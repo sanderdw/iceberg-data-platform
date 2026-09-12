@@ -1,0 +1,38 @@
+name: Release candidate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: '0.12.13'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - run: uv sync --locked --all-groups
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run release:source
+      - name: Scan source archive
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  '"$RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          mkdir "$RUNNER_TEMP/source-scan"
+          tar -xzf dist/iceberg-data-platform-*.tar.gz -C "$RUNNER_TEMP/source-scan"
+          "$RUNNER_TEMP/gitleaks" dir "$RUNNER_TEMP/source-scan" --redact --no-banner
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: source-release-candidate
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

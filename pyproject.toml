@@ -1,0 +1,41 @@
+[project]
+name = "iceberg-platform-portal"
+version = "0.2.0"
+description = "Team-based Apache Iceberg administration and personal marimo workspaces"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi==0.141.1",
+  "uvicorn[standard]>=0.52.4",
+  "httpx>=0.28.1",
+  "boto3>=1.43.93",
+  "python-dotenv>=1.2.3",
+]
+
+[dependency-groups]
+dev = [{include-group = "users"}, "pytest>=9.1.1", "ruff>=0.16.7", "httpx2>=2.12.0"]
+data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "pandas>=3.0.5", "ipykernel>=7.3.0", "matplotlib>=3.10.0"]
+users = [
+    "docker==7.2.0",
+]
+notebook = [
+    "marimo[sql]==0.24.2",
+    "matplotlib>=3.10.0",
+    "pandas>=3.0.5",
+    "pyiceberg[duckdb,pyarrow]>=0.12.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 110
+
+[tool.ruff.lint.per-file-ignores]
+"server/app.py" = ["BLE001"] # Never return provider error bodies or secrets.
+"server/polaris.py" = ["BLE001"] # Run every compensating action, even after one fails.
+"user_portal/app.py" = ["BLE001"] # Sanitize gateway errors; notebook/user credentials stay server-side.

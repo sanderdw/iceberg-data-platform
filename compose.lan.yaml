@@ -1,0 +1,6 @@
+# Additional portal binding for phones on the same LAN.
+# Use together with compose.yaml; the existing localhost binding is retained.
+services:
+  portal:
+    ports:
+      - "${PORTAL_LAN_IP:?Set PORTAL_LAN_IP to your host LAN address}:${PORT:-3000}:3000"

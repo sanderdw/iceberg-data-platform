@@ -1,0 +1,4 @@
+services:
+  users:
+    ports:
+      - "${PORTAL_LAN_IP:?Set PORTAL_LAN_IP to your host LAN address}:${USER_PORT:-3002}:3002"

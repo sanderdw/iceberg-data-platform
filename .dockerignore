@@ -1,0 +1,25 @@
+# Only application sources, shared assets, and locked dependency manifests
+**
+!pyproject.toml
+!uv.lock
+!LICENSE
+!NOTICE
+!THIRD_PARTY_NOTICES.md
+!Dockerfile
+!server/
+!server/*.py
+!public/
+!public/**
+!user_portal/
+!user_portal/**
+**/__pycache__/
+**/*.pyc
+**/.env*
+**/*.key
+**/*.pem
+!README.md
+**/key.json
+**/credentials*.json
+**/secrets*.json
+**/*.ipynb
+**/*.parquet

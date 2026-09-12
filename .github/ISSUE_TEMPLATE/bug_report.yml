@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible application problem
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: "Use synthetic data. Never include client secrets, passwords, tokens or .env files. For vulnerabilities, see SECURITY.md."
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Which portal, action and team/database role are involved?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Release/commit, OS, Docker version, browser and redacted error message.
+    validations:
+      required: true

@@ -1,0 +1,39 @@
+# Local credentials and data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+key.json
+credentials*.json
+secrets*.json
+.data/
+.local/
+*.db
+*.sqlite*
+*.parquet
+*.arrow
+
+# Environments and generated output
+.venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+test-results/
+playwright-report/
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Private historical material is kept outside the repository
+notebooktest/
+presentation/

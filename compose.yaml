@@ -1,0 +1,110 @@
+name: iceberg-platform
+
+x-polaris-env: &polaris-env
+  POLARIS_PERSISTENCE_TYPE: relational-jdbc
+  POLARIS_PERSISTENCE_RELATIONAL_JDBC_DATABASE_TYPE: postgresql
+  QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/polaris
+  QUARKUS_DATASOURCE_USERNAME: polaris
+  QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Run uv run python -m scripts.setup first}
+  POLARIS_REALM_CONTEXT_REALMS: POLARIS
+  QUARKUS_OTEL_SDK_DISABLED: "true"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: polaris
+      POSTGRES_USER: polaris
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U polaris -d polaris"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  polaris-bootstrap:
+    image: apache/polaris-admin-tool:1.7.0
+    environment: *polaris-env
+    command: ["bootstrap", "--realm=POLARIS", "--credential=POLARIS,${POLARIS_CLIENT_ID},${POLARIS_CLIENT_SECRET}"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  rustfs:
+    image: rustfs/rustfs:1.0.0-rc.3
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: :9000
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: :9001
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: [CMD, curl, -fsS, "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    restart: unless-stopped
+
+  polaris:
+    image: apache/polaris:1.7.0
+    environment:
+      <<: *polaris-env
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+    ports:
+      - "127.0.0.1:8181:8181"
+    depends_on:
+      polaris-bootstrap:
+        condition: service_completed_successfully
+      rustfs:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, -fsS, "http://localhost:8182/q/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    restart: unless-stopped
+
+  portal:
+    build: .
+    environment:
+      HOST: 0.0.0.0
+      PORTAL_PASSWORD: ${PORTAL_PASSWORD}
+      PROVIDER: polaris
+      POLARIS_URL: http://polaris:8181
+      POLARIS_PUBLIC_URL: ${POLARIS_PUBLIC_URL:-http://localhost:8181}
+      POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}
+      POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:9000}
+      S3_INTERNAL_ENDPOINT: http://rustfs:9000
+      S3_ADMIN_ENDPOINT: http://rustfs:9000
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    depends_on:
+      polaris:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  rustfs-data:

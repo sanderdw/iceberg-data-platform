@@ -1,0 +1,79 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: '0.12.13'
+          enable-cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: uv sync --locked --all-groups
+      - run: npm ci
+      - run: npm run verify
+      - run: uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
+      - run: npm run release:source
+      - name: Scan the actual source release for secrets
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  '"$RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          mkdir "$RUNNER_TEMP/source-scan"
+          tar -xzf dist/iceberg-data-platform-*.tar.gz -C "$RUNNER_TEMP/source-scan"
+          "$RUNNER_TEMP/gitleaks" dir "$RUNNER_TEMP/source-scan" --redact --no-banner
+      - name: Audit Python dependencies
+        run: |
+          uv export --locked --all-groups --no-hashes --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt" > /dev/null
+          uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+      - run: npm audit
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: '0.12.13'
+          enable-cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: uv sync --locked --all-groups
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: uv run python -m scripts.setup
+      - run: docker compose up -d --build --wait
+      - run: docker compose -f compose.users.yaml --profile images build
+      - run: docker compose -f compose.users.yaml up -d --wait users
+      - run: UV_NO_SYNC=1 npm run test:e2e
+      - run: uv run --all-groups python -m scripts.smoke
+      - run: uv run --all-groups python -m scripts.data_smoke
+      - run: npm run test:examples
+      - name: Clean this runner's development stacks
+        if: always()
+        run: |
+          if [ -f .env ]; then
+            docker compose -f compose.users.yaml down --remove-orphans
+            docker compose down --remove-orphans --volumes
+          fi
