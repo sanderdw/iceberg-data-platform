@@ -2,6 +2,9 @@
 
 A local platform for managing team access to Apache Iceberg and exploring data in personal marimo notebooks. It combines two FastAPI portals with Apache Polaris, PostgreSQL and RustFS.
 
+![Iceberg Data Platform](docs/portal.png)
+
+
 **Independent project · Apache-2.0 · Python 3.14 · uv · English interface and documentation**
 
 ## What it does
@@ -33,12 +36,13 @@ docker compose -f compose.users.yaml up -d --wait users
 
 Setup generates random development credentials in `.env`, sets restrictive file permissions, and preserves an existing `.env`. Do not commit or share this file.
 
-| Service | URL | Login |
-| --- | --- | --- |
-| Administration portal | http://localhost:3000 | `PORTAL_PASSWORD` from `.env` |
-| User portal | http://localhost:3002 | Existing username + issued client secret |
-| Polaris Iceberg REST API | http://localhost:8181/api/catalog | OAuth client ID + secret |
-| RustFS console | http://localhost:9001 | Issued bucket-admin credentials or local root credentials |
+
+| Service                  | URL                               | Login                                                     |
+| ------------------------ | --------------------------------- | --------------------------------------------------------- |
+| Administration portal    | http://localhost:3000             | `PORTAL_PASSWORD` from `.env`                             |
+| User portal              | http://localhost:3002             | Existing username + issued client secret                  |
+| Polaris Iceberg REST API | http://localhost:8181/api/catalog | OAuth client ID + secret                                  |
+| RustFS console           | http://localhost:9001             | Issued bucket-admin credentials or local root credentials |
 
 All default host ports bind to `127.0.0.1`. PostgreSQL is internal only. The portal's authenticated API documentation is available at `/docs` on port 3000.
 
