@@ -4,6 +4,11 @@
 
 Initial public release preparation:
 
+- Edit existing user roles, including catalog permission changes, S3 access promotion/demotion and rollback on provider failures.
+
+- Development, Acceptance and Production environments, with database names scoped to team and environment.
+- One shared notebook filespace per team/environment, concurrent member access and separate execution using each member's credentials. Fresh setup only; no migration of earlier user-specific workspaces.
+
 - Nothing-inspired user portal with persistent dark/light themes, monochrome controls, Doto headlines and inline status messages.
 
 - English interface, API messages, documentation and notebook examples throughout.

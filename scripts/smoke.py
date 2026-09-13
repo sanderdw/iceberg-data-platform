@@ -114,6 +114,23 @@ def main():
         p.update_memberships(users[0], [teams[0]])
         assert_denied(lambda: source.get_object(Bucket=db["bucket"], Key="evidence.txt"))
         print("PASS: adding/removing memberships updates existing credentials")
+        p.update_role(users[0], "reader")
+        assert_denied(lambda: source.list_objects_v2(Bucket=other["bucket"]))
+        assert catalog_request(p, accounts[0]["credentials"], other["id"]).status_code == 200
+        restored = p.update_role(users[0], "bucket-admin")
+        assert "bucketCredentials" not in restored
+        source.list_objects_v2(Bucket=other["bucket"])
+        assert_denied(lambda: source.list_objects_v2(Bucket=db["bucket"]))
+        new_account = p.create_user(UserInput(name=f"promoted-{suffix}", teams=[teams[0]], role="reader"))
+        users.append(new_account["user"]["id"])
+        promoted = p.update_role(users[-1], "bucket-admin")
+        promoted_s3 = s3_client(promoted["bucketCredentials"])
+        promoted_s3.list_objects_v2(Bucket=other["bucket"])
+        assert_denied(lambda: promoted_s3.list_objects_v2(Bucket=db["bucket"]))
+        p.update_role(users[-1], "writer")
+        assert_denied(lambda: promoted_s3.list_objects_v2(Bucket=other["bucket"]))
+        p.delete_user(users.pop())
+        print("PASS: role changes grant/revoke direct S3 access and preserve existing credentials")
         p.save_team(TeamInput(name=f"renamed-{suffix}"), teams[1])
         assert p.connection(db["id"])["bucket"] == db["bucket"]
         p.delete_database(db["id"])

@@ -55,4 +55,4 @@ The CI workflows use immutable action revisions, a read-only default token and f
 
 ## Compatibility
 
-There are no migrations from experimental metadata formats. Keep current PostgreSQL, RustFS and personal notebook volumes for updates within this model. A destructive reset is a separate operator action and must never be part of an upgrade or release script. Container base images and dependencies need their own vulnerability review for a deployment; the source package's dependency audit does not certify the operating-system image layers.
+The team/environment model starts from a fresh setup. It does not migrate older catalog metadata or user-specific notebook volumes. For subsequent updates within this model, preserve PostgreSQL, RustFS and shared team/environment notebook volumes. A destructive reset is a separate operator action and must never be part of an upgrade or release script. Container base images and dependencies need their own vulnerability review for a deployment; the source package's dependency audit does not certify the operating-system image layers.

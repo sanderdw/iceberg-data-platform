@@ -17,6 +17,10 @@ from server.models import ServiceError
 LABEL = "iceberg.users.runtime"
 
 
+def filespace_key(team, environment):
+    return sha256(json.dumps([team, environment]).encode()).hexdigest()[:32]
+
+
 @dataclass
 class Workspace:
     id: str
@@ -29,6 +33,7 @@ class Workspace:
     network: object = field(repr=False)
     upstream: str
     token: str = field(repr=False)
+    environment: str = "development"
 
     @property
     def url(self):
@@ -39,7 +44,10 @@ class Workspace:
             "id": self.id,
             "database": self.database,
             "team": self.team,
+            "environment": self.environment,
+            "filespace": self.key,
             "url": self.url + "?file=workspace.py",
+            "filesUrl": self.url,
             "examples": [
                 {
                     "title": "01 · Neighborhood data with PyIceberg",
@@ -73,21 +81,17 @@ class NotebookRuntime:
 
     def recover(self):
         # Sessions are process-local. Remove only this stack's orphan runtimes;
-        # personal notebook volumes persist across gateway restarts.
+        # team/environment notebook volumes persist across gateway restarts.
         filters = {"label": f"{LABEL}={self.scope}"}
         for container in self.docker.containers.list(all=True, filters=filters):
             container.remove(force=True)
         for network in self.docker.networks.list(filters=filters):
             self.cleanup_network(network)
 
-    def start(self, session, database, namespace, table):
-        key = sha256(json.dumps([session.user_id, session.team, database]).encode()).hexdigest()[:32]
+    def start(self, session, database, namespace, table, *, database_name=None):
+        key = filespace_key(session.team, session.environment)
         for workspace in self.workspaces.values():
-            if workspace.key == key:
-                if workspace.session_id != session.id:
-                    raise ServiceError(
-                        409, "This workspace is already open in another session. Close it there first."
-                    )
+            if workspace.key == key and workspace.session_id == session.id and workspace.database == database:
                 return workspace
         if len(self.workspaces) >= self.limit:
             raise ServiceError(409, "All notebook slots are in use. Close a workspace first.")
@@ -129,6 +133,8 @@ class NotebookRuntime:
                     "MARIMO_BASE_URL": f"/workspaces/{id}",
                     "MARIMO_GATEWAY_TOKEN": token,
                     "ICEBERG_DATABASE": database,
+                    "ICEBERG_DATABASE_NAME": database_name or database,
+                    "ICEBERG_ENVIRONMENT": session.environment,
                     "ICEBERG_NAMESPACE": json.dumps(namespace),
                     "ICEBERG_TABLE": table or "",
                     "ICEBERG_CLIENT_ID": session.client_id,
@@ -151,6 +157,7 @@ class NotebookRuntime:
                 network,
                 f"http://{ip}:2718",
                 token,
+                session.environment,
             )
             deadline = time.monotonic() + 45
             with httpx.Client(timeout=1, trust_env=False) as client:
@@ -177,8 +184,13 @@ class NotebookRuntime:
 
     def get(self, id, session):
         workspace = self.workspaces.get(id)
-        if not workspace or workspace.session_id != session.id or workspace.team != session.team:
-            raise ServiceError(404, "This workspace is unavailable in your session and team.")
+        if (
+            not workspace
+            or workspace.session_id != session.id
+            or workspace.team != session.team
+            or workspace.environment != session.environment
+        ):
+            raise ServiceError(404, "This notebook is unavailable in your session, team and environment.")
         return workspace
 
     def stop(self, id):

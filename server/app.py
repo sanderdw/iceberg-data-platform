@@ -13,7 +13,16 @@ from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 
-from .models import DatabaseInput, DatabaseMove, Login, Memberships, ServiceError, TeamInput, UserInput
+from .models import (
+    DatabaseInput,
+    DatabaseMove,
+    Login,
+    Memberships,
+    RoleInput,
+    ServiceError,
+    TeamInput,
+    UserInput,
+)
 from .polaris import PolarisProvider
 from .storage import RustFSStorage
 
@@ -239,6 +248,10 @@ def create_app(provider=None, password=None, secure_cookie=None):
     @app.patch("/api/users/{id}")
     def update_user(id: str, data: Memberships):
         return provider.update_memberships(id, data.teams)
+
+    @app.patch("/api/users/{id}/role")
+    def update_role(id: str, data: RoleInput):
+        return provider.update_role(id, data.role)
 
     @app.delete("/api/users/{id}")
     def delete_user(id: str):

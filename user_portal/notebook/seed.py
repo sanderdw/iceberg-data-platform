@@ -1,4 +1,4 @@
-"""Install missing starter notebooks, including in existing personal workspaces."""
+"""Install missing starter notebooks, including in existing team workspaces."""
 
 from pathlib import Path
 

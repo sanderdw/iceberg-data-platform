@@ -7,7 +7,7 @@ from user_portal.notebook.seed import seed_workspace
 
 work = Path("/work")
 seed_workspace(work)
-# Keep editor preferences alongside the personal notebook across restarts.
+# Keep editor preferences alongside the shared notebooks across restarts.
 config = work / ".marimo.toml"
 if not config.exists():
     config.write_text(

@@ -117,11 +117,11 @@ def test_move_and_membership_changes_update_catalog_and_s3_permissions(portal):
     new = user(p, [second], "new-user")
     both = user(p, [first, second], "both-user")
     db = database(p, first)
-    grant = lambda u, role: f"/principal-roles/{u['id']}/catalog-roles/analytics/{role}"
+    grant = lambda u, role: f"/principal-roles/{u['id']}/catalog-roles/{db['id']}/{role}"
     assert grant(old, "admin") in p.provider.grants
     assert grant(new, "reader") not in p.provider.grants
     assert grant(both, "reader") in p.provider.grants
-    moved = p.patch("/databases/analytics", {"team": second})
+    moved = p.patch(f"/databases/{db['id']}", {"team": second})
     assert moved.status_code == 200, moved.text
     assert moved.json()["bucket"] == db["bucket"]
     assert grant(old, "admin") not in p.provider.grants
@@ -137,10 +137,10 @@ def test_move_failure_restores_original_owner_and_access(portal):
     p = portal
     first, second = team(p), team(p, "second-team")
     old, new = user(p, [first], "old-user"), user(p, [second], "new-user")
-    database(p, first)
+    db = database(p, first)
     original = set(p.provider.grants)
-    p.provider.fail = lambda path, method, body: path == "/catalogs/analytics" and method == "PUT"
-    assert p.patch("/databases/analytics", {"team": second}).status_code == 502
+    p.provider.fail = lambda path, method, body: path == f"/catalogs/{db['id']}" and method == "PUT"
+    assert p.patch(f"/databases/{db['id']}", {"team": second}).status_code == 502
     assert p.provider.grants == original
     assert p.client.get("/api/databases").json()[0]["team"] == first
     assert old["id"] != new["id"]
@@ -152,12 +152,12 @@ def test_delete_database_can_resume_and_keeps_users(portal):
     u = user(p, [owner], role="bucket-admin")
     d = database(p, owner)
     p.provider.storage.delete_bucket.side_effect = ServiceError(502, "storage down")
-    assert p.delete("/databases/analytics").status_code == 502
+    assert p.delete(f"/databases/{d['id']}").status_code == 502
     assert p.client.get("/api/databases").json()[0]["status"] == "deleting"
-    assert p.client.get("/api/databases/analytics/connection").status_code == 409
-    assert p.patch("/databases/analytics", {"team": owner}).status_code == 409
+    assert p.client.get(f"/api/databases/{d['id']}/connection").status_code == 409
+    assert p.patch(f"/databases/{d['id']}", {"team": owner}).status_code == 409
     p.provider.storage.delete_bucket.side_effect = None
-    assert p.delete("/databases/analytics").status_code == 200
+    assert p.delete(f"/databases/{d['id']}").status_code == 200
     p.provider.storage.delete_bucket.assert_called_with(d["bucket"])
     assert p.client.get("/api/databases").json() == []
     assert p.client.get("/api/users").json()[0]["id"] == u["id"]
@@ -167,11 +167,11 @@ def test_delete_database_can_resume_and_keeps_users(portal):
 
 def test_provisioning_conflict_never_deletes_existing_catalog(portal):
     owner = team(portal)
-    database(portal, owner)
+    db = database(portal, owner)
     portal.provider.events.clear()
     assert portal.post("/databases", {"name": "analytics", "team": owner}).status_code == 409
     assert not any(
-        path == "/catalogs/analytics" and method == "DELETE" for path, method, _ in portal.provider.events
+        path == f"/catalogs/{db['id']}" and method == "DELETE" for path, method, _ in portal.provider.events
     )
 
 
@@ -203,3 +203,129 @@ def test_concurrent_delete_and_create_never_orphans_a_user(portal):
     overview = portal.client.get("/api/overview").json()
     available = {t["id"] for t in overview["teams"]}
     assert all(u["teams"] and set(u["teams"]) <= available for u in overview["users"])
+
+
+def test_database_names_are_scoped_to_team_and_environment(portal):
+    first, second = team(portal, "team-a"), team(portal, "team-b")
+    member = user(portal, [first], "sander")
+    created = []
+    for owner, env in [
+        (first, "development"),
+        (first, "acceptance"),
+        (first, "production"),
+        (second, "development"),
+    ]:
+        response = portal.post("/databases", {"name": "db1", "team": owner, "environment": env})
+        assert response.status_code == 201
+        db = response.json()
+        assert (db["name"], db["team"], db["environment"]) == ("db1", owner, env)
+        connection = portal.client.get(f"/api/databases/{db['id']}/connection").json()
+        assert connection["warehouse"] == db["id"]
+        grant = f"/principal-roles/{member['id']}/catalog-roles/{db['id']}/reader"
+        assert (grant in portal.provider.grants) == (owner == first)
+        created.append(db)
+    assert len({d["id"] for d in created}) == 4
+    assert len({d["bucket"] for d in created}) == 4
+    assert portal.post("/databases", {"name": "db1", "team": first}).status_code == 409
+    assert (
+        portal.post("/databases", {"name": "db2", "team": first, "environment": "staging"}).status_code == 422
+    )
+    grants = set(portal.provider.grants)
+    assert portal.patch(f"/databases/{created[0]['id']}", {"team": second}).status_code == 409
+    assert portal.provider.grants == grants
+    # The same display name in another environment does not prevent a move.
+    assert portal.patch(f"/databases/{created[2]['id']}", {"team": second}).status_code == 200
+
+
+@pytest.mark.parametrize("old_role", ["reader", "writer", "admin", "bucket-admin"])
+@pytest.mark.parametrize("new_role", ["reader", "writer", "admin", "bucket-admin"])
+def test_change_user_role_updates_all_team_databases(portal, old_role, new_role):
+    owners = [team(portal), team(portal, "second-team")]
+    dbs = [database(portal, owner, f"data_{i}") for i, owner in enumerate(owners)]
+    account = user(portal, owners, role=old_role)
+    original = dict(portal.provider.resources["principals"][account["id"]])
+    response = portal.patch(f"/users/{account['id']}/role", {"role": new_role})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["user"] == {**account, "role": new_role, "bucketAccess": new_role == "bucket-admin"}
+    assert "credentials" not in result  # The OAuth identity is preserved.
+    assert ("bucketCredentials" in result) == (new_role == "bucket-admin" and old_role != new_role)
+    assert (
+        portal.provider.resources["principals"][account["id"]]["createTimestamp"]
+        == original["createTimestamp"]
+    )
+    prefix = f"/principal-roles/{account['id']}/catalog-roles/"
+    effective = "admin" if new_role == "bucket-admin" else new_role
+    assert {g for g in portal.provider.grants if g.startswith(prefix)} == {
+        f"{prefix}{db['id']}/{effective}" for db in dbs
+    }
+    if old_role == "bucket-admin" and new_role != old_role:
+        portal.provider.storage.set_user_buckets.assert_called_with(
+            original["properties"]["portal.bucket-access-key"], []
+        )
+    assert "bucketCredentials" not in str(portal.client.get("/api/users").json())
+
+
+def test_demoted_s3_key_stays_denied_until_repromotion(portal):
+    first, second = team(portal), team(portal, "second-team")
+    database(portal, first)
+    target = database(portal, second, "target")
+    account = user(portal, [first], role="bucket-admin")
+    key = portal.provider.resources["principals"][account["id"]]["properties"]["portal.bucket-access-key"]
+    path = f"/users/{account['id']}"
+    assert portal.patch(path + "/role", {"role": "reader"}).status_code == 200
+    portal.provider.storage.set_user_buckets.assert_called_with(key, [])
+    portal.provider.storage.set_user_buckets.reset_mock()
+    assert portal.patch(path, {"teams": [second]}).status_code == 200
+    database(portal, second, "future_db")
+    portal.provider.storage.set_user_buckets.assert_not_called()
+    result = portal.patch(path + "/role", {"role": "bucket-admin"}).json()
+    assert "bucketCredentials" not in result  # Reuse the existing S3 credentials.
+    assert result["user"]["bucketAccess"] is True
+    assert target["bucket"] in portal.provider.storage.set_user_buckets.call_args.args[1]
+    assert len(portal.provider.storage.set_user_buckets.call_args.args[1]) == 2
+    portal.provider.storage.create_user.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "old_role,new_role", [("reader", "bucket-admin"), ("bucket-admin", "reader"), ("reader", "writer")]
+)
+@pytest.mark.parametrize("failure", ["grant", "metadata"])
+def test_failed_role_change_restores_grants_metadata_and_s3(portal, old_role, new_role, failure):
+    owner = team(portal)
+    db = database(portal, owner)
+    account = user(portal, [owner], role=old_role)
+    grants = set(portal.provider.grants)
+    effective = "admin" if new_role == "bucket-admin" else new_role
+    portal.provider.fail = lambda path, method, body: (
+        method == "PUT"
+        and (
+            path == f"/principals/{account['id']}"
+            if failure == "metadata"
+            else path.endswith(f"/catalog-roles/{db['id']}") and body["catalogRole"]["name"] == effective
+        )
+    )
+    assert portal.patch(f"/users/{account['id']}/role", {"role": new_role}).status_code == 502
+    assert portal.provider.grants == grants
+    assert portal.provider.list_users() == [account]
+    if old_role == "bucket-admin":
+        assert portal.provider.storage.set_user_buckets.call_args.args[1] == [db["bucket"]]
+    elif new_role == "bucket-admin":
+        portal.provider.storage.delete_user.assert_called_once()
+
+
+def test_role_edit_validation_and_provider_failure(portal):
+    owner = team(portal)
+    database(portal, owner)
+    account = user(portal, [owner])
+    path = f"/users/{account['id']}/role"
+    for body in ({}, {"role": "owner"}, {"role": None}, {"role": "admin", "teams": [owner]}):
+        assert portal.patch(path, body).status_code == 422
+    assert portal.patch("/users/missing/role", {"role": "reader"}).status_code == 404
+    grants = set(portal.provider.grants)
+    portal.provider.storage.create_user.side_effect = ServiceError(502, "storage down")
+    assert portal.patch(path, {"role": "bucket-admin"}).status_code == 502
+    assert portal.provider.grants == grants
+    assert portal.provider.list_users() == [account]
+    portal.client.delete("/api/session", headers=HEADERS)
+    assert portal.patch(path, {"role": "admin"}).status_code == 401

@@ -8,7 +8,7 @@ flowchart LR
     AdminAPI --> Storage[RustFS S3 and IAM]
     UserAPI --> Polaris
     UserAPI --> Docker[Trusted Docker daemon]
-    Docker --> Notebook[Personal marimo container]
+    Docker --> Notebook[Session marimo container]
     UserAPI -->|Authenticated HTTP and WebSocket proxy| Notebook
     Notebook -->|User credentials| Polaris
     Notebook -->|Vended credentials| Storage
@@ -21,17 +21,19 @@ flowchart LR
 
 Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, an individual principal role and the grants of their teams. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. There is no second application metadata database.
 
-The admin identity manages metadata and grants. The user gateway uses that identity only to resolve the directory, then uses the user's OAuth token for catalog browsing. Notebook containers receive the user's own credentials. A user may belong to several teams; the active team controls the UI and workspace context, while the credentials retain the union of the user's team grants.
+The admin identity manages metadata and grants. The user gateway uses that identity only to resolve the directory, then uses the user's OAuth token for catalog browsing. Notebook containers receive the user's own credentials. A user may belong to several teams; the active team and environment control the UI and workspace context, while the credentials retain the union of the user's team grants.
 
 ## Notebook lifecycle
 
-A workspace has one private volume per user/team/database. On start, missing starter files are copied to that volume. Existing files are preserved. Marimo serves the directory so the user can select their own notebook or either example.
+A workspace has one shared volume per team/environment, keyed by the stable team ID and environment. Environments are Development, Acceptance and Production. All team members and databases in an environment share the same files. On first use the gateway creates the volume; on each runtime start, missing starter files are added without replacing existing files. Marimo serves the directory for browsing shared notebooks and examples.
 
-Each workspace receives its own internal Docker network containing the runtime, gateway, Polaris and RustFS. Runtime ports are not published. HTTP and WebSocket requests must belong to the authenticated session and active team. Portal cookies and caller Authorization headers are stripped before forwarding to marimo.
+Database display names are unique within a team and environment. Each database has an opaque, stable catalog ID used in REST paths and connection settings, so `db1` can exist in both Development and Production. Moves preserve the catalog ID and bucket, and reject name conflicts at the destination. Files stay with their team/environment when a database moves; no notebook migration is performed.
+
+Each session/database execution receives its own container and internal Docker network containing the runtime, gateway, Polaris and RustFS. Runtime ports are not published. HTTP and WebSocket requests must belong to the authenticated session, active team and environment. Portal cookies and caller Authorization headers are stripped before forwarding to marimo.
 
 Runtime containers run as UID 10001 with a read-only root filesystem, a writable work volume and temporary filesystem, dropped capabilities, no privilege escalation, and CPU/memory/process limits. They do not receive the Docker socket or platform-admin secrets. The gateway itself is trusted and has Docker-host administrative access.
 
-Logout, team switching, expiry and revoked authorization stop runtimes. A gateway restart invalidates in-memory sessions and removes that stack's orphan runtimes and networks. Personal volumes persist. Multiple gateway replicas are not supported.
+Logout, team or environment switching, expiry and revoked authorization stop only the affected session’s runtimes. A gateway restart invalidates in-memory sessions and removes that stack's orphan runtimes and networks. Shared team/environment volumes persist. Multiple gateway replicas are not supported.
 
 ## Repository layout
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from server.models import ServiceError
+from server.models import Environment, ServiceError
 from server.polaris import PolarisProvider, enc
 
 
@@ -20,6 +20,7 @@ class UserSession:
     token_until: float
     expires: float
     team: str
+    environment: Environment = "development"
 
 
 class UserDirectory:
@@ -100,10 +101,17 @@ class UserDirectory:
     def database(self, session, database, profile=None):
         profile = profile or self.profile(session)
         result = next(
-            (d for d in profile["databases"] if d["id"] == database and d["team"] == session.team), None
+            (
+                d
+                for d in profile["databases"]
+                if d["id"] == database
+                and d["team"] == session.team
+                and d["environment"] == session.environment
+            ),
+            None,
         )
         if not result:
-            raise ServiceError(403, "This database is unavailable within your active team.")
+            raise ServiceError(403, "This database is unavailable within your active team and environment.")
         return result
 
     def request(self, session, path):

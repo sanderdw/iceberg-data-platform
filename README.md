@@ -1,6 +1,6 @@
 # Iceberg Data Platform
 
-A local platform for managing team access to Apache Iceberg and exploring data in personal marimo notebooks. It combines two FastAPI portals with Apache Polaris, PostgreSQL and RustFS.
+A local platform for managing team access to Apache Iceberg and exploring data in shared team marimo notebooks. It combines two FastAPI portals with Apache Polaris, PostgreSQL and RustFS.
 
 ![Iceberg Data Platform](docs/portal.png)
 
@@ -12,10 +12,10 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 - **Administration portal:** create and manage teams, assign users to one or more teams, create databases, move databases between teams, and delete databases with their stored data.
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
 - **Separate user portal:** log in with an existing username and client secret, switch teams and browse the active team's databases.
-- **Personal marimo workspaces:** isolated notebook containers with persistent files and the user's own data permissions.
+- **Shared team workspaces:** one shared filespace per team and environment, with isolated execution using each user's data permissions.
 - **Two included examples:** create 26,880 synthetic energy measurements with PyIceberg, then analyze and visualize them using native DuckDB SQL cells and reactive filters.
 
-The Compose projects are `iceberg-platform` (administration portal, Polaris, PostgreSQL and RustFS) and `iceberg-workspaces` (user portal and personal marimo notebooks). They share the data services, not an application database. This is a **local development platform**, with an in-memory session model and a trusted Docker gateway. Read [the security model](SECURITY.md) before deploying elsewhere.
+The Compose projects are `iceberg-platform` (administration portal, Polaris, PostgreSQL and RustFS) and `iceberg-workspaces` (user portal and shared team marimo notebooks). They share the data services, not an application database. This is a **local development platform**, with an in-memory session model and a trusted Docker gateway. Read [the security model](SECURITY.md) before deploying elsewhere.
 
 ## Quick start
 
@@ -54,7 +54,7 @@ All default host ports bind to `127.0.0.1`. PostgreSQL is internal only. The por
 4. Select a team and database. Choose **01 · Neighborhood data with PyIceberg**, run the cells with ▶ and click **Create example table**.
 5. Use the notebook selector to open **02 · Visualize with DuckDB**. Run its cells and change the street filter to explore energy consumption and solar production.
 
-The first example skips a table that already contains rows. Readers can use the second example once a writer has created the dataset. Saved notebooks persist per user, team and database. Switching teams or logging out stops execution; save your work first. Adding starter examples never overwrites existing personal notebook files.
+The first example skips a table that already contains rows. Readers can use the second example once a writer has created the dataset. Saved notebooks are shared per team and environment (Development, Acceptance or Production), across databases. Switching context or logging out stops only your execution; save your work first. Adding starter examples never overwrites existing team files.
 
 ### Optional LAN access
 

@@ -14,10 +14,10 @@ def _():
     from user_portal.notebook.connection import connect
 
     catalog = connect()
-    database = os.environ["ICEBERG_DATABASE"]
+    database = os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])
     namespace = tuple(json.loads(os.environ.get("ICEBERG_NAMESPACE", "[]")))
     selected_table = os.environ.get("ICEBERG_TABLE", "")
-    mo.md(f"# {database}\nYour personal workspace. Your existing team permissions apply to all operations.")
+    mo.md(f"# {database}\nShared team files for this environment. Operations use your own data permissions.")
     return catalog, mo, namespace, selected_table
 
 
@@ -53,7 +53,7 @@ def _(mo):
     mo.md("""
     ## Getting started
     Add Python or SQL cells in the editor. You can use `catalog`, `table` and `df`.
-    Your work is saved as a Python notebook in your personal storage for this database and team.
+    Your work is saved as a Python notebook in shared storage for this team and environment.
     Run the cells with the ▶ button in marimo. Writing requires a user role with write permissions.
     """)
 

@@ -27,7 +27,7 @@ test('portal admin explores namespaces, tables and views; database credentials a
     expect(oauth.status()).toBe(200);
     const token = (await oauth.json()).access_token;
     expect((await request.get('/api/admin/explorer/databases', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(401);
-    const catalog = `${process.env.POLARIS_URL}/api/catalog/v1/${name}`;
+    const catalog = `${process.env.POLARIS_URL}/api/catalog/v1/${database.id}`;
     const catalogHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     async function catalogPost(path, data) {
       const response = await request.post(catalog + path, { headers: catalogHeaders, data });

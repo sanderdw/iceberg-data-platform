@@ -4,6 +4,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Name = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,47}$")]
 TeamId = Annotated[str, Field(pattern=r"^team-[a-f0-9]{32}$")]
+Environment = Literal["development", "acceptance", "production"]
+ENVIRONMENTS = ("development", "acceptance", "production")
+Role = Literal["reader", "writer", "admin", "bucket-admin"]
 
 
 class ServiceError(Exception):
@@ -28,7 +31,7 @@ class TeamInput(Input):
 class DatabaseInput(Input):
     name: Name
     team: TeamId
-    environment: Literal["development", "staging", "production"] = "development"
+    environment: Environment = "development"
     description: str = Field(default="", max_length=280)
 
 
@@ -49,4 +52,8 @@ class Memberships(Input):
 
 class UserInput(Memberships):
     name: Name
-    role: Literal["reader", "writer", "admin", "bucket-admin"]
+    role: Role
+
+
+class RoleInput(Input):
+    role: Role

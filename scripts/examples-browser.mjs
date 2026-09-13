@@ -2,14 +2,14 @@ import { chromium, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 let input = ''; for await (const chunk of process.stdin) input += chunk;
 const data = JSON.parse(input);
-const browser = await chromium.launch({headless: true});
+const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 let page;
 try {
   const context = await browser.newContext({viewport: {width: 1500, height: 1100}});
   await context.addCookies([{name: 'iceberg_user_session', value: data.cookie, url: data.baseURL, httpOnly: true, sameSite: 'Strict'}]);
   page = await context.newPage(); page.setDefaultTimeout(30000);
   await page.goto(data.baseURL);
-  await page.locator('#databases button').filter({hasText: data.database}).click();
+  await page.locator('#databases button').filter({hasText: data.databaseName}).click();
   await page.locator('#example-write').click();
   let frame = page.frameLocator('#frame-host iframe');
   await frame.locator('.cm-content').first().waitFor();

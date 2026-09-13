@@ -1,7 +1,7 @@
 import { chromium, expect } from '@playwright/test';
 let input = ''; for await (const chunk of process.stdin) input += chunk;
 const data = JSON.parse(input);
-const browser = await chromium.launch({headless: true});
+const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 let page;
 try {
   const context = await browser.newContext({viewport: {width: 1440, height: 1000}});
@@ -16,7 +16,7 @@ try {
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.locator('#workspace-screen').waitFor({state: 'visible'});
-  await page.locator('#databases button').filter({hasText: data.database}).click();
+  await page.locator('#databases button').filter({hasText: data.databaseName}).click();
   await page.getByRole('button', {name: 'Open →', exact: true}).click();
   await page.getByRole('button', {name: 'Open →', exact: true}).click();
   await page.locator('.object-label').filter({hasText: 'events'}).waitFor();
@@ -55,5 +55,19 @@ try {
   await expect(page.locator('#open-notebook')).toHaveCSS('color', 'rgb(245, 245, 245)');
   await page.screenshot({path: 'test-results/users-mobile-light.png', fullPage: true});
   console.log('PASS: persistent dark/light themes, browser catalog, marimo WebSocket and table execution, mobile layout');
+  await page.locator('#notebooks button').first().click();
+  await page.getByRole('combobox', {name: 'Notebook', exact: true}).selectOption({label: 'Shared files'});
+  await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', data.notebook.filesUrl);
+  await expect(page.getByRole('combobox', {name: 'Environment', exact: true}).locator('option')).toHaveText(['Development', 'Acceptance', 'Production']);
+  await page.getByRole('combobox', {name: 'Environment', exact: true}).selectOption('production');
+  await expect(page.locator('#databases button')).toHaveCount(1);
+  await expect(page.locator('#databases button')).toContainText(data.databaseName);
+  await expect(page.locator('#databases button small')).toHaveText('Production');
+  await page.getByRole('combobox', {name: 'Environment', exact: true}).selectOption('acceptance');
+  await expect(page.locator('#databases button')).toHaveCount(0);
+  await expect(page.locator('#databases')).toContainText('no databases in this environment');
+  await page.getByRole('combobox', {name: 'Environment', exact: true}).selectOption('development');
+  await expect(page.locator('#databases button small')).toHaveText('Development');
+  console.log('PASS: shared-file selector and Development / Acceptance / Production navigation');
   await context.close();
 } catch (error) { if (page) { await page.screenshot({path: 'test-results/users-failure.png', fullPage: true}); for (const f of page.frames()) console.error((await f.locator('body').innerText()).slice(0, 7000)); } throw error; } finally { await browser.close(); }

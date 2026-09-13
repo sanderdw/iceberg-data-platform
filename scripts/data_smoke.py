@@ -48,6 +48,17 @@ def main():
         else:
             raise AssertionError("Reader must not create namespaces")
         print("PASS: reader cannot write")
+        p.update_role(users[1], "writer")
+        reader.create_namespace("promoted")
+        p.update_role(users[1], "reader")
+        try:
+            reader.create_namespace("demoted")
+        except ForbiddenError:
+            pass
+        else:
+            raise AssertionError("Demoted reader still has write access")
+        print("PASS: role promotion and demotion update an existing catalog client's permissions")
+        writer.drop_namespace("promoted")
         writer.create_view(
             ("analytics", "nested", "event_report"),
             schema=records.schema,

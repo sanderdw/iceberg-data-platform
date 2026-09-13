@@ -1,6 +1,6 @@
 # Iceberg Workspaces
 
-A standalone user portal with personal [marimo](https://marimo.io/) notebooks. Users sign in with their existing username and client secret, switch between their teams and browse the databases, namespaces, tables and views they can access.
+A standalone user portal with shared team [marimo](https://marimo.io/) notebooks. Users sign in with their existing username and client secret, switch between their teams and environments and browse the databases, namespaces, tables and views they can access.
 
 ## Start
 
@@ -31,11 +31,13 @@ The user portal follows the same Nothing-inspired design as the administration p
 
 ## Work with your team data
 
-Select an **Active team**, choose a database and browse its namespaces. Open a database or table in marimo. Views can be loaded with `catalog.load_view(...)` from a notebook. Your user permissions apply to every catalog and data operation.
+Select an **Active team** and **Environment**, choose a database and browse its namespaces. Open a database or table in marimo. Views can be loaded with `catalog.load_view(...)` from a notebook. Your user permissions apply to every catalog and data operation.
 
-Each user, team and database combination has one personal `/work` directory containing multiple notebooks. Saved files survive stopping and reopening the workspace. Switching teams, signing out or session expiry stops execution. Save changes before switching: unsaved edits and Python memory are lost when execution stops. A second session can only open the same work directory after the first session closes it.
+Each team and environment combination has one shared `/work` filespace containing multiple notebooks, across all databases in that environment. Environments are **Development**, **Acceptance** and **Production**. For example, `team-a` with `sander` and `alex`, and `db1` in Development and Production, has exactly two filespaces. Both members can open them concurrently and see each other’s saved files. Additional databases in Development reuse the Development filespace. Storage is allocated when a notebook first opens.
 
-Run cells with **▶** in marimo. Add Python or SQL cells in the editor and use the provided `catalog`, `table` and `df` variables. The notebook selector above the editor switches between the starter notebook and examples.
+Execution runs separately for each signed-in session and database, using that user’s credentials. Switching team or environment, signing out or session expiry stops only that session’s execution; teammates keep working. Saved files survive stopping and reopening. Save changes before switching: unsaved edits and Python memory are lost when execution stops. Shared files are not a collaborative text editor: coordinate edits to the same file to avoid overwriting each other’s saves.
+
+Run cells with **▶** in marimo. Add Python or SQL cells in the editor and use the provided `catalog`, `table` and `df` variables. Choose **Shared files** in the notebook selector to browse, create and open team notebooks, or select the starter notebook and examples directly.
 
 ## Bundled examples
 
@@ -84,7 +86,7 @@ The shared `.env` supplies `POLARIS_CLIENT_ID` and `POLARIS_CLIENT_SECRET`. Ther
 
 Default bindings use HTTP on localhost or LAN. Use HTTPS outside this local environment. A reverse proxy must support WebSockets and preserve the original Host header.
 
-Personal volumes are named `iceberg-workspaces-work-<hash>` and labeled `iceberg.users.runtime=iceberg-workspaces`. Back them up before removing Docker data. `docker compose down` preserves these directories. Deleting a user or database closes its runtime but does not automatically erase personal notebook files.
+Shared team/environment volumes are named `iceberg-workspaces-work-<hash>` and labeled `iceberg.users.runtime=iceberg-workspaces`. Back them up before removing Docker data. `docker compose down` preserves these directories. Deleting a user or database closes affected runtimes but does not automatically erase shared notebook files.
 
 ## Tests
 

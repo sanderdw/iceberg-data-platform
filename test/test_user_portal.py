@@ -13,7 +13,7 @@ from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
 from test.conftest import MemoryPolaris
 from user_portal.app import COOKIE, create_app
 from user_portal.directory import UserDirectory
-from user_portal.runtime import Workspace
+from user_portal.runtime import Workspace, filespace_key
 
 HEADERS = {"X-Portal-Request": "1"}
 
@@ -26,7 +26,7 @@ class FakeRuntime:
     def recover(self):
         self.recovered = True
 
-    def start(self, session, database, namespace, table):
+    def start(self, session, database, namespace, table, *, database_name=None):
         id = f"notebook-{len(self.workspaces)}"
         w = Workspace(
             id,
@@ -34,18 +34,24 @@ class FakeRuntime:
             session.user_id,
             session.team,
             database,
-            id,
+            filespace_key(session.team, session.environment),
             None,
             None,
             "http://notebook:2718",
             "hidden-runtime-token",
+            session.environment,
         )
         self.workspaces[id] = w
         return w
 
     def get(self, id, session):
         w = self.workspaces.get(id)
-        if not w or w.session_id != session.id or w.team != session.team:
+        if (
+            not w
+            or w.session_id != session.id
+            or w.team != session.team
+            or w.environment != session.environment
+        ):
             raise ServiceError(404, "Not found")
         return w
 
@@ -66,8 +72,9 @@ def users():
     p = MemoryPolaris()
     p.http = Mock()
     teams = [p.save_team(TeamInput(name=f"team-{i}"))["id"] for i in range(3)]
-    for i, team in enumerate(teams):
-        p.create_database(DatabaseInput(name=f"data_{i}", team=team))
+    databases = [
+        p.create_database(DatabaseInput(name=f"data_{i}", team=team))["id"] for i, team in enumerate(teams)
+    ]
     account = p.create_user(UserInput(name="alice", teams=teams[:2], role="reader"))["user"]
     p.resources["principals"][account["id"]]["clientId"] = account["id"]
     directory = UserDirectory({})
@@ -100,6 +107,7 @@ def users():
             directory=directory,
             provider=p,
             teams=teams,
+            databases=databases,
             account=account,
             calls=calls,
         )
@@ -127,7 +135,7 @@ def test_existing_name_secret_and_admin_cookie_is_not_user_session(users):
     login(c)
     state = c.get("/api/workspace").json()
     assert {t["id"] for t in state["teams"]} == set(users.teams[:2])
-    assert [d["id"] for d in state["databases"]] == ["data_0"]
+    assert [d["id"] for d in state["databases"]] == [users.databases[0]]
     for forbidden in ("clientSecret", "correct-secret", "actual-user-token", "clientId"):
         assert forbidden not in str(state)
     assert c.get("/api/state").status_code == 404
@@ -136,12 +144,12 @@ def test_existing_name_secret_and_admin_cookie_is_not_user_session(users):
 def test_team_switch_and_database_access(users):
     c = users.client
     login(c)
-    assert c.get("/api/contents", params={"database": "data_1"}).status_code == 403
+    assert c.get("/api/contents", params={"database": users.databases[1]}).status_code == 403
     assert c.patch("/api/team", json={"team": users.teams[2]}, headers=HEADERS).status_code == 403
     state = c.patch("/api/team", json={"team": users.teams[1]}, headers=HEADERS).json()
-    assert [d["id"] for d in state["databases"]] == ["data_1"]
-    assert c.get("/api/contents", params={"database": "data_0"}).status_code == 403
-    result = c.get("/api/contents", params={"database": "data_1", "namespace": "analytics"})
+    assert [d["id"] for d in state["databases"]] == [users.databases[1]]
+    assert c.get("/api/contents", params={"database": users.databases[0]}).status_code == 403
+    result = c.get("/api/contents", params={"database": users.databases[1], "namespace": "analytics"})
     assert result.status_code == 200
     assert result.json()["tables"][0]["name"] == "events"
     assert result.json()["views"][0]["name"] == "report"
@@ -160,12 +168,14 @@ def test_csrf_and_invalid_inputs(users):
         == 403
     )
     login(c)
-    assert c.post("/api/notebooks", json={"database": "data_2"}, headers=HEADERS).status_code == 403
-    assert c.get("/api/contents", params={"database": "data_0", "namespace": ".."}).status_code == 422
+    assert c.post("/api/notebooks", json={"database": users.databases[2]}, headers=HEADERS).status_code == 403
+    assert (
+        c.get("/api/contents", params={"database": users.databases[0], "namespace": ".."}).status_code == 422
+    )
     assert (
         c.post(
             "/api/notebooks",
-            json={"database": "data_0", "namespace": ["analytics"], "table": "missing"},
+            json={"database": users.databases[0], "namespace": ["analytics"], "table": "missing"},
             headers=HEADERS,
         ).status_code
         == 404
@@ -181,7 +191,7 @@ def test_csrf_and_invalid_inputs(users):
 def test_notebooks_are_owned_by_session_and_stop_on_team_switch(users):
     c = users.client
     login(c)
-    result = c.post("/api/notebooks", json={"database": "data_0"}, headers=HEADERS)
+    result = c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS)
     assert result.status_code == 201
     workspace = result.json()
     assert "hidden-runtime-token" not in str(workspace)
@@ -204,18 +214,18 @@ def test_notebooks_are_owned_by_session_and_stop_on_team_switch(users):
 def test_revoked_membership_stops_runtime(users):
     c = users.client
     login(c)
-    assert c.post("/api/notebooks", json={"database": "data_0"}, headers=HEADERS).status_code == 201
+    assert c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS).status_code == 201
     users.provider.update_memberships(users.account["id"], [users.teams[1]])
     state = c.get("/api/workspace").json()
     assert state["activeTeam"] == users.teams[1]
     assert not users.runtime.workspaces
-    assert c.get("/api/contents", params={"database": "data_0"}).status_code == 403
+    assert c.get("/api/contents", params={"database": users.databases[0]}).status_code == 403
 
 
 def test_logout_removes_runtime_and_cookie(users):
     c = users.client
     login(c)
-    c.post("/api/notebooks", json={"database": "data_0"}, headers=HEADERS)
+    c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS)
     assert c.request("DELETE", "/api/session", json={}, headers=HEADERS).status_code == 200
     assert not users.runtime.workspaces
     assert c.get("/api/workspace").status_code == 401
@@ -240,7 +250,7 @@ def test_websocket_requires_cookie_owner_and_same_origin(users):
 def test_proxy_strips_both_portals_cookies_and_injects_runtime_token(users):
     c = users.client
     login(c)
-    workspace = c.post("/api/notebooks", json={"database": "data_0"}, headers=HEADERS).json()
+    workspace = c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS).json()
     c.cookies.set("portal_session", "administrator-cookie")
     captured = []
 
@@ -262,17 +272,66 @@ def test_expired_token_refreshes_using_users_own_secret(users):
     directory = users.directory
     session = directory.login("alice", "correct-secret", "session")
     session.token_until = time.monotonic() - 1
-    directory.contents(session, "data_0", [])
+    directory.contents(session, users.databases[0], [])
     assert sum(r.url.path.endswith("/oauth/tokens") for r in users.calls) == 2
 
 
 def test_database_move_and_deleted_user_revoke_live_access(users):
     c = users.client
     login(c)
-    notebook = c.post("/api/notebooks", json={"database": "data_0"}, headers=HEADERS).json()
-    users.provider.move_database("data_0", users.teams[2])
+    notebook = c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS).json()
+    users.provider.move_database(users.databases[0], users.teams[2])
     assert c.get(notebook["url"]).status_code == 403
     assert c.get("/api/workspace").json()["databases"] == []
     assert not users.runtime.workspaces
     users.provider.delete_user(users.account["id"])
     assert c.get("/api/workspace").status_code == 401
+
+
+def test_team_environment_filespaces_are_shared_and_execution_stays_independent(users):
+    p, c = users.provider, users.client
+    owner = users.teams[0]
+    development = p.create_database(DatabaseInput(name="db1", team=owner))
+    production = p.create_database(DatabaseInput(name="db1", team=owner, environment="production"))
+    for name, role in [("sander", "writer"), ("alex", "reader")]:
+        account = p.create_user(UserInput(name=name, teams=[owner], role=role))["user"]
+        p.resources["principals"][account["id"]]["clientId"] = account["id"]
+    cookies, notebooks = {}, {}
+    for name in ("sander", "alex"):
+        c.cookies.clear()
+        assert (
+            c.post(
+                "/api/session", json={"username": name, "secret": "correct-secret"}, headers=HEADERS
+            ).status_code
+            == 200
+        )
+        cookies[name] = c.cookies.get(COOKIE)
+        state = c.get("/api/workspace").json()
+        assert state["environments"] == ["development", "acceptance", "production"]
+        assert len(state["filespaces"]) == 2  # data_0 adds no extra Development filespace.
+        assert {f["environment"] for f in state["filespaces"]} == {"development", "production"}
+        assert (
+            c.post("/api/notebooks", json={"database": production["id"]}, headers=HEADERS).status_code == 403
+        )
+        notebooks[name] = c.post(
+            "/api/notebooks", json={"database": development["id"]}, headers=HEADERS
+        ).json()
+    assert notebooks["sander"]["filespace"] == notebooks["alex"]["filespace"]
+    assert notebooks["sander"]["id"] != notebooks["alex"]["id"]
+    assert c.get(notebooks["sander"]["url"]).status_code == 404
+    assert c.patch("/api/environment", json={"environment": "staging"}, headers=HEADERS).status_code == 422
+    switched = c.patch("/api/environment", json={"environment": "production"}, headers=HEADERS)
+    assert switched.status_code == 200
+    assert [d["id"] for d in switched.json()["databases"]] == [production["id"]]
+    assert notebooks["sander"]["id"] in users.runtime.workspaces
+    assert notebooks["alex"]["id"] not in users.runtime.workspaces
+    prod = c.post("/api/notebooks", json={"database": production["id"]}, headers=HEADERS).json()
+    assert prod["filespace"] != notebooks["sander"]["filespace"]
+    assert c.get("/api/contents", params={"database": development["id"]}).status_code == 403
+    assert c.request("DELETE", "/api/session", json={}, headers=HEADERS).status_code == 200
+    assert notebooks["sander"]["id"] in users.runtime.workspaces
+    c.cookies.clear()
+    c.cookies.set(COOKIE, cookies["sander"])
+    assert c.get("/api/workspace").json()["notebooks"][0]["id"] == notebooks["sander"]["id"]
+    empty = c.patch("/api/environment", json={"environment": "acceptance"}, headers=HEADERS).json()
+    assert empty["activeEnvironment"] == "acceptance" and empty["databases"] == []

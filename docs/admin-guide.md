@@ -1,6 +1,6 @@
 # Administration guide
 
-Iceberg Platform runs the administration portal, Apache Polaris, PostgreSQL and RustFS in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and personal marimo notebooks.
+Iceberg Platform runs the administration portal, Apache Polaris, PostgreSQL and RustFS in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and shared team marimo notebooks.
 
 Python **3.14.7**, FastAPI **0.141.1** and uv **0.12.13** are pinned in the project manifests and Dockerfiles. Node is needed only for browser tests.
 
@@ -49,10 +49,11 @@ Open `http://<LAN-IP>:3000` on a phone connected to the same network. Only the p
 ## Teams, databases and users
 
 1. **Create teams** on the Teams page. Teams exist independently of databases and users. Editing a name or description preserves the stable team ID.
-2. **Create a database** and select an existing team. Each database gets its own catalog and RustFS bucket. Existing team members receive access immediately.
+2. **Create a database** and select an existing team and Development, Acceptance or Production. Names are unique within that team and environment; `db1` can exist in both Development and Production. Each database gets its own catalog and RustFS bucket. Existing team members receive access immediately.
 3. **Create a user** and select one or more teams. Every user must belong to at least one existing team. The selected role applies to all current and future databases in those teams.
 4. **Save credentials** when they appear. Secrets are returned once and are never stored or logged by the administration portal.
 5. **Edit memberships** under Users → Edit teams. Existing credentials gain or lose catalog and S3 permissions according to the selected teams.
+6. **Change roles** under Users → Edit role. The new role applies across all team databases without changing the username or database credentials. First-time bucket administrators receive new S3 credentials, shown once. Removing bucket administration denies all direct S3 access; restoring it reuses the same S3 credentials with the user’s current team buckets.
 6. **Move a database** under Databases → Move. Members of the new team receive access. Previous members lose access unless they also belong to the new team. The bucket, data, database name and connection details stay the same.
 7. **Delete a database** under Databases → Delete. After confirmation, the operation removes catalog grants, namespaces, tables, views, objects, object versions, multipart uploads and the dedicated bucket. Users and teams remain. If cleanup fails, use **Resume deletion** to finish it.
 8. **Delete a team** after moving or deleting its databases. The API refuses deletion if a user would lose their last team. Assign that user to another team or delete the user first. Users with multiple teams lose only the deleted membership.
@@ -103,7 +104,7 @@ The same credentials work across the user's team databases; change the warehouse
 
 See [architecture](architecture.md) for component boundaries. Teams are marked Polaris principal roles; users are principals with stable team IDs. Each user has a dedicated principal role granting only the catalog roles for their teams. Polaris stores this metadata in PostgreSQL; the portal has no separate database.
 
-Only resources marked `portal.managed-by=iceberg-portal-v2` belong to this resource model. Older resources are not imported. `docker compose down -v` deletes PostgreSQL and RustFS data and resets the local environment. A new environment has no default teams or users.
+Only resources marked `portal.managed-by=iceberg-portal-v2` belong to this resource model. Older resources are not imported. The team/environment workspace model requires a fresh setup; it does not migrate user-specific notebook volumes or old database metadata. `docker compose down -v` deletes PostgreSQL and RustFS data and resets the local environment. A new environment has no default teams or users.
 
 Run one Uvicorn worker. A lock serializes administration changes, such as creating a user while deleting a team. Sessions are process-local and expire after eight hours or a restart. Multiple replicas require shared sessions and coordination.
 
@@ -125,6 +126,7 @@ Creation and moves use compensating actions when Polaris or RustFS fails. Failed
 | GET | `/api/databases/{id}/connection` | Iceberg connection details |
 | GET / POST | `/api/users` | List / create users |
 | PATCH / DELETE | `/api/users/{id}` | Edit memberships with `{"teams":["team-id"]}` / revoke access |
+| PATCH | `/api/users/{id}/role` | Change role with `{"role":"writer"}`; returns the user and, on first S3 promotion, one-time `bucketCredentials` |
 
 Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, including DELETE without a body. Administration requires an authenticated portal session. Use stable team IDs from `/api/teams`. Validation errors return 422, missing teams 404 and dependency conflicts 409. Errors contain `error`; provider error bodies and secrets are never forwarded.
 

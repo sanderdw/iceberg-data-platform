@@ -226,7 +226,7 @@ class PolarisProvider:
         p = catalog["properties"]
         return {
             "id": catalog["name"],
-            "name": catalog["name"],
+            "name": p["portal.name"],
             "team": p["portal.team"],
             "description": p.get("portal.description", ""),
             "environment": p["portal.environment"],
@@ -246,10 +246,11 @@ class PolarisProvider:
             [
                 {
                     "id": c["name"],
-                    "name": c["name"],
+                    "name": c.get("properties", {}).get("portal.name", c["name"]),
                     "type": c.get("type", "INTERNAL"),
                     "managed": self.managed(c),
                     "team": c.get("properties", {}).get("portal.team"),
+                    "environment": c.get("properties", {}).get("portal.environment"),
                     "status": "deleting"
                     if c.get("properties", {}).get("portal.deleting") == "true"
                     else "ready",
@@ -327,7 +328,7 @@ class PolarisProvider:
             "name": p["portal.name"],
             "teams": json.loads(p["portal.teams"]),
             "role": p["portal.role"],
-            "bucketAccess": bool(p.get("portal.bucket-access-key")),
+            "bucketAccess": p["portal.role"] == "bucket-admin" and bool(p.get("portal.bucket-access-key")),
             "clientId": principal.get("clientId"),
             "createdAt": principal.get("createTimestamp"),
         }
@@ -358,22 +359,29 @@ class PolarisProvider:
 
     def create_database(self, data):
         self.require_teams([data.team])
-        path = f"/catalogs/{enc(data.name)}"
+        if any(
+            d["name"] == data.name and d["team"] == data.team and d["environment"] == data.environment
+            for d in self.list_databases()
+        ):
+            raise ServiceError(409, "This database name already exists in this team and environment.")
+        id = f"db-{uuid4().hex}"
+        path = f"/catalogs/{enc(id)}"
         with provision() as undo:
-            bucket = self.storage.create_bucket(data.name, data.team)
+            bucket = self.storage.create_bucket(id, data.team)
             undo.append(lambda: self.storage.delete_empty_bucket(bucket))
             self.management(
                 "/catalogs",
                 "POST",
                 {
                     "catalog": {
-                        "name": data.name,
+                        "name": id,
                         "type": "INTERNAL",
                         "properties": {
                             "default-base-location": f"s3://{bucket}/",
                             "portal.bucket": bucket,
                             "portal.managed-by": MANAGED,
                             "portal.team": data.team,
+                            "portal.name": data.name,
                             "portal.environment": data.environment,
                             "portal.description": data.description,
                         },
@@ -400,7 +408,7 @@ class PolarisProvider:
             databases = self.list_databases()
             for user in self.list_users():
                 after = self.access(user, databases)
-                before = {k: v for k, v in after.items() if k != data.name}
+                before = {k: v for k, v in after.items() if k != id}
                 if before != after:
                     self.sync_access(user, before, after, undo)
             return self.database(self.management(path))
@@ -415,6 +423,15 @@ class PolarisProvider:
         if old == team:
             return self.database(catalog)
         databases = self.list_databases()
+        if any(
+            d["team"] == team
+            and d["name"] == catalog["properties"]["portal.name"]
+            and d["environment"] == catalog["properties"]["portal.environment"]
+            for d in databases
+        ):
+            raise ServiceError(
+                409, "This database name already exists in the destination team and environment."
+            )
         moved = [{**d, "team": team} if d["id"] == id else d for d in databases]
         with provision() as undo:
             for user in self.list_users():
@@ -483,6 +500,43 @@ class PolarisProvider:
                 path, {**principal["properties"], "portal.teams": json.dumps(teams)}
             )
             return self.user(updated)
+
+    def update_role(self, id, role):
+        path = f"/principals/{enc(id)}"
+        principal = self.require(path)
+        user = self.user(principal)
+        if user["role"] == role:
+            return {"user": user}
+        access = self.access(user, self.list_databases())
+        properties = {**principal["properties"], "portal.role": role}
+        key = properties.get("portal.bucket-access-key")
+        credentials = None
+        with provision() as undo:
+            old_catalog_role = "admin" if user["role"] == "bucket-admin" else user["role"]
+            new_catalog_role = "admin" if role == "bucket-admin" else role
+            if old_catalog_role != new_catalog_role:
+                self.sync_access({**user, "bucketAccess": False}, access, {}, undo)
+            buckets = [d["bucket"] for d in access.values()]
+            if key:
+                # Retain the key with a deny-all policy on demotion. This preserves
+                # credentials for re-promotion and lets failed changes roll back.
+                before = buckets if user["bucketAccess"] else []
+                after = buckets if role == "bucket-admin" else []
+                if before != after:
+                    self.storage.set_user_buckets(key, after)
+                    undo.append(lambda: self.storage.set_user_buckets(key, before))
+            elif role == "bucket-admin":
+                key = f"portal{secrets.token_hex(12)}"
+                credentials = self.storage.create_user(key, buckets)
+                undo.append(lambda: self.storage.delete_user(key))
+                properties["portal.bucket-access-key"] = key
+            if old_catalog_role != new_catalog_role:
+                self.sync_access({**user, "role": role, "bucketAccess": False}, {}, access, undo)
+            updated = self.update_properties(path, properties)
+            return {
+                "user": self.user(updated),
+                **({"bucketCredentials": credentials} if credentials else {}),
+            }
 
     def delete_user(self, id):
         path = f"/principals/{enc(id)}"

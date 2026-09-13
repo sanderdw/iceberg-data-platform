@@ -48,16 +48,36 @@ test('central teams, memberships, move and deletion through FastAPI', async ({ p
     await expect(page.locator('.form-error')).toContainText('Select at least one team');
     await page.getByLabel(renamed, { exact: true }).check();
     await page.getByLabel(second, { exact: true }).check();
-    await page.getByRole('combobox', { name: 'Access', exact: true }).selectOption('bucket-admin');
+    await page.getByRole('combobox', { name: 'Access', exact: true }).selectOption('reader');
     await page.getByRole('dialog').getByRole('button', { name: 'Create user' }).click();
     await expect(page.getByRole('heading', { name: 'Your user is ready' })).toBeVisible();
-    await expect(page.locator('.credential code')).toHaveCount(4);
+    await expect(page.locator('.credential code')).toHaveCount(2);
     await page.getByRole('button', { name: 'Saved securely' }).click();
 
     await page.getByRole('button', { name: 'Users', exact: true }).click();
     const userRow = page.locator('tbody tr').filter({ hasText: username });
     await expect(userRow).toContainText(renamed);
     await expect(userRow).toContainText(second);
+    await userRow.getByRole('button', { name: 'Edit role', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Access', exact: true })).toHaveValue('reader');
+    await page.getByRole('combobox', { name: 'Access', exact: true }).selectOption('writer');
+    await page.screenshot({ path: 'test-results/edit-user-role.png', fullPage: true });
+    await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await expect(userRow).toContainText('Read & write');
+    await userRow.getByRole('button', { name: 'Edit role', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Access', exact: true }).selectOption('bucket-admin');
+    await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'S3 access is ready', exact: true })).toBeVisible();
+    await expect(page.locator('.credential code')).toHaveCount(2);
+    await page.getByRole('button', { name: 'Saved securely' }).click();
+    for (const role of ['reader', 'bucket-admin']) {
+      await userRow.getByRole('button', { name: 'Edit role', exact: true }).click();
+      await page.getByRole('combobox', { name: 'Access', exact: true }).selectOption(role);
+      await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+      await expect(page.getByRole('dialog')).not.toBeVisible();
+    }
+    await expect(userRow).toContainText('Database + bucket administration');
     await userRow.getByRole('button', { name: 'Edit teams' }).click();
     await page.getByLabel(renamed, { exact: true }).uncheck();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -103,7 +123,7 @@ test('central teams, memberships, move and deletion through FastAPI', async ({ p
     await request.post('/api/session', { headers, data: { password: process.env.PORTAL_PASSWORD } });
     const overview = await (await request.get('/api/overview')).json();
     for (const u of overview.users.filter(u => u.name === username)) await request.delete(`/api/users/${u.id}`, { headers });
-    for (const d of overview.databases.filter(d => d.id === database)) await request.delete(`/api/databases/${d.id}`, { headers });
+    for (const d of overview.databases.filter(d => d.name === database)) await request.delete(`/api/databases/${d.id}`, { headers });
     for (const t of overview.teams.filter(t => [first, second, renamed].includes(t.name))) await request.delete(`/api/teams/${t.id}`, { headers });
   }
 });

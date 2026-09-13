@@ -21,7 +21,7 @@ def _():
 def _(mo, os):
     mo.md(f"""
     # Neighborhood data with PyIceberg
-    **Example 1 of 2 · database `{os.environ["ICEBERG_DATABASE"]}`**
+    **Example 1 of 2 · database `{os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])}`**
 
     We create `synthetic.neighborhood_electricity`: **40 homes × 7 days × 96 quarter-hours = 26,880 rows**.
     The data comes from the bundled synthetic energy model. All addresses are fictional;

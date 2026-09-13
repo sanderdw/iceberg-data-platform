@@ -21,10 +21,10 @@ from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
-from server.models import ServiceError
+from server.models import ENVIRONMENTS, Environment, ServiceError
 
 from .directory import UserDirectory
-from .runtime import NotebookRuntime
+from .runtime import NotebookRuntime, filespace_key
 
 PUBLIC = Path(__file__).parent / "public"
 COOKIE = "iceberg_user_session"
@@ -47,6 +47,11 @@ class NotebookInput(BaseModel):
     database: str = Field(min_length=1, max_length=256)
     namespace: list[str] = Field(default_factory=list, max_length=100)
     table: str | None = Field(default=None, max_length=256)
+
+
+class EnvironmentInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    environment: Environment
 
 
 def validate_namespace(parts):
@@ -82,7 +87,8 @@ def create_app(directory=None, runtime=None):
         if session.team not in {t["id"] for t in profile["teams"]}:
             runtime.stop_session(session.id)
             session.team = profile["teams"][0]["id"]
-        available = [d for d in profile["databases"] if d["team"] == session.team]
+        team_databases = [d for d in profile["databases"] if d["team"] == session.team]
+        available = [d for d in team_databases if d["environment"] == session.environment]
         for workspace in list(runtime.workspaces.values()):
             if workspace.session_id == session.id and workspace.database not in {d["id"] for d in available}:
                 runtime.stop(workspace.id)
@@ -90,6 +96,13 @@ def create_app(directory=None, runtime=None):
             **profile,
             "databases": available,
             "activeTeam": session.team,
+            "activeEnvironment": session.environment,
+            "environments": list(ENVIRONMENTS),
+            "filespaces": [
+                {"id": filespace_key(session.team, env), "team": session.team, "environment": env}
+                for env in ENVIRONMENTS
+                if any(d["environment"] == env for d in team_databases)
+            ],
             "notebooks": [w.public() for w in runtime.workspaces.values() if w.session_id == session.id],
         }
 
@@ -262,6 +275,14 @@ def create_app(directory=None, runtime=None):
             session.team = data.team
         return workspace_state(session)
 
+    @app.patch("/api/environment")
+    def switch_environment(data: EnvironmentInput, request: Request):
+        session = request.state.session
+        if session.environment != data.environment:
+            runtime.stop_session(session.id)
+            session.environment = data.environment
+        return workspace_state(session)
+
     @app.get("/api/contents")
     def contents(
         request: Request,
@@ -274,13 +295,15 @@ def create_app(directory=None, runtime=None):
     @app.post("/api/notebooks", status_code=201)
     def start_notebook(data: NotebookInput, request: Request):
         session = request.state.session
-        directory.database(session, data.database)
+        database = directory.database(session, data.database)
         validate_namespace(data.namespace)
         if data.namespace or data.table:
             content = directory.contents(session, data.database, data.namespace)
             if data.table and data.table not in {t["name"] for t in content["tables"]}:
                 raise ServiceError(404, "Table not found in this namespace.")
-        return runtime.start(session, data.database, data.namespace, data.table).public()
+        return runtime.start(
+            session, data.database, data.namespace, data.table, database_name=database["name"]
+        ).public()
 
     @app.delete("/api/notebooks/{id}")
     def stop_notebook(id: str, request: Request):

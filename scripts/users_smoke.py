@@ -3,7 +3,6 @@
 import json
 import os
 import subprocess
-from hashlib import sha256
 
 import docker
 import httpx
@@ -13,6 +12,7 @@ from pyiceberg.view import ViewVersion
 
 from scripts.smoke import stack_resources
 from server.models import DatabaseInput, TeamInput, UserInput
+from user_portal.runtime import filespace_key
 
 HEADERS = {"X-Portal-Request": "1"}
 
@@ -33,6 +33,12 @@ def main():
             users.append(account["user"]["id"])
             other = p.create_user(UserInput(name=f"other-{suffix}", teams=[teams[2]], role="reader"))
             users.append(other["user"]["id"])
+            teammate = p.create_user(UserInput(name=f"alex-{suffix}", teams=[teams[0]], role="reader"))
+            users.append(teammate["user"]["id"])
+            production = p.create_database(
+                DatabaseInput(name=f"workspace_0_{suffix}", team=teams[0], environment="production")
+            )
+            databases.append(production["id"])
             credentials = account["credentials"]
             catalog = load_catalog(
                 databases[0],
@@ -60,8 +66,8 @@ def main():
                     representations=[{"type": "sql", "sql": "SELECT * FROM events", "dialect": "spark"}],
                 ),
             )
-            for team, db in zip(teams[:2], databases[:2], strict=True):
-                key = sha256(json.dumps([users[0], team, db]).encode()).hexdigest()[:32]
+            for team, env in [(teams[0], "development"), (teams[1], "development"), (teams[0], "production")]:
+                key = filespace_key(team, env)
                 volume_names.append(f"iceberg-workspaces-work-{key}")
             with httpx.Client(
                 base_url=os.environ.get("USER_PORTAL_URL", "http://localhost:3002"), timeout=90
@@ -76,6 +82,7 @@ def main():
                     assert response.status_code == 200, (response.status_code, response.text)
                     state = c.get("/api/workspace").json()
                     assert len(state["teams"]) == 2
+                    assert len(state["filespaces"]) == 2
                     assert {d["id"] for d in state["databases"]} == {databases[0]}
                     assert c.get("/api/contents", params={"database": databases[2]}).status_code == 403
                     content = c.get(
@@ -121,6 +128,67 @@ def main():
                     executed = runtime.exec_run(["/app/.venv/bin/python", "-c", code])
                     assert executed.exit_code == 0, executed.output.decode()
                     print(executed.output.decode().strip(), flush=True)
+                    with httpx.Client(base_url=str(c.base_url), timeout=90) as peer:
+                        try:
+                            peer.post(
+                                "/api/session",
+                                headers=HEADERS,
+                                json={
+                                    "username": teammate["user"]["name"],
+                                    "secret": teammate["credentials"]["clientSecret"],
+                                },
+                            ).raise_for_status()
+                            shared_response = peer.post(
+                                "/api/notebooks", headers=HEADERS, json={"database": databases[0]}
+                            )
+                            shared_response.raise_for_status()
+                            shared = shared_response.json()
+                            assert shared["filespace"] == notebook["filespace"]
+                            assert shared["id"] != notebook["id"]
+                            peer_runtime = daemon.containers.get("iceberg-workspaces-marimo-" + shared["id"])
+                            proof = peer_runtime.exec_run(["cat", "/work/persistence-proof.txt"])
+                            assert proof.exit_code == 0 and proof.output == b"saved"
+                            peer_write = peer_runtime.exec_run(
+                                [
+                                    "/app/.venv/bin/python",
+                                    "-c",
+                                    "from pathlib import Path; Path('/work/alex.txt').write_text('shared with sander')",
+                                ]
+                            )
+                            assert peer_write.exit_code == 0
+                            proof = runtime.exec_run(["cat", "/work/alex.txt"])
+                            assert proof.exit_code == 0 and proof.output == b"shared with sander"
+                            assert peer.get(notebook["url"]).status_code == 404
+                            assert peer.get(shared["filesUrl"]).status_code == 200
+                            peer.patch(
+                                "/api/environment", headers=HEADERS, json={"environment": "production"}
+                            ).raise_for_status()
+                            prod_response = peer.post(
+                                "/api/notebooks", headers=HEADERS, json={"database": production["id"]}
+                            )
+                            prod_response.raise_for_status()
+                            prod_notebook = prod_response.json()
+                            assert prod_notebook["filespace"] != shared["filespace"]
+                            prod_runtime = daemon.containers.get(
+                                "iceberg-workspaces-marimo-" + prod_notebook["id"]
+                            )
+                            proof = prod_runtime.exec_run(
+                                [
+                                    "/app/.venv/bin/python",
+                                    "-c",
+                                    "from pathlib import Path; assert not Path('/work/alex.txt').exists(); assert not Path('/work/persistence-proof.txt').exists()",
+                                ]
+                            )
+                            assert proof.exit_code == 0, proof.output.decode()
+                        finally:
+                            peer.request(
+                                "DELETE", "/api/session", headers=HEADERS, json={}
+                            ).raise_for_status()
+                        assert c.get(notebook["url"]).status_code == 200
+                    print(
+                        "PASS: two members share saved files; Production is separate; teammate sign-out preserves execution",
+                        flush=True,
+                    )
                     if os.environ.get("USER_BROWSER_TEST") == "1":
                         subprocess.run(
                             ["node", "scripts/users-browser.mjs"],
@@ -130,6 +198,7 @@ def main():
                                     "cookie": c.cookies.get("iceberg_user_session"),
                                     "notebook": notebook,
                                     "database": databases[0],
+                                    "databaseName": f"workspace_0_{suffix}",
                                     "team": teams[1],
                                 }
                             ),
@@ -144,6 +213,7 @@ def main():
                                     "baseURL": str(c.base_url),
                                     "cookie": c.cookies.get("iceberg_user_session"),
                                     "database": databases[0],
+                                    "databaseName": f"workspace_0_{suffix}",
                                 }
                             ),
                             text=True,
@@ -173,7 +243,7 @@ def main():
                         )
                         assert saved.exit_code == 0, saved.output.decode()
                     print(
-                        "PASS: team switch stops container, reopening preserves personal notebook storage",
+                        "PASS: team switch stops container, reopening preserves shared team/environment storage",
                         flush=True,
                     )
                     with httpx.Client(base_url=str(c.base_url)) as outsider:
