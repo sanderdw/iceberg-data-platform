@@ -33,6 +33,8 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
         assert any(name.endswith("/.env.example") for name in members)
         assert any(name.endswith("/LICENSE") for name in members)
         assert any(name.endswith("/01_pyiceberg_neighborhood.py") for name in members)
+        screenshot = next(name for name in members if name.endswith("/docs/portal.png"))
+        assert archive.extractfile(screenshot).read() == (release_tree / "docs" / "portal.png").read_bytes()
         assert not any(name.endswith("/.env") or "/.venv/" in name or "/dist/" in name for name in members)
 
 

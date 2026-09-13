@@ -39,7 +39,8 @@ ROOT_FILES = (
     "uv.lock",
 )
 SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", ".github")
-SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".ttf", ".txt", ".md", ".yaml", ".yml"}
+BINARY_SUFFIXES = {".png", ".ttf"}
+SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml"} | BINARY_SUFFIXES
 IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache"}
 
 
@@ -86,7 +87,7 @@ def check(root=ROOT):
                 local_secrets.append(value.strip().strip("\"'"))
     for path in files:
         relative = path.relative_to(root).as_posix()
-        if path.suffix == ".ttf":
+        if path.suffix in BINARY_SUFFIXES:
             continue
         content = path.read_text()
         if any(secret in content for secret in local_secrets):
