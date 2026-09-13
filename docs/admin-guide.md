@@ -112,6 +112,33 @@ Creation and moves use compensating actions when Polaris or RustFS fails. Failed
 
 ## API
 
+The **Infrastructure** page displays live service health, probe response times and
+recent successful-probe percentages, per-container CPU/memory/uptime/restarts,
+PostgreSQL metadata statistics, managed bucket totals and RustFS filesystem space.
+It refreshes every 15 seconds; bucket scans run every five minutes. Refresh fetches
+the collector's latest snapshot rather than triggering an expensive scan.
+
+Start or update it with `docker compose up -d --build --no-deps monitor portal`.
+Compose connects the portal to the internal collector automatically. If running
+the portal outside Compose, configure `MONITOR_URL` to reach that collector over
+a private connection. The collector has no published host port by default.
+Set `MONITOR_USERS_URL=http://users:3002` in `.env` and recreate `monitor` to include
+health checks for the optional user portal. `MONITOR_PROJECTS` selects the Compose
+projects whose container resources are collected.
+
+Each source shows its own last successful update and marks stale or unavailable
+readings. Missing metrics display a dash. Probe history holds up to 60 checks in
+memory and resets on collector restart; it is not a persisted uptime SLA or a
+measurement of actual API traffic. PostgreSQL transaction rates include monitoring
+traffic, and deadlocks are cumulative since the PostgreSQL statistics reset.
+The first transaction-rate sample is unavailable until a second reading exists.
+
+Bucket totals cover current objects in portal-managed buckets, excluding previous
+versions and incomplete uploads. Scans use a shared 45-second budget checked
+between S3 requests and a 1,000-page limit per bucket. Incomplete scans remain
+unavailable and never count as zero; concurrent writes can change counts during
+a scan. Filesystem usage can include other data sharing RustFS's backing filesystem.
+
 | Method | Path | Action |
 | --- | --- | --- |
 | GET / POST / DELETE | `/api/session` | Read session / sign in / sign out |
@@ -119,6 +146,7 @@ Creation and moves use compensating actions when Polaris or RustFS fails. Failed
 | GET | `/api/admin/explorer/databases` | List all Polaris databases for the portal administrator |
 | GET | `/api/admin/explorer/contents?database=name&namespace=part` | List namespaces, tables and views; repeat `namespace` for nested paths |
 | GET | `/api/overview` | Provider status, teams, databases and users |
+| GET | `/api/infrastructure` | Administrator-only cached monitoring snapshot |
 | GET / POST | `/api/teams` | List / create teams |
 | PATCH / DELETE | `/api/teams/{id}` | Edit / delete a team |
 | GET / POST | `/api/databases` | List / create databases |

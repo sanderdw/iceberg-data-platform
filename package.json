@@ -11,7 +11,7 @@
     "start": "uv run python -m server",
     "setup": "uv run python -m scripts.setup",
     "test": "uv run pytest",
-    "verify": "uv run --all-groups pytest && uv run --all-groups ruff check server user_portal test scripts/*.py && node --check public/app.js && node --check user_portal/public/app.js",
+    "verify": "uv run --all-groups pytest && uv run --all-groups ruff check server user_portal test scripts/*.py && node --check public/app.js && node --check public/infrastructure.js && node --check user_portal/public/app.js",
     "test:e2e": "playwright test",
     "test:stack": "uv run python -m scripts.smoke",
     "test:data": "uv run --group data python -m scripts.data_smoke",

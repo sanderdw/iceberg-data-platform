@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlsplit
 
+import httpx
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
@@ -27,7 +28,8 @@ from .polaris import PolarisProvider
 from .storage import RustFSStorage
 
 PUBLIC = Path(__file__).resolve().parent.parent / "public"
-FILES = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg"}
+FILES = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg",
+         "/infrastructure.js": "infrastructure.js"}
 FILES.update({f"/fonts/{name}.ttf": f"fonts/{name}.ttf" for name in ("doto", "space-grotesk", "space-mono")})
 
 
@@ -98,7 +100,7 @@ def create_app(provider=None, password=None, secure_cookie=None):
             ) or path in ("/docs", "/openapi.json", "/docs/oauth2-redirect")
             if protected and not request.state.authenticated:
                 raise ServiceError(401, "Sign in to continue.")
-            if protected:
+            if protected and path != "/api/infrastructure":
                 async with mutation_lock:
                     response = await call_next(request)
             else:
@@ -170,6 +172,20 @@ def create_app(provider=None, password=None, secure_cookie=None):
             "databases": provider.list_databases(),
             "users": provider.list_users(),
         }
+
+    @app.get("/api/infrastructure")
+    async def infrastructure():
+        endpoint = os.environ.get("MONITOR_URL", "")
+        if not endpoint:
+            raise ServiceError(503, "Monitoring is not configured. Start the monitoring service and set MONITOR_URL.")
+        try:
+            async with httpx.AsyncClient(timeout=4, trust_env=False) as client:
+                response = await client.get(endpoint.rstrip("/") + "/snapshot",
+                                            headers={"X-Monitor-Token": password})
+                response.raise_for_status()
+                return response.json()
+        except (httpx.HTTPError, ValueError):
+            raise ServiceError(503, "The monitoring service is unavailable. Retrying automatically.") from None
 
     async def require_portal_admin(request: Request):
         # A portal password session is the only admin identity. Never accept a

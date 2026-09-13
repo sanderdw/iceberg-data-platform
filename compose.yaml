@@ -81,6 +81,7 @@ services:
     build: .
     environment:
       HOST: 0.0.0.0
+      MONITOR_URL: http://monitor:3003
       PORTAL_PASSWORD: ${PORTAL_PASSWORD}
       PROVIDER: polaris
       POLARIS_URL: http://polaris:8181
@@ -103,6 +104,37 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  monitor:
+    build: .
+    user: "0:0"
+    command: ["/app/.venv/bin/uvicorn", "server.monitoring:create_monitor_app", "--factory", "--host", "0.0.0.0", "--port", "3003"]
+    environment:
+      PORTAL_PASSWORD: ${PORTAL_PASSWORD}
+      POLARIS_URL: http://polaris:8181
+      POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}
+      POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      S3_ADMIN_ENDPOINT: http://rustfs:9000
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      MONITOR_PROJECTS: ${MONITOR_PROJECTS:-iceberg-platform,iceberg-workspaces}
+      MONITOR_USERS_URL: ${MONITOR_USERS_URL:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - rustfs-data:/storage:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3003/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
 volumes:

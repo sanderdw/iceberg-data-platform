@@ -24,6 +24,7 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
     (release_tree / ".env").write_text("LOCAL_PASSWORD=" + secrets.token_hex(24))
     (release_tree / ".venv").mkdir()
     (release_tree / ".venv" / "private.txt").write_text("private data")
+    (release_tree / "docs" / "conversation.md").write_text("Private local development conversation")
     first = build(release_tree)
     digest = hashlib.sha256(first.read_bytes()).hexdigest()
     second = build(release_tree)
@@ -36,6 +37,7 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
         screenshot = next(name for name in members if name.endswith("/docs/portal.png"))
         assert archive.extractfile(screenshot).read() == (release_tree / "docs" / "portal.png").read_bytes()
         assert not any(name.endswith("/.env") or "/.venv/" in name or "/dist/" in name for name in members)
+        assert not any(name.endswith("/docs/conversation.md") for name in members)
 
 
 def test_known_local_secret_in_public_source_is_rejected(release_tree):

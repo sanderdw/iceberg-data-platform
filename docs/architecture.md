@@ -37,6 +37,24 @@ Logout, team or environment switching, expiry and revoked authorization stop onl
 
 ## Repository layout
 
+The internal `monitor` service polls health endpoints, Docker container statistics,
+PostgreSQL statistics and S3 object listings independently. It keeps bounded probe
+history and cached snapshots in memory. The admin API authenticates requests to
+`/api/infrastructure` and fetches the snapshot using a server-side shared secret.
+This read bypasses the administration mutation lock and does not depend on Polaris
+being healthy. Source failures retain the last successful sample with an explicit
+unavailable status. The collector returns only selected metrics, never Docker
+inspection documents, SQL text, connection strings or upstream error bodies.
+
+The collector has no host port, mounts RustFS data read-only for filesystem capacity,
+and reads Docker via its Unix socket. Its root filesystem is read-only and Linux
+capabilities are dropped. Docker socket access still makes it a trusted service
+with host-level capability; the portal itself has no Docker socket. PostgreSQL
+queries use read-only transactions and statement/connect timeouts. The local
+Compose setup reuses the PostgreSQL account; a separately provisioned monitoring
+account can be configured through `PGHOST`, `PGDATABASE` and `PGUSER` with its password
+in the collector's `POSTGRES_PASSWORD` environment variable.
+
 | Path | Purpose |
 | --- | --- |
 | `server/` | Administration API, domain validation, Polaris and RustFS adapters |

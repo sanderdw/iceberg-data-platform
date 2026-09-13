@@ -35,5 +35,6 @@ htmlcov/
 .vscode/
 
 # Private historical material is kept outside the repository
+docs/conversation.md
 notebooktest/
 presentation/
