@@ -16,6 +16,9 @@ try {
   await page.goto(data.baseURL);
   await page.locator('#databases button').filter({hasText: data.databaseName}).click();
   await page.locator('#example-write').click();
+  // Reuse the runtime provisioned before Chromium launched, keeping Docker's
+  // network topology stable while the editor's module graph loads.
+  await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', data.notebook.examples[0].url);
   let frame = page.frameLocator('#frame-host iframe');
   await frame.locator('.cm-content').first().waitFor();
   await frame.locator('.cm-content').first().click();

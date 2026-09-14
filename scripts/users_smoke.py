@@ -206,12 +206,23 @@ def main():
                             check=True,
                         )
                     if os.environ.get("USER_EXAMPLE_TEST") == "1":
+                        # Environment switching above stops the original runtime.
+                        # Create its replacement before Chromium starts: new Docker
+                        # interfaces can abort in-flight assets with ERR_NETWORK_CHANGED
+                        # when the browser runs on the same Linux host as Docker.
+                        example_response = c.post(
+                            "/api/notebooks", headers=HEADERS, json={"database": databases[0]}
+                        )
+                        example_response.raise_for_status()
+                        example_notebook = example_response.json()
+                        c.get(example_notebook["url"]).raise_for_status()
                         subprocess.run(
                             ["node", "scripts/examples-browser.mjs"],
                             input=json.dumps(
                                 {
                                     "baseURL": str(c.base_url),
                                     "cookie": c.cookies.get("iceberg_user_session"),
+                                    "notebook": example_notebook,
                                     "database": databases[0],
                                     "databaseName": f"workspace_0_{suffix}",
                                 }
