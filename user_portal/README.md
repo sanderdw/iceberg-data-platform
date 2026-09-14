@@ -43,8 +43,11 @@ Run cells with **▶** in marimo. Add Python or SQL cells in the editor and use 
 
 1. **01 · Neighborhood data with PyIceberg** creates `synthetic.neighborhood_electricity` with 40 homes, seven days and 26,880 quarter-hour readings. The deterministic model includes consumption, solar generation, grid draw, grid export and fictional addresses. Run the cells and click **Create example table**. A populated table is skipped; existing rows are never overwritten or duplicated. Writing requires a writer role or higher.
 2. **02 · Visualize with DuckDB** reads that Iceberg table using your credentials, then runs SQL on the loaded dataframe. The street selector reactively updates the hourly aggregation, statistics and chart. A second chart compares grid draw and export by street. Readers can use this notebook once a writer has created the table. **Reload Iceberg data** fetches changes made by another notebook.
+3. **03 · Native DuckDB on Iceberg** attaches Polaris directly with DuckDB's `iceberg` extension. Choose a table and click **Connect / refresh credentials**, then inspect tables, columns, the first 100 rows, row counts, snapshots and energy totals using SQL cells. It defaults to the table selected in the portal or `synthetic.neighborhood_electricity`. The attachment is read-only and readers can use it.
 
-Energy is measured in kWh per quarter-hour; hourly queries sum the intervals. Iceberg stores UTC timestamps, while charts display local time in Europe/Amsterdam. All addresses are fictional and the dataset is a demonstration, not a calibrated energy model. Visualization reads up to 100,000 rows; add selective Iceberg filters for larger datasets. DuckDB analyzes locally loaded data without network extensions.
+Energy is measured in kWh per quarter-hour; hourly queries sum the intervals. Iceberg stores UTC timestamps, while charts display local time in Europe/Amsterdam. All addresses are fictional and the dataset is a demonstration, not a calibrated energy model. Example 2 reads up to 100,000 rows into a dataframe; add selective Iceberg filters for larger datasets. Example 3 runs scans and aggregations directly in DuckDB, returning only query results to marimo.
+
+The native example follows [DuckDB's Iceberg REST catalog workflow](https://duckdb.org/docs/lts/core_extensions/iceberg/iceberg_rest_catalogs): in-memory secrets and `ATTACH ... (TYPE iceberg)`. Its connection helper obtains table-scoped storage credentials from Polaris using the signed-in user's identity and sets the internal RustFS endpoint. Automatic credential vending on the attachment is disabled to prevent Polaris's host-facing S3 address from replacing that internal endpoint. Reconnect to renew expiring credentials, see a fresh snapshot or query a different table. HTTPX retrieves credentials and catalog configuration; DuckDB reads Iceberg metadata and Parquet without PyIceberg or a dataframe staging step. The notebook image bundles `httpfs` and `iceberg` for pinned DuckDB 1.5.5 under `/opt/duckdb/extensions`, so runtime internet access is unnecessary.
 
 The examples use focused cells with explicit dependencies, local intermediate variables, reusable generation logic, `mo.stop` and a `run_button` for writes. Widget changes flow through marimo's reactive graph without `on_change` callbacks or hidden state. Native SQL cells feed the charts. Filters select rows in the dataframe without interpolating user input into SQL. See the [marimo best practices](https://docs.marimo.io/guides/best_practices/) and [SQL guide](https://docs.marimo.io/guides/working_with_data/sql/).
 
@@ -52,6 +55,8 @@ New work directories receive the examples immediately. Existing directories rece
 
 ```bash
 uv run --all-groups marimo check user_portal/notebook/examples/*.py
+# Native DuckDB execution against temporary data, including offline extensions and reader access:
+uv run --all-groups python -m scripts.duckdb_smoke
 # With running stacks, Chromium and current images:
 npm run test:examples
 ```

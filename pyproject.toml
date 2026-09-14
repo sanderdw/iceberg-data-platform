@@ -22,6 +22,7 @@ users = [
     "docker==7.2.0",
 ]
 notebook = [
+    "duckdb==1.5.5",
     "marimo[sql]==0.24.2",
     "matplotlib>=3.10.0",
     "pandas>=3.0.5",

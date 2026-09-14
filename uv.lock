@@ -598,6 +598,7 @@ dev = [
     { name = "ruff" },
 ]
 notebook = [
+    { name = "duckdb" },
     { name = "marimo", extra = ["sql"] },
     { name = "matplotlib" },
     { name = "pandas" },
@@ -631,6 +632,7 @@ dev = [
     { name = "ruff", specifier = ">=0.16.7" },
 ]
 notebook = [
+    { name = "duckdb", specifier = "==1.5.5" },
     { name = "marimo", extras = ["sql"], specifier = "==0.24.2" },
     { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "pandas", specifier = ">=3.0.5" },

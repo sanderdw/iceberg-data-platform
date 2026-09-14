@@ -3,6 +3,8 @@
 ```mermaid
 flowchart LR
     Admin[Administrator browser] --> AdminAPI[FastAPI admin portal :3000]
+    Admin --> PgAdmin[pgAdmin :5050]
+    PgAdmin --> Postgres
     User[User browser] --> UserAPI[FastAPI user gateway :3002]
     AdminAPI --> Polaris[Apache Polaris]
     AdminAPI --> Storage[RustFS S3 and IAM]
@@ -17,7 +19,7 @@ flowchart LR
 
 ## Services and ownership
 
-`compose.yaml` runs the `iceberg-platform` project: PostgreSQL, RustFS, Polaris bootstrap, Polaris and the admin portal. `compose.users.yaml` runs the `iceberg-workspaces` gateway separately and provides the notebook image build. The gateway joins the existing catalog network; it does not depend on the administration portal's API.
+`compose.yaml` runs the `iceberg-platform` project: PostgreSQL 18, pgAdmin, RustFS, Polaris bootstrap, Polaris and the admin portal. pgAdmin exposes a localhost web interface for the internal PostgreSQL metadata database and persists its settings in a separate volume. `compose.users.yaml` runs the `iceberg-workspaces` gateway separately and provides the notebook image build. The gateway joins the existing catalog network; it does not depend on the administration portal's API.
 
 Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, an individual principal role and the grants of their teams. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. There is no second application metadata database.
 
@@ -64,6 +66,7 @@ in the collector's `POSTGRES_PASSWORD` environment variable.
 | `user_portal/notebook/` | Runtime image, connection helper and starter seeding |
 | `user_portal/notebook/examples/` | Editable PyIceberg and DuckDB examples |
 | `scripts/` | Credential setup, integration checks and source release tooling |
+| `pgadmin/` | Preconfigured PostgreSQL metadata connection for pgAdmin |
 | `test/` | Unit, authorization and browser tests |
 | `docs/` | Operating and release documentation |
 | `.github/` | CI and contribution templates |

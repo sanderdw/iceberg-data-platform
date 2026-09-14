@@ -1,6 +1,6 @@
 # Administration guide
 
-Iceberg Platform runs the administration portal, Apache Polaris, PostgreSQL and RustFS in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and shared team marimo notebooks.
+Iceberg Platform runs the administration portal, Apache Polaris, PostgreSQL 18, pgAdmin and RustFS in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and shared team marimo notebooks.
 
 Python **3.14.7**, FastAPI **0.141.1** and uv **0.12.13** are pinned in the project manifests and Dockerfiles. Node is needed only for browser tests.
 
@@ -24,6 +24,7 @@ Open http://localhost:3000 and sign in with `PORTAL_PASSWORD` from `.env`. Setup
 | OpenAPI schema | http://localhost:3000/openapi.json | Admin portal session |
 | RustFS console | http://localhost:9001 | Bucket administrator S3 credentials or local root credentials |
 | Iceberg REST API | http://localhost:8181/api/catalog | OAuth2 client ID and secret |
+| pgAdmin | http://localhost:5050 | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD` |
 
 Published ports bind to `127.0.0.1`. PostgreSQL is internal only. Set `PORT` to change the portal port. Swagger UI loads assets from jsDelivr; the OpenAPI schema remains available without the CDN.
 
@@ -35,6 +36,16 @@ uv run python -m server --reload
 ```
 
 The Python entry point reads `.env`; existing environment variables take precedence. Use `PORT=3001 uv run python -m server` when the Docker portal already occupies port 3000.
+
+### PostgreSQL and pgAdmin
+
+PostgreSQL uses `postgres:18-alpine`. Its `postgres18-data` volume is mounted at `/var/lib/postgresql`, with data under `/var/lib/postgresql/18/docker`, following the [PostgreSQL 18 image layout](https://hub.docker.com/_/postgres). On first startup, Polaris bootstraps its schema and administrator credentials in the database.
+
+Polaris 1.7.0 documents the [PostgreSQL JDBC metastore](https://polaris.apache.org/releases/1.7.0/metastores/relational-jdbc/), without an explicit PostgreSQL 18 compatibility matrix. This stack was verified with PostgreSQL 18.6: fresh Polaris bootstrap, `scripts.smoke` and `scripts.data_smoke` passed, covering catalog metadata, permissions and Iceberg reads/writes. Rerun these checks after changing either service version.
+
+pgAdmin 9.17 runs at http://localhost:5050 and stores its settings in `pgadmin-data`. Setup generates a separate `PGADMIN_PASSWORD` in `.env`. Set `PGADMIN_EMAIL`, `PGADMIN_PASSWORD` and `PGADMIN_PORT` to customize the initial account and port. If omitted, the email defaults to `admin@example.com` and the password falls back to `PORTAL_PASSWORD`. The account settings apply when pgAdmin first initializes its volume; later password changes should be made in pgAdmin.
+
+After signing in, expand **Iceberg Platform → Polaris metadata** and enter `POSTGRES_PASSWORD` from `.env`. The predefined connection uses host `postgres`, port `5432`, database `polaris` and username `polaris`. PostgreSQL remains accessible only on the Docker network. pgAdmin administers Polaris's metadata database; use the notebooks to query Iceberg table data.
 
 ### Phone access
 
@@ -104,7 +115,7 @@ The same credentials work across the user's team databases; change the warehouse
 
 See [architecture](architecture.md) for component boundaries. Teams are marked Polaris principal roles; users are principals with stable team IDs. Each user has a dedicated principal role granting only the catalog roles for their teams. Polaris stores this metadata in PostgreSQL; the portal has no separate database.
 
-Only resources marked `portal.managed-by=iceberg-portal-v2` belong to this resource model. Older resources are not imported. The team/environment workspace model requires a fresh setup; it does not migrate user-specific notebook volumes or old database metadata. `docker compose down -v` deletes PostgreSQL and RustFS data and resets the local environment. A new environment has no default teams or users.
+Only resources marked `portal.managed-by=iceberg-portal-v2` belong to this resource model. A fresh setup has no default teams or users. `docker compose down -v` deletes PostgreSQL, pgAdmin and RustFS data and resets the local environment.
 
 Run one Uvicorn worker. A lock serializes administration changes, such as creating a user while deleting a team. Sessions are process-local and expire after eight hours or a restart. Multiple replicas require shared sessions and coordination.
 

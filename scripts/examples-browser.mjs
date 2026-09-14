@@ -8,6 +8,11 @@ try {
   const context = await browser.newContext({viewport: {width: 1500, height: 1100}});
   await context.addCookies([{name: 'iceberg_user_session', value: data.cookie, url: data.baseURL, httpOnly: true, sameSite: 'Strict'}]);
   page = await context.newPage(); page.setDefaultTimeout(30000);
+  page.on('pageerror', error => console.error('Browser error:', error.message));
+  page.on('console', message => { if (message.type() === 'error') console.error('Browser console:', message.text()); });
+  // Keep credentials and query tokens out of network diagnostics.
+  page.on('requestfailed', request => console.error('Request failed:', request.method(), new URL(request.url()).pathname, request.failure()?.errorText));
+  page.on('response', response => { if (response.status() >= 400) console.error('HTTP error:', response.status(), new URL(response.url()).pathname); });
   await page.goto(data.baseURL);
   await page.locator('#databases button').filter({hasText: data.databaseName}).click();
   await page.locator('#example-write').click();
@@ -48,7 +53,12 @@ try {
   if (page) {
     await mkdir('test-results/examples', {recursive:true});
     await page.screenshot({path:'test-results/examples/failure.png',fullPage:true});
-    for (const f of page.frames()) console.error((await f.locator('body').innerText()).slice(-3000), await f.locator('select, [role=combobox]').evaluateAll(nodes => nodes.map(n => n.outerHTML.slice(0, 1800))));
+    for (const f of page.frames()) {
+      console.error('Frame:', new URL(f.url()).pathname);
+      try {
+        console.error((await f.locator('body').innerText({timeout: 5000})).slice(-3000), await f.locator('select, [role=combobox]').evaluateAll(nodes => nodes.map(n => n.outerHTML.slice(0, 1800))));
+      } catch (diagnosticError) { console.error('Could not inspect frame:', diagnosticError.message); }
+    }
   }
   throw error;
 } finally { await browser.close(); }

@@ -19,6 +19,11 @@ def test_existing_workspace_receives_examples_without_overwriting_edits(tmp_path
     second.write_text("# My SQL")
     seed_workspace(tmp_path)
     assert second.read_text() == "# My SQL"
+    third = tmp_path / "03_duckdb_iceberg.py"
+    assert "engine=lakehouse" in third.read_text()
+    third.write_text("# My native analysis")
+    seed_workspace(tmp_path)
+    assert third.read_text() == "# My native analysis"
 
 
 def test_energy_data_is_reproducible_and_balanced():

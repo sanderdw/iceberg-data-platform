@@ -13,9 +13,9 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
 - **Separate user portal:** log in with an existing username and client secret, switch teams and browse the active team's databases.
 - **Shared team workspaces:** one shared filespace per team and environment, with isolated execution using each user's data permissions.
-- **Two included examples:** create 26,880 synthetic energy measurements with PyIceberg, then analyze and visualize them using native DuckDB SQL cells and reactive filters.
+- **Three included examples:** create 26,880 synthetic energy measurements with PyIceberg, visualize them with DuckDB, or attach Polaris directly for native DuckDB queries on Iceberg.
 
-The Compose projects are `iceberg-platform` (administration portal, Polaris, PostgreSQL and RustFS) and `iceberg-workspaces` (user portal and shared team marimo notebooks). They share the data services, not an application database. This is a **local development platform**, with an in-memory session model and a trusted Docker gateway. Read [the security model](SECURITY.md) before deploying elsewhere.
+The Compose projects are `iceberg-platform` (administration portal, Polaris, PostgreSQL 18, pgAdmin and RustFS) and `iceberg-workspaces` (user portal and shared team marimo notebooks). They share the data services, not an application database. This is a **local development platform**, with an in-memory session model and a trusted Docker gateway. Read [the security model](SECURITY.md) before deploying elsewhere.
 
 ## Quick start
 
@@ -43,8 +43,11 @@ Setup generates random development credentials in `.env`, sets restrictive file 
 | User portal              | http://localhost:3002             | Existing username + issued client secret                  |
 | Polaris Iceberg REST API | http://localhost:8181/api/catalog | OAuth client ID + secret                                  |
 | RustFS console           | http://localhost:9001             | Issued bucket-admin credentials or local root credentials |
+| pgAdmin                  | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD` from `.env`            |
 
 All default host ports bind to `127.0.0.1`. PostgreSQL is internal only. The portal's authenticated API documentation is available at `/docs` on port 3000.
+
+pgAdmin includes a **Polaris metadata** server connection. Enter `POSTGRES_PASSWORD` from `.env` when connecting to the database. PostgreSQL 18 stores its data in the persistent `postgres18-data` volume. See the [administration guide](docs/admin-guide.md#postgresql-and-pgadmin) for configuration details.
 
 ### First session
 
@@ -53,6 +56,7 @@ All default host ports bind to `127.0.0.1`. PostgreSQL is internal only. The por
 3. Save the one-time client secret. Open the user portal on port 3002 and log in using the username and that secret.
 4. Select a team and database. Choose **01 · Neighborhood data with PyIceberg**, run the cells with ▶ and click **Create example table**.
 5. Use the notebook selector to open **02 · Visualize with DuckDB**. Run its cells and change the street filter to explore energy consumption and solar production.
+6. Open **03 · Native DuckDB on Iceberg** and click **Connect / refresh credentials** to query the Iceberg table directly, inspect snapshots and run SQL aggregations.
 
 The first example skips a table that already contains rows. Readers can use the second example once a writer has created the dataset. Saved notebooks are shared per team and environment (Development, Acceptance or Production), across databases. Switching context or logging out stops only your execution; save your work first. Adding starter examples never overwrites existing team files.
 
@@ -100,6 +104,7 @@ Tests cover authorization, team membership, compensating actions, resumable dele
 
 ## Documentation
 
+- [Users, teams, memberships, roles and database definitions](docs/CONTEXT.md)
 - [Architecture and repository layout](docs/architecture.md)
 - [Administration guide](docs/admin-guide.md)
 - [User portal and notebooks](user_portal/README.md)

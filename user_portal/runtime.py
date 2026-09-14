@@ -54,6 +54,7 @@ class Workspace:
                     "url": self.url + "?file=01_pyiceberg_neighborhood.py",
                 },
                 {"title": "02 · Visualize with DuckDB", "url": self.url + "?file=02_duckdb_visualization.py"},
+                {"title": "03 · Native DuckDB on Iceberg", "url": self.url + "?file=03_duckdb_iceberg.py"},
             ],
         }
 

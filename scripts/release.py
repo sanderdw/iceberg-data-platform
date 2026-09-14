@@ -34,6 +34,7 @@ ROOT_FILES = (
     "compose.users.lan.yaml",
     "package.json",
     "package-lock.json",
+    "pgadmin/servers.json",
     "playwright.config.mjs",
     "pyproject.toml",
     "uv.lock",

@@ -72,4 +72,5 @@ setInterval(() => { if (state && !document.hidden) loadState().catch(error => no
 
 $('#example-write').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 0)));
 $('#example-analyse').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 1)));
+$('#example-native').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 2)));
 $('#notebook-file').addEventListener('change', e => showNotebook(activeNotebook, e.target.value));
