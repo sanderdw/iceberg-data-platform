@@ -714,6 +714,7 @@ data = [
 dev = [
     { name = "docker" },
     { name = "httpx2" },
+    { name = "pyiceberg", extra = ["pyarrow"] },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -730,6 +731,7 @@ notebook = [
 ]
 users = [
     { name = "docker" },
+    { name = "pyiceberg", extra = ["pyarrow"] },
 ]
 
 [package.metadata]
@@ -752,6 +754,7 @@ data = [
 dev = [
     { name = "docker", specifier = "==7.2.0" },
     { name = "httpx2", specifier = ">=2.12.0" },
+    { name = "pyiceberg", extras = ["pyarrow"], specifier = ">=0.12.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.16.7" },
 ]
@@ -766,7 +769,10 @@ notebook = [
     { name = "polars", specifier = ">=1.44.2" },
     { name = "pyiceberg", extras = ["duckdb", "pyarrow"], specifier = ">=0.12.0" },
 ]
-users = [{ name = "docker", specifier = "==7.2.0" }]
+users = [
+    { name = "docker", specifier = "==7.2.0" },
+    { name = "pyiceberg", extras = ["pyarrow"], specifier = ">=0.12.0" },
+]
 
 [[package]]
 name = "idna"

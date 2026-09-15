@@ -12,6 +12,7 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 - **Administration portal:** create and manage teams, assign users to one or more teams, create databases, move databases between teams, and delete databases with their stored data.
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
 - **Separate user portal:** log in with an existing username and client secret, switch teams and browse the active team's databases.
+- **User catalog details:** inspect table schemas, snapshots, branches/tags, partitioning, sort orders and view SQL; preview up to 100 rows at a selected snapshot with your own data permissions.
 - **Shared team workspaces:** one shared filespace per team and environment, with isolated execution using each user's data permissions.
 - **Three included examples:** create 26,880 synthetic energy measurements with PyIceberg, visualize them with DuckDB, or attach Polaris directly for native DuckDB queries on Iceberg.
 

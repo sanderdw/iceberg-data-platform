@@ -8,6 +8,8 @@ import httpx
 from server.models import Environment, ServiceError
 from server.polaris import PolarisProvider, enc
 
+from .catalog import object_details, properties
+
 
 @dataclass
 class UserSession:
@@ -29,6 +31,7 @@ class UserDirectory:
         self.metadata = PolarisProvider(env, None)
         self.http = httpx.Client(timeout=15)
         self.url = env.get("POLARIS_URL", "http://polaris:8181").rstrip("/")
+        self.s3_endpoint = env.get("USER_S3_ENDPOINT", "http://rustfs:9000")
 
     def close(self):
         self.metadata.http.close()
@@ -166,3 +169,38 @@ class UserDirectory:
                     [{"name": t["name"], "namespace": t["namespace"]} for t in items], key=lambda t: t["name"]
                 )
         return result
+
+    def details(self, session, database, namespace, kind, name=None):
+        database_info = self.database(session, database)
+        if kind == "database":
+            return {
+                "kind": kind,
+                "database": database_info,
+                "catalogUri": self.metadata.public_url + "/api/catalog",
+            }
+        path = f"/api/catalog/v1/{enc(database)}/namespaces/{enc(chr(31).join(namespace))}"
+        if kind == "namespace":
+            loaded = self.request(session, path)
+            return {
+                "kind": kind,
+                "namespace": namespace,
+                "properties": properties(loaded.get("properties", {})),
+            }
+        loaded = self.request(session, f"{path}/{kind}s/{enc(name)}")
+        return {"name": name, "namespace": namespace, **object_details(kind, loaded)}
+
+    def preview_request(self, session, database, namespace, name, snapshot_id, limit):
+        details = self.details(session, database, namespace, "table", name)
+        selected = snapshot_id or details["currentSnapshotId"]
+        if selected is not None and selected not in {s["id"] for s in details["snapshots"]}:
+            raise ServiceError(404, "This snapshot is no longer available. Refresh the table.")
+        return {
+            "uri": self.url + "/api/catalog",
+            "database": database,
+            "namespace": namespace,
+            "table": name,
+            "snapshotId": selected,
+            "limit": limit,
+            "token": session.token,
+            "s3Endpoint": self.s3_endpoint,
+        }

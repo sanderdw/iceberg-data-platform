@@ -11,7 +11,7 @@
     "start": "uv run python -m server",
     "setup": "uv run python -m scripts.setup",
     "test": "uv run pytest",
-    "verify": "uv run --all-groups pytest && uv run --all-groups ruff check server user_portal test scripts/*.py && node --check public/app.js && node --check public/infrastructure.js && node --check user_portal/public/app.js",
+    "verify": "uv run --all-groups pytest && uv run --all-groups ruff check server user_portal test scripts/*.py && node --check public/app.js && node --check public/infrastructure.js && node --check user_portal/public/app.js && node --check user_portal/public/catalog.js",
     "test:e2e": "playwright test",
     "test:stack": "uv run python -m scripts.smoke",
     "test:data": "uv run --group data python -m scripts.data_smoke",
@@ -19,6 +19,7 @@
     "users:start": "docker compose -f compose.users.yaml up -d users",
     "users:stop": "docker compose -f compose.users.yaml down",
     "test:users": "USER_BROWSER_TEST=1 uv run --all-groups python -m scripts.users_smoke",
+    "test:catalog": "node scripts/catalog-browser.mjs",
     "test:examples": "USER_EXAMPLE_TEST=1 USER_BROWSER_TEST=1 uv run --all-groups python -m scripts.users_smoke",
     "check:release": "uv run --all-groups python -m scripts.release",
     "release:source": "uv run --all-groups python -m scripts.release --build"

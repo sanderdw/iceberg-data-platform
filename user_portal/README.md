@@ -31,7 +31,13 @@ The user portal follows the same Nothing-inspired design as the administration p
 
 ## Work with your team data
 
-Select an **Active team** and **Environment**, choose a database and browse its namespaces. Open a database or table in marimo. Views can be loaded with `catalog.load_view(...)` from a notebook. Your user permissions apply to every catalog and data operation.
+Select an **Active team** and **Environment**, choose a database and browse its namespaces. Filter the current listing by name or object type. Database summaries show the team, environment and catalog connection information; namespace summaries include their properties.
+
+Choose **Details →** on a table or view. Table tabs show the schema (including nested field IDs and descriptions), snapshot statistics, history, branches and tags, partition specifications, sort orders and properties. **Preview** reads up to 100 rows from the selected snapshot only when you choose **Load preview**. **Preview snapshot** in the history selects that snapshot for a historical read. Snapshot IDs and large integer values retain their full precision. Record totals are metadata statistics and can include rows affected by delete files.
+
+View tabs show the output schema, current SQL definition and dialect, version history and properties. Views do not have table snapshot or preview controls: execution requires a compatible SQL engine. **Open in marimo** remains available for databases, namespaces and selected tables; views can be loaded with `catalog.load_view(...)` from a notebook. All catalog inspection controls are read-only; metadata edits, compaction, rollback and snapshot expiration are outside this first release.
+
+Your user permissions apply to every catalog and data operation. Details use the signed-in user's Polaris token. Preview reads run in a disposable process with that user's token and table credentials vended by Polaris; platform credentials and local catalog configuration are not inherited. Access is checked before the read and again before returning its result. Previews do not start or modify a notebook. They are limited to two concurrent requests, 30 seconds of wall time, 20 seconds of CPU time and 2 GiB of virtual address space per process. Display is limited to 50 top-level columns and 512 characters per cell. Large scans may hit those limits even when only 100 rows are requested; use marimo for those tables.
 
 Each team and environment combination has one shared `/work` filespace containing multiple notebooks, across all databases in that environment. Environments are **Development**, **Acceptance** and **Production**. For example, `team-a` with `sander` and `alex`, and `db1` in Development and Production, has exactly two filespaces. Both members can open them concurrently and see each other’s saved files. Additional databases in Development reuse the Development filespace. Storage is allocated when a notebook first opens.
 
@@ -104,6 +110,7 @@ The shared `.env` supplies `POLARIS_CLIENT_ID` and `POLARIS_CLIENT_SECRET`. Ther
 | `MAX_NOTEBOOKS` | `8` | Maximum simultaneous runtimes |
 | `NOTEBOOK_MEMORY` | `1g` | Runtime memory limit |
 | `USER_COOKIE_SECURE` | `false` | Set to `true` with HTTPS |
+| `USER_S3_ENDPOINT` | `http://rustfs:9000` | Preview storage endpoint; set to the host-facing S3 URL when running the gateway outside Docker |
 
 Default bindings use HTTP on localhost or LAN. Use HTTPS outside this local environment. A reverse proxy must support WebSockets and preserve the original Host header.
 
@@ -113,6 +120,9 @@ Shared team/environment volumes are named `iceberg-workspaces-work-<hash>` and l
 
 ```bash
 uv run --all-groups pytest
+node scripts/catalog-browser.mjs
+# With Polaris and RustFS running, using temporary test data:
+uv run --all-groups python -m scripts.catalog_smoke
 uv run --all-groups ruff check server user_portal test scripts/*.py
 uv run --all-groups marimo check user_portal/notebook/template.py
 # With both stacks running:

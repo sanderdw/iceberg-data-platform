@@ -67,6 +67,8 @@ jobs:
       - run: docker compose -f compose.users.yaml --profile images build
       - run: docker compose -f compose.users.yaml up -d --wait users
       - run: UV_NO_SYNC=1 npm run test:e2e
+      - run: npm run test:catalog
+      - run: uv run --all-groups python -m scripts.catalog_smoke
       - run: uv run --all-groups python -m scripts.smoke
       - run: uv run --all-groups python -m scripts.data_smoke
       - run: npm run test:examples

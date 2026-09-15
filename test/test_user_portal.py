@@ -17,6 +17,40 @@ from user_portal.runtime import Workspace, filespace_key
 
 HEADERS = {"X-Portal-Request": "1"}
 
+SNAPSHOT = "9007199254740993"
+TABLE_METADATA = {
+    "format-version": 2,
+    "table-uuid": "table-uuid",
+    "location": "s3://bucket/events",
+    "current-schema-id": 0,
+    "schemas": [
+        {
+            "schema-id": 0,
+            "fields": [
+                {"id": 1, "name": "id", "type": "long", "required": True, "doc": "Event ID"},
+                {"id": 2, "name": "event", "type": "string", "required": False},
+            ],
+        }
+    ],
+    "current-snapshot-id": int(SNAPSHOT),
+    "last-updated-ms": 1700000000000,
+    "snapshots": [
+        {
+            "snapshot-id": int(SNAPSHOT),
+            "schema-id": 0,
+            "timestamp-ms": 1700000000000,
+            "summary": {"operation": "append", "total-records": "3", "token": "hidden-token"},
+        }
+    ],
+    "snapshot-log": [{"snapshot-id": int(SNAPSHOT), "timestamp-ms": 1700000000000}],
+    "refs": {"main": {"snapshot-id": int(SNAPSHOT), "type": "branch"}},
+    "properties": {"owner": "analytics", "s3.access-key-id": "hidden-key", "client-secret": "hidden-secret"},
+    "partition-specs": [{"spec-id": 0, "fields": []}],
+    "default-spec-id": 0,
+    "sort-orders": [{"order-id": 0, "fields": []}],
+    "default-sort-order-id": 0,
+}
+
 
 class FakeRuntime:
     def __init__(self):
@@ -89,6 +123,46 @@ def users():
                 return httpx.Response(401)
             return httpx.Response(200, json={"access_token": "actual-user-token", "expires_in": 3600})
         assert request.headers["Authorization"] == "Bearer actual-user-token"
+        if request.url.path.endswith("/tables/events"):
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": TABLE_METADATA,
+                    "config": {"s3.secret-access-key": "hidden-storage-secret"},
+                },
+            )
+        if request.url.path.endswith("/views/report"):
+            return httpx.Response(
+                200,
+                json={
+                    "metadata": {
+                        "format-version": 1,
+                        "view-uuid": "view-uuid",
+                        "location": "s3://bucket/view",
+                        "schemas": TABLE_METADATA["schemas"],
+                        "current-version-id": 1,
+                        "versions": [
+                            {
+                                "version-id": 1,
+                                "schema-id": 0,
+                                "timestamp-ms": 1700000000000,
+                                "default-namespace": ["analytics"],
+                                "representations": [
+                                    {"type": "sql", "dialect": "spark", "sql": "SELECT * FROM events"}
+                                ],
+                            }
+                        ],
+                    }
+                },
+            )
+        if request.url.path.endswith("/namespaces/analytics"):
+            return httpx.Response(
+                200,
+                json={
+                    "namespace": ["analytics"],
+                    "properties": {"owner": "analytics", "password": "hidden-password"},
+                },
+            )
         if request.url.path.endswith("/tables"):
             return httpx.Response(200, json={"identifiers": [{"namespace": ["analytics"], "name": "events"}]})
         if request.url.path.endswith("/views"):
@@ -122,6 +196,90 @@ def login(client):
         "HttpOnly" in response.headers["set-cookie"] and "SameSite=strict" in response.headers["set-cookie"]
     )
     return response
+
+
+def test_catalog_details_use_user_identity_and_project_metadata(users):
+    c = users.client
+    assert (
+        c.get("/api/details", params={"database": users.databases[0], "kind": "database"}).status_code == 401
+    )
+    login(c)
+    params = {"database": users.databases[0], "namespace": "analytics"}
+    assert (
+        c.get("/api/details", params={**params, "kind": "database"}).json()["database"]["id"]
+        == users.databases[0]
+    )
+    ns = c.get("/api/details", params={**params, "kind": "namespace"}).json()
+    assert ns["properties"] == {"owner": "analytics"}
+    result = c.get("/api/details", params={**params, "kind": "table", "name": "events"})
+    assert result.status_code == 200
+    table = result.json()
+    assert table["currentSnapshotId"] == table["snapshots"][0]["id"] == SNAPSHOT
+    assert table["history"][0]["snapshotId"] == table["refs"][0]["snapshotId"] == SNAPSHOT
+    assert table["columns"][0]["doc"] == "Event ID"
+    assert table["properties"] == {"owner": "analytics"}
+    assert "hidden-" not in result.text
+    assert "actual-user-token" not in result.text
+    view = c.get("/api/details", params={**params, "kind": "view", "name": "report"}).json()
+    assert view["columns"][0]["name"] == "id"
+    assert view["versions"][0]["representations"] == [{"dialect": "spark", "sql": "SELECT * FROM events"}]
+    assert "snapshots" not in view
+    assert c.get("/catalog.js").status_code == 200
+
+
+def test_catalog_denies_other_team_environment_and_provider_forbidden(users, monkeypatch):
+    c = users.client
+    login(c)
+    params = {"database": users.databases[1], "namespace": "analytics", "kind": "table", "name": "events"}
+    before = len(users.calls)
+    assert c.get("/api/details", params=params).status_code == 403
+    assert len(users.calls) == before
+    params["database"] = users.databases[0]
+    c.patch("/api/environment", json={"environment": "production"}, headers=HEADERS)
+    assert c.get("/api/details", params=params).status_code == 403
+    c.patch("/api/environment", json={"environment": "development"}, headers=HEADERS)
+    monkeypatch.setattr(
+        users.directory.http, "get", lambda *a, **kw: httpx.Response(403, text="hidden-secret")
+    )
+    denied = c.get("/api/details", params=params)
+    assert denied.status_code == 403 and "hidden-secret" not in denied.text
+
+
+def test_preview_authorization_limits_snapshot_and_revocation(users, monkeypatch):
+    c = users.client
+    login(c)
+    payload = {"database": users.databases[0], "namespace": ["analytics"], "table": "events"}
+    run = Mock(return_value={"columns": ["id"], "rows": [["1"]], "snapshotId": SNAPSHOT, "limit": 100})
+    monkeypatch.setattr("user_portal.app.run_preview", run)
+    assert c.post("/api/preview", json=payload).status_code == 403
+    for override in (
+        {"database": users.databases[1]},
+        {"limit": 101},
+        {"snapshot_id": "123"},
+        {"snapshot_id": "1; DROP TABLE"},
+        {"namespace": []},
+        {"table": ".."},
+    ):
+        assert c.post("/api/preview", json={**payload, **override}, headers=HEADERS).status_code in (
+            403,
+            404,
+            422,
+        )
+    run.assert_not_called()
+    result = c.post("/api/preview", json=payload, headers=HEADERS)
+    assert result.status_code == 200 and result.json()["snapshotId"] == SNAPSHOT
+    prepared = run.call_args.args[0]
+    assert prepared["token"] == "actual-user-token" and prepared["snapshotId"] == SNAPSHOT
+    assert "secret" not in prepared and "client_id" not in prepared
+    assert "actual-user-token" not in result.text
+
+    def revoke(_):
+        users.provider.update_memberships(users.account["id"], [users.teams[1]])
+        return {"rows": [["must not be returned"]]}
+
+    run.side_effect = revoke
+    result = c.post("/api/preview", json=payload, headers=HEADERS)
+    assert result.status_code == 403 and "must not be returned" not in result.text
 
 
 def test_existing_name_secret_and_admin_cookie_is_not_user_session(users):

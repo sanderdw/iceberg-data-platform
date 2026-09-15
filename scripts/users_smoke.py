@@ -96,6 +96,28 @@ def main():
                     assert content.status_code == 200, content.text
                     assert content.json()["tables"][0]["name"] == "events"
                     assert content.json()["views"][0]["name"] == "event_report"
+                    detail_params = [
+                        ("database", databases[0]),
+                        ("namespace", "analytics"),
+                        ("namespace", "nested"),
+                        ("kind", "table"),
+                        ("name", "events"),
+                    ]
+                    details = c.get("/api/details", params=detail_params)
+                    assert details.status_code == 200, details.text
+                    snapshot = details.json()["currentSnapshotId"]
+                    assert isinstance(snapshot, str) and details.json()["columns"][0]["name"] == "id"
+                    preview_payload = {
+                        "database": databases[0],
+                        "namespace": ["analytics", "nested"],
+                        "table": "events",
+                        "snapshot_id": snapshot,
+                        "limit": 100,
+                    }
+                    preview = c.post("/api/preview", headers=HEADERS, json=preview_payload)
+                    assert preview.status_code == 200, preview.text
+                    assert preview.json()["rows"] == [["1", "deploy"], ["2", "build"], ["3", "release"]]
+                    assert credentials["clientSecret"] not in details.text + preview.text
                     print(
                         "PASS: username/client-secret, team catalog, nested namespaces, tables, views, denied other team",
                         flush=True,
@@ -138,6 +160,9 @@ def main():
                                     "secret": teammate["credentials"]["clientSecret"],
                                 },
                             ).raise_for_status()
+                            peer_preview = peer.post("/api/preview", headers=HEADERS, json=preview_payload)
+                            assert peer_preview.status_code == 200, peer_preview.text
+                            assert peer_preview.json()["rows"] == preview.json()["rows"]
                             shared_response = peer.post(
                                 "/api/notebooks", headers=HEADERS, json={"database": databases[0]}
                             )

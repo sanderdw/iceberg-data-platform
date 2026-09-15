@@ -21,7 +21,7 @@ function symbol(kind) {
   return e;
 }
 function resetEditor() { $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; }
-function loginScreen() { state = null; database = null; namespace = []; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
+function loginScreen() { state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
 async function api(path, method = 'GET', body) { const response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); const result = await response.json(); if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { button.disabled = false; } }
 function renderState() {
@@ -33,7 +33,7 @@ function renderState() {
   $('#notebooks').replaceChildren(...state.notebooks.map(n => { const b = element('button', `${state.databases.find(d => d.id === n.database)?.name || n.database} · ${envNames[n.environment]} ↗`, 'quiet'); b.addEventListener('click', () => showNotebook(n)); return b; }));
   if (!state.notebooks.length) $('#notebooks').append(element('p', 'Open a database in marimo to get started.', 'hint'));
 }
-function clearBrowser() { clearNotice(); database = null; namespace = []; browseVersion++; $('#database-label').textContent = 'CATALOG'; $('#namespace-title').textContent = 'Select a database'; $('#breadcrumbs').replaceChildren(); $('#open-notebook').hidden = true; $('#examples').hidden = true; $('#objects').replaceChildren(element('p', 'Select a database from the catalog.', 'empty')); }
+function clearBrowser() { clearNotice(); database = null; namespace = []; selectedObject = null; browseVersion++; $('#database-label').textContent = 'CATALOG'; $('#namespace-title').textContent = 'Select a database'; $('#breadcrumbs').replaceChildren(); $('#open-notebook').hidden = true; $('#examples').hidden = true; $('#objects').replaceChildren(element('p', 'Select a database from the catalog.', 'empty')); }
 async function loadState() {
   const next = await api('/workspace');
   if (state && (state.activeTeam !== next.activeTeam || state.activeEnvironment !== next.activeEnvironment || (database && !next.databases.some(d => d.id === database)))) { resetEditor(); clearBrowser(); }
@@ -41,20 +41,20 @@ async function loadState() {
   state = next; renderState();
 }
 async function browse(db, ns) {
-  clearNotice(); const version = ++browseVersion; database = db; namespace = [...ns]; $('#editor').hidden = true; $('#browser').hidden = false; renderState();
+  clearNotice(); selectedObject = null; const version = ++browseVersion; database = db; namespace = [...ns]; $('#editor').hidden = true; $('#browser').hidden = false; renderState();
   $('#database-label').textContent = state.databases.find(d => d.id === db)?.name || db; $('#namespace-title').textContent = ns.length ? ns.at(-1) : 'Namespaces'; $('#open-notebook').hidden = false; $('#examples').hidden = false;
   const crumbs = [[], ...ns.map((_, i) => ns.slice(0, i + 1))];
   $('#breadcrumbs').replaceChildren(...crumbs.flatMap((parts, i) => { const b = element('button', parts.at(-1) || state.databases.find(d => d.id === db)?.name || db); b.addEventListener('click', () => browse(db, parts)); return i ? [element('span', '/'), b] : [b]; }));
   $('#objects').replaceChildren(element('p', '[ LOADING... ]', 'empty'));
   try {
     const query = new URLSearchParams({database: db}); ns.forEach(p => query.append('namespace', p));
-    const result = await api(`/contents?${query}`); if (version !== browseVersion) return;
+    const [result, detail] = await Promise.all([api(`/contents?${query}`), api(`/details?${query}&kind=${ns.length ? 'namespace' : 'database'}`)]); if (version !== browseVersion) return;
     const rows = [];
     function row(name, kind, iconName, actionLabel, action) { const r = element('div', undefined, 'object-row'); const label = element('div', undefined, 'object-label'); label.append(element('strong', name), element('small', kind)); const button = element('button', actionLabel, 'quiet'); button.addEventListener('click', () => busy(button, action)); r.append(symbol(iconName), label, button); rows.push(r); }
     result.namespaces.forEach(parts => row(parts.at(-1), 'Namespace', 'namespace', 'Open →', () => browse(db, parts)));
-    result.tables.forEach(t => row(t.name, 'Iceberg table', 'table', 'marimo ↗', () => openNotebook(db, ns, t.name)));
-    result.views.forEach(v => row(v.name, 'Iceberg view', 'view', 'marimo ↗', () => openNotebook(db, ns)));
-    $('#objects').replaceChildren(...rows); if (!rows.length) $('#objects').append(element('p', 'This namespace is empty. Continue working in marimo with your user permissions.', 'empty'));
+    result.tables.forEach(t => row(t.name, 'Iceberg table', 'table', 'Details →', () => inspectObject(db, ns, 'table', t.name)));
+    result.views.forEach(v => row(v.name, 'Iceberg view', 'view', 'Details →', () => inspectObject(db, ns, 'view', v.name)));
+    renderCatalogListing(detail, result, rows);
   } catch (error) { if (version === browseVersion) { $('#objects').replaceChildren(element('p', error.message, 'empty')); notice(error.message, true); } }
 }
 function showNotebook(notebook, targetUrl = notebook.url) { if (activeNotebook?.id !== notebook.id || activeNotebook?.selectedUrl !== targetUrl) { const frame = element('iframe'); frame.title = `marimo · ${notebook.database}`; frame.src = targetUrl; frame.allow = 'clipboard-read; clipboard-write'; $('#frame-host').replaceChildren(frame); } activeNotebook = {...notebook, selectedUrl: targetUrl}; $('#notebook-file').replaceChildren(...[{title: 'Shared files', url: notebook.filesUrl}, {title: 'Starter notebook', url: notebook.url}, ...(notebook.examples || [])].map(n => { const option = element('option', n.title); option.value = n.url; return option; })); $('#notebook-file').value = targetUrl; $('#editor-title').textContent = `${state.databases.find(d => d.id === notebook.database)?.name || notebook.database} · ${envNames[notebook.environment]}`; $('#editor-external').href = targetUrl; $('#browser').hidden = true; $('#editor').hidden = false; placeNotice(); }
@@ -63,8 +63,8 @@ $('#login').addEventListener('submit', e => { e.preventDefault(); const form = e
 $('#logout').addEventListener('click', e => busy(e.currentTarget, async () => { await api('/session', 'DELETE'); loginScreen(); }));
 $('#team').addEventListener('change', e => busy(e.currentTarget, async () => { try { const next = await api('/team', 'PATCH', {team: e.target.value}); resetEditor(); clearBrowser(); state = next; renderState(); } catch (error) { $('#team').value = state.activeTeam; throw error; } }));
 $('#environment').addEventListener('change', e => busy(e.currentTarget, async () => { try { const next = await api('/environment', 'PATCH', {environment: e.target.value}); resetEditor(); clearBrowser(); state = next; renderState(); } catch (error) { $('#environment').value = state.activeEnvironment; throw error; } }));
-$('#refresh').addEventListener('click', e => busy(e.currentTarget, async () => { await loadState(); if (database) await browse(database, namespace); }));
-$('#open-notebook').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace)));
+$('#refresh').addEventListener('click', e => busy(e.currentTarget, async () => { await loadState(); if (selectedObject) await inspectObject(database, namespace, selectedObject.kind, selectedObject.name); else if (database) await browse(database, namespace); }));
+$('#open-notebook').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, selectedObject?.kind === 'table' ? selectedObject.name : null)));
 $('#back').addEventListener('click', () => { $('#editor').hidden = true; $('#browser').hidden = false; placeNotice(); });
 $('#close-notebook').addEventListener('click', e => busy(e.currentTarget, async () => { await api(`/notebooks/${activeNotebook.id}`, 'DELETE'); resetEditor(); await loadState(); notice('Notebook stopped. Your saved work is preserved.'); }));
 (async () => { try { if ((await api('/session')).authenticated) await loadState(); else loginScreen(); } catch (error) { loginScreen(); notice(error.message, true); } })();

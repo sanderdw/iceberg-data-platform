@@ -7,7 +7,7 @@ import secrets
 import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 import httpx
@@ -24,6 +24,7 @@ from websockets.exceptions import ConnectionClosed, InvalidHandshake
 from server.models import ENVIRONMENTS, Environment, ServiceError
 
 from .directory import UserDirectory
+from .preview import run_preview
 from .runtime import NotebookRuntime, filespace_key
 
 PUBLIC = Path(__file__).parent / "public"
@@ -54,6 +55,12 @@ class EnvironmentInput(BaseModel):
     environment: Environment
 
 
+class PreviewInput(NotebookInput):
+    table: str = Field(min_length=1, max_length=256)
+    snapshot_id: str | None = Field(default=None, pattern=r"^[0-9]{1,19}$")
+    limit: int = Field(default=100, ge=1, le=100)
+
+
 def validate_namespace(parts):
     if len(parts) > 100 or any(
         not p or len(p) > 256 or p in (".", "..") or "\x1f" in p or "\0" in p for p in parts
@@ -74,6 +81,7 @@ def create_app(directory=None, runtime=None):
     runtime = runtime or NotebookRuntime(os.environ)
     sessions, attempts = {}, {}
     lock = asyncio.Lock()
+    previews = asyncio.Semaphore(2)
     secure = os.environ.get("USER_COOKIE_SECURE") == "true"
 
     def session_for(cookies):
@@ -192,7 +200,7 @@ def create_app(directory=None, runtime=None):
                     request._body = bytes(body)
                 elif path.startswith("/workspaces/") and not same_origin(origin, request.url):
                     raise ServiceError(403, "Invalid request origin.")
-            if path.startswith("/api/") and path != "/api/health":
+            if path.startswith("/api/") and path not in ("/api/health", "/api/preview"):
                 async with lock:
                     response = await call_next(request)
             else:
@@ -291,6 +299,54 @@ def create_app(directory=None, runtime=None):
     ):
         validate_namespace(namespace or [])
         return directory.contents(request.state.session, database, namespace or [])
+
+    @app.get("/api/details")
+    def details(
+        request: Request,
+        database: Annotated[str, Query(min_length=1, max_length=256)],
+        kind: Literal["database", "namespace", "table", "view"],
+        namespace: Annotated[list[str] | None, Query()] = None,
+        name: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+    ):
+        parts = namespace or []
+        validate_namespace(parts)
+        if kind != "database" and not parts:
+            raise ServiceError(422, "Select a namespace.")
+        if kind in ("table", "view"):
+            validate_namespace([name or ""])
+        return directory.details(request.state.session, database, parts, kind, name)
+
+    @app.post("/api/preview")
+    async def preview(data: PreviewInput, request: Request):
+        validate_namespace(data.namespace)
+        validate_namespace([data.table])
+        if not data.namespace:
+            raise ServiceError(422, "Select a namespace.")
+        if previews.locked():
+            raise ServiceError(429, "Preview slots are busy. Try again shortly.")
+        async with previews:
+            async with lock:
+                session = session_for(request.cookies)
+                context = (session.team, session.environment)
+                prepared = await run_in_threadpool(
+                    directory.preview_request,
+                    session,
+                    data.database,
+                    data.namespace,
+                    data.table,
+                    data.snapshot_id,
+                    data.limit,
+                )
+            result = await run_in_threadpool(run_preview, prepared)
+            async with lock:
+                # Sign-out, context switches and revocation while reading discard the result.
+                session = session_for(request.cookies)
+                if context != (session.team, session.environment):
+                    raise ServiceError(403, "Your workspace context changed. Preview again.")
+                await run_in_threadpool(
+                    directory.details, session, data.database, data.namespace, "table", data.table
+                )
+            return result
 
     @app.post("/api/notebooks", status_code=201)
     def start_notebook(data: NotebookInput, request: Request):
@@ -425,7 +481,13 @@ def create_app(directory=None, runtime=None):
             with suppress(RuntimeError, WebSocketDisconnect):
                 await websocket.close(code=1008)
 
-    files = {"": "index.html", "app.js": "app.js", "style.css": "style.css", "favicon.svg": "favicon.svg"}
+    files = {
+        "": "index.html",
+        "app.js": "app.js",
+        "catalog.js": "catalog.js",
+        "style.css": "style.css",
+        "favicon.svg": "favicon.svg",
+    }
     files.update(
         {f"fonts/{font}.ttf": f"fonts/{font}.ttf" for font in ("doto", "space-grotesk", "space-mono")}
     )
