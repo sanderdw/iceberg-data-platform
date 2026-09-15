@@ -126,6 +126,7 @@ def test_shell_checksum_failure_does_not_install(shell_installer):
     archive.write_bytes(b"bad download")
     result = run()
     assert result.returncode != 0
+    assert "checksum failed" in result.stdout + result.stderr
     assert not Path(env["ICEBERG_INSTALL_DIR"]).exists()
     assert not any("up" in args or "run" in args for args in calls(env))
 
@@ -134,6 +135,7 @@ def test_shell_pull_failure_does_not_start_stacks(shell_installer):
     run, env = shell_installer
     env["TEST_FAIL"] = "pull"
     assert run().returncode != 0
+    assert any("pull" in args for args in calls(env))
     assert not any("up" in args for args in calls(env))
 
 
@@ -192,6 +194,7 @@ def test_powershell_checksum_failure_does_not_install(powershell_installer):
     archive.write_bytes(b"bad download")
     result = run()
     assert result.returncode != 0
+    assert "checksum failed" in result.stdout + result.stderr
     assert not Path(env["ICEBERG_INSTALL_DIR"]).exists()
     assert not any("up" in args or "run" in args for args in calls(env))
 
@@ -200,4 +203,5 @@ def test_powershell_pull_failure_does_not_start_stacks(powershell_installer):
     run, env = powershell_installer
     env["TEST_FAIL"] = "pull"
     assert run().returncode != 0
+    assert any("pull" in args for args in calls(env))
     assert not any("up" in args for args in calls(env))

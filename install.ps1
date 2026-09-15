@@ -40,7 +40,12 @@
         $Entry = $Entries[0]
         $ArchivePath = Join-Path $TemporaryDir $Entry.Archive
         Invoke-WebRequest -UseBasicParsing "$ReleaseUrl/download/v$($Entry.Version)/$($Entry.Archive)" -OutFile $ArchivePath
-        if ((Get-FileHash $ArchivePath -Algorithm SHA256).Hash -ne $Entry.Hash) { throw 'Installation bundle checksum failed.' }
+        $Hasher = [Security.Cryptography.SHA256]::Create()
+        try {
+            $ActualHash = [BitConverter]::ToString($Hasher.ComputeHash([IO.File]::ReadAllBytes($ArchivePath))).Replace('-', '')
+        }
+        finally { $Hasher.Dispose() }
+        if ($ActualHash -ne $Entry.Hash) { throw 'Installation bundle checksum failed.' }
         $BundleDir = Join-Path $TemporaryDir 'bundle'
         New-Item -ItemType Directory -Path $BundleDir | Out-Null
         & tar -xzf $ArchivePath -C $BundleDir --strip-components=1
