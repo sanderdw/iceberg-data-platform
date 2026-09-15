@@ -103,4 +103,4 @@ jobs:
           version: '0.12.13'
           python-version: '3.14.7'
       - name: Test native installers without starting Docker
-        run: uv run --no-project --with pytest==9.1.1 python -m pytest test/test_installer.py
+        run: uv run --no-project --with pytest==9.1.1 python -m pytest --noconftest test/test_installer.py
