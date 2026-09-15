@@ -9,10 +9,10 @@ credentials*.json
 secrets*.json
 .data/
 .local/
-*.db
 *.sqlite*
 *.parquet
 *.arrow
+*.db*
 
 # Environments and generated output
 .venv/
@@ -38,3 +38,7 @@ htmlcov/
 docs/conversation.md
 notebooktest/
 presentation/
+
+# Personal sample data and generated user credentials
+/personal/*
+

@@ -105,7 +105,7 @@ class NotebookRuntime:
                 raise ServiceError(409, "The notebook storage does not belong to this workspace stack.")
         except NotFound:
             self.docker.volumes.create(volume_name, labels=labels)
-        network = self.docker.networks.create(f"{self.scope}-session-{id}", internal=True, labels=labels)
+        network = self.docker.networks.create(f"{self.scope}-session-{id}", internal=False, labels=labels)
         container = None
         try:
             network.connect(self.gateway)
@@ -130,6 +130,8 @@ class NotebookRuntime:
                 environment={
                     "HOME": "/tmp/home",
                     "PYTHONDONTWRITEBYTECODE": "1",
+                    "PYTHONPATH": "/tmp/packages:/app",
+                    "MARIMO_UV_TARGET": "/tmp/packages",
                     "MARIMO_SKIP_UPDATE_CHECK": "1",
                     "MARIMO_BASE_URL": f"/workspaces/{id}",
                     "MARIMO_GATEWAY_TOKEN": token,

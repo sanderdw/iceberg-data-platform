@@ -39,6 +39,22 @@ Execution runs separately for each signed-in session and database, using that us
 
 Run cells with **▶** in marimo. Add Python or SQL cells in the editor and use the provided `catalog`, `table` and `df` variables. Choose **Shared files** in the notebook selector to browse, create and open team notebooks, or select the starter notebook and examples directly.
 
+Notebooks have outbound internet access for APIs, downloads and package installation. Use marimo's package installer with **uv** (the default for workspaces without a saved package manager preference), or run this in a Python cell:
+
+```python
+import subprocess
+import sys
+
+subprocess.run(
+    ["uv", "pip", "install", "--python", sys.executable, "--target", "/tmp/packages", "humanize"],
+    check=True,
+)
+```
+
+Installed packages are available to notebook imports from `/tmp/packages`. They are private to the running container and disappear when it stops; reinstall them when reopening a workspace. Package downloads, caches and installs share the runtime's 256 MiB `/tmp` limit. For large packages or dependencies needed on every start, add them to the `notebook` uv dependency group and rebuild the notebook image.
+
+The base notebook image includes Altair for charts, Polars for dataframes, `nbformat` for Jupyter export, and `nbconvert[webpdf]` with Chromium and its system dependencies for PDF export.
+
 ## Bundled examples
 
 1. **01 · Neighborhood data with PyIceberg** creates `synthetic.neighborhood_electricity` with 40 homes, seven days and 26,880 quarter-hour readings. The deterministic model includes consumption, solar generation, grid draw, grid export and fictional addresses. Run the cells and click **Create example table**. A populated table is skipped; existing rows are never overwritten or duplicated. Writing requires a writer role or higher.
@@ -67,7 +83,7 @@ The browser test runs both examples, verifies that writing requires an explicit 
 
 - Python **3.14.7**, FastAPI **0.141.1** and marimo **0.24.2** are pinned in `uv.lock`.
 - The gateway uses the platform identity only to read the user, team and database directory. Catalog requests and notebook operations use the signed-in user's identity.
-- Each editor has a private container and internal network shared only with the gateway, Polaris and RustFS. Runtime ports are not published. Notebooks have no internet connection. Add packages to the notebook image through the `notebook` uv dependency group.
+- Each editor has a private container and a separate Docker bridge network shared only with the gateway, Polaris and RustFS. The network allows outbound internet access. Runtime ports are not published.
 - Runtimes use UID 10001, writable `/work` and `/tmp`, no Linux capabilities, up to two CPUs, 256 processes and 1 GiB RAM by default. Notebook code receives only its user's credentials, with no platform secret, administrator cookies or Docker socket.
 - The trusted gateway has Docker socket access to start and stop runtimes. It belongs to trusted platform administration. This shared Docker host is intended for local development and does not provide isolation for hostile tenants.
 - HTTP and WebSocket proxy requests check session ownership and database access. Neither portal's cookies are forwarded to marimo. The internal marimo token stays on the server.

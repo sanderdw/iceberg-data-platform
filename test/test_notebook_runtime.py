@@ -27,7 +27,13 @@ def runtime(monkeypatch):
 
     daemon.volumes.get.side_effect = get_volume
     daemon.volumes.create.side_effect = create_volume
-    daemon.networks.create.side_effect = lambda name, **kw: Mock(name=name, attrs={})
+
+    def create_network(name, **kwargs):
+        network = Mock(attrs={})
+        network.name = name
+        return network
+
+    daemon.networks.create.side_effect = create_network
 
     def run_container(*args, **kwargs):
         return Mock(attrs={"NetworkSettings": {"Networks": {kwargs["network"]: {"IPAddress": "10.0.0.2"}}}})
@@ -89,6 +95,21 @@ def test_other_teams_get_separate_files_even_for_same_database_name(runtime):
     runtime.start(session(team="team-b"), "db1", [], None)
     calls = runtime.docker.containers.run.call_args_list
     assert mounted_volume(calls[0]) != mounted_volume(calls[1])
+
+
+def test_notebooks_allow_egress_with_separate_networks_and_writable_packages(runtime):
+    runtime.start(session(), "db1", [], None)
+    runtime.start(session("alex"), "db1", [], None)
+    networks = runtime.docker.networks.create.call_args_list
+    assert networks[0].args[0] != networks[1].args[0]
+    for network, container in zip(networks, runtime.docker.containers.run.call_args_list, strict=True):
+        assert network.kwargs["internal"] is False
+        assert container.kwargs["network"] == network.args[0]
+        assert not container.kwargs.get("ports")
+        assert container.kwargs["read_only"] is True
+        env = container.kwargs["environment"]
+        assert env["MARIMO_UV_TARGET"] == "/tmp/packages"
+        assert env["MARIMO_UV_TARGET"] in env["PYTHONPATH"].split(":")
 
 
 def test_volume_from_another_stack_is_rejected(runtime):
