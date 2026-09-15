@@ -1,41 +1,63 @@
-# Install a released version
+# Install with one command
 
-Requirements: Docker Engine or Docker Desktop with Compose v2, a Linux AMD64 or ARM64 container host, and at least 4 GiB of Docker memory for a small demonstration. macOS and Windows users can run Linux containers with Docker Desktop; use a Bash-compatible terminal for the commands below.
+First install and start Docker with Compose v2. On [macOS](https://docs.docker.com/desktop/setup/install/mac-install/) and [Windows](https://docs.docker.com/desktop/setup/install/windows-install/), use Docker Desktop with Linux containers. Allocate at least 4 GiB of Docker memory for a small demonstration. Images support AMD64 and ARM64.
 
-## Download and start
+## Linux and macOS
 
-Download the installation bundle and `SHA256SUMS` from the [GitHub release](https://github.com/sanderdw/iceberg-data-platform/releases). For version 0.2.0:
+Run in Terminal:
 
 ```bash
-curl -fLO https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.2.0/iceberg-data-platform-0.2.0-install.tar.gz
-curl -fLO https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.2.0/SHA256SUMS
-# Linux; on macOS use: shasum -a 256 --check --ignore-missing SHA256SUMS
-sha256sum --check --ignore-missing SHA256SUMS
-tar -xzf iceberg-data-platform-0.2.0-install.tar.gz
-cd iceberg-data-platform-0.2.0-install
-
-# Generate .env using Python already included in the portal image.
-docker run --rm --user "$(id -u):$(id -g)" \
-  --mount "type=bind,src=$PWD,dst=/install" \
-  --entrypoint python ghcr.io/sanderdw/iceberg-data-platform-portal:0.2.0 \
-  /install/scripts/setup.py
-
-docker compose pull
-docker compose up -d --no-build --wait
-docker compose -f compose.users.yaml --profile images pull
-docker compose -f compose.users.yaml up -d --no-build --wait users
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh
 ```
 
-Open the administration portal at http://localhost:3000 and log in with `PORTAL_PASSWORD` from `.env`. The user portal is at http://localhost:3002. Create a team, database and user in the administration portal before logging in to the user portal.
+## Windows
 
-The notebook image is pulled explicitly because the user portal starts notebook containers on demand. The installation bundle pins the portal, monitoring service, user portal and notebook runtime to the same version. No source checkout, local Python, uv, Node.js or image build is required.
+Run in PowerShell:
 
-The images are listed under [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform). Public packages can be pulled without logging in. If a newly published package is still private, the repository owner must change its package visibility to Public before anonymous installation works.
+```powershell
+irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
+```
 
-## Upgrade
+The installer downloads and verifies the release bundle, creates `.env` with random credentials, pulls the images, and starts both Compose stacks. The notebook image is pulled too, ready for the first workspace. No source checkout, Python, uv, Node.js or local image builds are required.
 
-Save work and stop active notebook sessions before upgrading. Back up your data volumes and `.env`. Extract the new installation bundle into a new directory, copy your existing `.env` into it with restrictive permissions, then repeat the pull/start commands above from that directory. The fixed Compose project names reuse existing PostgreSQL, pgAdmin, RustFS and notebook volumes. Setup preserves an existing `.env`.
+Configuration is stored in `~/iceberg-data-platform` on Linux/macOS and `$HOME\iceberg-data-platform` on Windows. The Compose files use `:latest` for the portal, monitoring service, user portal and notebook runtime. Third-party data services retain their tested version tags.
 
-Do not run `docker compose down --volumes` during an upgrade. Existing installations may require migration steps from the release notes. Version 0.2.0 supports a fresh installation and does not migrate earlier experimental metadata formats.
+After installation:
+
+- Open the administration portal at http://localhost:3000.
+- Find `PORTAL_PASSWORD` in the installation directory's `.env` and use it to log in.
+- Create a team, database and user; then open the user portal at http://localhost:3002.
+
+The scripts are available for inspection in the [release assets](https://github.com/sanderdw/iceberg-data-platform/releases/latest). You can also download the installation archive there and run its `install.sh` or `install.ps1` to install the latest release.
+
+## Choose a directory
+
+Linux/macOS:
+
+```bash
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh -s -- --dir "$HOME/my-iceberg"
+```
+
+Windows PowerShell:
+
+```powershell
+$env:ICEBERG_INSTALL_DIR = "$HOME\my-iceberg"
+irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
+```
+
+Use a directory separate from a source checkout. Docker must have access to this directory for credential setup; Docker Desktop shares the home directory by default.
+
+## Update or restart
+
+Run the same installer command again. It preserves `.env` and data volumes, refreshes the managed configuration files (saving existing Compose files as `.bak`), pulls `:latest`, and starts the stacks. Save work and stop active notebook sessions before updating. Back up data and review the release notes for migration steps.
+
+To restart without downloading anything, run these commands from the installation directory:
+
+```bash
+docker compose up -d --wait
+docker compose -f compose.users.yaml up -d --wait users
+```
+
+Do not run `docker compose down --volumes` during an upgrade. The fixed project names reuse PostgreSQL, pgAdmin, RustFS and notebook volumes. Earlier experimental metadata formats are not migrated automatically.
 
 This is a local development platform. Default ports bind to localhost; review the [security model](https://github.com/sanderdw/iceberg-data-platform/blob/main/SECURITY.md) before exposing services beyond a trusted local environment.

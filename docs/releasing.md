@@ -1,6 +1,6 @@
 # Publishing a release
 
-The initial version is **0.2.0**. The `Release` workflow publishes three versioned container packages and source/installation archives when a matching `vX.Y.Z` tag is pushed. Local tooling only prepares artifacts.
+The current version is **0.2.1**. The `Release` workflow publishes three versioned container packages and source/installation archives when a matching `vX.Y.Z` tag is pushed. Local tooling only prepares artifacts.
 
 ## Validate the source
 
@@ -52,15 +52,15 @@ Scan the extracted archive with Gitleaks before uploading. CI does this automati
 3. Tag that commit and push the tag:
 
    ```bash
-   git tag -a v0.2.0 -m "Release 0.2.0"
-   git push origin v0.2.0
+   git tag -a v0.2.1 -m "Release 0.2.1"
+   git push origin v0.2.1
    ```
 
-The workflow rejects a tag that does not match the project version, runs verification and a source secret scan, then builds each image on native AMD64 and ARM64 runners. It publishes `ghcr.io/sanderdw/iceberg-data-platform-{portal,users,notebook}` with exact version tags (for example `0.2.0`), architecture tags and a `latest` alias. Only after every image builds does it publish the multi-platform tags and GitHub release with installation/source archives and `SHA256SUMS`. Installations use exact versions.
+The workflow rejects a tag that does not match the project version, runs verification and a source secret scan, then builds each image on native AMD64 and ARM64 runners. It publishes `ghcr.io/sanderdw/iceberg-data-platform-{portal,users,notebook}` with exact version tags (for example `0.2.0`), architecture tags and a `latest` alias. Only after every image builds does it publish the multi-platform tags and GitHub release with installation/source archives and `SHA256SUMS`. Installations follow `latest`; exact version tags remain available for manual pinning.
 
-The Docker-only bundle is generated from the source Compose definitions, removes all build contexts, keeps bind mounts relative, and pins the notebook image used by the user portal. It includes setup and pgAdmin configuration without local credentials.
+The Docker-only bundle is generated from the source Compose definitions, removes all build contexts, keeps bind mounts relative, and uses `:latest` consistently for all application images, including the notebook image used by the user portal. It includes setup and pgAdmin configuration without local credentials. The `install.sh` and `install.ps1` release assets download the matching bundle, verify its checksum, generate `.env`, pull images and start both stacks. Their stable URLs are `/releases/latest/download/install.sh` and `/releases/latest/download/install.ps1`.
 
-On first publication, open each package's settings from [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set visibility to **Public**. GitHub creates new container packages as private even for a public repository. Verify an anonymous pull of all three packages before announcing the release. Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no registry secret is needed. Images include the source repository label so GitHub links them to this repository. See [GitHub's container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+On first publication, open each package's settings from [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and confirm visibility is **Public**. Change private packages to Public before sharing the installation command. Verify an anonymous pull of all three packages before announcing the release. Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no registry secret is needed. Images include the source repository label so GitHub links them to this repository. See [GitHub's container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
 For a failed release, fix the cause before retrying the workflow on the same tag. Never move a published release tag to different source. The manual `Release candidate` workflow still prepares source artifacts without publishing.
 

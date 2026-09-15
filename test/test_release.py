@@ -66,7 +66,7 @@ def test_symlink_and_unexpected_private_file_are_rejected(release_tree, tmp_path
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="Docker Compose is required to render the bundle")
-def test_install_bundle_is_portable_versioned_and_preserves_secrets(release_tree):
+def test_install_bundle_is_portable_uses_latest_and_excludes_secrets(release_tree):
     secret = secrets.token_hex(24)
     (release_tree / ".env").write_text(f"PORTAL_PASSWORD={secret}\n")
     source = build(release_tree)
@@ -90,11 +90,15 @@ def test_install_bundle_is_portable_versioned_and_preserves_secrets(release_tree
     assert admin["services"]["portal"]["image"] == admin["services"]["monitor"]["image"]
     notebook_image = users["services"]["notebook-image"]["image"]
     assert users["services"]["users"]["environment"]["NOTEBOOK_IMAGE"] == notebook_image
-    version = json.loads((release_tree / "package.json").read_text())["version"]
-    assert notebook_image == f"ghcr.io/sanderdw/iceberg-data-platform-notebook:{version}"
+    assert notebook_image == "ghcr.io/sanderdw/iceberg-data-platform-notebook:latest"
+    for model in (admin, users):
+        for service in model["services"].values():
+            if service["image"].startswith("ghcr.io/sanderdw/"):
+                assert service["image"].endswith(":latest")
+    assert files["install.sh"] == (release_tree / "install.sh").read_bytes()
     assert admin["services"]["portal"]["environment"]["PORTAL_PASSWORD"] == "${PORTAL_PASSWORD}"
     mounts = admin["services"]["pgadmin"]["volumes"]
     assert any(mount.get("source") == "./pgadmin/servers.json" for mount in mounts)
     checksums = (bundle.parent / "SHA256SUMS").read_text()
-    for path in (source, bundle):
+    for path in (source, bundle, bundle.parent / "install.sh", bundle.parent / "install.ps1"):
         assert f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" in checksums

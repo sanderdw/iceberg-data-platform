@@ -139,9 +139,19 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF_NOTES
-          ## Install with Docker Compose
+          ## Install with one command
 
-          Download and extract \`iceberg-data-platform-${VERSION}-install.tar.gz\` below, then follow \`docs/install.md\` in the bundle.
+          With Docker running, use the command for your platform:
+
+          **Linux / macOS**
+
+          \`curl -fsSL https://github.com/${GH_REPO}/releases/latest/download/install.sh | sh\`
+
+          **Windows PowerShell**
+
+          \`irm https://github.com/${GH_REPO}/releases/latest/download/install.ps1 | iex\`
+
+          The installer creates configuration and random credentials, pulls latest images and starts both stacks. Open http://localhost:3000 and use PORTAL_PASSWORD from ~/iceberg-data-platform/.env.
 
           Prebuilt images support Linux AMD64 and ARM64:
           - \`ghcr.io/${GH_REPO}-portal:${VERSION}\`

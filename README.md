@@ -22,7 +22,21 @@ The Compose projects are `iceberg-platform` (administration portal, Polaris, Pos
 
 ### Install a released version (Docker only)
 
-Download the installation bundle from [Releases](https://github.com/sanderdw/iceberg-data-platform/releases) and follow the [installation guide](docs/install.md). Versioned images for AMD64 and ARM64 are published to [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform). The bundle runs prebuilt images and generates your local credentials; no Python, uv, Node.js or local image builds are needed.
+Install and start Docker with Compose v2 first (Docker Desktop on macOS/Windows, using Linux containers).
+
+**Linux / macOS**
+
+```bash
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh
+```
+
+**Windows PowerShell**
+
+```powershell
+irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
+```
+
+The installer creates `~/iceberg-data-platform`, prepares `.env`, pulls `:latest` images and starts both stacks. Open http://localhost:3000 and log in with `PORTAL_PASSWORD` from `.env`. See the [installation guide](docs/install.md) for configuration and updates.
 
 ### Run from source
 

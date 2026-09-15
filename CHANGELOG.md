@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 — 2026-09-16
+
+- One-command installers for Linux/macOS and Windows PowerShell: download and verify configuration, generate `.env`, pull images, and start both stacks automatically.
+- Installation Compose files use `:latest` for all application images, including on-demand notebooks.
+- Rerunning the installer preserves credentials and data volumes and backs up the existing Compose files.
+
 ## 0.2.0 — 2026-09-15
 
 Initial public release:

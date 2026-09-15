@@ -28,6 +28,8 @@ ROOT_FILES = (
     "SECURITY.md",
     "THIRD_PARTY_NOTICES.md",
     "Dockerfile",
+    "install.sh",
+    "install.ps1",
     "compose.yaml",
     "compose.lan.yaml",
     "compose.users.yaml",
@@ -143,7 +145,7 @@ def build(root=ROOT, output=None):
 
 
 def build_install(root=ROOT, output=None):
-    """Render portable Compose files with versioned images and no build contexts."""
+    """Render portable Compose files using the latest published application images."""
     version, _ = check(root)
     output = output or root / "dist"
     output.mkdir(parents=True, exist_ok=True)
@@ -158,13 +160,13 @@ def build_install(root=ROOT, output=None):
         for name, service in model["services"].items():
             service.pop("build", None)
             if name in image_names:
-                service["image"] = f"{registry}-{image_names[name]}:{version}"
+                service["image"] = f"{registry}-{image_names[name]}:latest"
             if name == "users":
-                service["environment"]["NOTEBOOK_IMAGE"] = f"{registry}-notebook:{version}"
+                service["environment"]["NOTEBOOK_IMAGE"] = f"{registry}-notebook:latest"
         # JSON is valid YAML; keep Compose's normalized model without another dependency.
         contents[filename] = (json.dumps(model, indent=2) + "\n").encode()
     for filename in (".env.example", "scripts/setup.py", "pgadmin/servers.json", "compose.lan.yaml",
-                     "compose.users.lan.yaml", "LICENSE", "NOTICE", "docs/install.md"):
+                     "compose.users.lan.yaml", "LICENSE", "NOTICE", "docs/install.md", "install.sh", "install.ps1"):
         contents[filename] = (root / filename).read_bytes()
     name = f"iceberg-data-platform-{version}-install"
     archive = output / f"{name}.tar.gz"
@@ -179,7 +181,10 @@ def build_install(root=ROOT, output=None):
             info.mode = 0o644
             info.mtime = 0
             tar.addfile(info, io.BytesIO(data))
-    archives = sorted(output.glob(f"iceberg-data-platform-{version}*.tar.gz"))
+    installers = [output / filename for filename in ("install.sh", "install.ps1")]
+    for installer in installers:
+        installer.write_bytes((root / installer.name).read_bytes())
+    archives = [*sorted(output.glob(f"iceberg-data-platform-{version}*.tar.gz")), *installers]
     (output / "SHA256SUMS").write_text("".join(
         f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in archives
     ))
