@@ -142,12 +142,60 @@ def build(root=ROOT, output=None):
     return archive
 
 
+def build_install(root=ROOT, output=None):
+    """Render portable Compose files with versioned images and no build contexts."""
+    version, _ = check(root)
+    output = output or root / "dist"
+    output.mkdir(parents=True, exist_ok=True)
+    registry = "ghcr.io/sanderdw/iceberg-data-platform"
+    image_names = {"portal": "portal", "monitor": "portal", "users": "users", "notebook-image": "notebook"}
+    contents = {}
+    for filename in ("compose.yaml", "compose.users.yaml"):
+        model = json.loads(subprocess.check_output([
+            "docker", "compose", "--env-file", str(root / ".env.example"), "-f", str(root / filename),
+            "config", "--no-interpolate", "--no-path-resolution", "--format", "json",
+        ], cwd=root))
+        for name, service in model["services"].items():
+            service.pop("build", None)
+            if name in image_names:
+                service["image"] = f"{registry}-{image_names[name]}:{version}"
+            if name == "users":
+                service["environment"]["NOTEBOOK_IMAGE"] = f"{registry}-notebook:{version}"
+        # JSON is valid YAML; keep Compose's normalized model without another dependency.
+        contents[filename] = (json.dumps(model, indent=2) + "\n").encode()
+    for filename in (".env.example", "scripts/setup.py", "pgadmin/servers.json", "compose.lan.yaml",
+                     "compose.users.lan.yaml", "LICENSE", "NOTICE", "docs/install.md"):
+        contents[filename] = (root / filename).read_bytes()
+    name = f"iceberg-data-platform-{version}-install"
+    archive = output / f"{name}.tar.gz"
+    with (
+        archive.open("wb") as raw,
+        gzip.GzipFile(fileobj=raw, mode="wb", filename="", mtime=0) as compressed,
+        tarfile.open(fileobj=compressed, mode="w") as tar,
+    ):
+        for filename, data in sorted(contents.items()):
+            info = tarfile.TarInfo(f"{name}/{filename}")
+            info.size = len(data)
+            info.mode = 0o644
+            info.mtime = 0
+            tar.addfile(info, io.BytesIO(data))
+    archives = sorted(output.glob(f"iceberg-data-platform-{version}*.tar.gz"))
+    (output / "SHA256SUMS").write_text("".join(
+        f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in archives
+    ))
+    print(f"Built {archive.name} ({archive.stat().st_size:,} bytes)")
+    return archive
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", action="store_true", help="Also build dist/source archive and checksum")
+    parser.add_argument("--install", action="store_true", help="Also build a Docker-only installation bundle")
     args = parser.parse_args()
     try:
         build() if args.build else check()
+        if args.install:
+            build_install()
     except ValueError as exc:
         parser.exit(1, f"Release check failed: {exc}\n")
 

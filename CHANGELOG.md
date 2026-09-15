@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased — 0.2.0
+## 0.2.0 — 2026-09-15
 
-Initial public release preparation:
+Initial public release:
+
+- Versioned GitHub container packages for AMD64 and ARM64, plus a Docker-only installation bundle with checksums.
 
 - Edit existing user roles, including catalog permission changes, S3 access promotion/demotion and rollback on provider failures.
 
@@ -21,4 +23,4 @@ Initial public release preparation:
 - uv lockfile, pinned Python version, separate Compose stacks, authorization and browser tests.
 - Apache-2.0 license, third-party font notices, contributor/security documentation, CI and a checked source-release builder.
 
-No migration from earlier experimental metadata formats is provided. The public release uses the `iceberg-portal-v2` resource marker. Published releases and tags will be recorded here after publication.
+No migration from earlier experimental metadata formats is provided. The public release uses the `iceberg-portal-v2` resource marker.

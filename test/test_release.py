@@ -1,13 +1,14 @@
 """The public artifact must preserve source and reject accidental private additions."""
 
 import hashlib
+import json
 import secrets
 import shutil
 import tarfile
 
 import pytest
 
-from scripts.release import ROOT, build, check, release_files
+from scripts.release import ROOT, build, build_install, check, release_files
 
 
 @pytest.fixture
@@ -62,3 +63,38 @@ def test_symlink_and_unexpected_private_file_are_rejected(release_tree, tmp_path
     (release_tree / "docs" / "linked.md").symlink_to(outside)
     with pytest.raises(ValueError, match="Symlinks"):
         check(release_tree)
+
+
+@pytest.mark.skipif(shutil.which("docker") is None, reason="Docker Compose is required to render the bundle")
+def test_install_bundle_is_portable_versioned_and_preserves_secrets(release_tree):
+    secret = secrets.token_hex(24)
+    (release_tree / ".env").write_text(f"PORTAL_PASSWORD={secret}\n")
+    source = build(release_tree)
+    bundle = build_install(release_tree)
+    digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
+    assert hashlib.sha256(build_install(release_tree).read_bytes()).hexdigest() == digest
+    with tarfile.open(bundle) as archive:
+        files = {name.split("/", 1)[1]: archive.extractfile(name).read() for name in archive.getnames()}
+    assert ".env" not in files
+    assert "scripts/setup.py" in files
+    assert "pgadmin/servers.json" in files
+    for content in files.values():
+        assert secret.encode() not in content
+        assert str(release_tree).encode() not in content
+    admin = json.loads(files["compose.yaml"])
+    users = json.loads(files["compose.users.yaml"])
+    assert admin["name"] == "iceberg-platform"
+    assert users["name"] == "iceberg-workspaces"
+    for model in (admin, users):
+        assert all("build" not in service for service in model["services"].values())
+    assert admin["services"]["portal"]["image"] == admin["services"]["monitor"]["image"]
+    notebook_image = users["services"]["notebook-image"]["image"]
+    assert users["services"]["users"]["environment"]["NOTEBOOK_IMAGE"] == notebook_image
+    version = json.loads((release_tree / "package.json").read_text())["version"]
+    assert notebook_image == f"ghcr.io/sanderdw/iceberg-data-platform-notebook:{version}"
+    assert admin["services"]["portal"]["environment"]["PORTAL_PASSWORD"] == "${PORTAL_PASSWORD}"
+    mounts = admin["services"]["pgadmin"]["volumes"]
+    assert any(mount.get("source") == "./pgadmin/servers.json" for mount in mounts)
+    checksums = (bundle.parent / "SHA256SUMS").read_text()
+    for path in (source, bundle):
+        assert f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" in checksums

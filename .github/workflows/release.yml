@@ -1,0 +1,157 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: '0.12.13'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Validate release tag
+        id: version
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          version = json.load(open('package.json'))['version']
+          if not re.fullmatch(r'\d+\.\d+\.\d+', version) or os.environ['RELEASE_REF'] != f'refs/tags/v{version}':
+              raise SystemExit('Run this workflow on the vX.Y.Z tag matching the project version')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+          PY
+      - run: uv sync --locked --all-groups
+      - run: npm ci
+      - run: npm run verify
+      - run: uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
+      - run: uv run python -m scripts.release --build --install
+      - name: Scan source archive
+        run: |
+          curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  '"$RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          mkdir "$RUNNER_TEMP/source-scan"
+          tar -xzf "dist/iceberg-data-platform-${VERSION}.tar.gz" -C "$RUNNER_TEMP/source-scan"
+          "$RUNNER_TEMP/gitleaks" dir "$RUNNER_TEMP/source-scan" --redact --no-banner
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-bundles
+          path: dist/
+          if-no-files-found: error
+  images:
+    needs: validate
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [portal, users, notebook]
+        arch: [amd64, arm64]
+        include:
+          - image: portal
+            dockerfile: Dockerfile
+          - image: users
+            dockerfile: user_portal/Dockerfile
+          - image: notebook
+            dockerfile: user_portal/notebook/Dockerfile
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003
+      - uses: docker/login-action@0a596b2e7a325f0cedf8e9bd21ab002cbd3c9241
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          tags: ghcr.io/${{ github.repository }}-${{ matrix.image }}:${{ needs.validate.outputs.version }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+  publish:
+    needs: [validate, images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/download-artifact@484a0b528fb4d7bd804637ccb632e47a0e638317
+        with:
+          name: release-bundles
+          path: dist
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003
+      - uses: docker/login-action@0a596b2e7a325f0cedf8e9bd21ab002cbd3c9241
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish versioned multi-platform images
+        env:
+          REGISTRY: ghcr.io/${{ github.repository }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          for component in portal users notebook; do
+            image="${REGISTRY}-${component}"
+            docker buildx imagetools create --tag "${image}:${VERSION}" --tag "${image}:latest" \
+              "${image}:${VERSION}-amd64" "${image}:${VERSION}-arm64"
+          done
+      - name: Publish release and installation bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF_NOTES
+          ## Install with Docker Compose
+
+          Download and extract \`iceberg-data-platform-${VERSION}-install.tar.gz\` below, then follow \`docs/install.md\` in the bundle.
+
+          Prebuilt images support Linux AMD64 and ARM64:
+          - \`ghcr.io/${GH_REPO}-portal:${VERSION}\`
+          - \`ghcr.io/${GH_REPO}-users:${VERSION}\`
+          - \`ghcr.io/${GH_REPO}-notebook:${VERSION}\`
+
+          The installation bundle requires only Docker with Compose. It generates local credentials and preserves existing configuration and data volumes.
+          EOF_NOTES
+          if gh release view "v${VERSION}" > /dev/null 2>&1; then
+            gh release upload "v${VERSION}" dist/* --clobber
+          else
+            gh release create "v${VERSION}" dist/* --verify-tag --title "v${VERSION}" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi

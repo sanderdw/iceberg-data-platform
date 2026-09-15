@@ -20,6 +20,12 @@ The Compose projects are `iceberg-platform` (administration portal, Polaris, Pos
 
 ## Quick start
 
+### Install a released version (Docker only)
+
+Download the installation bundle from [Releases](https://github.com/sanderdw/iceberg-data-platform/releases) and follow the [installation guide](docs/install.md). Versioned images for AMD64 and ARM64 are published to [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform). The bundle runs prebuilt images and generates your local credentials; no Python, uv, Node.js or local image builds are needed.
+
+### Run from source
+
 Requirements: Docker Engine or Docker Desktop with Compose v2, [uv](https://docs.astral.sh/uv/getting-started/installation/), and enough Docker memory for the data stack plus notebooks (budget at least 4 GiB for a small demonstration). Node.js 24+ is only needed for development and browser tests.
 
 From a checkout or extracted source release:
@@ -111,7 +117,7 @@ Tests cover authorization, team membership, compensating actions, resumable dele
 - [User portal and notebooks](user_portal/README.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security and deployment boundaries](SECURITY.md)
-- [Preparing a source release](docs/releasing.md)
+- [Publishing a release](docs/releasing.md)
 - [Changelog](CHANGELOG.md)
 
 ## License
