@@ -1,6 +1,6 @@
 # Iceberg Workspaces
 
-A standalone user portal with shared team [marimo](https://marimo.io/) notebooks. Users sign in with their existing username and client secret, switch between their teams and environments and browse the databases, namespaces, tables and views they can access.
+A standalone user portal with shared team [marimo](https://marimo.io/) notebooks. Users sign in with Keycloak, switch between their teams and environments and browse the databases, namespaces, tables and views they can access.
 
 ## Start
 
@@ -11,7 +11,7 @@ docker compose -f compose.users.yaml --profile images build
 docker compose -f compose.users.yaml up -d --wait users
 ```
 
-Open http://localhost:3002. Use the username and client secret issued by the portal administrator. The OAuth client ID is used by Iceberg clients; the portal login asks for the username. Port 3000 is the separate administration portal.
+Open http://localhost:3002. Sign in with the Keycloak account created or linked by your administrator. Port 3000 is the separate administration portal.
 
 The Compose project is `iceberg-workspaces`; the data and administration project is `iceberg-platform`. The workspace gateway can stop and restart independently. It connects directly to Polaris and RustFS and does not require the administration portal API.
 

@@ -110,6 +110,14 @@ class PolarisProvider:
         if response.status_code == 401 and retry:
             self.token = None
             return self.request(path, method, body, False)
+        if response.status_code == 400 and method == "DELETE":
+            # Polaris reports an already-absent grant as 400, not 404. Treat
+            # only that explicit condition as successful idempotent removal.
+            try:
+                if response.json().get("error", {}).get("type") == "GRANT_NOT_FOUND":
+                    return None
+            except (ValueError, AttributeError):
+                pass
         if response.is_error:
             status = response.status_code if response.status_code in (404, 409) else 502
             message = {
@@ -444,7 +452,7 @@ class PolarisProvider:
             result = self.update_properties(path, {**catalog["properties"], "portal.team": team})
             return self.database(result)
 
-    def create_user(self, data):
+    def create_user(self, data, *, identity_properties=None, activate=True):
         self.require_teams(data.teams)
         if any(u["name"] == data.name for u in self.list_users()):
             raise ServiceError(409, "This username already exists.")
@@ -464,6 +472,7 @@ class PolarisProvider:
                             "portal.teams": json.dumps(data.teams),
                             "portal.role": data.role,
                             **({"portal.bucket-access-key": key} if key else {}),
+                            **(identity_properties or {}),
                         },
                     }
                 },
@@ -479,7 +488,8 @@ class PolarisProvider:
                 undo.append(lambda: self.storage.delete_user(key))
             # S3 policy was just created. Only grant catalog permissions here.
             self.sync_access({**user, "bucketAccess": False}, {}, access, undo)
-            self.management(f"{path}/principal-roles", "PUT", {"principalRole": {"name": id}})
+            if activate:
+                self.management(f"{path}/principal-roles", "PUT", {"principalRole": {"name": id}})
             return {
                 "user": user,
                 "credentials": result["credentials"],

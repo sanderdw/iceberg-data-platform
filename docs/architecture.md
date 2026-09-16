@@ -6,6 +6,9 @@ flowchart LR
     Admin --> PgAdmin[pgAdmin :5050]
     PgAdmin --> Postgres
     User[User browser] --> UserAPI[FastAPI user gateway :3002]
+    AdminAPI -->|OIDC and account lifecycle| Keycloak[Keycloak IAM]
+    UserAPI -->|OIDC| Keycloak
+    Polaris -->|Validate signed user tokens| Keycloak
     AdminAPI --> Polaris[Apache Polaris]
     AdminAPI --> Storage[RustFS S3 and IAM]
     UserAPI --> Polaris
@@ -19,7 +22,16 @@ flowchart LR
 
 ## Services and ownership
 
-`compose.yaml` runs the `iceberg-platform` project: PostgreSQL 18, pgAdmin, RustFS, Polaris bootstrap, Polaris and the admin portal. pgAdmin exposes a localhost web interface for the internal PostgreSQL metadata database and persists its settings in a separate volume. `compose.users.yaml` runs the `iceberg-workspaces` gateway separately and provides the notebook image build. The gateway joins the existing catalog network; it does not depend on the administration portal's API.
+`compose.yaml` runs **iceberg-platform**: the admin portal, Keycloak, PostgreSQL 18,
+pgAdmin, RustFS, Polaris and monitoring. Startup configures Keycloak provisioning before
+the admin portal becomes available. `compose.users.yaml` runs **iceberg-workspaces**:
+the user gateway and notebook image build. The gateway joins the platform network,
+uses Keycloak for sign-in and talks directly to Polaris and RustFS. It can restart
+independently of the platform and has no dependency on the admin portal API.
+
+Authentication and account management live in `server/oidc.py`, `server/identity.py`
+and `server/entrypoints.py`. Both standard application images include OIDC support.
+The installed portals always use Keycloak authentication.
 
 Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, an individual principal role and the grants of their teams. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. There is no second application metadata database.
 

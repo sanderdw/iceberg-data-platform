@@ -45,7 +45,7 @@ SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", ".g
 BINARY_SUFFIXES = {".png", ".ttf"}
 SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml"} | BINARY_SUFFIXES
 IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache"}
-LOCAL_FILES = {"docs/conversation.md"}
+LOCAL_FILES = {"docs/conversation.md", "docs/dbaas-reference-architecture.drawio"}
 
 
 def release_files(root=ROOT):
@@ -83,12 +83,12 @@ def check(root=ROOT):
     if project.get("license") != "Apache-2.0" or package.get("license") != "Apache-2.0":
         raise ValueError("Expected Apache-2.0 project metadata")
     local_secrets = []
-    env_file = root / ".env"
-    if env_file.is_file():
-        for line in env_file.read_text().splitlines():
-            key, _, value = line.partition("=")
-            if ("SECRET" in key or "PASSWORD" in key) and len(value.strip()) >= 12:
-                local_secrets.append(value.strip().strip("\"'"))
+    for env_file in root.glob(".env*"):
+        if env_file.is_file() and env_file.name != ".env.example":
+            for line in env_file.read_text().splitlines():
+                key, _, value = line.partition("=")
+                if ("SECRET" in key or "PASSWORD" in key) and len(value.strip()) >= 12:
+                    local_secrets.append(value.strip().strip("\"'"))
     for path in files:
         relative = path.relative_to(root).as_posix()
         if path.suffix in BINARY_SUFFIXES:
@@ -144,29 +144,52 @@ def build(root=ROOT, output=None):
     return archive
 
 
-def build_install(root=ROOT, output=None):
-    """Render portable Compose files using the latest published application images."""
+def installer_source(root, filename, release_tag="latest", image_tag="latest"):
+    # Values become shell/PowerShell literals. Accept only simple release/image tags.
+    for value in (release_tag, image_tag):
+        if not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", value):
+            raise ValueError("Invalid release or image tag")
+    if (release_tag == "latest") != (image_tag == "latest"):
+        raise ValueError("A pinned installation needs both release and image tags")
+    content = (root / filename).read_text()
+    if filename == "install.sh":
+        content = content.replace("    release_tag=latest\n", f"    release_tag={release_tag}\n")
+    else:
+        content = content.replace("    $ReleaseTag = 'latest'\n", f"    $ReleaseTag = '{release_tag}'\n")
+    return content.replace("iceberg-data-platform-portal:latest", f"iceberg-data-platform-portal:{image_tag}").encode()
+
+
+def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="latest"):
+    """Render portable Compose files and matching stable or pinned installers."""
     version, _ = check(root)
     output = output or root / "dist"
     output.mkdir(parents=True, exist_ok=True)
     registry = "ghcr.io/sanderdw/iceberg-data-platform"
-    image_names = {"portal": "portal", "monitor": "portal", "users": "users", "notebook-image": "notebook"}
-    contents = {}
+    image_names = {"portal": "portal", "monitor": "portal", "users": "users", "notebook-image": "notebook",
+                   "keycloak-bootstrap": "portal"}
+    contents = {name: installer_source(root, name, release_tag, image_tag) for name in ("install.sh", "install.ps1")}
     for filename in ("compose.yaml", "compose.users.yaml"):
         model = json.loads(subprocess.check_output([
             "docker", "compose", "--env-file", str(root / ".env.example"), "-f", str(root / filename),
             "config", "--no-interpolate", "--no-path-resolution", "--format", "json",
         ], cwd=root))
         for name, service in model["services"].items():
+            # Compose can retain merged environments as KEY=value lists when
+            # interpolation is disabled. Normalize without resolving secrets.
+            if isinstance(service.get("environment"), list):
+                service["environment"] = {
+                    key: value if separator else None
+                    for key, separator, value in (item.partition("=") for item in service["environment"])
+                }
             service.pop("build", None)
             if name in image_names:
-                service["image"] = f"{registry}-{image_names[name]}:latest"
+                service["image"] = f"{registry}-{image_names[name]}:{image_tag}"
             if name == "users":
-                service["environment"]["NOTEBOOK_IMAGE"] = f"{registry}-notebook:latest"
+                service["environment"]["NOTEBOOK_IMAGE"] = f"{registry}-notebook:{image_tag}"
         # JSON is valid YAML; keep Compose's normalized model without another dependency.
         contents[filename] = (json.dumps(model, indent=2) + "\n").encode()
     for filename in (".env.example", "scripts/setup.py", "pgadmin/servers.json", "compose.lan.yaml",
-                     "compose.users.lan.yaml", "LICENSE", "NOTICE", "docs/install.md", "install.sh", "install.ps1"):
+                     "compose.users.lan.yaml", "LICENSE", "NOTICE", "docs/install.md", "docs/keycloak.md"):
         contents[filename] = (root / filename).read_bytes()
     name = f"iceberg-data-platform-{version}-install"
     archive = output / f"{name}.tar.gz"
@@ -183,7 +206,7 @@ def build_install(root=ROOT, output=None):
             tar.addfile(info, io.BytesIO(data))
     installers = [output / filename for filename in ("install.sh", "install.ps1")]
     for installer in installers:
-        installer.write_bytes((root / installer.name).read_bytes())
+        installer.write_bytes(contents[installer.name])
     archives = [*sorted(output.glob(f"iceberg-data-platform-{version}*.tar.gz")), *installers]
     (output / "SHA256SUMS").write_text("".join(
         f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in archives
@@ -196,11 +219,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", action="store_true", help="Also build dist/source archive and checksum")
     parser.add_argument("--install", action="store_true", help="Also build a Docker-only installation bundle")
+    parser.add_argument("--release-tag", default="latest", help="GitHub release to download from the generated installers")
+    parser.add_argument("--image-tag", default="latest", help="Matching application image tag for the installation bundle")
     args = parser.parse_args()
     try:
         build() if args.build else check()
         if args.install:
-            build_install()
+            build_install(release_tag=args.release_tag, image_tag=args.image_tag)
     except ValueError as exc:
         parser.exit(1, f"Release check failed: {exc}\n")
 

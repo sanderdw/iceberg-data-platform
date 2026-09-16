@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- The `keycloak` branch publishes tested prereleases with one-command installers
+  and matching image tags, independently of stable releases.
+- Supported Keycloak OIDC integration for both portals, Polaris and per-user notebooks.
+- Administration-portal account creation, explicit linking, temporary password reset and access revocation.
+- Keycloak in the existing platform/workspace Compose split and standard application images, optional demo fixtures and dedicated integration CI.
+- Source and Docker installation bundles include Keycloak setup and operating documentation.
+
 ## 0.2.1 — 2026-09-16
 
 - One-command installers for Linux/macOS and Windows PowerShell: download and verify configuration, generate `.env`, pull images, and start both stacks automatically.

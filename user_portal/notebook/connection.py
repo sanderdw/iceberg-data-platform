@@ -14,12 +14,17 @@ class InternalS3FileIO(PyArrowFileIO):
 
 
 def connect():
+    credentials = (
+        {"token": os.environ["ICEBERG_ACCESS_TOKEN"]}
+        if os.environ.get("ICEBERG_ACCESS_TOKEN") else
+        {"credential": f"{os.environ['ICEBERG_CLIENT_ID']}:{os.environ['ICEBERG_CLIENT_SECRET']}"}
+    )
     return load_catalog(
         os.environ["ICEBERG_DATABASE"],
         type="rest",
         uri=os.environ["ICEBERG_CATALOG_URI"],
         warehouse=os.environ["ICEBERG_DATABASE"],
-        credential=f"{os.environ['ICEBERG_CLIENT_ID']}:{os.environ['ICEBERG_CLIENT_SECRET']}",
+        **credentials,
         scope="PRINCIPAL_ROLE:ALL",
         **{
             "oauth2-server-uri": os.environ["ICEBERG_TOKEN_URI"],

@@ -27,17 +27,19 @@ def connect_duckdb(namespace, table):
         endpoint = os.environ["ICEBERG_CATALOG_URI"].rstrip("/")
         warehouse = os.environ["ICEBERG_DATABASE"]
         with httpx.Client(timeout=30, trust_env=False) as client:
-            response = client.post(
-                os.environ["ICEBERG_TOKEN_URI"],
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": os.environ["ICEBERG_CLIENT_ID"],
-                    "client_secret": os.environ["ICEBERG_CLIENT_SECRET"],
-                    "scope": "PRINCIPAL_ROLE:ALL",
-                },
-            )
-            response.raise_for_status()
-            token = response.json()["access_token"]
+            token = os.environ.get("ICEBERG_ACCESS_TOKEN")
+            if not token:
+                response = client.post(
+                    os.environ["ICEBERG_TOKEN_URI"],
+                    data={
+                        "grant_type": "client_credentials",
+                        "client_id": os.environ["ICEBERG_CLIENT_ID"],
+                        "client_secret": os.environ["ICEBERG_CLIENT_SECRET"],
+                        "scope": "PRINCIPAL_ROLE:ALL",
+                    },
+                )
+                response.raise_for_status()
+                token = response.json()["access_token"]
             client.headers.update({"Authorization": f"Bearer {token}"})
             response = client.get(f"{endpoint}/v1/config", params={"warehouse": warehouse})
             response.raise_for_status()

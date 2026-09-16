@@ -1,5 +1,10 @@
 # Install with one command
 
+For the integrated Keycloak authentication, see [Keycloak setup](keycloak.md).
+The same two Compose projects support Keycloak by default. The stable commands below
+install the latest stable release; use the preview commands to test the `keycloak` branch.
+
+
 First install and start Docker with Compose v2. On [macOS](https://docs.docker.com/desktop/setup/install/mac-install/) and [Windows](https://docs.docker.com/desktop/setup/install/windows-install/), use Docker Desktop with Linux containers. Allocate at least 4 GiB of Docker memory for a small demonstration. Images support AMD64 and ARM64.
 
 ## Linux and macOS
@@ -25,10 +30,38 @@ Configuration is stored in `~/iceberg-data-platform` on Linux/macOS and `$HOME\i
 After installation:
 
 - Open the administration portal at http://localhost:3000.
-- Find `PORTAL_PASSWORD` in the installation directory's `.env` and use it to log in.
+- Find `PLATFORM_ADMIN_USERNAME` and `PLATFORM_ADMIN_PASSWORD` in `.env`, sign in through Keycloak, and change the initial password.
 - Create a team, database and user; then open the user portal at http://localhost:3002.
 
 The scripts are available for inspection in the [release assets](https://github.com/sanderdw/iceberg-data-platform/releases/latest). You can also download the installation archive there and run its `install.sh` or `install.ps1` to install the latest release.
+
+## Test the Keycloak branch
+
+Once the branch's `Release` workflow has published its first successful preview:
+
+```bash
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/keycloak-preview/install.sh | sh
+```
+
+```powershell
+irm https://github.com/sanderdw/iceberg-data-platform/releases/download/keycloak-preview/install.ps1 | iex
+```
+
+The installer downloads one exact preview bundle, verifies its checksum and uses
+the matching application images, including notebooks. Docker with Compose is enough;
+users do not need Git, Python, Node.js or a GitHub login. Each successful branch push
+updates these download entrypoints. Rerun the command to install a newer preview;
+updates are never automatic. The usual stable installation command stays unchanged.
+
+Use a fresh installation. Both versions use `iceberg-platform`, `iceberg-workspaces`
+and the same ports and volumes. A different installation directory does not isolate
+them; use a separate Docker environment to test alongside an existing installation.
+Preview updates within the same installation preserve `.env` and data. There is no
+migration from an earlier password-based installation.
+
+Open http://localhost:3000, use `PLATFORM_ADMIN_USERNAME` and `PLATFORM_ADMIN_PASSWORD`
+from `.env`, and change the temporary password. Create a team, database and user, then
+sign in at http://localhost:3002. See [account management](keycloak.md#manage-users-in-the-administration-portal).
 
 ## Choose a directory
 

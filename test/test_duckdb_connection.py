@@ -66,6 +66,15 @@ def test_native_connection_uses_scoped_vended_credentials_and_internal_endpoint(
     assert "PERSISTENT" not in sql
 
 
+def test_external_token_skips_client_secret_exchange(connection_setup, monkeypatch):
+    connection, requests = connection_setup
+    monkeypatch.setenv("ICEBERG_ACCESS_TOKEN", "private'token")
+    monkeypatch.delenv("ICEBERG_CLIENT_SECRET")
+    monkeypatch.delenv("ICEBERG_CLIENT_ID")
+    assert native.connect_duckdb(("analytics",), "events") is connection
+    assert all(request.method == "GET" for request in requests)
+
+
 def test_failed_connection_closes_and_does_not_expose_provider_sql(connection_setup):
     connection, _ = connection_setup
     connection.execute.side_effect = native.duckdb.Error("SQL contains private-client-secret")

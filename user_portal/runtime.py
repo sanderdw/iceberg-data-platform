@@ -140,8 +140,10 @@ class NotebookRuntime:
                     "ICEBERG_ENVIRONMENT": session.environment,
                     "ICEBERG_NAMESPACE": json.dumps(namespace),
                     "ICEBERG_TABLE": table or "",
-                    "ICEBERG_CLIENT_ID": session.client_id,
-                    "ICEBERG_CLIENT_SECRET": session.secret,
+                    **({"ICEBERG_ACCESS_TOKEN": session.token} if session.oidc_subject else {
+                        "ICEBERG_CLIENT_ID": session.client_id,
+                        "ICEBERG_CLIENT_SECRET": session.secret,
+                    }),
                     "ICEBERG_CATALOG_URI": "http://polaris:8181/api/catalog",
                     "ICEBERG_TOKEN_URI": "http://polaris:8181/api/catalog/v1/oauth/tokens",
                     "ICEBERG_S3_ENDPOINT": "http://rustfs:9000",

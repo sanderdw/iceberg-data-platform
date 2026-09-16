@@ -6,15 +6,20 @@ services:
       context: .
       dockerfile: user_portal/Dockerfile
     environment:
+      OIDC_ISSUER: ${OIDC_ISSUER:?Run scripts.setup first}
+      OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/iceberg
+      OIDC_CLIENT_ID: iceberg-users
+      OIDC_CLIENT_SECRET: ${OIDC_USERS_SECRET}
+      OIDC_ORIGIN: ${USER_ORIGIN}
       USER_PORT: 3002
       USER_HOST: 0.0.0.0
       USER_COOKIE_SECURE: ${USER_COOKIE_SECURE:-false}
       USER_STACK_NAME: iceberg-workspaces
-      POLARIS_URL: http://polaris:8181
+      POLARIS_URL: http://polaris-control-plane:8181
       POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}
       POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET}
-      POLARIS_CONTAINER: ${POLARIS_CONTAINER:-iceberg-platform-polaris-1}
-      RUSTFS_CONTAINER: ${RUSTFS_CONTAINER:-iceberg-platform-rustfs-1}
+      POLARIS_CONTAINER: iceberg-platform-polaris-1
+      RUSTFS_CONTAINER: iceberg-platform-rustfs-1
       NOTEBOOK_IMAGE: iceberg-user-notebook:0.1.0
       MAX_NOTEBOOKS: ${MAX_NOTEBOOKS:-8}
       NOTEBOOK_MEMORY: ${NOTEBOOK_MEMORY:-1g}
@@ -43,4 +48,4 @@ services:
 networks:
   catalog:
     external: true
-    name: ${CATALOG_DOCKER_NETWORK:-iceberg-platform_default}
+    name: iceberg-platform_default

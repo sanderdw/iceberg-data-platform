@@ -5,7 +5,7 @@ WORKDIR /app
 COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md ./
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-dev
+RUN uv sync --locked --no-dev --group oidc
 COPY server ./server
 COPY public ./public
 RUN useradd --uid 10001 --create-home portal

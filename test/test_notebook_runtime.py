@@ -54,6 +54,15 @@ def session(name="sander", environment="development", team="team-a"):
     )
 
 
+def test_oidc_runtime_receives_only_user_access_token(runtime):
+    member = replace(session(), oidc_subject="keycloak-subject", secret="", client_id="")
+    runtime.start(member, "db1", [], None)
+    env = runtime.docker.containers.run.call_args.kwargs["environment"]
+    assert env["ICEBERG_ACCESS_TOKEN"] == "token"
+    assert "ICEBERG_CLIENT_SECRET" not in env
+    assert "ICEBERG_CLIENT_ID" not in env
+
+
 def mounted_volume(call):
     volumes = call.kwargs["volumes"]
     assert len(volumes) == 1

@@ -1,6 +1,7 @@
 name: Release
 on:
   push:
+    branches: [keycloak]
     tags: ['v*']
   workflow_dispatch:
 permissions:
@@ -9,11 +10,17 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
   validate:
+    needs: checks
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
       version: ${{ steps.version.outputs.version }}
+      preview: ${{ steps.version.outputs.preview }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      image_tag: ${{ steps.version.outputs.image_tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -21,10 +28,7 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: '0.12.13'
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '24'
-      - name: Validate release tag
+      - name: Select stable release or Keycloak preview
         id: version
         env:
           RELEASE_REF: ${{ github.ref }}
@@ -32,16 +36,29 @@ jobs:
           python3 - <<'PY'
           import json, os, re
           version = json.load(open('package.json'))['version']
-          if not re.fullmatch(r'\d+\.\d+\.\d+', version) or os.environ['RELEASE_REF'] != f'refs/tags/v{version}':
-              raise SystemExit('Run this workflow on the vX.Y.Z tag matching the project version')
+          preview = os.environ['RELEASE_REF'] == 'refs/heads/keycloak'
+          if not re.fullmatch(r'\d+\.\d+\.\d+', version) or (not preview and os.environ['RELEASE_REF'] != f'refs/tags/v{version}'):
+              raise SystemExit('Run this workflow on keycloak or the vX.Y.Z tag matching the project version')
+          build = f"keycloak-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f'version={version}\n')
+              output.write(f'preview={str(preview).lower()}\n')
+              output.write(f'release_tag={build if preview else "v" + version}\n')
+              output.write(f'image_tag={build if preview else version}\n')
           PY
       - run: uv sync --locked --all-groups
-      - run: npm ci
-      - run: npm run verify
       - run: uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
-      - run: uv run python -m scripts.release --build --install
+      - name: Build matching source, bundle and installers
+        env:
+          PREVIEW: ${{ steps.version.outputs.preview }}
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
+        run: |
+          if [ "$PREVIEW" = true ]; then
+            uv run python -m scripts.release --build --install --release-tag "$RELEASE_TAG" --image-tag "$IMAGE_TAG"
+          else
+            uv run python -m scripts.release --build --install
+          fi
       - name: Scan source archive
         run: |
           curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
@@ -96,10 +113,10 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/${{ matrix.arch }}
           push: true
-          tags: ghcr.io/${{ github.repository }}-${{ matrix.image }}:${{ needs.validate.outputs.version }}-${{ matrix.arch }}
+          tags: ghcr.io/${{ github.repository }}-${{ matrix.image }}:${{ needs.validate.outputs.image_tag }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+            org.opencontainers.image.version=${{ needs.validate.outputs.image_tag }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=Apache-2.0
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
@@ -125,14 +142,69 @@ jobs:
       - name: Publish versioned multi-platform images
         env:
           REGISTRY: ghcr.io/${{ github.repository }}
-          VERSION: ${{ needs.validate.outputs.version }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+          PREVIEW: ${{ needs.validate.outputs.preview }}
         run: |
           for component in portal users notebook; do
             image="${REGISTRY}-${component}"
-            docker buildx imagetools create --tag "${image}:${VERSION}" --tag "${image}:latest" \
-              "${image}:${VERSION}-amd64" "${image}:${VERSION}-arm64"
+            aliases=(--tag "${image}:${IMAGE_TAG}")
+            if [ "$PREVIEW" != true ]; then
+              aliases+=(--tag "${image}:latest")
+            fi
+            docker buildx imagetools create "${aliases[@]}" \
+              "${image}:${IMAGE_TAG}-amd64" "${image}:${IMAGE_TAG}-arm64"
           done
+      - name: Check public image access
+        if: needs.validate.outputs.preview == 'true'
+        env:
+          REGISTRY: ghcr.io/${{ github.repository }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+        run: |
+          anonymous_config=$(mktemp -d)
+          for component in portal users notebook; do
+            docker --config "$anonymous_config" manifest inspect "${REGISTRY}-${component}:${IMAGE_TAG}" > /dev/null
+          done
+      - name: Publish Keycloak preview
+        if: needs.validate.outputs.preview == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: |
+          cat > "$RUNNER_TEMP/preview-notes.md" <<EOF_NOTES
+          ## Try Keycloak
+
+          This preview was built and tested from commit ${GITHUB_SHA} on the keycloak branch.
+
+          **Linux / macOS**
+
+          \`curl -fsSL https://github.com/${GH_REPO}/releases/download/keycloak-preview/install.sh | sh\`
+
+          **Windows PowerShell**
+
+          \`irm https://github.com/${GH_REPO}/releases/download/keycloak-preview/install.ps1 | iex\`
+
+          Requires Docker with Compose v2 and a fresh installation. Uses the same project names, volumes and ports as stable; use a separate Docker environment to test alongside an existing installation.
+
+          Open http://localhost:3000 and use PLATFORM_ADMIN_USERNAME and PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Change the initial password, then create a team, database and user. The user portal is http://localhost:3002 and Keycloak is http://localhost:8080/admin. No demo accounts or data are created automatically.
+
+          [Exact build and source](https://github.com/${GH_REPO}/releases/tag/${RELEASE_TAG}). Its installers and all application images are pinned to this build. The keycloak-preview release holds only the current installer entrypoints; use the exact build for source archives.
+
+          Rerunning the preview command installs the most recently published successful build. Existing installations do not update automatically. Stable latest releases and image tags are unchanged.
+          EOF_NOTES
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" dist/* --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Keycloak preview ${RELEASE_TAG}" --notes-file "$RUNNER_TEMP/preview-notes.md"
+          fi
+          if gh release view keycloak-preview > /dev/null 2>&1; then
+            gh release upload keycloak-preview dist/install.sh dist/install.ps1 --clobber
+            gh release edit keycloak-preview --prerelease --latest=false --notes-file "$RUNNER_TEMP/preview-notes.md"
+          else
+            gh release create keycloak-preview dist/install.sh dist/install.ps1 --target "$GITHUB_SHA" \
+              --prerelease --latest=false --title "Keycloak preview — install here" --notes-file "$RUNNER_TEMP/preview-notes.md"
+          fi
       - name: Publish release and installation bundle
+        if: needs.validate.outputs.preview != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -151,7 +223,7 @@ jobs:
 
           \`irm https://github.com/${GH_REPO}/releases/latest/download/install.ps1 | iex\`
 
-          The installer creates configuration and random credentials, pulls latest images and starts both stacks. Open http://localhost:3000 and use PORTAL_PASSWORD from ~/iceberg-data-platform/.env.
+          The installer creates configuration and random credentials, pulls latest images and starts both stacks. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
 
           Prebuilt images support Linux AMD64 and ARM64:
           - \`ghcr.io/${GH_REPO}-portal:${VERSION}\`

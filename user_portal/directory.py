@@ -23,6 +23,8 @@ class UserSession:
     expires: float
     team: str
     environment: Environment = "development"
+    oidc_subject: str = ""
+    oidc_issuer: str = ""
 
 
 class UserDirectory:
@@ -86,6 +88,12 @@ class UserDirectory:
             if exc.status == 404:
                 raise ServiceError(401, "Your user no longer exists. Sign in again.") from exc
             raise
+        if session.oidc_subject and (
+            principal["properties"].get("portal.oidc-subject") != session.oidc_subject
+            or principal["properties"].get("portal.oidc-issuer") != session.oidc_issuer
+            or principal["properties"].get("portal.identity-status", "linked") != "linked"
+        ):
+            raise ServiceError(403, "Your identity is no longer linked to this user.")
         user = self.metadata.user(principal)
         teams = [t for t in self.metadata.list_teams() if t["id"] in user["teams"]]
         if not teams:
@@ -119,6 +127,8 @@ class UserDirectory:
 
     def request(self, session, path):
         if session.token_until <= time.monotonic():
+            if session.oidc_subject:
+                raise ServiceError(401, "Your Keycloak session expired. Sign in again.")
             session.token, session.token_until = self.authenticate(session.client_id, session.secret)
         try:
             response = self.http.get(
@@ -134,6 +144,29 @@ class UserDirectory:
             status = response.status_code if response.status_code in (401, 403, 404) else 502
             raise ServiceError(status, "This content is unavailable with your permissions.")
         return response.json()
+
+    def login_oidc(self, claims, token, lifetime, session_id):
+        mapping = claims.get("polaris", {})
+        name = mapping.get("principal_name")
+        if not isinstance(name, str) or not name.startswith("portal-"):
+            raise ServiceError(403, "Your identity is not linked to a platform user.")
+        principal = self.metadata.require(f"/principals/{enc(name)}")
+        # Polaris's management API does not expose numeric entity IDs. Zero
+        # requests lookup by the immutable portal principal name, not username.
+        if mapping.get("principal_id") != 0:
+            raise ServiceError(403, "Your identity mapping is invalid.")
+        user = self.metadata.user(principal)
+        until = time.monotonic() + lifetime
+        session = UserSession(
+            session_id, user["id"], user["name"], "", "", token, until, until, "",
+            oidc_subject=claims["sub"], oidc_issuer=claims["iss"],
+        )
+        profile = self.profile(session)
+        session.team = profile["teams"][0]["id"]
+        # Exercise the external token against Polaris before accepting the login.
+        if profile["databases"]:
+            self.request(session, "/api/catalog/v1/config?warehouse=" + enc(profile["databases"][0]["id"]))
+        return session
 
     def pages(self, session, path, key):
         values, seen, token = [], set(), None

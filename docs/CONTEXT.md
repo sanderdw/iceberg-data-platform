@@ -22,7 +22,7 @@ PostgreSQL data persists in the Docker volume `iceberg-platform_postgres18-data`
 
 ## Users
 
-A user is a person who signs in to the user portal with a username and issued Polaris client secret. The gateway resolves the username to a Polaris client ID and authenticates with Polaris's OAuth token endpoint.
+A user is a person who signs in through Keycloak. The gateway resolves the exact issuer and subject to a linked Polaris principal; catalog requests and notebooks use that person's Keycloak access token.
 
 Each user has a stable internal ID such as `portal-<uuid>`, a globally unique display username, one or more team memberships, and one application role. The dedicated principal role has the same internal name as the user principal. Application users are not PostgreSQL login roles.
 
@@ -51,7 +51,7 @@ A user has one application role across all accessible team databases; there are 
 
 Each catalog has `reader`, `writer` and `admin` catalog roles. The `bucket-admin` application role maps to the `admin` catalog role and adds direct S3 bucket access. RustFS stores those S3 identities and policies; the user principal records the associated access-key ID in `portal.bucket-access-key`.
 
-The platform administration portal has its own `PORTAL_PASSWORD` login. An application user's `admin` or `bucket-admin` role does not grant access to that portal.
+The platform administration portal requires the Keycloak `iceberg-admin/platform-admin` role. An application user's `admin` or `bucket-admin` role does not grant access to that portal.
 
 ## Database definitions
 
