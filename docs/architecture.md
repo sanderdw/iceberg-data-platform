@@ -83,4 +83,4 @@ in the collector's `POSTGRES_PASSWORD` environment variable.
 | `docs/` | Operating and release documentation |
 | `.github/` | CI and contribution templates |
 
-The supported public examples are the marimo notebooks. Historical Jupyter experiments, private credentials, presentation assets and generated evidence are not part of the source release.
+The supported public examples are the marimo notebooks. Historical Jupyter experiments, private credentials and generated evidence are not part of the source release. The `presentation/` deck is tracked in git and published to GitHub Pages by the `Pages` workflow, but it is excluded from the source release as well.

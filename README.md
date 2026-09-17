@@ -155,6 +155,7 @@ Tests cover authorization, team membership, compensating actions, resumable dele
 - [Contributing](CONTRIBUTING.md)
 - [Security and deployment boundaries](SECURITY.md)
 - [Publishing a release](docs/releasing.md)
+- [Presentation](https://sanderdw.github.io/iceberg-data-platform/) — reveal.js deck about the platform; its source lives in `presentation/`, which is not part of source releases
 - [Changelog](CHANGELOG.md)
 
 ## License

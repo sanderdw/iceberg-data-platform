@@ -46,6 +46,8 @@ BINARY_SUFFIXES = {".png", ".ttf"}
 SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml"} | BINARY_SUFFIXES
 IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache"}
 LOCAL_FILES = {"docs/conversation.md", "docs/dbaas-reference-architecture.drawio"}
+# Tracked in git and published by the GitHub Pages workflow, but not part of the source release.
+TRACKED_UNRELEASED = ("presentation/",)
 
 
 def release_files(root=ROOT):
@@ -72,7 +74,9 @@ def check(root=ROOT):
     public_paths = {p.relative_to(root).as_posix() for p in files}
     if (root / ".git").exists():
         tracked = subprocess.check_output(["git", "-C", str(root), "ls-files", "-z"]).decode().split("\0")
-        excluded_tracked = sorted(set(filter(None, tracked)) - public_paths)
+        excluded_tracked = sorted(
+            path for path in set(filter(None, tracked)) - public_paths if not path.startswith(TRACKED_UNRELEASED)
+        )
         if excluded_tracked:
             raise ValueError(f"Git tracks files outside the public release: {', '.join(excluded_tracked)}")
     project = tomllib.loads((root / "pyproject.toml").read_text())["project"]

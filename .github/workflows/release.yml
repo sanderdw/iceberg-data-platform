@@ -3,6 +3,7 @@ on:
   push:
     branches: [keycloak]
     tags: ['v*']
+    paths-ignore: ['presentation/**']
   workflow_dispatch:
 permissions:
   contents: read
