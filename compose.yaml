@@ -56,7 +56,7 @@ services:
         condition: service_healthy
 
   rustfs:
-    image: rustfs/rustfs:1.0.0-rc.6
+    image: rustfs/rustfs:1.0.0
     environment:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}

@@ -8,6 +8,7 @@
 - Administration-portal account creation, explicit linking, temporary password reset and access revocation.
 - Keycloak in the existing platform/workspace Compose split and standard application images, optional demo fixtures and dedicated integration CI.
 - Source and Docker installation bundles include Keycloak setup and operating documentation.
+- RustFS 1.0.0 replaces the 1.0.0-rc.6 release candidate; existing `rustfs-data` volumes are kept.
 
 ## 0.2.1 — 2026-09-16
 
