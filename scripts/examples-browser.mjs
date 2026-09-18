@@ -50,7 +50,18 @@ try {
   await expect(dropdown).toHaveValue('Example Solar Street');
   await expect.poll(async () => (await plotSources()).some(source => !originalPlots.includes(source)), {timeout:30000}).toBe(true);
   await page.screenshot({path:'test-results/examples/duckdb.png',fullPage:true});
-  console.log('PASS: bundled examples open, explicit/idempotent PyIceberg write, DuckDB SQL, 2 plots and reactive street filter');
+  // The Iceberg v3 examples have no controls: running all cells completes them.
+  for (const [label, text] of [['04 · Write Iceberg v3 with DuckDB', /deleted 45 fault events/], ['05 · Read Iceberg v3 with DuckDB', /Every write is a snapshot/]]) {
+    await page.locator('#notebook-file').selectOption({label});
+    frame = page.frameLocator('#frame-host iframe');
+    await frame.locator('.cm-content').first().waitFor();
+    await frame.locator('.cm-content').first().click();
+    await page.keyboard.press('Control+Shift+r');
+    await frame.getByText(text).first().waitFor({timeout:90000});
+  }
+  await frame.getByText('puffin', {exact:true}).first().waitFor({timeout:60000});
+  await page.screenshot({path:'test-results/examples/iceberg-v3.png',fullPage:true});
+  console.log('PASS: bundled examples open, explicit/idempotent PyIceberg write, DuckDB SQL, 2 plots, reactive street filter and Iceberg v3 write/read');
   await context.close();
 } catch (error) {
   if (page) {

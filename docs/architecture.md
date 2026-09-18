@@ -76,7 +76,7 @@ in the collector's `POSTGRES_PASSWORD` environment variable.
 | `user_portal/` | User API, authentication, notebook lifecycle and proxy |
 | `user_portal/public/` | User interface; shares canonical assets with `public/` |
 | `user_portal/notebook/` | Runtime image, connection helper and starter seeding |
-| `user_portal/notebook/examples/` | Editable PyIceberg and DuckDB examples |
+| `user_portal/notebook/examples/` | Editable PyIceberg and DuckDB examples, including Iceberg v3 write and read |
 | `scripts/` | Credential setup, integration checks and source release tooling |
 | `pgadmin/` | Preconfigured PostgreSQL metadata connection for pgAdmin |
 | `test/` | Unit, authorization and browser tests |

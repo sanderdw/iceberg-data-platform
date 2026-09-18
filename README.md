@@ -14,7 +14,7 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 - **Separate user portal:** sign in with Keycloak, switch teams and browse the active team's databases.
 - **User catalog details:** inspect table schemas, snapshots, branches/tags, partitioning, sort orders and view SQL; preview up to 100 rows at a selected snapshot with your own data permissions.
 - **Shared team workspaces:** one shared filespace per team and environment, with isolated execution using each user's data permissions.
-- **Three included examples:** create 26,880 synthetic energy measurements with PyIceberg, visualize them with DuckDB, or attach Polaris directly for native DuckDB queries on Iceberg.
+- **Five included examples:** create 26,880 synthetic energy measurements with PyIceberg, visualize them with DuckDB, attach Polaris directly for native DuckDB queries on Iceberg, and write and read an Iceberg v3 table (variant, nanosecond timestamps, geometry, default values, row lineage, deletion vectors) with DuckDB.
 
 The platform uses two Compose projects: **iceberg-platform** for the admin portal,
 Keycloak and data services, and **iceberg-workspaces** for the user portal and notebooks.
@@ -105,6 +105,7 @@ pgAdmin includes a **Polaris metadata** server connection. Enter `POSTGRES_PASSW
 4. Select a team and database. Choose **01 · Neighborhood data with PyIceberg**, run the cells with ▶ and click **Create example table**.
 5. Use the notebook selector to open **02 · Visualize with DuckDB**. Run its cells and change the street filter to explore energy consumption and solar production.
 6. Open **03 · Native DuckDB on Iceberg** and click **Connect / refresh credentials** to query the Iceberg table directly, inspect snapshots and run SQL aggregations.
+7. Open **04 · Write Iceberg v3 with DuckDB** and run all cells to create an Iceberg v3 table with variant, nanosecond timestamp and geometry columns. Then open **05 · Read Iceberg v3 with DuckDB** to query those types, row lineage, deletion vectors and an earlier snapshot. Both run from top to bottom without input.
 
 The first example skips a table that already contains rows. Readers can use the second example once a writer has created the dataset. Saved notebooks are shared per team and environment (Development, Acceptance or Production), across databases. Switching context or logging out stops only your execution; save your work first. Adding starter examples never overwrites existing team files.
 

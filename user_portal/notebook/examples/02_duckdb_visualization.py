@@ -21,7 +21,7 @@ def _():
 def _(mo, os):
     mo.md(f"""
     # Visualize with DuckDB
-    **Example 2 of 3 · database `{os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])}`**
+    **Example 2 of 5 · database `{os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])}`**
 
     PyIceberg reads `synthetic.neighborhood_electricity` with your own user permissions.
     Then **DuckDB** analyzes the data in marimo's SQL cells. The charts react to your street selection.

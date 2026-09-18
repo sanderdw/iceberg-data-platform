@@ -5,6 +5,8 @@ import re
 SENSITIVE = re.compile(
     r"secret|token|credential|password|access.key|private.key|authorization", re.IGNORECASE
 )
+# Iceberg v3 types the PyIceberg preview cannot read yet. DuckDB notebooks can.
+UNPREVIEWABLE = ("variant", "geometry", "geography")
 
 
 def properties(values):
@@ -104,6 +106,15 @@ def object_details(kind, loaded):
         return result
     result.update(
         {
+            # Every schema counts: the preview parses the table's full schema history.
+            "previewUnsupported": sorted(
+                {
+                    column["type"].split("(")[0]
+                    for s in schemas
+                    for column in columns(s)
+                    if column["type"].startswith(UNPREVIEWABLE)
+                }
+            ),
             "updatedAt": metadata.get("last-updated-ms"),
             "currentSnapshotId": identifier(metadata.get("current-snapshot-id"))
             if metadata.get("current-snapshot-id") != -1

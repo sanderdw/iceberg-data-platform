@@ -10,6 +10,9 @@
 - Source and Docker installation bundles include Keycloak setup and operating documentation.
 - Roles are assigned per team: a user can hold a different role in each team, managed in one **Edit access** dialog. The user portal shows the role of the active team.
 - Breaking: users are created and edited with `memberships: [{team, role}]`; `PATCH /api/users/{id}` replaces the full list and `PATCH /api/users/{id}/role` is removed. Existing users keep their access and are rewritten to the new `portal.memberships` property on their next edit. Downgrading to an older portal version is not supported afterwards.
+- Two example notebooks write and read an Iceberg format-version 3 table with DuckDB's native Iceberg extension: `VARIANT`, `TIMESTAMP_NS`, `GEOMETRY`, default values, row lineage, deletion vectors and time travel. They run from top to bottom without controls.
+- The DuckDB connection helper can attach writable and vend storage credentials for a table it just created.
+- The table preview and starter notebook explain that PyIceberg cannot read `variant`, `geometry` or `geography` columns yet, instead of reporting a permission problem.
 - RustFS 1.0.0 replaces the 1.0.0-rc.6 release candidate; existing `rustfs-data` volumes are kept.
 
 ## 0.2.1 — 2026-09-16

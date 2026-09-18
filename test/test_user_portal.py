@@ -246,6 +246,37 @@ def test_catalog_denies_other_team_environment_and_provider_forbidden(users, mon
     assert denied.status_code == 403 and "hidden-secret" not in denied.text
 
 
+def test_preview_declines_iceberg_v3_types_it_cannot_read(users, monkeypatch):
+    c = users.client
+    login(c)
+    run = Mock()
+    monkeypatch.setattr("user_portal.app.run_preview", run)
+    # The variant column was dropped again, yet the preview parses every schema.
+    v3 = [
+        {"schema-id": 1, "fields": [{"id": 3, "name": "payload", "type": "variant", "required": False}]},
+        {
+            "schema-id": 0,
+            "fields": [
+                {"id": 1, "name": "at", "type": "timestamp_ns", "required": False},
+                {"id": 2, "name": "place", "type": "geometry(OGC:CRS84)", "required": False},
+            ],
+        },
+    ]
+    monkeypatch.setitem(TABLE_METADATA, "schemas", v3)
+    monkeypatch.setitem(TABLE_METADATA, "format-version", 3)
+    params = {"database": users.databases[0], "namespace": "analytics", "kind": "table", "name": "events"}
+    details = c.get("/api/details", params=params).json()
+    assert details["formatVersion"] == 3
+    assert details["previewUnsupported"] == ["geometry", "variant"]
+    payload = {"database": users.databases[0], "namespace": ["analytics"], "table": "events"}
+    result = c.post("/api/preview", json=payload, headers=HEADERS)
+    assert result.status_code == 422 and "geometry, variant" in result.json()["error"]
+    run.assert_not_called()
+    monkeypatch.setitem(TABLE_METADATA, "schemas", v3[1:])
+    monkeypatch.setitem(v3[1]["fields"][1], "type", "string")
+    assert c.get("/api/details", params=params).json()["previewUnsupported"] == []
+
+
 def test_preview_authorization_limits_snapshot_and_revocation(users, monkeypatch):
     c = users.client
     login(c)

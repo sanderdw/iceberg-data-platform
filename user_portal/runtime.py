@@ -55,6 +55,14 @@ class Workspace:
                 },
                 {"title": "02 · Visualize with DuckDB", "url": self.url + "?file=02_duckdb_visualization.py"},
                 {"title": "03 · Native DuckDB on Iceberg", "url": self.url + "?file=03_duckdb_iceberg.py"},
+                {
+                    "title": "04 · Write Iceberg v3 with DuckDB",
+                    "url": self.url + "?file=04_duckdb_iceberg_v3_write.py",
+                },
+                {
+                    "title": "05 · Read Iceberg v3 with DuckDB",
+                    "url": self.url + "?file=05_duckdb_iceberg_v3_read.py",
+                },
             ],
         }
 
