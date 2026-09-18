@@ -16,6 +16,20 @@ WRITE_ERROR = (
 )
 
 
+def _register_variant_with_marimo():
+    # marimo's datasets panel has no mapping for DuckDB's VARIANT and logs a warning for
+    # every such column. It shows the column as "unknown" either way, so say that up front.
+    try:
+        from marimo._data import get_datasets
+
+        get_datasets._UNKNOWN_TYPES.add("variant")
+    except ImportError, AttributeError:
+        pass  # No marimo (plain Python) or its internals moved: only the warning returns.
+
+
+_register_variant_with_marimo()
+
+
 def sql_literal(value):
     return "'" + str(value).replace("'", "''") + "'"
 

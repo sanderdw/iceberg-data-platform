@@ -120,6 +120,17 @@ def test_failed_connection_closes_and_does_not_expose_provider_sql(connection_se
     assert error.value.__suppress_context__
 
 
+def test_variant_columns_do_not_warn_in_the_marimo_datasets_panel(caplog):
+    pytest.importorskip("marimo")
+    from marimo._data import get_datasets
+
+    connection = native.duckdb.connect()
+    connection.execute("CREATE TABLE events AS SELECT {'kind': 'door'}::VARIANT AS payload")
+    (database,) = get_datasets.get_databases_from_duckdb(connection)
+    assert database.schemas[0].tables[0].columns[0].type == "unknown"
+    assert "Unknown DuckDB type" not in caplog.text
+
+
 def test_schema_reference_quotes_names():
     assert native.schema_reference(("analytics", 'ne"sted')) == '"lakehouse"."analytics.ne""sted"'
 
