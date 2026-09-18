@@ -36,6 +36,18 @@ def enc(value):
     return quote(value, safe="")
 
 
+def catalog_role(role):
+    return "admin" if role == "bucket-admin" else role
+
+
+def grants(access):
+    return {(id, catalog_role(d["role"])) for id, d in access.items()}
+
+
+def buckets(access):
+    return sorted(d["bucket"] for d in access.values() if d["role"] == "bucket-admin")
+
+
 @contextmanager
 def provision():
     undo = []
@@ -226,8 +238,9 @@ class PolarisProvider:
             raise ServiceError(409, "This is a user's last team. Assign that user to another team first.")
         with provision() as undo:
             for user in users:
-                self.update_memberships(user["id"], [t for t in user["teams"] if t != id])
-                undo.append(lambda u=user: self.update_memberships(u["id"], u["teams"]))
+                roles = {m["team"]: m["role"] for m in user["memberships"]}
+                self.update_memberships(user["id"], {t: r for t, r in roles.items() if t != id})
+                undo.append(lambda u=user, r=roles: self.update_memberships(u["id"], r))
             self.remove(f"/principal-roles/{enc(id)}")
 
     def database(self, catalog):
@@ -329,14 +342,29 @@ class PolarisProvider:
             ),
         }
 
+    @staticmethod
+    def memberships(properties):
+        # Principals written before per-team roles carry one role for all their teams.
+        if "portal.memberships" in properties:
+            return dict(json.loads(properties["portal.memberships"]))
+        return {team: properties["portal.role"] for team in json.loads(properties["portal.teams"])}
+
+    @staticmethod
+    def membership_properties(properties, roles):
+        # The legacy keys are dropped, not dual-written: an older portal would
+        # apply a stale single role to every team.
+        kept = {k: v for k, v in properties.items() if k not in ("portal.teams", "portal.role")}
+        return {**kept, "portal.memberships": json.dumps(roles)}
+
     def user(self, principal):
         p = principal["properties"]
+        roles = self.memberships(p)
         return {
             "id": principal["name"],
             "name": p["portal.name"],
-            "teams": json.loads(p["portal.teams"]),
-            "role": p["portal.role"],
-            "bucketAccess": p["portal.role"] == "bucket-admin" and bool(p.get("portal.bucket-access-key")),
+            "memberships": [{"team": team, "role": role} for team, role in roles.items()],
+            "teams": list(roles),
+            "bucketAccess": "bucket-admin" in roles.values() and bool(p.get("portal.bucket-access-key")),
             "clientId": principal.get("clientId"),
             "createdAt": principal.get("createTimestamp"),
         }
@@ -345,25 +373,30 @@ class PolarisProvider:
         return [self.user(p) for p in self.management("/principals")["principals"] if self.managed(p)]
 
     def access(self, user, databases):
-        return {d["id"]: d for d in databases if d["team"] in user["teams"] and d["status"] == "ready"}
+        roles = {m["team"]: m["role"] for m in user["memberships"]}
+        return {
+            d["id"]: {**d, "role": roles[d["team"]]}
+            for d in databases
+            if d["team"] in roles and d["status"] == "ready"
+        }
 
-    def sync_access(self, user, before, after, undo):
-        role = "admin" if user["role"] == "bucket-admin" else user["role"]
+    def sync_access(self, user, before, after, undo, *, s3=True):
         base = f"/principal-roles/{enc(user['id'])}/catalog-roles"
-        # Revoke first, then grant. No temporary union of old and new access.
-        for db in before.keys() - after.keys():
+        # Revoke first, then grant. No temporary union of old and new access,
+        # also when a database stays in scope and only its role changes.
+        for db, role in sorted(grants(before) - grants(after)):
             path = f"{base}/{enc(db)}"
             self.remove(f"{path}/{role}")
-            undo.append(lambda p=path: self.management(p, "PUT", {"catalogRole": {"name": role}}))
-        if user["bucketAccess"]:
+            undo.append(lambda p=path, r=role: self.management(p, "PUT", {"catalogRole": {"name": r}}))
+        if s3 and buckets(before) != buckets(after):
             principal = self.require(f"/principals/{enc(user['id'])}")
-            key = principal["properties"]["portal.bucket-access-key"]
-            self.storage.set_user_buckets(key, [d["bucket"] for d in after.values()])
-            undo.append(lambda: self.storage.set_user_buckets(key, [d["bucket"] for d in before.values()]))
-        for db in after.keys() - before.keys():
+            if key := principal["properties"].get("portal.bucket-access-key"):
+                self.storage.set_user_buckets(key, buckets(after))
+                undo.append(lambda: self.storage.set_user_buckets(key, buckets(before)))
+        for db, role in sorted(grants(after) - grants(before)):
             path = f"{base}/{enc(db)}"
             self.management(path, "PUT", {"catalogRole": {"name": role}})
-            undo.append(lambda p=path: self.remove(f"{p}/{role}"))
+            undo.append(lambda p=path, r=role: self.remove(f"{p}/{r}"))
 
     def create_database(self, data):
         self.require_teams([data.team])
@@ -443,9 +476,8 @@ class PolarisProvider:
         moved = [{**d, "team": team} if d["id"] == id else d for d in databases]
         with provision() as undo:
             for user in self.list_users():
-                before, after = self.access(user, databases), self.access(user, moved)
-                if before.keys() != after.keys():
-                    self.sync_access(user, before, after, undo)
+                # Also re-binds when the user holds different roles in both teams.
+                self.sync_access(user, self.access(user, databases), self.access(user, moved), undo)
             bucket = catalog["properties"]["portal.bucket"]
             self.storage.tag_bucket(bucket, id, team)
             undo.append(lambda: self.storage.tag_bucket(bucket, id, old))
@@ -453,12 +485,13 @@ class PolarisProvider:
             return self.database(result)
 
     def create_user(self, data, *, identity_properties=None, activate=True):
-        self.require_teams(data.teams)
+        roles = data.roles
+        self.require_teams(list(roles))
         if any(u["name"] == data.name for u in self.list_users()):
             raise ServiceError(409, "This username already exists.")
         id = f"portal-{uuid4().hex}"
         path, role_path = f"/principals/{id}", f"/principal-roles/{id}"
-        key = f"portal{secrets.token_hex(12)}" if data.role == "bucket-admin" else None
+        key = f"portal{secrets.token_hex(12)}" if "bucket-admin" in roles.values() else None
         with provision() as undo:
             result = self.management(
                 "/principals",
@@ -469,8 +502,7 @@ class PolarisProvider:
                         "properties": {
                             "portal.managed-by": MANAGED,
                             "portal.name": data.name,
-                            "portal.teams": json.dumps(data.teams),
-                            "portal.role": data.role,
+                            "portal.memberships": json.dumps(roles),
                             **({"portal.bucket-access-key": key} if key else {}),
                             **(identity_properties or {}),
                         },
@@ -484,10 +516,10 @@ class PolarisProvider:
             access = self.access(user, self.list_databases())
             bucket_credentials = None
             if key:
-                bucket_credentials = self.storage.create_user(key, [d["bucket"] for d in access.values()])
+                bucket_credentials = self.storage.create_user(key, buckets(access))
                 undo.append(lambda: self.storage.delete_user(key))
             # S3 policy was just created. Only grant catalog permissions here.
-            self.sync_access({**user, "bucketAccess": False}, {}, access, undo)
+            self.sync_access(user, {}, access, undo, s3=False)
             if activate:
                 self.management(f"{path}/principal-roles", "PUT", {"principalRole": {"name": id}})
             return {
@@ -496,52 +528,29 @@ class PolarisProvider:
                 **({"bucketCredentials": bucket_credentials} if bucket_credentials else {}),
             }
 
-    def update_memberships(self, id, teams):
-        self.require_teams(teams)
+    def update_memberships(self, id, roles):
+        self.require_teams(list(roles))
         path = f"/principals/{enc(id)}"
         principal = self.require(path)
         user = self.user(principal)
         databases = self.list_databases()
-        with provision() as undo:
-            self.sync_access(
-                user, self.access(user, databases), self.access({**user, "teams": teams}, databases), undo
-            )
-            updated = self.update_properties(
-                path, {**principal["properties"], "portal.teams": json.dumps(teams)}
-            )
-            return self.user(updated)
-
-    def update_role(self, id, role):
-        path = f"/principals/{enc(id)}"
-        principal = self.require(path)
-        user = self.user(principal)
-        if user["role"] == role:
-            return {"user": user}
-        access = self.access(user, self.list_databases())
-        properties = {**principal["properties"], "portal.role": role}
-        key = properties.get("portal.bucket-access-key")
+        before = self.access(user, databases)
+        memberships = [{"team": team, "role": role} for team, role in roles.items()]
+        after = self.access({**user, "memberships": memberships}, databases)
+        properties = self.membership_properties(principal["properties"], roles)
         credentials = None
         with provision() as undo:
-            old_catalog_role = "admin" if user["role"] == "bucket-admin" else user["role"]
-            new_catalog_role = "admin" if role == "bucket-admin" else role
-            if old_catalog_role != new_catalog_role:
-                self.sync_access({**user, "bucketAccess": False}, access, {}, undo)
-            buckets = [d["bucket"] for d in access.values()]
-            if key:
-                # Retain the key with a deny-all policy on demotion. This preserves
-                # credentials for re-promotion and lets failed changes roll back.
-                before = buckets if user["bucketAccess"] else []
-                after = buckets if role == "bucket-admin" else []
-                if before != after:
-                    self.storage.set_user_buckets(key, after)
-                    undo.append(lambda: self.storage.set_user_buckets(key, before))
-            elif role == "bucket-admin":
+            if "bucket-admin" in roles.values() and not properties.get("portal.bucket-access-key"):
                 key = f"portal{secrets.token_hex(12)}"
-                credentials = self.storage.create_user(key, buckets)
+                credentials = self.storage.create_user(key, buckets(after))
                 undo.append(lambda: self.storage.delete_user(key))
                 properties["portal.bucket-access-key"] = key
-            if old_catalog_role != new_catalog_role:
-                self.sync_access({**user, "role": role, "bucketAccess": False}, {}, access, undo)
+                self.sync_access(user, before, after, undo, s3=False)
+            else:
+                # An existing key is retained with a deny-all policy once the last
+                # bucket-admin membership goes. This preserves credentials for
+                # re-promotion and lets failed changes roll back.
+                self.sync_access(user, before, after, undo)
             updated = self.update_properties(path, properties)
             return {
                 "user": self.user(updated),
@@ -600,13 +609,14 @@ class PolarisProvider:
         databases = self.list_databases()
         for user in self.list_users():
             if catalog["properties"]["portal.team"] in user["teams"]:
-                role = "admin" if user["role"] == "bucket-admin" else user["role"]
-                self.remove(f"/principal-roles/{enc(user['id'])}/catalog-roles/{enc(id)}/{role}")
+                # Every role: the membership role may have changed since a failed attempt.
+                for role in ROLES:
+                    self.remove(f"/principal-roles/{enc(user['id'])}/catalog-roles/{enc(id)}/{role}")
                 if user["bucketAccess"]:
                     principal = self.require(f"/principals/{enc(user['id'])}")
                     self.storage.set_user_buckets(
                         principal["properties"]["portal.bucket-access-key"],
-                        [d["bucket"] for d in self.access(user, databases).values()],
+                        buckets(self.access(user, databases)),
                     )
         # Grant the management identity content access for recursive Iceberg cleanup.
         self.management(

@@ -9,21 +9,27 @@ import httpx
 from fastapi import Query
 from pydantic import Field
 
-from server.models import Input, ServiceError, UserInput
+from server.models import Input, Membership, ServiceError, UserInput
 from server.polaris import enc
 
 PREFIX = "portal.identity-"
 
 
-class CreateIdentity(UserInput):
+class IdentityMembership(Membership):
     role: Literal["reader", "writer", "admin"]
+
+
+class IdentityInput(UserInput):
+    memberships: list[IdentityMembership] = Field(min_length=1, max_length=100)
+
+
+class CreateIdentity(IdentityInput):
     email: str = Field(min_length=3, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
 
 
-class LinkIdentity(UserInput):
-    role: Literal["reader", "writer", "admin"]
+class LinkIdentity(IdentityInput):
     subject: str = Field(min_length=1, max_length=128)
 
 

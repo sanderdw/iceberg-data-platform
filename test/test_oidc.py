@@ -17,7 +17,7 @@ from joserfc.jwk import RSAKey
 from server.app import create_app
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
 from server.oidc import OIDC
-from test.conftest import HEADERS, PASSWORD, MemoryPolaris
+from test.conftest import HEADERS, PASSWORD, MemoryPolaris, members
 from test.test_user_portal import FakeRuntime
 from user_portal.app import create_app as create_users
 from user_portal.directory import UserDirectory
@@ -133,7 +133,7 @@ def test_user_link_identity_permissions_and_token_expiry(issuer):
     provider = MemoryPolaris()
     team = provider.save_team(TeamInput(name="demo-team"))["id"]
     provider.create_database(DatabaseInput(name="demo-db", team=team))
-    account = provider.create_user(UserInput(name="alice", role="reader", teams=[team]))["user"]
+    account = provider.create_user(UserInput(name="alice", memberships=members([team])))["user"]
     principal = provider.resources["principals"][account["id"]]
     principal["properties"].update({"portal.oidc-subject": "subject-123", "portal.oidc-issuer": ISSUER})
     state["access_changes"] = {"polaris": {"principal_id": 0, "principal_name": account["id"]}}
@@ -156,7 +156,7 @@ def test_user_link_identity_permissions_and_token_expiry(issuer):
         assert client.get(start(client, state), follow_redirects=False).status_code == 303
         workspace = client.get("/api/workspace").json()
         assert workspace["user"]["id"] == account["id"]
-        assert workspace["user"]["role"] == "reader"
+        assert workspace["activeRole"] == "reader"
         assert [t["id"] for t in workspace["teams"]] == [team]
         assert len(calls) == 1
         session = directory.login_oidc(

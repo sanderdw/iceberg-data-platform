@@ -104,6 +104,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             **profile,
             "databases": available,
             "activeTeam": session.team,
+            "activeRole": next(t["role"] for t in profile["teams"] if t["id"] == session.team),
             "activeEnvironment": session.environment,
             "environments": list(ENVIRONMENTS),
             "filespaces": [

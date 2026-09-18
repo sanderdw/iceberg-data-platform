@@ -75,10 +75,10 @@ Use **Users** at http://localhost:3000 for routine account management:
    shown once and the user must change it at first sign-in at http://localhost:3002.
    Email invitations and password recovery email are not configured by default.
 2. **Create user → Link existing account**: search the exact Keycloak username and
-   select the account. Assign a platform username, teams and data role. The account's
+   select the account. Assign a platform username, teams and a data role per team. The account's
    password stays unchanged. Matching names never cause an automatic link.
-3. **Edit teams / Edit role** manages Polaris permissions. A data administrator role
-   does not grant access to the administration portal.
+3. **Edit access** manages Polaris permissions: the user's teams and the role in each
+   team. A data administrator role does not grant access to the administration portal.
 4. **Reset password** issues another temporary password for accounts created by this
    portal. Accounts linked from elsewhere retain password management in Keycloak.
 5. **Revoke** removes the platform identity, its Polaris grants and Keycloak platform
@@ -196,7 +196,7 @@ administrator password. Passwords and tokens are never printed.
 - Sessions and login transactions are in memory and require one replica per portal.
   Restarting the user portal stops its runtimes; saved team files persist.
 - The human-account workflows do not offer direct S3/bucket-admin credentials.
-  Teams and data roles stay in Polaris; Keycloak groups are not synchronized.
+  Teams and per-team data roles stay in Polaris; Keycloak groups are not synchronized.
 - An incomplete new account may remain disabled in Keycloak after revocation. Review
   such abandoned accounts in Keycloak; the portal preserves accounts by design.
 - Existing Polaris client-secret authentication remains available in mixed mode.

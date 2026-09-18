@@ -8,6 +8,8 @@
 - Administration-portal account creation, explicit linking, temporary password reset and access revocation.
 - Keycloak in the existing platform/workspace Compose split and standard application images, optional demo fixtures and dedicated integration CI.
 - Source and Docker installation bundles include Keycloak setup and operating documentation.
+- Roles are assigned per team: a user can hold a different role in each team, managed in one **Edit access** dialog. The user portal shows the role of the active team.
+- Breaking: users are created and edited with `memberships: [{team, role}]`; `PATCH /api/users/{id}` replaces the full list and `PATCH /api/users/{id}/role` is removed. Existing users keep their access and are rewritten to the new `portal.memberships` property on their next edit. Downgrading to an older portal version is not supported afterwards.
 - RustFS 1.0.0 replaces the 1.0.0-rc.6 release candidate; existing `rustfs-data` volumes are kept.
 
 ## 0.2.1 — 2026-09-16

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
-from test.conftest import MemoryPolaris
+from test.conftest import MemoryPolaris, members
 from user_portal.app import COOKIE, create_app
 from user_portal.directory import UserDirectory
 from user_portal.runtime import Workspace, filespace_key
@@ -109,7 +109,8 @@ def users():
     databases = [
         p.create_database(DatabaseInput(name=f"data_{i}", team=team))["id"] for i, team in enumerate(teams)
     ]
-    account = p.create_user(UserInput(name="alice", teams=teams[:2], role="reader"))["user"]
+    roles = {teams[0]: "reader", teams[1]: "writer"}
+    account = p.create_user(UserInput(name="alice", memberships=members(teams[:2], roles)))["user"]
     p.resources["principals"][account["id"]]["clientId"] = account["id"]
     directory = UserDirectory({})
     directory.metadata.http.close()
@@ -274,7 +275,7 @@ def test_preview_authorization_limits_snapshot_and_revocation(users, monkeypatch
     assert "actual-user-token" not in result.text
 
     def revoke(_):
-        users.provider.update_memberships(users.account["id"], [users.teams[1]])
+        users.provider.update_memberships(users.account["id"], {users.teams[1]: "reader"})
         return {"rows": [["must not be returned"]]}
 
     run.side_effect = revoke
@@ -304,8 +305,11 @@ def test_team_switch_and_database_access(users):
     login(c)
     assert c.get("/api/contents", params={"database": users.databases[1]}).status_code == 403
     assert c.patch("/api/team", json={"team": users.teams[2]}, headers=HEADERS).status_code == 403
+    assert c.get("/api/workspace").json()["activeRole"] == "reader"
     state = c.patch("/api/team", json={"team": users.teams[1]}, headers=HEADERS).json()
     assert [d["id"] for d in state["databases"]] == [users.databases[1]]
+    assert state["activeRole"] == "writer"  # The role follows the active team.
+    assert [t["role"] for t in state["teams"]] == ["reader", "writer"]
     assert c.get("/api/contents", params={"database": users.databases[0]}).status_code == 403
     result = c.get("/api/contents", params={"database": users.databases[1], "namespace": "analytics"})
     assert result.status_code == 200
@@ -373,7 +377,7 @@ def test_revoked_membership_stops_runtime(users):
     c = users.client
     login(c)
     assert c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS).status_code == 201
-    users.provider.update_memberships(users.account["id"], [users.teams[1]])
+    users.provider.update_memberships(users.account["id"], {users.teams[1]: "reader"})
     state = c.get("/api/workspace").json()
     assert state["activeTeam"] == users.teams[1]
     assert not users.runtime.workspaces
@@ -452,7 +456,7 @@ def test_team_environment_filespaces_are_shared_and_execution_stays_independent(
     development = p.create_database(DatabaseInput(name="db1", team=owner))
     production = p.create_database(DatabaseInput(name="db1", team=owner, environment="production"))
     for name, role in [("sander", "writer"), ("alex", "reader")]:
-        account = p.create_user(UserInput(name=name, teams=[owner], role=role))["user"]
+        account = p.create_user(UserInput(name=name, memberships=members([owner], role)))["user"]
         p.resources["principals"][account["id"]]["clientId"] = account["id"]
     cookies, notebooks = {}, {}
     for name in ("sander", "alex"):

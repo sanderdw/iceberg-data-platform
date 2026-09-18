@@ -1,6 +1,7 @@
 let loginUrl = null;
 const $ = (s) => document.querySelector(s);
 const envNames = {development: 'Development', acceptance: 'Acceptance', production: 'Production'};
+const roleNames = {reader: 'Read', writer: 'Read & write', admin: 'Administrator', 'bucket-admin': 'Database + bucket administration'};
 let state, database = null, namespace = [], activeNotebook = null, browseVersion = 0;
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
 function placeNotice() { const target = !$('#login-screen').hidden ? $('#login-status') : !$('#editor').hidden ? $('#editor-status') : $('#workspace-status'); target.append($('#notice')); }
@@ -27,7 +28,7 @@ async function api(path, method = 'GET', body) { const response = await fetch(`/
 async function busy(button, action) { button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { button.disabled = false; } }
 function renderState() {
   $('#login-screen').hidden = true; $('#identity').hidden = false; $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; placeNotice();
-  $('#team').replaceChildren(...state.teams.map(t => { const option = element('option', t.name); option.value = t.id; return option; })); $('#team').value = state.activeTeam;
+  $('#team').replaceChildren(...state.teams.map(t => { const option = element('option', `${t.name} · ${roleNames[t.role] || t.role}`); option.value = t.id; return option; })); $('#team').value = state.activeTeam;
   $('#environment').replaceChildren(...state.environments.map(env => { const option = element('option', envNames[env]); option.value = env; return option; })); $('#environment').value = state.activeEnvironment;
   $('#databases').replaceChildren(...state.databases.map(d => { const b = element('button', undefined, `db${database === d.id ? ' selected' : ''}`); const label = element('span', d.name); label.append(element('small', envNames[d.environment])); b.append(symbol('database'), label); b.setAttribute('aria-pressed', String(database === d.id)); b.addEventListener('click', () => browse(d.id, [])); return b; }));
   if (!state.databases.length) $('#databases').append(element('p', 'This team has no databases in this environment yet.', 'hint'));

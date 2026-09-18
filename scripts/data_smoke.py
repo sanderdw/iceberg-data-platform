@@ -17,7 +17,7 @@ def main():
         databases.append(db["id"])
         catalogs = {}
         for role in ("writer", "reader"):
-            result = p.create_user(UserInput(name=f"{role}-{suffix}", teams=[owner], role=role))
+            result = p.create_user(UserInput(name=f"{role}-{suffix}", memberships=[{"team": owner, "role": role}]))
             users.append(result["user"]["id"])
             credentials = result["credentials"]
             catalogs[role] = load_catalog(
@@ -48,9 +48,9 @@ def main():
         else:
             raise AssertionError("Reader must not create namespaces")
         print("PASS: reader cannot write")
-        p.update_role(users[1], "writer")
+        p.update_memberships(users[1], {owner: "writer"})
         reader.create_namespace("promoted")
-        p.update_role(users[1], "reader")
+        p.update_memberships(users[1], {owner: "reader"})
         try:
             reader.create_namespace("demoted")
         except ForbiddenError:

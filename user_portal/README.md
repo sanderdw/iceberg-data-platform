@@ -31,7 +31,7 @@ The user portal follows the same Nothing-inspired design as the administration p
 
 ## Work with your team data
 
-Select an **Active team** and **Environment**, choose a database and browse its namespaces. Filter the current listing by name or object type. Database summaries show the team, environment and catalog connection information; namespace summaries include their properties.
+Select an **Active team** and **Environment**, choose a database and browse its namespaces. The team selector shows your role in each team; roles are assigned per team, so you can read in one team and write in another. Filter the current listing by name or object type. Database summaries show the team, environment and catalog connection information; namespace summaries include their properties.
 
 Choose **Details →** on a table or view. Table tabs show the schema (including nested field IDs and descriptions), snapshot statistics, history, branches and tags, partition specifications, sort orders and properties. **Preview** reads up to 100 rows from the selected snapshot only when you choose **Load preview**. **Preview snapshot** in the history selects that snapshot for a historical read. Snapshot IDs and large integer values retain their full precision. Record totals are metadata statistics and can include rows affected by delete files.
 
@@ -63,7 +63,7 @@ The base notebook image includes Altair for charts, Polars for dataframes, `nbfo
 
 ## Bundled examples
 
-1. **01 · Neighborhood data with PyIceberg** creates `synthetic.neighborhood_electricity` with 40 homes, seven days and 26,880 quarter-hour readings. The deterministic model includes consumption, solar generation, grid draw, grid export and fictional addresses. Run the cells and click **Create example table**. A populated table is skipped; existing rows are never overwritten or duplicated. Writing requires a writer role or higher.
+1. **01 · Neighborhood data with PyIceberg** creates `synthetic.neighborhood_electricity` with 40 homes, seven days and 26,880 quarter-hour readings. The deterministic model includes consumption, solar generation, grid draw, grid export and fictional addresses. Run the cells and click **Create example table**. A populated table is skipped; existing rows are never overwritten or duplicated. Writing requires a writer role or higher in the active team.
 2. **02 · Visualize with DuckDB** reads that Iceberg table using your credentials, then runs SQL on the loaded dataframe. The street selector reactively updates the hourly aggregation, statistics and chart. A second chart compares grid draw and export by street. Readers can use this notebook once a writer has created the table. **Reload Iceberg data** fetches changes made by another notebook.
 3. **03 · Native DuckDB on Iceberg** attaches Polaris directly with DuckDB's `iceberg` extension. Choose a table and click **Connect / refresh credentials**, then inspect tables, columns, the first 100 rows, row counts, snapshots and energy totals using SQL cells. It defaults to the table selected in the portal or `synthetic.neighborhood_electricity`. The attachment is read-only and readers can use it.
 

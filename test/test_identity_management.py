@@ -8,12 +8,13 @@ from unittest.mock import Mock
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from server.app import create_app
 from server.identity import CreateIdentity, KeycloakAdmin, LinkIdentity, UserManagement
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
 from server.polaris import PolarisProvider
-from test.conftest import HEADERS, PASSWORD, MemoryPolaris
+from test.conftest import HEADERS, PASSWORD, MemoryPolaris, members
 
 
 @pytest.mark.parametrize("error_type,success", [("GRANT_NOT_FOUND", True), ("INVALID_REQUEST", False)])
@@ -90,7 +91,7 @@ def identities():
     provider.create_database(DatabaseInput(name="demo", team=team))
     kc = MemoryKeycloak()
     manager = UserManagement(kc)
-    data = CreateIdentity(name="alice", role="writer", teams=[team], email="alice@example.test",
+    data = CreateIdentity(name="alice", memberships=members([team], "writer"), email="alice@example.test",
                           first_name="Alice", last_name="Analyst")
     return SimpleNamespace(provider=provider, kc=kc, manager=manager, data=data)
 
@@ -115,7 +116,7 @@ def test_existing_account_link_is_explicit_and_preserves_credentials(identities)
     s = identities
     s.kc.accounts["external-sub"] = {"id": "external-sub", "username": "external-name",
                                      "enabled": True, "attributes": {"other_app": ["keep"]}}
-    data = LinkIdentity(name="local-name", role="reader", teams=s.data.teams, subject="external-sub")
+    data = LinkIdentity(name="local-name", memberships=members(s.data.teams), subject="external-sub")
     result = s.manager.create(s.provider, data, "link")
     assert result["identity"]["username"] == "external-name"
     assert "temporaryPassword" not in result["identity"]
@@ -127,11 +128,11 @@ def test_existing_account_link_is_explicit_and_preserves_credentials(identities)
 
 def test_link_existing_polaris_user_without_changing_team_or_role(identities):
     s = identities
-    user = s.provider.create_user(UserInput(name="legacy", role="reader", teams=s.data.teams))["user"]
+    user = s.provider.create_user(UserInput(name="legacy", memberships=members(s.data.teams)))["user"]
     s.kc.accounts["legacy-sub"] = {"id": "legacy-sub", "username": "legacy-kc", "enabled": True}
     result = s.manager.link(s.provider, user["id"], "legacy-sub")
     assert result["user"]["teams"] == user["teams"]
-    assert result["user"]["role"] == "reader"
+    assert result["user"]["memberships"] == user["memberships"]
     assert len(s.provider.list_users()) == 1
 
 
@@ -249,12 +250,28 @@ def test_identity_api_is_admin_and_csrf_protected_and_disables_legacy_creation(i
         assert client.post("/api/identity/users", json=s.data.model_dump(), headers=HEADERS).status_code == 401
         client.post("/api/session", json={"password": PASSWORD}, headers=HEADERS)
         assert client.post("/api/identity/users", json=s.data.model_dump()).status_code == 403
-        assert client.post("/api/users", json={"name": "alice", "role": "reader", "teams": s.data.teams}, headers=HEADERS).status_code == 409
+        assert client.post("/api/users", json={"name": "alice", "memberships": members(s.data.teams)}, headers=HEADERS).status_code == 409
         result = client.post("/api/identity/users", json=s.data.model_dump(), headers=HEADERS)
         assert result.status_code == 201
         assert "clientSecret" not in result.text
         assert "temporaryPassword" not in client.get("/api/overview").text
         assert client.get("/api/session").json()["userManagement"] == "keycloak"
+
+
+def test_keycloak_users_cannot_gain_bucket_administration_but_keep_a_held_one(identities):
+    s = identities
+    team = s.data.teams[0]
+    human = s.manager.create(s.provider, s.data, "new")["user"]
+    legacy = s.provider.create_user(UserInput(name="legacy", memberships=members([team], "bucket-admin")))["user"]
+    with pytest.raises(ValidationError):
+        CreateIdentity(**{**s.data.model_dump(), "memberships": members([team], "bucket-admin")})
+    with TestClient(create_app(s.provider, PASSWORD, user_management=s.manager)) as client:
+        client.post("/api/session", json={"password": PASSWORD}, headers=HEADERS)
+        body = {"memberships": members([team], "bucket-admin")}
+        assert client.patch(f"/api/users/{human['id']}", json=body, headers=HEADERS).status_code == 422
+        assert client.patch(f"/api/users/{legacy['id']}", json=body, headers=HEADERS).status_code == 200
+        body = {"memberships": members([team], "admin")}
+        assert client.patch(f"/api/users/{human['id']}", json=body, headers=HEADERS).status_code == 200
 
 
 def test_keycloak_admin_uses_service_credentials_and_sanitizes_errors():

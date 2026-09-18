@@ -60,18 +60,18 @@ origins and TLS before using them. See [Keycloak configuration](keycloak.md#conf
 ## Teams, databases and users
 
 1. **Create teams** on the Teams page. Teams exist independently of databases and users. Editing a name or description preserves the stable team ID.
-2. **Create a database** and select an existing team and Development, Acceptance or Production. Names are unique within that team and environment; `db1` can exist in both Development and Production. Each database gets its own catalog and RustFS bucket. Existing team members receive access immediately.
-3. **Create a user** and select one or more teams. Every user must belong to at least one existing team. The selected role applies to all current and future databases in those teams.
+2. **Create a database** and select an existing team and Development, Acceptance or Production. Names are unique within that team and environment; `db1` can exist in both Development and Production. Each database gets its own catalog and RustFS bucket. Existing team members receive access immediately, with the role they hold in that team.
+3. **Create a user**, select one or more teams and choose a role for each team. Every user must belong to at least one existing team. A role applies to all current and future databases of that team only, so one person can be Administrator in one team and Read in another.
 4. **Copy the temporary password** shown once for a new Keycloak account. The user must change it at first sign-in. Existing linked accounts keep their own passwords.
-5. **Edit memberships** under Users → Edit teams. Polaris grants or removes access according to the selected teams.
-6. **Change roles** under Users → Edit role. The new data role applies across all team databases. It does not grant portal administration.
-7. **Move a database** under Databases → Move. Members of the new team receive access. Previous members lose access unless they also belong to the new team. The bucket, data, database name and connection details stay the same.
+5. **Edit memberships** under Users → Edit access. Check or clear teams; Polaris grants or removes access according to the selected teams.
+6. **Change roles** in the same Edit access dialog, per team. Changing the role for one team leaves the user's access to other teams untouched. A data role does not grant portal administration.
+7. **Move a database** under Databases → Move. Members of the new team receive access with their role in that team. Previous members lose access unless they also belong to the new team; a member of both teams switches to their role in the new team. The bucket, data, database name and connection details stay the same.
 8. **Delete a database** under Databases → Delete. After confirmation, the operation removes catalog grants, namespaces, tables, views, objects, object versions, multipart uploads and the dedicated bucket. Users and teams remain. If cleanup fails, use **Resume deletion** to finish it.
 9. **Delete a team** after moving or deleting its databases. The API refuses deletion if a user would lose their last team. Assign that user to another team or delete the user first. Users with multiple teams lose only the deleted membership.
 
 Both portals use Keycloak. Human users are linked explicitly to Polaris principals; notebooks receive their Keycloak access token. Portal administrators require the Keycloak `platform-admin` client role. A database is an Iceberg catalog; engines such as Spark or Trino execute queries.
 
-| Role | Permissions within the selected teams' databases |
+| Role | Permissions within the databases of the team it is assigned for |
 | --- | --- |
 | Read | Read namespaces, tables, views and data |
 | Read & write | Manage data, tables, views and namespaces |
@@ -123,7 +123,7 @@ The service identity must have the required grants for each selected catalog. Hu
 
 ## Persistence and operational behavior
 
-See [architecture](architecture.md) for component boundaries. Teams are marked Polaris principal roles; users are principals with stable team IDs. Each user has a dedicated principal role granting only the catalog roles for their teams. Polaris stores this metadata in PostgreSQL; the portal has no separate database.
+See [architecture](architecture.md) for component boundaries. Teams are marked Polaris principal roles; users are principals with stable team IDs and a role per team. Each user has a dedicated principal role granting, per database, only the catalog role that matches the user's role in the owning team. Polaris stores this metadata in PostgreSQL; the portal has no separate database.
 
 Only resources marked `portal.managed-by=iceberg-portal-v2` belong to this resource model. A fresh setup has no default teams or users. `docker compose down -v` deletes PostgreSQL, pgAdmin and RustFS data and resets the local environment.
 
@@ -174,8 +174,7 @@ a scan. Filesystem usage can include other data sharing RustFS's backing filesys
 | PATCH / DELETE | `/api/databases/{id}` | Move with `{"team":"team-id"}` / delete including data |
 | GET | `/api/databases/{id}/connection` | Iceberg connection details |
 | GET / POST | `/api/users` | List / create users |
-| PATCH / DELETE | `/api/users/{id}` | Edit memberships with `{"teams":["team-id"]}` / revoke access |
-| PATCH | `/api/users/{id}/role` | Change role with `{"role":"writer"}`; returns the user and, on first S3 promotion, one-time `bucketCredentials` |
+| PATCH / DELETE | `/api/users/{id}` | Replace memberships and per-team roles with `{"memberships":[{"team":"team-id","role":"writer"}]}`; returns the user and, on first S3 promotion, one-time `bucketCredentials` / revoke access |
 
 Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, including DELETE without a body. Administration requires an authenticated portal session. Use stable team IDs from `/api/teams`. Validation errors return 422, missing teams 404 and dependency conflicts 409. Errors contain `error`; provider error bodies and secrets are never forwarded.
 

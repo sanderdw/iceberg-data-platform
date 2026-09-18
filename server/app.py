@@ -19,7 +19,6 @@ from .models import (
     DatabaseMove,
     Login,
     Memberships,
-    RoleInput,
     ServiceError,
     TeamInput,
     UserInput,
@@ -93,7 +92,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
     async def validation_error(request, exc):
         fields = sorted({str(e["loc"][-1]) for e in exc.errors()})
         message = "Check the input: " + ", ".join(fields) + "."
-        if "teams" in fields:
+        if {"memberships", "team"} & set(fields):
             message += " Select at least one existing team, without duplicates."
         return JSONResponse({"error": message}, status_code=422)
 
@@ -296,14 +295,13 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
     @app.patch("/api/users/{id}")
     def update_user(id: str, data: Memberships):
         require_editable_user(id)
-        return provider.update_memberships(id, data.teams)
-
-    @app.patch("/api/users/{id}/role")
-    def update_role(id: str, data: RoleInput):
-        require_editable_user(id)
-        if user_management and data.role == "bucket-admin":
-            raise ServiceError(422, "Keycloak users access storage through Polaris; direct S3 accounts are not supported.")
-        return provider.update_role(id, data.role)
+        if user_management:
+            # A linked legacy account keeps the bucket administration it already holds.
+            current = provider.user(user_management.principal(provider, id))["memberships"]
+            held = {m["team"] for m in current if m["role"] == "bucket-admin"}
+            if any(m.role == "bucket-admin" and m.team not in held for m in data.memberships):
+                raise ServiceError(422, "Keycloak users access storage through Polaris; direct S3 accounts are not supported.")
+        return provider.update_memberships(id, data.roles)
 
     @app.delete("/api/users/{id}")
     def delete_user(id: str):

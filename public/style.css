@@ -35,6 +35,10 @@
 .team-choices legend { padding: 0 6px; font-size: 13px; }
 .team-choices label { display: flex; align-items: center; gap: 10px; margin: 0; }
 .team-choices input[type=checkbox] { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
+.team-role { display: grid; grid-template-columns: 1fr minmax(170px, 45%); gap: 12px; align-items: center; }
+.team-role select { width: 100%; font: var(--small)/1.5 var(--mono); background: var(--surface); color: var(--primary); border: 1px solid var(--line); border-radius: 6px; min-height: 44px; padding: 12px; }
+.team-role select:disabled { opacity: .4; }
+@media (max-width: 760px) { .team-role { grid-template-columns: 1fr; } }
 button:disabled { cursor: not-allowed; opacity: .45; }
 @media (max-width: 760px) { .sidebar nav { gap: 4px; } .row-actions { gap: 8px; } }
 

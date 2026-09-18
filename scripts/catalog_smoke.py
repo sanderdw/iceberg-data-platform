@@ -17,9 +17,9 @@ def main():
         teams.append(provider.save_team(TeamInput(name=f"catalog-{suffix}"))["id"])
         db = provider.create_database(DatabaseInput(name=f"catalog_{suffix}", team=teams[0]))["id"]
         databases.append(db)
-        writer = provider.create_user(UserInput(name=f"writer-{suffix}", teams=teams, role="writer"))
+        writer = provider.create_user(UserInput(name=f"writer-{suffix}", memberships=[{"team": t, "role": "writer"} for t in teams]))
         users.append(writer["user"]["id"])
-        reader = provider.create_user(UserInput(name=f"reader-{suffix}", teams=teams, role="reader"))
+        reader = provider.create_user(UserInput(name=f"reader-{suffix}", memberships=[{"team": t, "role": "reader"} for t in teams]))
         users.append(reader["user"]["id"])
         credentials = writer["credentials"]
         catalog = load_catalog(

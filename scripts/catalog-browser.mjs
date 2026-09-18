@@ -26,7 +26,7 @@ try {
     const url = new URL(route.request().url()), path = url.pathname;
     let body;
     if (path === '/api/session') body = {authenticated: true};
-    else if (path === '/api/workspace') body = {user: {name: 'Analyst', role: 'reader'}, teams: [{id: 'analytics', name: 'Energy analytics'}], databases: [database], activeTeam: 'analytics', activeEnvironment: 'development', environments: ['development', 'acceptance', 'production'], notebooks: []};
+    else if (path === '/api/workspace') body = {user: {name: 'Analyst'}, teams: [{id: 'analytics', name: 'Energy analytics', role: 'reader'}], databases: [database], activeTeam: 'analytics', activeRole: 'reader', activeEnvironment: 'development', environments: ['development', 'acceptance', 'production'], notebooks: []};
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'readings'}], views: [{name: 'daily_energy'}]} : {namespaces: [['analytics']], tables: [], views: []};
     else if (path === '/api/details') body = ({database: {kind: 'database', database}, namespace: {kind: 'namespace', properties: {owner: 'Energy analytics'}}, table, view})[url.searchParams.get('kind')];
     else if (path === '/api/preview') {

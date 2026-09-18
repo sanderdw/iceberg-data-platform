@@ -59,7 +59,7 @@ try {
   await page.locator('[name=last_name]').fill('Test');
   await page.locator('[name=email]').fill(username + '@example.test');
   await page.locator(`[name=teams][value="${team}"]`).check();
-  await page.locator('[name=role]').selectOption('writer');
+  await page.locator(`[name="role:${team}"]`).selectOption('writer');
   await page.locator('#modal-form button[type=submit]').click();
   await expect(page.locator('#temporary-password')).toBeVisible();
   const temporary = await page.locator('#temporary-password').innerText();
@@ -82,11 +82,11 @@ try {
   assert.match(output, /PASS/);
   console.log('PASS: first login requires a password change; new user opens a notebook with Polaris access');
 
-  await page.locator(`[data-role="${principalId}"]`).click();
-  await page.locator('[name=role]').selectOption('reader');
+  await page.locator(`[data-memberships="${principalId}"]`).click();
+  await page.locator(`[name="role:${team}"]`).selectOption('reader');
   await page.locator('#modal-form button[type=submit]').click();
   await expect(page.locator('#modal')).not.toBeVisible();
-  assert.equal((await checked(await admin.request.get(adminURL + '/api/users'))).find(u => u.id === principalId).role, 'reader');
+  assert.equal((await checked(await admin.request.get(adminURL + '/api/users'))).find(u => u.id === principalId).memberships.find(m => m.team === team).role, 'reader');
   await revoke(page, principalId);
   const accounts = await checked(await admin.request.get(adminURL + '/api/identity/accounts?username=' + username));
   assert.equal(accounts[0].id, subject);
@@ -107,7 +107,7 @@ try {
   await expect(page.locator(`#identity-account option[value="${subject}"]`)).toBeAttached();
   await page.locator('#identity-account').selectOption(subject);
   await page.locator(`[name=teams][value="${team}"]`).check();
-  await page.locator('[name=role]').selectOption('reader');
+  await page.locator(`[name="role:${team}"]`).selectOption('reader');
   await page.locator('#modal-form button[type=submit]').click();
   await expect(page.locator('#identity-done')).toBeVisible();
   assert.equal(await page.locator('#temporary-password').count(), 0);

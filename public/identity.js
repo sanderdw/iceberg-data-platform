@@ -4,9 +4,9 @@ let keycloakUsers = false;
 function identityGuide() {
   const steps = [
     ['Create a team and database', 'Teams own databases. Choose the team when creating a database.'],
-    ['Create or link a user', 'On Users, create a Keycloak account or select an existing account to link. Choose teams and a data role. Share new accounts’ temporary passwords securely.'],
+    ['Create or link a user', 'On Users, create a Keycloak account or select an existing account to link. Choose teams and a data role per team. Share new accounts’ temporary passwords securely.'],
     ['Sign in and open a notebook', 'Open the user portal and choose Sign in with Keycloak. New users must change their temporary password. Their notebooks use their own database permissions.'],
-    ['Manage access', 'Edit teams and roles here. Revoke removes platform access and preserves the Keycloak account. Use Retry setup if account creation was interrupted.'],
+    ['Manage access', 'Use Edit access to change teams and the role in each team. Revoke removes platform access and preserves the Keycloak account. Use Retry setup if account creation was interrupted.'],
   ];
   $('#page-content').innerHTML = `<section class="panel guide"><span class="eyebrow">GUIDE / KEYCLOAK PILOT</span><h2>From account to data.</h2>${steps.map(([title, text], i) => `<div class="guide-step"><span>0${i + 1}</span><div><h3>${title}</h3><p>${text}</p></div></div>`).join('')}<div class="panel-note">Keycloak manages sign-in. This portal manages teams and data permissions. The data administrator role does not grant access to this administration portal.</div></section>`;
 }
@@ -51,11 +51,12 @@ function identityModal(existingId = null, database = null, mode = 'new') {
     : '<label>Existing Keycloak username<input id="identity-search" maxlength="254" autocomplete="off"></label><button class="button" id="find-identity" type="button">Find account</button><label>Account to link<select name="subject" id="identity-account" required><option value="">Search and select an account</option></select></label><p class="subtle">Select the exact account. Its password and access to other applications stay unchanged.</p>';
   openModal(existingId ? `Link ${esc(user.name)} to Keycloak` : 'A new platform user',
     'Keycloak manages sign-in. This portal manages team and database access.',
-    `${chooser}<form id="modal-form">${existingId ? '' : nameInput(mode === 'new' ? 'Username' : 'Platform username', 'e.g. analyst')}${accountFields}${existingId ? '' : teamChecks(selected ? [selected] : []) + roleSelect()}<p class="form-error" role="alert"></p><div class="modal-actions"><button class="button" type="button" id="identity-refresh">Refresh Users</button><button class="button primary" type="submit">${mode === 'new' ? 'Create user' : 'Link account'}</button></div></form>`);
+    `${chooser}<form id="modal-form">${existingId ? '' : nameInput(mode === 'new' ? 'Username' : 'Platform username', 'e.g. analyst')}${accountFields}${existingId ? '' : membershipRows(selected ? { [selected]: 'reader' } : {})}<p class="form-error" role="alert"></p><div class="modal-actions"><button class="button" type="button" id="identity-refresh">Refresh Users</button><button class="button primary" type="submit">${mode === 'new' ? 'Create user' : 'Link account'}</button></div></form>`);
   if (!existingId) {
     $('#identity-new').onclick = () => identityModal(null, database, 'new');
     $('#identity-link').onclick = () => identityModal(null, database, 'link');
   }
+  bindMembershipRows();
   $('#identity-refresh').onclick = async () => { closeModal(); await load(); };
   if (mode === 'link') {
     let searchVersion = 0;
@@ -75,7 +76,7 @@ function identityModal(existingId = null, database = null, mode = 'new') {
     };
   }
   formSubmit(async input => {
-    if (!existingId && !input.teams.length) throw new Error('Select at least one team.');
+    if (!existingId && !input.memberships.length) throw new Error('Select at least one team.');
     const path = existingId ? `/users/${encodeURIComponent(existingId)}/identity` : mode === 'new' ? '/identity/users' : '/identity/links';
     await identityReady(await api(path, 'POST', input));
   });

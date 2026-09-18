@@ -33,9 +33,9 @@ Authentication and account management live in `server/oidc.py`, `server/identity
 and `server/entrypoints.py`. Both standard application images include OIDC support.
 The installed portals always use Keycloak authentication.
 
-Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, an individual principal role and the grants of their teams. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. There is no second application metadata database.
+Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, a role per team, an individual principal role and, per database, the grant that matches their role in the owning team. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. There is no second application metadata database.
 
-The admin identity manages metadata and grants. The user gateway uses that identity only to resolve the directory, then uses the user's OAuth token for catalog browsing. Notebook containers receive the user's own credentials. A user may belong to several teams; the active team and environment control the UI and workspace context, while the credentials retain the union of the user's team grants.
+The admin identity manages metadata and grants. The user gateway uses that identity only to resolve the directory, then uses the user's OAuth token for catalog browsing. Notebook containers receive the user's own credentials. A user may belong to several teams; the active team and environment control the UI and workspace context, while the credentials retain the union of the user's team grants, each at the role held in that team.
 
 ## Notebook lifecycle
 

@@ -39,21 +39,30 @@ class DatabaseMove(Input):
     team: TeamId
 
 
-class Memberships(Input):
-    teams: list[TeamId] = Field(min_length=1, max_length=100)
+class Membership(Input):
+    team: TeamId
+    role: Role
 
-    @field_validator("teams")
+
+class Memberships(Input):
+    memberships: list[Membership] = Field(min_length=1, max_length=100)
+
+    @field_validator("memberships")
     @classmethod
     def unique_teams(cls, value):
-        if len(set(value)) != len(value):
+        teams = [m.team for m in value]
+        if len(set(teams)) != len(teams):
             raise ValueError("Select each team only once.")
         return value
+
+    @property
+    def teams(self):
+        return [m.team for m in self.memberships]
+
+    @property
+    def roles(self):
+        return {m.team: m.role for m in self.memberships}
 
 
 class UserInput(Memberships):
     name: Name
-    role: Role
-
-
-class RoleInput(Input):
-    role: Role

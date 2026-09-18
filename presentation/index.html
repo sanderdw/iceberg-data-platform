@@ -447,12 +447,12 @@
   <div class="cols">
     <ul>
       <li><strong>Team</strong> owns databases. Stable ID, unique name, a description.</li>
-      <li><strong>User</strong> signs in with Keycloak, belongs to one or more teams, has one role: read, read and write, admin.</li>
+      <li><strong>User</strong> signs in with Keycloak, belongs to one or more teams, has a role per team: read, read and write, admin.</li>
       <li><strong>Database</strong> is an Iceberg catalog in Polaris plus a dedicated S3 bucket. Namespaces, tables and views live inside.</li>
       <li><strong>Environment</strong> per database: development, acceptance, production.</li>
     </ul>
     <ul>
-      <li>Effective access is the union of the user's teams. Moving a database re-syncs grants and bucket policies.</li>
+      <li>Effective access is the union of the user's teams, each at its own role. Moving a database re-syncs grants and bucket policies.</li>
       <li>No second application database. Polaris <em>is</em> the source of truth for teams, users and catalogs.</li>
       <li>Portal admin is a Keycloak role. Database admin does not grant portal admin.</li>
       <li>Self-service for teams, governance in one place.</li>

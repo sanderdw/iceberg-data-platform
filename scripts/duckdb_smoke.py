@@ -52,7 +52,7 @@ def main():
         databases.append(database["id"])
         accounts = []
         for role in ("writer", "reader"):
-            account = provider.create_user(UserInput(name=f"native-{role}-{suffix}", teams=teams, role=role))
+            account = provider.create_user(UserInput(name=f"native-{role}-{suffix}", memberships=[{"team": t, "role": role} for t in teams]))
             users.append(account["user"]["id"])
             accounts.append(account["credentials"])
         writer, reader = accounts

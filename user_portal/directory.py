@@ -95,7 +95,8 @@ class UserDirectory:
         ):
             raise ServiceError(403, "Your identity is no longer linked to this user.")
         user = self.metadata.user(principal)
-        teams = [t for t in self.metadata.list_teams() if t["id"] in user["teams"]]
+        roles = {m["team"]: m["role"] for m in user["memberships"]}
+        teams = [{**t, "role": roles[t["id"]]} for t in self.metadata.list_teams() if t["id"] in roles]
         if not teams:
             raise ServiceError(403, "You no longer have any available teams.")
         databases = [
@@ -104,7 +105,7 @@ class UserDirectory:
             if d["team"] in {t["id"] for t in teams} and d["status"] == "ready"
         ]
         return {
-            "user": {"id": user["id"], "name": user["name"], "role": user["role"]},
+            "user": {"id": user["id"], "name": user["name"]},
             "teams": teams,
             "databases": databases,
         }

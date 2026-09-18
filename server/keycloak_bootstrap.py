@@ -110,7 +110,7 @@ def main():
             for account, role in (("admin", "reader"), ("writer", "writer"), ("reader", "reader")):
                 name = demo_prefix + "-" + account
                 if name not in users:
-                    result = provider.create_user(UserInput(name=name, role=role, teams=[teams[demo_prefix + "-team"]["id"]]))
+                    result = provider.create_user(UserInput(name=name, memberships=[{"team": teams[demo_prefix + "-team"]["id"], "role": role}]))
                     users[name] = result["user"]  # Generated Polaris client secret is deliberately discarded.
                 response = kc.get(prefix + "/users", params={"username": name, "exact": "true"})
                 response.raise_for_status()

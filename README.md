@@ -9,7 +9,7 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 
 ## What it does
 
-- **Administration portal:** create and manage teams, assign users to one or more teams, create databases, move databases between teams, and delete databases with their stored data.
+- **Administration portal:** create and manage teams, assign users to one or more teams with a role per team, create databases, move databases between teams, and delete databases with their stored data.
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
 - **Separate user portal:** sign in with Keycloak, switch teams and browse the active team's databases.
 - **User catalog details:** inspect table schemas, snapshots, branches/tags, partitioning, sort orders and view SQL; preview up to 100 rows at a selected snapshot with your own data permissions.
@@ -100,7 +100,7 @@ pgAdmin includes a **Polaris metadata** server connection. Enter `POSTGRES_PASSW
 ### First session
 
 1. Open the administration portal, sign in with Keycloak as `platform-admin` and change the temporary password.
-2. Create a team, create a database under that team, then create a user with membership of that team. Choose **Read & write** (writer) to run both examples.
+2. Create a team, create a database under that team, then create a user with membership of that team. Choose **Read & write** (writer) for that team to run the examples that write data.
 3. Copy the temporary password shown once. Open the user portal on port 3002, sign in through Keycloak, and change that password.
 4. Select a team and database. Choose **01 · Neighborhood data with PyIceberg**, run the cells with ▶ and click **Create example table**.
 5. Use the notebook selector to open **02 · Visualize with DuckDB**. Run its cells and change the street filter to explore energy consumption and solar production.
