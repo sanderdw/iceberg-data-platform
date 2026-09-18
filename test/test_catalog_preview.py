@@ -1,25 +1,15 @@
-"""Preview resource boundary and real Iceberg scans against temporary local files."""
+"""Preview resource boundary, process isolation and DuckDB's rendering of rows."""
 
 import json
 import subprocess
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import pyarrow as pa
 import pytest
-from pyiceberg.catalog.noop import NoopCatalog
-from pyiceberg.io.pyarrow import PyArrowFileIO
-from pyiceberg.partitioning import UNPARTITIONED_PARTITION_SPEC
-from pyiceberg.schema import Schema
-from pyiceberg.table import CommitTableResponse, Table
-from pyiceberg.table.metadata import new_table_metadata
-from pyiceberg.table.sorting import UNSORTED_SORT_ORDER
-from pyiceberg.table.update import update_table_metadata
-from pyiceberg.types import LongType, NestedField, StringType
 
 from server.models import ServiceError
 from user_portal.catalog import columns
-from user_portal.preview import read_preview, run_preview
+from user_portal.preview import read_rows, run_preview
 
 
 def test_nested_schema_fields_keep_ids_and_types():
@@ -68,49 +58,66 @@ def test_preview_process_does_not_inherit_platform_secrets(monkeypatch):
         run_preview({})
 
 
-def test_real_preview_is_bounded_and_reads_selected_snapshot(tmp_path, monkeypatch):
-    catalog = NoopCatalog("preview")
-    data = pa.table({"id": list(range(150)), "event": ["x" * 600] * 149 + [None]})
-    table = Table(
-        identifier=("analytics", "events"),
-        catalog=catalog,
-        io=PyArrowFileIO(),
-        metadata_location=str(tmp_path / "metadata.json"),
-        metadata=new_table_metadata(
-            Schema(NestedField(1, "id", LongType()), NestedField(2, "event", StringType())),
-            UNPARTITIONED_PARTITION_SPEC,
-            UNSORTED_SORT_ORDER,
-            str(tmp_path),
-        ),
-    )
-    monkeypatch.setattr(catalog, "load_table", lambda _: table)
-    monkeypatch.setattr(
-        catalog,
-        "commit_table",
-        lambda t, requirements, updates: CommitTableResponse(
-            metadata=update_table_metadata(t.metadata, updates), metadata_location=t.metadata_location
-        ),
-    )
-    table.append(data)
-    old = str(table.current_snapshot().snapshot_id)
-    table.overwrite(pa.table({"id": [999], "event": ["new"]}))
-    monkeypatch.setattr("pyiceberg.catalog.load_catalog", lambda *a, **kw: catalog)
+def test_a_crashing_preview_never_reaches_the_portal_process():
+    # A real child process: no catalog is listening, so it fails, and only it fails.
     request = {
-        "database": "preview",
-        "uri": "http://catalog",
-        "token": "user-token",
+        "uri": "http://127.0.0.1:9",
+        "database": "db",
         "namespace": ["analytics"],
         "table": "events",
-        "s3Endpoint": "http://rustfs:9000",
-        "snapshotId": old,
+        "snapshotId": None,
         "limit": 100,
+        "token": "user-token",
+        "s3Endpoint": "http://127.0.0.1:9",
     }
-    result = read_preview(request)
-    assert len(result["rows"]) == 100
-    assert result["rows"][0][0] == "0" and len(result["rows"][0][1]) == 513
-    assert result["cellsTruncated"] and result["snapshotId"] == old
-    result = read_preview({**request, "snapshotId": str(table.current_snapshot().snapshot_id)})
-    assert result["rows"] == [["999", "new"]]
-    assert read_preview({**request, "snapshotId": None})["rows"] == []
-    with pytest.raises(ValueError, match="expired"):
-        read_preview({**request, "snapshotId": "123"})
+    with pytest.raises(ServiceError, match="Preview unavailable") as error:
+        run_preview(request)
+    assert error.value.status == 502 and "user-token" not in str(error.value)
+
+
+def test_a_preview_killed_by_the_kernel_is_reported_as_unavailable(monkeypatch):
+    killed = SimpleNamespace(returncode=-9, stdout="", stderr="")
+    monkeypatch.setattr(subprocess, "run", Mock(return_value=killed))
+    with pytest.raises(ServiceError, match="Preview unavailable"):
+        run_preview({})
+
+
+def test_rows_are_bounded_and_every_type_is_rendered_as_text():
+    duckdb = pytest.importorskip("duckdb")
+    connection = duckdb.connect()
+    connection.execute("""
+        CREATE TABLE events AS
+        SELECT range AS id,
+               9007199254740993 AS large_id,
+               CASE WHEN range < 149 THEN repeat('x', 600) END AS event,
+               CASE WHEN range > 0 THEN {'kind': 'door', 'who': {'badge': 7}}::VARIANT END AS payload,
+               'POINT (5 52)'::GEOMETRY AS location,
+               TIMESTAMP_NS '2026-09-21 14:13:20.000066225' AS measured_at
+        FROM range(150)
+    """)
+    names, rows, columns_truncated, cells_truncated = read_rows(connection, "events ORDER BY id", 100)
+    assert names == ["id", "large_id", "event", "payload", "location", "measured_at"]
+    assert len(rows) == 100 and cells_truncated and not columns_truncated
+    assert rows[0][:2] == ["0", "9007199254740993"]  # Exact, beyond JavaScript's safe integers.
+    assert len(rows[0][2]) == 513 and rows[0][2].endswith("…")
+    assert rows[0][3] is None and rows[1][3] == '{"kind":"door","who":{"badge":7}}'
+    assert rows[0][4:] == ["POINT (5 52)", "2026-09-21 14:13:20.000066225"]
+    assert read_rows(connection, "events WHERE id = 149", 100)[1][0][2] is None
+    # An empty table has columns but no rows, whatever is committed meanwhile.
+    assert read_rows(connection, "events", 0)[:2] == (names, [])
+
+
+def test_wide_tables_show_the_first_fifty_columns():
+    duckdb = pytest.importorskip("duckdb")
+    connection = duckdb.connect()
+    connection.execute(f"CREATE TABLE wide AS SELECT {', '.join(f'{i} AS c{i}' for i in range(60))}")
+    names, rows, columns_truncated, _ = read_rows(connection, "wide", 100)
+    assert names == [f"c{i}" for i in range(50)] and len(rows[0]) == 50 and columns_truncated
+
+
+def test_quoted_column_names_cannot_inject_sql():
+    duckdb = pytest.importorskip("duckdb")
+    connection = duckdb.connect()
+    connection.execute('CREATE TABLE odd AS SELECT 1 AS "a"" AS VARCHAR), (SELECT 42) AS (""b"')
+    names, rows, _, _ = read_rows(connection, "odd", 100)
+    assert names == ['a" AS VARCHAR), (SELECT 42) AS ("b'] and rows == [["1"]]

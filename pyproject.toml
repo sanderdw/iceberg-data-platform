@@ -21,7 +21,7 @@ dev = [{include-group = "users"}, {include-group = "oidc"}, "pytest>=9.1.1", "ru
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "pandas>=3.0.5", "ipykernel>=7.3.0", "matplotlib>=3.10.0"]
 users = [
     "docker==7.2.0",
-    "pyiceberg[pyarrow]>=0.12.0",
+    "duckdb==1.5.5",
 ]
 notebook = [
     "altair>=6.2.2",

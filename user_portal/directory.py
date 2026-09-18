@@ -225,12 +225,6 @@ class UserDirectory:
 
     def preview_request(self, session, database, namespace, name, snapshot_id, limit):
         details = self.details(session, database, namespace, "table", name)
-        if details["previewUnsupported"]:
-            raise ServiceError(
-                422,
-                f"Preview does not support {', '.join(details['previewUnsupported'])} columns yet. "
-                "Open the table in marimo; example 05 reads these Iceberg v3 types with DuckDB.",
-            )
         selected = snapshot_id or details["currentSnapshotId"]
         if selected is not None and selected not in {s["id"] for s in details["snapshots"]}:
             raise ServiceError(404, "This snapshot is no longer available. Refresh the table.")

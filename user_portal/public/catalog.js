@@ -102,7 +102,6 @@ function renderObjectDetails(detail, db, ns, name, version) {
   if (detail.kind === 'table') {
     let selectedSnapshot = detail.currentSnapshotId;
     const preview = tab('Preview', p => {
-      if (detail.previewUnsupported?.length) { p.append(element('p', `Preview does not support ${detail.previewUnsupported.join(', ')} columns yet. Open the table in marimo; example 05 reads these Iceberg v3 types with DuckDB.`, 'catalog-empty')); return; }
       const controls = element('div', undefined, 'preview-controls');
       const label = element('label', 'Snapshot'), picker = element('select'); picker.setAttribute('aria-label', 'Preview snapshot');
       detail.snapshots.forEach(s => { const option = element('option', `${s.id === detail.currentSnapshotId ? 'Current · ' : ''}${timestamp(s.timestamp)} · ${s.id}`); option.value = s.id; picker.append(option); });

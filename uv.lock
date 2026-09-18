@@ -777,8 +777,8 @@ data = [
 dev = [
     { name = "authlib" },
     { name = "docker" },
+    { name = "duckdb" },
     { name = "httpx2" },
-    { name = "pyiceberg", extra = ["pyarrow"] },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -799,7 +799,7 @@ oidc = [
 ]
 users = [
     { name = "docker" },
-    { name = "pyiceberg", extra = ["pyarrow"] },
+    { name = "duckdb" },
 ]
 
 [package.metadata]
@@ -822,8 +822,8 @@ data = [
 dev = [
     { name = "authlib", specifier = "==1.8.0" },
     { name = "docker", specifier = "==7.2.0" },
+    { name = "duckdb", specifier = "==1.5.5" },
     { name = "httpx2", specifier = ">=2.12.0" },
-    { name = "pyiceberg", extras = ["pyarrow"], specifier = ">=0.12.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.16.7" },
 ]
@@ -844,7 +844,7 @@ oidc = [
 ]
 users = [
     { name = "docker", specifier = "==7.2.0" },
-    { name = "pyiceberg", extras = ["pyarrow"], specifier = ">=0.12.0" },
+    { name = "duckdb", specifier = "==1.5.5" },
 ]
 
 [[package]]
