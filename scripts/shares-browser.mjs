@@ -86,6 +86,7 @@ try {
   await page.getByLabel('Expires at the end of this UTC day (optional)').fill('2031-05-01');
   await page.getByRole('button', {name: 'Save share', exact: true}).click();
   await expect(grid).not.toContainText('Not granted');
+  await expect(grid).toContainText('2031-05-01 · end of day UTC');
   const edit = calls.at(-1);
   if (edit.method !== 'PATCH' || edit.input.expiresAt !== '2031-05-01T23:59:59Z' || edit.input.objects.length !== 1 || 'name' in edit.input) throw new Error('Unexpected edit request: ' + JSON.stringify(edit));
 

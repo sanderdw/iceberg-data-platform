@@ -34,7 +34,7 @@ function renderShares(host, db, result) {
     if (share.status === 'revoking') actions.append(element('span', 'Revoking…', 'hint'));
     else actions.append(action('Edit', async () => shareForm(host, db, share)), action('New secret', async () => issued(host, db, await api(`/shares/${share.id}/rotate`, 'POST'), 'The previous secret no longer works.')), revokeButton(host, db, share));
     const name = element('div'); name.append(element('strong', share.name), element('small', share.recipient || '—'));
-    return [name, objects, share.expiresAt ? timestamp(share.expiresAt) : 'Never', `${share.createdBy || '—'} · ${timestamp(share.createdAt)}`, actions];
+    return [name, objects, share.expiresAt ? `${share.expiresAt.slice(0, 10)} · end of day UTC` : 'Never', `${share.createdBy || '—'} · ${timestamp(share.createdAt)}`, actions];
   });
   const list = rows.length ? dataGrid(['Share / recipient', 'Tables and views', 'Expires', 'Created', ''], rows, 'Data shares') : element('p', 'Nothing in this database is shared.', 'catalog-empty');
   host.replaceChildren(intro, create, list);

@@ -12,7 +12,7 @@ test('portal admin reviews and revokes data shares', async ({ page, context }) =
   await context.request.post('/api/session', { headers, data: { password: process.env.PORTAL_PASSWORD } });
   await page.route('**/api/overview', async route => {
     const response = await route.fetch(), overview = await response.json();
-    const shares = revoked.length ? [] : [{ id, name: 'partner', recipient, description: '', database: 'db-' + 'b'.repeat(32), objects: [{ kind: 'table', namespace: ['sales', 'eu'], name: 'orders' }, { kind: 'view', namespace: ['sales'], name: 'report' }], expiresAt: '2031-05-01T12:00:00+00:00', createdAt: 1789506000000, createdBy: 'team-admin', clientId: 'client-1', status: 'active' }];
+    const shares = revoked.length ? [] : [{ id, name: 'partner', recipient, description: '', database: 'db-' + 'b'.repeat(32), objects: [{ kind: 'table', namespace: ['sales', 'eu'], name: 'orders' }, { kind: 'view', namespace: ['sales'], name: 'report' }], expiresAt: '2031-05-01T23:59:59+00:00', createdAt: 1789506000000, createdBy: 'team-admin', clientId: 'client-1', status: 'active' }];
     await route.fulfill({ response, json: { ...overview, shares } });
   });
   await page.route('**/api/shares/*', async route => {
