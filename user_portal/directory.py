@@ -83,7 +83,7 @@ class UserDirectory:
     def profile(self, session):
         # Re-read metadata so deletion, team removal and moves affect active sessions.
         try:
-            principal = self.metadata.require(f"/principals/{enc(session.user_id)}")
+            principal = self.metadata.require_user(f"/principals/{enc(session.user_id)}")
         except ServiceError as exc:
             if exc.status == 404:
                 raise ServiceError(401, "Your user no longer exists. Sign in again.") from exc
@@ -151,7 +151,7 @@ class UserDirectory:
         name = mapping.get("principal_name")
         if not isinstance(name, str) or not name.startswith("portal-"):
             raise ServiceError(403, "Your identity is not linked to a platform user.")
-        principal = self.metadata.require(f"/principals/{enc(name)}")
+        principal = self.metadata.require_user(f"/principals/{enc(name)}")
         # Polaris's management API does not expose numeric entity IDs. Zero
         # requests lookup by the immutable portal principal name, not username.
         if mapping.get("principal_id") != 0:

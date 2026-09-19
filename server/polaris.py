@@ -182,6 +182,19 @@ class PolarisProvider:
             raise ServiceError(404, "Not found.")
         return resource
 
+    def is_share(self, resource):
+        return self.managed(resource) and resource["properties"].get("portal.kind") == "share"
+
+    def is_user(self, resource):
+        # Share principals are machine identities: never a user, member or portal login.
+        return self.managed(resource) and not self.is_share(resource)
+
+    def require_user(self, path):
+        principal = self.require(path)
+        if not self.is_user(principal):
+            raise ServiceError(404, "Not found.")
+        return principal
+
     def team(self, role):
         return {
             "id": role["name"],
@@ -370,7 +383,7 @@ class PolarisProvider:
         }
 
     def list_users(self):
-        return [self.user(p) for p in self.management("/principals")["principals"] if self.managed(p)]
+        return [self.user(p) for p in self.management("/principals")["principals"] if self.is_user(p)]
 
     def access(self, user, databases):
         roles = {m["team"]: m["role"] for m in user["memberships"]}
@@ -531,7 +544,7 @@ class PolarisProvider:
     def update_memberships(self, id, roles):
         self.require_teams(list(roles))
         path = f"/principals/{enc(id)}"
-        principal = self.require(path)
+        principal = self.require_user(path)
         user = self.user(principal)
         databases = self.list_databases()
         before = self.access(user, databases)
@@ -559,7 +572,7 @@ class PolarisProvider:
 
     def delete_user(self, id):
         path = f"/principals/{enc(id)}"
-        principal = self.require(path)
+        principal = self.require_user(path)
         key = principal["properties"].get("portal.bucket-access-key")
         if key:
             self.storage.delete_user(key)
