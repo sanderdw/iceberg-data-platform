@@ -68,6 +68,7 @@ try {
   await expect(page.locator('.catalog-summary')).toContainText('Energy analytics');
 
   await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
+  await page.locator('#notebooks button').first().click();
   await expect(page.locator('#editor')).toBeVisible();
   await expect(page.locator('#frame-host iframe')).toHaveAttribute('data-preserved', 'yes');
   await page.evaluate(() => refreshWorkspace());
@@ -177,8 +178,15 @@ print(json.dumps(outputs))
   await expect(grid).toContainText(recipient);
   await page.screenshot({path: 'test-results/shares/member-dark.png', fullPage: true});
   role = 'bucket-admin';
+  const today = new Date().toISOString().slice(0, 10);
+  shares[0].expiresAt = `${today}T23:59:59Z`;
   await page.getByRole('button', {name: 'Refresh data shares', exact: true}).click();
   await expect(page.locator('#share-permissions')).toBeHidden();
+  await grid.getByRole('button', {name: 'Edit', exact: true}).click();
+  await page.getByLabel('Recipient').fill('Updated on expiry day');
+  await page.getByRole('button', {name: 'Save share', exact: true}).click();
+  await expect(grid).toContainText('Updated on expiry day');
+  expect(calls.at(-1).input.expiresAt).toBe(`${today}T23:59:59Z`);
   await grid.getByRole('button', {name: 'Edit', exact: true}).click();
   await expect(page.getByLabel('Share name')).toBeDisabled();
   await expect(page.locator('.share-selection')).toContainText('analytics.daily_energy');

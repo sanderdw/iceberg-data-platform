@@ -103,7 +103,9 @@ function shareForm(host, db, share) {
   const form = element('form', undefined, 'share-form'), selected = new Map((share?.objects || []).map(o => [objectKey(o), {kind: o.kind, namespace: o.namespace, name: o.name}]));
   const name = textInput(share?.name, 48, true); name.pattern = '[a-z][a-z0-9_-]{2,47}'; name.disabled = Boolean(share); name.title = 'Lowercase letters, digits, - and _; 3 to 48 characters.';
   const recipient = textInput(share?.recipient, 120), description = textInput(share?.description, 280);
-  const expiry = element('input'); expiry.type = 'date'; expiry.min = new Date(Date.now() + 86400000).toISOString().slice(0, 10); expiry.value = share?.expiresAt ? share.expiresAt.slice(0, 10) : '';
+  const expiry = element('input'); expiry.type = 'date'; expiry.value = share?.expiresAt ? share.expiresAt.slice(0, 10) : '';
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  expiry.min = expiry.value && expiry.value < tomorrow ? expiry.value : tomorrow;
   const chosen = element('div', undefined, 'share-selection'), warning = element('p', VIEW_WARNING, 'share-warning'); warning.setAttribute('role', 'note');
   const save = element('button', share ? 'Save share' : 'Create share and show credential'); save.type = 'submit';
   function refresh() {

@@ -569,8 +569,8 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
 
     @app.post("/api/shares", status_code=201)
     def create_share(data: ShareInput, request: Request):
-        _, user = directory.share_database(request.state.session, data.database)
-        return directory.metadata.create_share(data, user)
+        database, user = directory.share_database(request.state.session, data.database)
+        return directory.metadata.create_share(data, user, expected_team=database["team"])
 
     @app.patch("/api/shares/{id}")
     def update_share(id: share_id, data: ShareUpdate, request: Request):

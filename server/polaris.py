@@ -494,9 +494,6 @@ class PolarisProvider:
             raise ServiceError(409, "This database is being deleted. Complete the deletion first.")
         if old == team:
             return self.database(catalog)
-        # The new owners must never inherit external access they did not grant.
-        if self.list_shares(id):
-            raise ServiceError(409, "Revoke this database's data shares first.")
         databases = self.list_databases()
         if any(
             d["team"] == team
@@ -508,14 +505,23 @@ class PolarisProvider:
                 409, "This database name already exists in the destination team and environment."
             )
         moved = [{**d, "team": team} if d["id"] == id else d for d in databases]
+        # Publish move intent before checking shares. Creators publish their inactive
+        # principal before rechecking this marker and epoch, so one side must refuse.
+        # Keep the epoch even after failure to fence creators spanning an entire move.
+        properties = {**catalog["properties"], "portal.share-epoch": uuid4().hex}
+        properties.pop("portal.moving", None)
         with provision() as undo:
+            self.update_properties(path, {**properties, "portal.moving": team})
+            undo.append(lambda: self.update_properties(path, properties))
+            if self.list_shares(id):
+                raise ServiceError(409, "Revoke this database's data shares first.")
             for user in self.list_users():
                 # Also re-binds when the user holds different roles in both teams.
                 self.sync_access(user, self.access(user, databases), self.access(user, moved), undo)
             bucket = catalog["properties"]["portal.bucket"]
             self.storage.tag_bucket(bucket, id, team)
             undo.append(lambda: self.storage.tag_bucket(bucket, id, old))
-            result = self.update_properties(path, {**catalog["properties"], "portal.team": team})
+            result = self.update_properties(path, {**properties, "portal.team": team})
             return self.database(result)
 
     def create_user(self, data, *, identity_properties=None, activate=True):
@@ -837,10 +843,14 @@ class PolarisProvider:
             "connection": self.share_connection(principal, credentials),
         }
 
-    def create_share(self, data, created_by):
+    def create_share(self, data, created_by, *, expected_team=None):
         catalog = self.require(f"/catalogs/{enc(data.database)}")
         if catalog["properties"].get("portal.deleting") == "true":
             raise ServiceError(409, "This database is being deleted.")
+        if catalog["properties"].get("portal.moving"):
+            raise ServiceError(409, "This database is being moved. Try again after the move completes.")
+        if expected_team is not None and catalog["properties"]["portal.team"] != expected_team:
+            raise ServiceError(409, "This database changed teams. Refresh and try again.")
         existing = self.list_shares(data.database)
         if len(existing) >= MAX_SHARES:
             raise ServiceError(409, f"A database can have at most {MAX_SHARES} data shares.")
@@ -882,6 +892,17 @@ class PolarisProvider:
                 },
             )
             undo.append(lambda: self.remove(f"/principals/{id}"))
+            # The principal is now visible to a concurrent move's share preflight,
+            # but its credential still has no access. Reject stale authorization,
+            # including a move away and back to the same team during creation.
+            current = self.require(f"/catalogs/{enc(data.database)}")["properties"]
+            if (
+                current.get("portal.moving")
+                or current.get("portal.deleting") == "true"
+                or current["portal.team"] != catalog["properties"]["portal.team"]
+                or current.get("portal.share-epoch") != catalog["properties"].get("portal.share-epoch")
+            ):
+                raise ServiceError(409, "This database changed during share creation. Refresh and try again.")
             # Activation last: until here the new secret opens nothing.
             self.management(f"/principals/{id}/principal-roles", "PUT", {"principalRole": {"name": id}})
             return self.issued(result["principal"], result["credentials"])

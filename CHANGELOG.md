@@ -8,6 +8,7 @@
 - Keycloak access tokens renew automatically within an eight-hour portal session and Keycloak's session limits. Notebook helpers retrieve the current user token from the gateway without receiving refresh tokens; existing DuckDB attachments need reconnecting to refresh cached credentials. Sign-in returns to the requested portal location.
 - The administration portal lists every data share on a new **Data shares** page and can revoke it. Deleting a database revokes its shares.
 - Breaking: a database with data shares cannot be moved to another team until the shares are revoked.
+- Concurrent share creation and database moves recheck persisted move state before activating a share. Shares expiring today remain editable without changing their expiry. Notebook token renewal reads the private token file written by the runtime entrypoint.
 - Upgrade note: the user gateway now also writes to Polaris with the platform identity, to manage data shares. `compose.users.yaml` passes `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` to it. Sharing with parties outside this machine needs your own TLS reverse proxy for the Polaris catalog API and RustFS, with both variables set before the shared databases are created; see `SECURITY.md`.
 
 ## 0.3.1 — 2026-09-19

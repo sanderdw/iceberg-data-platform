@@ -78,6 +78,12 @@ A view is only a definition. The recipient's engine reads the underlying tables 
 
 A share belongs to its database, and through it to the owning team; the team is not stored on the share. Every current Administrator or Database + bucket administrator of that team can manage it, including after the person who created it lost that role. A shared database cannot be moved to another team until its shares are revoked, so new owners never inherit external access. Deleting a database revokes its shares first.
 
+Moves persist a `portal.moving` marker and a new `portal.share-epoch` before checking
+for shares. Share creation publishes its inactive principal, then rechecks the catalog's
+owner, move marker and epoch before activating the credential. This prevents concurrent
+requests in the two portals from creating external access across a team move. A crash
+during a move can leave its marker blocking new shares; retry the move to complete it.
+
 Readers and writers can list shares for databases in their active team and environment.
 The user portal disables management buttons for these roles; the API enforces the same
 administrator requirement for every mutation. Listing a share does not reveal its secret.

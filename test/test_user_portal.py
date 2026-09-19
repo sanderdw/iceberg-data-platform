@@ -514,6 +514,24 @@ def promote(users, roles):
     users.provider.update_memberships(users.account["id"], roles)
 
 
+def test_share_creation_rechecks_team_after_gateway_authorization(users, monkeypatch):
+    c, provider = users.client, users.provider
+    first, second, _ = users.teams
+    db = users.databases[0]
+    promote(users, {first: "admin", second: "reader"})
+    login(c)
+    create = provider.create_share
+
+    def move_then_create(data, user, **kwargs):
+        provider.move_database(db, second)
+        return create(data, user, **kwargs)
+
+    monkeypatch.setattr(provider, "create_share", move_then_create)
+    response = c.post("/api/shares", json=share_body(db), headers=JSON)
+    assert response.status_code == 409
+    assert provider.list_shares() == []
+
+
 def test_only_current_team_admins_manage_shares(users):
     c, (first, second, _), (db, other_db, foreign_db) = users.client, users.teams, users.databases
     assert c.get("/api/shares", params={"database": db}).status_code == 401

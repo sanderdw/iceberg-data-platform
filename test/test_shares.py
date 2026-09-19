@@ -264,6 +264,79 @@ def test_shared_database_cannot_change_owner(stack):
     assert provider.move_database(db, second)["team"] == second
 
 
+@pytest.mark.parametrize("return_to_owner", [False, True])
+def test_move_finishes_before_share_principal_is_published(stack, monkeypatch, return_to_owner):
+    provider, db = stack
+    owner = provider.resources["catalogs"][db]["properties"]["portal.team"]
+    second = provider.save_team(TeamInput(name="second-team"))["id"]
+    management = provider.management
+    before = share_state(provider)
+
+    def interleave(path, method="GET", body=None):
+        if path == "/principals" and method == "POST":
+            provider.move_database(db, second)
+            if return_to_owner:
+                provider.move_database(db, owner)
+        return management(path, method, body)
+
+    monkeypatch.setattr(provider, "management", interleave)
+    with pytest.raises(ServiceError, match="changed during share creation"):
+        provider.create_share(share_input(db), CREATOR, expected_team=owner)
+    assert share_state(provider) == before
+    assert not any(path.endswith("/principal-roles") and method == "PUT"
+                   for path, method, _ in provider.events if path.startswith("/principals/share-"))
+
+
+def test_move_sees_share_principal_before_activation(stack, monkeypatch):
+    provider, db = stack
+    second = provider.save_team(TeamInput(name="second-team"))["id"]
+    management = provider.management
+    before = share_state(provider)
+
+    def interleave(path, method="GET", body=None):
+        result = management(path, method, body)
+        if path == "/principals" and method == "POST":
+            with pytest.raises(ServiceError, match="data shares first"):
+                provider.move_database(db, second)
+        return result
+
+    monkeypatch.setattr(provider, "management", interleave)
+    with pytest.raises(ServiceError, match="changed during share creation"):
+        provider.create_share(share_input(db), CREATOR)
+    assert share_state(provider) == before
+    assert provider.resources["catalogs"][db]["properties"]["portal.team"] != second
+    # The failed move clears its moving marker; the user can retry safely.
+    monkeypatch.setattr(provider, "management", management)
+    assert provider.create_share(share_input(db), CREATOR)["credentials"]
+
+
+def test_share_creation_refuses_persisted_move_marker(stack, monkeypatch):
+    provider, db = stack
+    second = provider.save_team(TeamInput(name="second-team"))["id"]
+    listing = provider.list_shares
+
+    def interleave(database=None, **kwargs):
+        assert provider.resources["catalogs"][db]["properties"]["portal.moving"] == second
+        with pytest.raises(ServiceError, match="being moved"):
+            provider.create_share(share_input(db), CREATOR)
+        return listing(database, **kwargs)
+
+    monkeypatch.setattr(provider, "list_shares", interleave)
+    assert provider.move_database(db, second)["team"] == second
+    assert "portal.moving" not in provider.resources["catalogs"][db]["properties"]
+
+
+def test_share_creation_refuses_team_changed_since_authorization(stack):
+    provider, db = stack
+    owner = provider.resources["catalogs"][db]["properties"]["portal.team"]
+    second = provider.save_team(TeamInput(name="second-team"))["id"]
+    provider.move_database(db, second)
+    before = share_state(provider)
+    with pytest.raises(ServiceError, match="changed teams"):
+        provider.create_share(share_input(db), CREATOR, expected_team=owner)
+    assert share_state(provider) == before
+
+
 def test_platform_admin_sees_and_revokes_shares_but_cannot_create_them(portal):
     p = portal
     owner = team(p)

@@ -26,6 +26,7 @@ try {
   await expect(page.locator('#open-notebook')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(page.locator('#open-notebook')).toHaveCSS('color', 'rgb(0, 0, 0)');
   await page.screenshot({path: 'test-results/users-catalog-dark.png', fullPage: true});
+  await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
   await page.locator('#notebooks button').first().click();
   const frame = page.frameLocator('#frame-host iframe');
   await frame.locator('.cm-content').first().waitFor();
@@ -55,9 +56,11 @@ try {
   await expect(page.locator('#open-notebook')).toHaveCSS('color', 'rgb(245, 245, 245)');
   await page.screenshot({path: 'test-results/users-mobile-light.png', fullPage: true});
   console.log('PASS: persistent dark/light themes, browser catalog, marimo WebSocket and table execution, mobile layout');
+  await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
   await page.locator('#notebooks button').first().click();
   await page.getByRole('combobox', {name: 'Notebook', exact: true}).selectOption({label: 'Shared files'});
   await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', data.notebook.filesUrl);
+  await page.getByRole('button', {name: 'Catalog', exact: true}).click();
   await expect(page.getByRole('combobox', {name: 'Environment', exact: true}).locator('option')).toHaveText(['Development', 'Acceptance', 'Production']);
   await page.getByRole('combobox', {name: 'Environment', exact: true}).selectOption('production');
   await expect(page.locator('#databases button')).toHaveCount(1);
