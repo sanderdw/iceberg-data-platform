@@ -116,6 +116,7 @@
     .reveal pre code .k { color: var(--text-display); }
     .reveal pre code .s { color: var(--text-primary); }
     .reveal pre code .n { color: var(--text-primary); }
+    .reveal pre code .c { color: var(--text-display); }
     .reveal code { font-family: var(--r-code-font); font-size: 0.9em; }
     /* Section dividers and title: dot-matrix motif */
     .reveal .slides section.divider, .reveal .slides section.title { background-image: radial-gradient(circle, var(--border-visible) 1px, transparent 1px); background-size: 16px 16px; justify-content: flex-end; }
@@ -172,7 +173,7 @@
       <ol>
         <li>How Iceberg actually works, and why it is not Snowflake.</li>
         <li>What fully open source buys you: no lock-in, autonomy, portability.</li>
-        <li>A demo: teams, databases, notebooks, one identity.</li>
+        <li>A demo: teams, databases, notebooks, data sharing, one identity.</li>
       </ol>
     </div>
   </div>
@@ -246,7 +247,7 @@
   <div class="cols-asym">
     <pre><code data-noescape>{
   <span class="k">"format-version"</span>: <span class="n">2</span>,
-  <span class="k">"table-uuid"</span>: <span class="s">"68abb0f3-1b50-4658-899a-da8035f031b2"</span>,
+  <span class="k">"table-uuid"</span>: <span class="s">"3e611aa6-56f1-4a49-9ce4-43508ab1a1fa"</span>,
   <span class="k">"location"</span>: <span class="s">"s3://db-…/synthetic/neighborhood_electricity"</span>,
   <span class="k">"schemas"</span>: [{ <span class="k">"schema-id"</span>: <span class="n">0</span>, <span class="k">"fields"</span>: [
       { <span class="k">"id"</span>: <span class="n">1</span>, <span class="k">"name"</span>: <span class="s">"timestamp_utc"</span>, <span class="k">"type"</span>: <span class="s">"timestamptz"</span> },
@@ -255,16 +256,16 @@
       { <span class="k">"id"</span>: <span class="n">13</span>, <span class="k">"name"</span>: <span class="s">"grid_draw_kwh"</span>, <span class="k">"type"</span>: <span class="s">"double"</span> }
   ]}],
   <span class="k">"partition-specs"</span>: [{ <span class="k">"spec-id"</span>: <span class="n">0</span>, <span class="k">"fields"</span>: [] }],
-  <span class="k">"current-snapshot-id"</span>: <span class="n">1208397818083668235</span>,
-  <span class="k">"refs"</span>: { <span class="k">"main"</span>: { <span class="k">"snapshot-id"</span>: <span class="n">1208397818083668235</span>,
+  <span class="k">"current-snapshot-id"</span>: <span class="n">6783783537935539897</span>,
+  <span class="k">"refs"</span>: { <span class="k">"main"</span>: { <span class="k">"snapshot-id"</span>: <span class="n">6783783537935539897</span>,
                       <span class="k">"type"</span>: <span class="s">"branch"</span> } },
   <span class="k">"snapshots"</span>: [{
     <span class="k">"sequence-number"</span>: <span class="n">1</span>,
-    <span class="k">"snapshot-id"</span>: <span class="n">1208397818083668235</span>,
+    <span class="k">"snapshot-id"</span>: <span class="n">6783783537935539897</span>,
     <span class="k">"summary"</span>: { <span class="k">"operation"</span>: <span class="s">"append"</span>,
                  <span class="k">"added-records"</span>: <span class="s">"26880"</span>,
                  <span class="k">"total-data-files"</span>: <span class="s">"1"</span> },
-    <span class="k">"manifest-list"</span>: <span class="s">"s3://db-…/metadata/snap-1208…avro"</span>
+    <span class="k">"manifest-list"</span>: <span class="s">"s3://db-…/metadata/snap-6783…avro"</span>
   }]
 }</code></pre>
     <ul>
@@ -408,7 +409,7 @@
 <section class="divider">
   <div class="doto num">03</div>
   <h1>The platform</h1>
-  <p class="secondary">Teams, databases, notebooks. One identity, your own permissions everywhere.</p>
+  <p class="secondary">Teams, databases, notebooks, data shares. One identity, your own permissions everywhere.</p>
 </section>
 
 <section>
@@ -455,12 +456,13 @@
       <li><strong>User</strong> signs in with Keycloak, belongs to one or more teams, has a role per team: read, read and write, admin.</li>
       <li><strong>Database</strong> is an Iceberg catalog in Polaris plus a dedicated S3 bucket. Namespaces, tables and views live inside.</li>
       <li><strong>Environment</strong> per database: development, acceptance, production.</li>
+      <li><strong>Data share</strong> gives an external party read access to selected tables and views of one database, with its own credential.</li>
     </ul>
     <ul>
       <li>Effective access is the union of the user's teams, each at its own role. Moving a database re-syncs grants and bucket policies.</li>
       <li>No second application database. Polaris <em>is</em> the source of truth for teams, users and catalogs.</li>
       <li>Portal admin is a Keycloak role. Database admin does not grant portal admin.</li>
-      <li>Self-service for teams, governance in one place.</li>
+      <li>Self-service for teams, governance in one place: team administrators share data themselves, the platform administrator sees every share.</li>
     </ul>
   </div>
   <p class="lede foot">Ownership is explicit: a team owns a database, a database owns a bucket. That is the whole governance model.</p>
@@ -474,11 +476,12 @@
       <div class="label">Admin API · :3000 · OpenAPI at /docs</div>
       <table class="api"><tbody>
         <tr><td class="mono verb">GET POST DELETE</td><td class="mono">/api/session</td><td>Auth state, sign in, sign out</td></tr>
-        <tr><td class="mono verb">GET</td><td class="mono">/api/overview</td><td>Health, teams, databases, users</td></tr>
+        <tr><td class="mono verb">GET</td><td class="mono">/api/overview</td><td>Health, teams, databases, users, data shares</td></tr>
         <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/teams[/{id}]</td><td>Teams</td></tr>
         <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/databases[/{id}]</td><td>Catalog plus bucket, per team</td></tr>
         <tr><td class="mono verb">GET</td><td class="mono">/api/databases/{id}/connection</td><td>Iceberg REST connection details</td></tr>
         <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/users[/{id}]</td><td>Users and their role per team</td></tr>
+        <tr><td class="mono verb">DELETE</td><td class="mono">/api/shares/{id}</td><td>Revoke a data share</td></tr>
         <tr><td class="mono verb">GET POST</td><td class="mono">/api/identity/{accounts,users,links}</td><td>Find, create, link Keycloak accounts</td></tr>
         <tr><td class="mono verb">POST</td><td class="mono">/api/users/{id}/identity[/retry|/password]</td><td>Link, retry, reset password</td></tr>
         <tr><td class="mono verb">GET</td><td class="mono">/api/admin/explorer/{databases,contents}</td><td>Browse every catalog</td></tr>
@@ -494,6 +497,8 @@
         <tr><td class="mono verb">GET</td><td class="mono">/api/contents · /api/details</td><td>Tables, schema, snapshots</td></tr>
         <tr><td class="mono verb">POST</td><td class="mono">/api/preview</td><td>Table preview, 100 rows max</td></tr>
         <tr><td class="mono verb">POST DELETE</td><td class="mono">/api/notebooks[/{id}]</td><td>Start and stop a marimo container</td></tr>
+        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/shares[/{id}]</td><td>Data shares, for team administrators</td></tr>
+        <tr><td class="mono verb">POST</td><td class="mono">/api/shares/{id}/rotate</td><td>Replace the secret of a share</td></tr>
         <tr><td class="mono verb">ANY · WS</td><td class="mono">/workspaces/{id}/…</td><td>Proxy into that container</td></tr>
         <tr><td class="mono verb">GET</td><td class="mono">/api/health</td><td>Liveness</td></tr>
       </tbody></table>
@@ -753,6 +758,99 @@
 </section>
 
 <section>
+  <div class="label">Demo · Data sharing</div>
+  <h2>Share a table with someone outside, without a copy</h2>
+  <div class="cols-3">
+    <div class="group">
+      <div class="label">01 · Team administrator</div>
+      <p>Picks tables and views of one database in the user portal and names the recipient. No platform administrator in the loop.</p>
+    </div>
+    <div class="group">
+      <div class="label">02 · Polaris</div>
+      <p>One principal per share, with one read grant per selected table or view. Nothing on the namespace, nothing on the catalog.</p>
+    </div>
+    <div class="group">
+      <div class="label">03 · External party</div>
+      <p>Any Iceberg REST client, its own client ID and secret, and read-only storage credentials scoped to the shared table.</p>
+    </div>
+  </div>
+  <p class="lede foot">One copy of the data. The recipient reads the same files, with a credential the team can replace, expire or revoke.</p>
+  <aside class="notes">This is the open-standard answer to vendor data sharing: the contract is Iceberg REST plus S3, so the recipient brings an engine of choice. Ownership stays with the team that owns the database; every administrator of that team manages the same shares.</aside>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Data sharing</span><h2>Pick the tables, get a credential</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/32-user-share-form.png" alt="User portal form for a data share with a recipient, an expiry and a namespace tree with a selected table">
+      <img class="shot" src="screenshots/33-user-share-credential.png" alt="User portal panel with the client ID, the client secret and a PyIceberg snippet for the recipient">
+    </div>
+    <div class="caption foot two"><span>mila administers grid-planning · one table for the municipality, with an expiry</span><span>Client ID, secret and a PyIceberg snippet · shown once, never stored</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/32-user-share-form.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · data share form</div>
+  </section>
+  <section class="full" data-background-image="screenshots/33-user-share-credential.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · credential for the recipient · the secret in this capture has been replaced</div>
+  </section>
+  <aside class="notes">The Data shares section only exists for the administrator role of the active team; the gateway re-reads that role from Polaris on every request. A view can be shared too, but it is only a definition: the tables it reads go into the share with it.</aside>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Data sharing</span><h2>The team manages it, the platform sees it</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/34-user-share-list.png" alt="User portal list of data shares with edit, secret and revoke actions">
+      <img class="shot" src="screenshots/35-admin-shares.png" alt="Admin portal page listing every data share with its database, team, tables and expiry">
+    </div>
+    <div class="caption foot two"><span>User portal · edit the selection, replace the secret, revoke</span><span>Admin portal · every share across all teams · revoke only</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/34-user-share-list.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · data shares of a database</div>
+  </section>
+  <section class="full" data-background-image="screenshots/35-admin-shares.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">Admin portal · data shares</div>
+  </section>
+  <aside class="notes">Revoking ends issued Polaris tokens at once. Deleting a database revokes its shares, and a shared database stays with its team until the shares are revoked, so an owner never inherits external access it did not grant.</aside>
+</section>
+
+<section>
+  <div class="label">Demo · Data sharing</div>
+  <h2>What the recipient can do, and what not</h2>
+  <div class="cols-asym">
+    <pre><code data-noescape><span class="k">from</span> pyiceberg.catalog <span class="k">import</span> load_catalog
+
+catalog = load_catalog(
+    <span class="s">"shared"</span>, type=<span class="s">"rest"</span>,
+    uri=<span class="s">"https://catalog.example/api/catalog"</span>,
+    warehouse=<span class="s">"db-…"</span>,
+    credential=<span class="s">"&lt;client-id&gt;:&lt;client-secret&gt;"</span>,
+    scope=<span class="s">"PRINCIPAL_ROLE:ALL"</span>,
+    **{<span class="s">"header.X-Iceberg-Access-Delegation"</span>:
+       <span class="s">"vended-credentials"</span>},
+)
+
+table = catalog.load_table(
+    <span class="s">"synthetic.neighborhood_electricity"</span>)
+table.scan().to_arrow()         <span class="c"># 26,880 rows</span>
+
+catalog.list_namespaces()       <span class="c"># Forbidden</span>
+catalog.list_tables(<span class="s">"synthetic"</span>)  <span class="c"># Forbidden</span>
+catalog.load_table(<span class="s">"synthetic.other"</span>)  <span class="c"># Forbidden</span></code></pre>
+    <ul>
+      <li><strong>Exactly the shared objects</strong>, loaded by their full name. Polaris does not filter listings, so a share holds no list privilege at all.</li>
+      <li><strong>Storage follows the grant.</strong> Vended S3 credentials are read-only and end at the prefix of the shared table.</li>
+      <li><strong>A view is a definition</strong>, not a row or column filter. Its tables are shared with it and readable in full.</li>
+      <li><strong>Revoke is immediate</strong> for catalog tokens. Storage credentials already handed out expire on their own.</li>
+      <li>Outside one machine it needs your TLS proxy in front of Polaris and RustFS.</li>
+    </ul>
+  </div>
+  <div class="caption foot">Every line on this slide is asserted against Polaris and RustFS by scripts/share_smoke.py.</div>
+</section>
+
+<section>
   <div class="label">03 · Platform</div>
   <h2>Security model, in one slide</h2>
   <div class="cols-asym">
@@ -761,6 +859,7 @@
       <li>Polaris vends short lived, table scoped S3 credentials. Notebooks never see bucket root keys.</li>
       <li>Each notebook session runs in its own container and network: read-only root filesystem, dropped capabilities, CPU and memory limits, no Docker socket.</li>
       <li>Revoking a membership or deleting a user stops the affected runtimes. Authorization is re-checked every 30 seconds.</li>
+      <li>A data share is a separate Polaris principal with one read grant per shared table or view. No listing, no writing, no other database. Its secret is shown once and never stored.</li>
     </ul>
   </div>
   <p class="secondary foot"><span class="dot"></span>Boundaries are documented: this build is for local development. HTTPS, persistent sessions and hostile-tenant isolation are on the list, not in the box.</p>
@@ -780,7 +879,7 @@
     <li><strong>Iceberg is the storage standard.</strong> Whatever engine or vendor we use, tables should land as Iceberg on object storage we own.</li>
     <li><strong>Catalog and identity are the governance points.</strong> Permissions belong in the catalog, users in the identity provider. Not in every tool separately.</li>
     <li><strong>Engines are replaceable.</strong> Treat them as workload decisions, not platform commitments.</li>
-    <li><strong>Self-service with ownership.</strong> Teams create and own their databases. The platform team owns the building blocks.</li>
+    <li><strong>Self-service with ownership.</strong> Teams create, own and share their databases. The platform team owns the building blocks.</li>
   </ul>
 </section>
 

@@ -12,6 +12,7 @@ const OUT = 'presentation/screenshots', STATE = '.local/presentation/state.json'
 const RUSTFS = 'http://localhost:9001/rustfs/console/browser/', KEYCLOAK_USERS = env.KEYCLOAK_ORIGIN + '/admin/master/console/#/iceberg/users';
 
 // Fictional grid operator. Roles differ per team for sander, which the access dialog shows.
+// mila administers grid-planning and shares one of its tables with a municipality.
 const TEAMS = [
   ['grid-planning', 'Capacity planning for the regional grid'],
   ['asset-management', 'Lifecycle of stations, cables and transformers'],
@@ -26,8 +27,10 @@ const USERS = [
   ['noor', 'Noor', 'Example', [['outage-response', 'writer']]],
   ['sander', 'Sander', 'Example', [['grid-planning', 'writer'], ['asset-management', 'reader']]],
   ['alex', 'Alex', 'Example', [['grid-planning', 'reader']]],
+  ['mila', 'Mila', 'Example', [['grid-planning', 'admin']]],
 ];
 const DEMO_USER = 'sander', DEMO_TEAM = 'grid-planning', DEMO_DATABASE = 'smart-meter-readings';
+const TEAM_ADMIN = 'mila', SHARE = {name: 'municipality-heat-plan', recipient: 'Municipality of Example · heat transition team', description: 'Street-level consumption and solar production for the district heating plan', namespace: 'synthetic', table: 'neighborhood_electricity'};
 
 // Passwords chosen at the forced first sign-in; kept outside git so the script can run again.
 const state = existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {users: {}};
@@ -203,8 +206,44 @@ try {
   await loadPreview(workspace);
   await shot(workspace, '30-user-table-v3-preview');
 
+  // A team administrator shares one table with an external party, without a portal administrator.
+  if (need(32, 33, 34, 35)) {
+    const owner = await newContext(), sharing = await owner.newPage();
+    sharing.setDefaultTimeout(30000);
+    await signIn(sharing, env.USER_ORIGIN, TEAM_ADMIN, state.users[TEAM_ADMIN], chosen => { state.users[TEAM_ADMIN] = chosen; });
+    await sharing.locator('#workspace-screen').waitFor();
+    await sharing.locator('#databases button').filter({hasText: DEMO_DATABASE}).first().click();
+    await sharing.locator('summary').filter({hasText: 'Data shares'}).click();
+    await sharing.getByRole('button', {name: 'New data share', exact: true}).waitFor();
+    const existing = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares.find(s => s.name === SHARE.name);
+    await sharing.getByRole('button', {name: 'New data share', exact: true}).click();
+    await sharing.getByLabel('Share name').fill(SHARE.name);
+    await sharing.getByLabel('Recipient').fill(SHARE.recipient);
+    await sharing.getByLabel('Description').fill(SHARE.description);
+    await sharing.getByLabel(/^Expires/).fill(`${new Date().getUTCFullYear() + 1}-12-31`);
+    await sharing.locator('.share-tree summary').filter({hasText: SHARE.namespace}).click();
+    await sharing.getByLabel(SHARE.table).check();
+    // Database facts above the form, so the capture says which database is shared.
+    await sharing.locator('.catalog-summary').evaluate(s => s.scrollIntoView({block: 'start'}));
+    await shot(sharing, '32-user-share-form');
+    // The pictured secret must not outlive the capture: it is replaced once more at the end.
+    if (existing) { await sharing.getByRole('button', {name: 'Cancel', exact: true}).click(); await sharing.getByRole('button', {name: 'New secret', exact: true}).first().click(); }
+    else await sharing.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
+    await sharing.locator('.share-issued').waitFor();
+    await sharing.locator('.share-issued h3').first().evaluate(h => h.scrollIntoView({block: 'start'}));
+    await shot(sharing, '33-user-share-credential');
+    await sharing.getByRole('button', {name: 'Done, I stored the secret', exact: true}).click();
+    await sharing.getByRole('region', {name: 'Data shares', exact: true}).waitFor();
+    await sharing.locator('summary').filter({hasText: 'Data shares'}).evaluate(h => h.scrollIntoView({block: 'start'}));
+    await shot(sharing, '34-user-share-list');
+    const share = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares.find(s => s.name === SHARE.name);
+    const renewed = await owner.request.post(`${env.USER_ORIGIN}/api/shares/${share.id}/rotate`, {data: {}, headers: {'X-Portal-Request': '1'}});
+    if (!renewed.ok()) throw new Error(`The pictured secret was not replaced: ${renewed.status()}`);
+    await owner.close();
+  }
+
   await portal.goto(env.PORTAL_ORIGIN);
-  for (const [page, name] of [['databases', '02-admin-databases'], ['users', '03-admin-users'], ['teams', '04-admin-teams'], ['infrastructure', '05-admin-infrastructure']]) {
+  for (const [page, name] of [['databases', '02-admin-databases'], ['users', '03-admin-users'], ['teams', '04-admin-teams'], ['shares', '35-admin-shares'], ['infrastructure', '05-admin-infrastructure']]) {
     await portal.locator(`[data-page="${page}"]`).first().click();
     await portal.waitForLoadState('networkidle');
     await shot(portal, name);
