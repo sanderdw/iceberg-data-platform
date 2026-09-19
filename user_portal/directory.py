@@ -126,6 +126,24 @@ class UserDirectory:
             raise ServiceError(403, "This database is unavailable within your active team and environment.")
         return result
 
+    def share_database(self, session, database):
+        """The database and caller, only for a current administrator of the owning team.
+
+        Shares are written with the platform identity, so this check is the whole
+        authorization. It is re-read from Polaris on every request, never cached.
+        """
+        profile = self.profile(session)
+        result = self.database(session, database, profile)
+        role = next(t["role"] for t in profile["teams"] if t["id"] == result["team"])
+        if role not in ("admin", "bucket-admin"):
+            raise ServiceError(403, "Only team administrators can manage data shares.")
+        return result, profile["user"]
+
+    def share(self, session, id):
+        principal = self.metadata.require_share(id)
+        self.share_database(session, principal["properties"]["portal.database"])
+        return principal
+
     def request(self, session, path):
         if session.token_until <= time.monotonic():
             if session.oidc_subject:

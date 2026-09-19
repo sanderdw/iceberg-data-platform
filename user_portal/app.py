@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 import httpx
 from docker.errors import DockerException
 from fastapi import FastAPI, Query, Request, WebSocket
+from fastapi import Path as PathParam
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,7 +22,8 @@ from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
-from server.models import ENVIRONMENTS, Environment, ServiceError
+from server.models import ENVIRONMENTS, Environment, ServiceError, ShareInput, ShareUpdate
+from server.polaris import MAX_SHARES
 
 from .directory import UserDirectory
 from .preview import run_preview
@@ -119,6 +121,11 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         while True:
             await asyncio.sleep(30)
             async with lock:
+                try:
+                    # Expiry is a real revocation in Polaris, not a hidden row.
+                    await run_in_threadpool(directory.metadata.expire_shares)
+                except ServiceError as exc:
+                    LOG.error("Data share expiry failed; retrying on next sweep: %s", exc.status)
                 now = time.monotonic()
                 for key, (_, until) in list(attempts.items()):
                     if until < now:
@@ -190,7 +197,12 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
-        return JSONResponse({"error": "Check the input."}, status_code=422)
+        # Only messages from our own validators are shown; everything else stays generic.
+        message = next(
+            (str(e["ctx"]["error"]) for e in exc.errors() if e["type"] == "value_error" and "error" in e.get("ctx", {})),
+            "Check the input.",
+        )
+        return JSONResponse({"error": message}, status_code=422)
 
     @app.middleware("http")
     async def security(request, call_next):
@@ -500,6 +512,37 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         finally:
             with suppress(RuntimeError, WebSocketDisconnect):
                 await websocket.close(code=1008)
+
+    share_id = Annotated[str, PathParam(pattern=r"^share-[a-f0-9]{32}$")]
+
+    @app.get("/api/shares")
+    def shares(request: Request, database: Annotated[str, Query(pattern=r"^db-[a-f0-9]{32}$")]):
+        directory.share_database(request.state.session, database)
+        return {
+            "shares": directory.metadata.list_shares(database, drift=True),
+            "limits": {"shares": MAX_SHARES, "objects": 50},
+        }
+
+    @app.post("/api/shares", status_code=201)
+    def create_share(data: ShareInput, request: Request):
+        _, user = directory.share_database(request.state.session, data.database)
+        return directory.metadata.create_share(data, user)
+
+    @app.patch("/api/shares/{id}")
+    def update_share(id: share_id, data: ShareUpdate, request: Request):
+        directory.share(request.state.session, id)
+        return {"share": directory.metadata.update_share(id, data)}
+
+    @app.post("/api/shares/{id}/rotate")
+    def rotate_share(id: share_id, request: Request):
+        directory.share(request.state.session, id)
+        return directory.metadata.rotate_share(id)
+
+    @app.delete("/api/shares/{id}")
+    def delete_share(id: share_id, request: Request):
+        directory.share(request.state.session, id)
+        directory.metadata.delete_share(id)
+        return {"deleted": True}
 
     files = {
         "": "index.html",

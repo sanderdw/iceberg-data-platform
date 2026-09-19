@@ -497,3 +497,97 @@ def test_team_environment_filespaces_are_shared_and_execution_stays_independent(
     assert c.get("/api/workspace").json()["notebooks"][0]["id"] == notebooks["sander"]["id"]
     empty = c.patch("/api/environment", json={"environment": "acceptance"}, headers=HEADERS).json()
     assert empty["activeEnvironment"] == "acceptance" and empty["databases"] == []
+
+
+JSON = {**HEADERS, "Content-Type": "application/json"}
+
+
+def share_body(database, **extra):
+    objects = [
+        {"kind": "table", "namespace": ["analytics"], "name": "events"},
+        {"kind": "view", "namespace": ["analytics"], "name": "report"},
+    ]
+    return {"database": database, "name": "partner", "objects": objects, **extra}
+
+
+def promote(users, roles):
+    users.provider.update_memberships(users.account["id"], roles)
+
+
+def test_only_current_team_admins_manage_shares(users):
+    c, (first, second, _), (db, other_db, foreign_db) = users.client, users.teams, users.databases
+    assert c.get("/api/shares", params={"database": db}).status_code == 401
+    login(c)
+    # Reader on the active team, writer on the second: neither may share.
+    assert c.get("/api/shares", params={"database": db}).status_code == 403
+    assert c.post("/api/shares", json=share_body(db), headers=JSON).status_code == 403
+    assert c.patch("/api/team", json={"team": second}, headers=JSON).status_code == 200
+    assert c.post("/api/shares", json=share_body(other_db), headers=JSON).status_code == 403
+    assert users.provider.list_shares() == []
+    promote(users, {first: "reader", second: "admin"})
+    created = c.post("/api/shares", json=share_body(other_db, recipient="Partner BV"), headers=JSON)
+    assert created.status_code == 201, created.text
+    body = created.json()
+    id = body["share"]["id"]
+    assert body["credentials"]["clientSecret"] and body["share"]["createdBy"] == "alice"
+    assert body["connection"]["identifiers"][0] == {"kind": "table", "identifier": "analytics.events"}
+    listed = c.get("/api/shares", params={"database": other_db}).json()
+    assert [s["id"] for s in listed["shares"]] == [id] and listed["limits"] == {"shares": 20, "objects": 50}
+    assert "clientSecret" not in str(listed) and all(o["granted"] for o in listed["shares"][0]["objects"])
+    # Admin of one team is nothing in another: not a member, or a member without the role.
+    assert c.get("/api/shares", params={"database": foreign_db}).status_code == 403
+    assert c.post("/api/shares", json=share_body(foreign_db), headers=JSON).status_code == 403
+    assert c.post("/api/shares", json=share_body(db), headers=JSON).status_code == 403
+    # The share belongs to the active team and environment only.
+    assert c.patch("/api/environment", json={"environment": "production"}, headers=JSON).status_code == 200
+    assert c.delete(f"/api/shares/{id}", headers=JSON).status_code == 403
+    assert c.patch("/api/environment", json={"environment": "development"}, headers=JSON).status_code == 200
+    assert c.patch("/api/team", json={"team": first}, headers=JSON).status_code == 200
+    assert c.post(f"/api/shares/{id}/rotate", json={}, headers=JSON).status_code == 403
+    assert c.patch("/api/team", json={"team": second}, headers=JSON).status_code == 200
+    rotated = c.post(f"/api/shares/{id}/rotate", json={}, headers=JSON)
+    assert rotated.status_code == 200 and rotated.json()["credentials"]["clientSecret"] == "rotated-secret"
+    # Demotion between two requests takes effect at once; the share itself survives its creator.
+    promote(users, {first: "reader", second: "writer"})
+    for response in (
+        c.patch(f"/api/shares/{id}", json={"recipient": "x"}, headers=JSON),
+        c.post(f"/api/shares/{id}/rotate", json={}, headers=JSON),
+        c.delete(f"/api/shares/{id}", headers=JSON),
+    ):
+        assert response.status_code == 403
+    assert [s["id"] for s in users.provider.list_shares()] == [id]
+    promote(users, {first: "reader", second: "bucket-admin"})
+    edited = c.patch(f"/api/shares/{id}", json={"objects": share_body(db)["objects"][:1]}, headers=JSON)
+    assert edited.status_code == 200 and [o["name"] for o in edited.json()["share"]["objects"]] == ["events"]
+    assert c.delete(f"/api/shares/{id}", headers=JSON).status_code == 200
+    assert users.provider.list_shares() == []
+
+
+def test_share_requests_are_validated_and_csrf_protected(users):
+    c, second, db = users.client, users.teams[1], users.databases[1]
+    promote(users, {users.teams[0]: "reader", second: "admin"})
+    login(c)
+    c.patch("/api/team", json={"team": second}, headers=JSON)
+    assert c.post("/api/shares", json=share_body(db)).status_code == 403
+    assert c.post("/api/shares", json=share_body(db), headers={**JSON, "Origin": "http://evil.test"}).status_code == 403
+    view_only = c.post("/api/shares", json={**share_body(db), "objects": share_body(db)["objects"][1:]}, headers=JSON)
+    assert (view_only.status_code, view_only.json()["error"]) == (422, "Select the tables a shared view reads.")
+    for body in (
+        share_body("../etc"),
+        share_body(db, expiresAt="2020-01-01T00:00:00Z"),
+        share_body(db, team=second),
+        {**share_body(db), "objects": [{"kind": "table", "namespace": [".."], "name": "events"}]},
+        {**share_body(db), "objects": [{"kind": "table", "namespace": ["a"], "name": f"t{n}"} for n in range(51)]},
+    ):
+        assert c.post("/api/shares", json=body, headers=JSON).status_code in (413, 422)
+    assert c.get("/api/shares", params={"database": "db-x"}).status_code == 422
+    assert c.delete("/api/shares/portal-" + "a" * 32, headers=JSON).status_code == 422
+    assert c.delete("/api/shares/share-" + "a" * 32, headers=JSON).status_code == 404
+    # A platform user is not a share, and a share is not a login.
+    assert c.delete(f"/api/shares/{users.account['id'].replace('portal-', 'share-')}", headers=JSON).status_code == 404
+    id = c.post("/api/shares", json=share_body(db), headers=JSON).json()["share"]["id"]
+    users.provider.resources["principals"][id]["clientId"] = id
+    c.delete("/api/session", headers=JSON)
+    for username in ("partner", id):
+        attempt = c.post("/api/session", json={"username": username, "secret": "correct-secret"}, headers=HEADERS)
+        assert attempt.status_code == 401
