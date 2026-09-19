@@ -90,7 +90,7 @@ function shareForm(host, db, share) {
   const picker = element('fieldset'); picker.append(element('legend', 'Tables and views'), element('p', 'The recipient can read exactly these objects and cannot list anything else. Share tables and views by their full name.', 'hint'), objectPicker(db, selected, refresh), chosen, warning);
   const cancel = element('button', 'Cancel', 'quiet'); cancel.type = 'button'; cancel.addEventListener('click', () => loadShares(host, db));
   const buttons = element('div', undefined, 'share-actions'); buttons.append(save, cancel);
-  form.append(element('h3', share ? `Edit ${share.name}` : 'New data share'), field('Share name', name), field('Recipient', recipient), field('Description', description), field('Expires at the end of (optional)', expiry), picker, buttons);
+  form.append(element('h3', share ? `Edit ${share.name}` : 'New data share'), field('Share name', name), field('Recipient', recipient), field('Description', description), field('Expires at the end of this UTC day (optional)', expiry), picker, buttons);
   form.addEventListener('submit', event => {
     event.preventDefault();
     busy(save, async () => {

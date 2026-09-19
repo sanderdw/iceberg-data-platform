@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Path as PathParam
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -195,12 +196,13 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
     def overview():
         health = provider.health()
         if health["status"] != "online":
-            return {"health": health, "teams": [], "databases": [], "users": []}
+            return {"health": health, "teams": [], "databases": [], "users": [], "shares": []}
         return {
             "health": health,
             "teams": provider.list_teams(),
             "databases": provider.list_databases(),
             "users": list_users(),
+            "shares": provider.list_shares(),
         }
 
     @app.get("/api/infrastructure")
@@ -310,6 +312,12 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
             user_management.revoke(provider, id)
         else:
             provider.delete_user(id)
+        return {"deleted": True}
+
+    # Team administrators create and edit shares in the user portal. Here they can only be revoked.
+    @app.delete("/api/shares/{id}")
+    def delete_share(id: Annotated[str, PathParam(pattern=r"^share-[a-f0-9]{32}$")]):
+        provider.delete_share(id)
         return {"deleted": True}
 
     if user_management:

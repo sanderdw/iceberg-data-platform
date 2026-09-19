@@ -51,7 +51,8 @@ def test_share_principal_is_never_a_user(portal):
     p = portal
     owner = team(p)
     u = user(p, [owner])
-    share_principal(p.provider)
+    # An orphaned share would be revoked by the first listing; this one has its database.
+    share_principal(p.provider, p.post("/databases", {"name": "shared", "team": owner}).json()["id"])
     assert [x["id"] for x in p.client.get("/api/users").json()] == [u["id"]]
     assert [x["id"] for x in p.client.get("/api/overview").json()["users"]] == [u["id"]]
     assert p.patch(f"/users/{SHARE}", {"memberships": members([owner])}).status_code == 404
@@ -261,3 +262,30 @@ def test_shared_database_cannot_change_owner(stack):
     assert exc.value.status == 409 and "data shares" in str(exc.value)
     provider.delete_share(id)
     assert provider.move_database(db, second)["team"] == second
+
+
+def test_platform_admin_sees_and_revokes_shares_but_cannot_create_them(portal):
+    p = portal
+    owner = team(p)
+    db = p.post("/databases", {"name": "analytics", "team": owner}).json()["id"]
+    id = p.provider.create_share(share_input(db, recipient="Partner BV"), CREATOR)["share"]["id"]
+    overview = p.client.get("/api/overview").json()
+    assert [(s["id"], s["recipient"], s["database"]) for s in overview["shares"]] == [(id, "Partner BV", db)]
+    assert "secret" not in str(overview["shares"]).lower()
+    assert p.post("/shares", share_input(db, name="other").model_dump(mode="json", by_alias=True)).status_code == 405
+    assert p.patch(f"/databases/{db}", {"team": team(p, "second-team")}).status_code == 409
+    assert p.delete("/shares/portal-" + "a" * 32).status_code == 422
+    assert p.delete("/shares/share-" + "f" * 32).status_code == 404
+    assert p.delete(f"/shares/{id}").status_code == 200
+    assert p.client.get("/api/overview").json()["shares"] == []
+    assert p.delete(f"/databases/{db}").status_code == 200
+
+
+def test_share_routes_need_an_admin_session():
+    from fastapi.testclient import TestClient
+
+    from server.app import create_app
+    from test.conftest import HEADERS, PASSWORD
+
+    with TestClient(create_app(MemoryPolaris(), PASSWORD)) as c:
+        assert c.delete(f"/api/shares/{SHARE}", headers=HEADERS).status_code == 401

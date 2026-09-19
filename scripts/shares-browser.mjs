@@ -83,7 +83,7 @@ try {
   await expect(page.getByLabel('Share name')).toBeDisabled();
   await expect(page.locator('.share-selection')).toContainText('analytics.daily_energy');
   await page.locator('.share-selection .share-object').filter({hasText: 'daily_energy'}).getByRole('button', {name: 'Remove'}).click();
-  await page.getByLabel('Expires at the end of (optional)').fill('2031-05-01');
+  await page.getByLabel('Expires at the end of this UTC day (optional)').fill('2031-05-01');
   await page.getByRole('button', {name: 'Save share', exact: true}).click();
   await expect(grid).not.toContainText('Not granted');
   const edit = calls.at(-1);
