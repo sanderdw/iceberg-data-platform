@@ -548,6 +548,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         "": "index.html",
         "app.js": "app.js",
         "catalog.js": "catalog.js",
+        "shares.js": "shares.js",
         "style.css": "style.css",
         "favicon.svg": "favicon.svg",
     }
