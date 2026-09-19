@@ -494,6 +494,9 @@ class PolarisProvider:
             raise ServiceError(409, "This database is being deleted. Complete the deletion first.")
         if old == team:
             return self.database(catalog)
+        # The new owners must never inherit external access they did not grant.
+        if self.list_shares(id):
+            raise ServiceError(409, "Revoke this database's data shares first.")
         databases = self.list_databases()
         if any(
             d["team"] == team
@@ -637,6 +640,10 @@ class PolarisProvider:
                     "polaris.config.drop-with-purge.enabled": "true",
                 },
             )
+        # External access ends with the database, before anything else is taken apart.
+        for principal in self.management("/principals")["principals"]:
+            if self.is_share(principal) and principal["properties"]["portal.database"] == id:
+                self.delete_share(principal["name"])
         databases = self.list_databases()
         for user in self.list_users():
             if catalog["properties"]["portal.team"] in user["teams"]:
@@ -666,6 +673,11 @@ class PolarisProvider:
         self.storage.delete_bucket(catalog["properties"]["portal.bucket"])
         for role in ROLES:
             self.remove(f"{path}/catalog-roles/{role}")
+        # The user gateway is a second writer: a share created there during this deletion
+        # leaves a role that would block the catalog drop. Its principal is revoked as an orphan.
+        for role in self.management(f"{path}/catalog-roles")["roles"]:
+            if role["name"].startswith("share-"):
+                self.remove(f"{path}/catalog-roles/{enc(role['name'])}")
         self.remove(f"/principal-roles/service_admin/catalog-roles/{enc(id)}/catalog_admin")
         self.remove(path)
 

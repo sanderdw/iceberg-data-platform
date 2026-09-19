@@ -230,3 +230,34 @@ def test_expired_and_orphaned_shares_are_revoked(stack):
     del provider.resources["catalogs"][db]
     provider.expire_shares()
     assert share_state(provider)[0] == before[0] == []
+
+
+def test_database_deletion_revokes_its_shares_and_resumes(stack):
+    provider, db = stack
+    other = provider.create_database(DatabaseInput(name="other", team=provider.list_teams()[0]["id"]))["id"]
+    kept = provider.create_share(share_input(other), CREATOR)["share"]["id"]
+    gone = provider.create_share(share_input(db), CREATOR)["share"]["id"]
+    # A share role written by the gateway while the deletion was already running.
+    provider.management(f"/catalogs/{db}/catalog-roles", "POST", {"catalogRole": {"name": "share-" + "e" * 32}})
+    provider.storage.delete_bucket.side_effect = ServiceError(502, "storage down")
+    with pytest.raises(ServiceError):
+        provider.delete_database(db)
+    assert gone not in provider.resources["principals"]
+    with pytest.raises(ServiceError) as exc:
+        provider.create_share(share_input(db, name="too-late"), CREATOR)
+    assert exc.value.status == 409
+    provider.storage.delete_bucket.side_effect = None
+    provider.delete_database(db)
+    assert [d["id"] for d in provider.list_databases()] == [other]
+    assert [s["id"] for s in provider.list_shares()] == [kept]
+
+
+def test_shared_database_cannot_change_owner(stack):
+    provider, db = stack
+    second = provider.save_team(TeamInput(name="second-team"))["id"]
+    id = provider.create_share(share_input(db), CREATOR)["share"]["id"]
+    with pytest.raises(ServiceError) as exc:
+        provider.move_database(db, second)
+    assert exc.value.status == 409 and "data shares" in str(exc.value)
+    provider.delete_share(id)
+    assert provider.move_database(db, second)["team"] == second
