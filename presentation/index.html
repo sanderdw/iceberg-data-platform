@@ -241,7 +241,7 @@
   <div class="cols-asym">
     <pre><code data-noescape>{
   <span class="k">"format-version"</span>: <span class="n">2</span>,
-  <span class="k">"table-uuid"</span>: <span class="s">"c6e6cf73-0a4b-492a-82dd-2a216d9040b3"</span>,
+  <span class="k">"table-uuid"</span>: <span class="s">"68abb0f3-1b50-4658-899a-da8035f031b2"</span>,
   <span class="k">"location"</span>: <span class="s">"s3://db-…/synthetic/neighborhood_electricity"</span>,
   <span class="k">"schemas"</span>: [{ <span class="k">"schema-id"</span>: <span class="n">0</span>, <span class="k">"fields"</span>: [
       { <span class="k">"id"</span>: <span class="n">1</span>, <span class="k">"name"</span>: <span class="s">"timestamp_utc"</span>, <span class="k">"type"</span>: <span class="s">"timestamptz"</span> },
@@ -250,16 +250,16 @@
       { <span class="k">"id"</span>: <span class="n">13</span>, <span class="k">"name"</span>: <span class="s">"grid_draw_kwh"</span>, <span class="k">"type"</span>: <span class="s">"double"</span> }
   ]}],
   <span class="k">"partition-specs"</span>: [{ <span class="k">"spec-id"</span>: <span class="n">0</span>, <span class="k">"fields"</span>: [] }],
-  <span class="k">"current-snapshot-id"</span>: <span class="n">6017469865504772874</span>,
-  <span class="k">"refs"</span>: { <span class="k">"main"</span>: { <span class="k">"snapshot-id"</span>: <span class="n">6017469865504772874</span>,
+  <span class="k">"current-snapshot-id"</span>: <span class="n">1208397818083668235</span>,
+  <span class="k">"refs"</span>: { <span class="k">"main"</span>: { <span class="k">"snapshot-id"</span>: <span class="n">1208397818083668235</span>,
                       <span class="k">"type"</span>: <span class="s">"branch"</span> } },
   <span class="k">"snapshots"</span>: [{
     <span class="k">"sequence-number"</span>: <span class="n">1</span>,
-    <span class="k">"snapshot-id"</span>: <span class="n">6017469865504772874</span>,
+    <span class="k">"snapshot-id"</span>: <span class="n">1208397818083668235</span>,
     <span class="k">"summary"</span>: { <span class="k">"operation"</span>: <span class="s">"append"</span>,
                  <span class="k">"added-records"</span>: <span class="s">"26880"</span>,
                  <span class="k">"total-data-files"</span>: <span class="s">"1"</span> },
-    <span class="k">"manifest-list"</span>: <span class="s">"s3://db-…/metadata/snap-6017…avro"</span>
+    <span class="k">"manifest-list"</span>: <span class="s">"s3://db-…/metadata/snap-1208…avro"</span>
   }]
 }</code></pre>
     <ul>
@@ -292,8 +292,8 @@
     <ul>
       <li><strong>Statistics in metadata.</strong> Planning skips files without opening them.</li>
       <li><strong>Many engines, one copy.</strong> DuckDB, Spark, Trino, Flink, PyIceberg. Snowflake and Databricks read Iceberg too.</li>
-      <li><strong>Branches and tags</strong> per table for audits and write-audit-publish.</li>
-      <li><strong>Views</strong> as first class catalog objects.</li>
+      <li><strong>Branches, tags and views.</strong> Refs per table for audits and write-audit-publish; views are first class catalog objects.</li>
+      <li><strong>Format version 3.</strong> Semi-structured <code>VARIANT</code>, nanosecond timestamps, geometry, column defaults, row lineage and deletion vectors.</li>
     </ul>
   </div>
   <p class="lede foot">In short: the capabilities you associate with a data warehouse, without the warehouse owning your data.</p>
@@ -326,13 +326,13 @@
   <table>
     <thead><tr><th>Capability</th><th>Component</th><th class="num">Version</th><th>License</th><th>Swappable for</th></tr></thead>
     <tbody>
-      <tr><td>Table format</td><td>Apache Iceberg (PyIceberg)</td><td class="num">spec v2 · 0.12</td><td class="mono">Apache-2.0</td><td>It is the standard. Engines come and go.</td></tr>
+      <tr><td>Table format</td><td>Apache Iceberg (PyIceberg)</td><td class="num">spec v2 and v3 · 0.12</td><td class="mono">Apache-2.0</td><td>It is the standard. Engines come and go.</td></tr>
       <tr><td>Catalog and permissions</td><td>Apache Polaris</td><td class="num">1.7.0</td><td class="mono">Apache-2.0</td><td>Lakekeeper, Nessie, Gravitino, Unity Catalog OSS, AWS Glue</td></tr>
       <tr><td>Identity (OIDC)</td><td>Keycloak</td><td class="num">26.7.3</td><td class="mono">Apache-2.0</td><td>Entra ID, Okta, any OIDC provider</td></tr>
       <tr><td>Object storage (S3 API)</td><td>RustFS</td><td class="num">1.0.0</td><td class="mono">Apache-2.0</td><td>AWS S3, MinIO, Ceph, Cloudflare R2, on-prem</td></tr>
       <tr><td>Catalog metadata store</td><td>PostgreSQL</td><td class="num">18</td><td class="mono">PostgreSQL</td><td>Managed Postgres anywhere</td></tr>
       <tr><td>Notebooks</td><td>marimo</td><td class="num">0.24.2</td><td class="mono">Apache-2.0</td><td>Jupyter, VS Code, any Python client</td></tr>
-      <tr><td>Query engine</td><td>DuckDB</td><td class="num">1.5.5</td><td class="mono">MIT</td><td>Trino, Spark, Flink, Polars, ClickHouse</td></tr>
+      <tr><td>Query engine</td><td>DuckDB with the iceberg extension, reads and writes</td><td class="num">1.5.5</td><td class="mono">MIT</td><td>Trino, Spark, Flink, Polars, ClickHouse</td></tr>
       <tr><td>Portals and API</td><td>FastAPI, Python 3.14</td><td class="num">0.141</td><td class="mono">MIT</td><td>Ours. Thin by design.</td></tr>
     </tbody>
   </table>
@@ -396,7 +396,7 @@
       <li><strong>Fewer vendors, more decisions.</strong> A feature for architecture, a real cost for a small team.</li>
     </ul>
   </div>
-  <p class="secondary foot">Open source does not mean free of work. What you gain in ownership you also gain in responsibility. My take: worth it when data is a long term asset. It usually is.</p>
+  <p class="secondary foot">Open source does not mean free of work. What you gain in ownership you also gain in responsibility.</p>
 </section>
 
 <!-- ========== PART 3: DEMO ========== -->
@@ -480,7 +480,7 @@
       <img class="shot" src="screenshots/04-admin-teams.png" alt="Admin portal teams page">
       <img class="shot" src="screenshots/03-admin-users.png" alt="Admin portal users page">
     </div>
-    <div class="caption foot two"><span>Teams · a central place for ownership and membership</span><span>Users · Keycloak accounts with team membership and one role</span></div>
+    <div class="caption foot two"><span>Teams · a central place for ownership and membership</span><span>Users · Keycloak accounts with a role in every team they belong to</span></div>
     <div class="hint">↓ full screen</div>
   </section>
   <section class="full" data-background-image="screenshots/04-admin-teams.png" data-background-size="contain" data-background-color="#000000">
@@ -489,6 +489,13 @@
   <section class="full" data-background-image="screenshots/03-admin-users.png" data-background-size="contain" data-background-color="#000000">
     <div class="caption">Admin portal · users</div>
   </section>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">Demo · Administration</span><h2>A role per team, not per user</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/24-admin-edit-access.png" alt="Edit access dialog with a role select for every team of the user"></div>
+  <div class="caption foot">Edit access · sander reads asset-management and writes grid-planning · each role reaches only the databases of that team</div>
+  <aside class="notes">Read, read and write, or administrator, chosen per team. Saving re-syncs the Polaris grants of every database those teams own. Database administration never grants access to this portal.</aside>
 </section>
 
 <section class="shot-slide">
@@ -523,7 +530,7 @@
       <img class="shot" src="screenshots/07-user-welcome.png" alt="User portal welcome page">
       <img class="shot" src="screenshots/08-user-catalog-empty.png" alt="User portal with active team, environment and database selected">
     </div>
-    <div class="caption foot two"><span>User portal :3002</span><span>Switch team and environment · five bundled example notebooks</span></div>
+    <div class="caption foot two"><span>User portal :3002 · sign in with the same Keycloak account</span><span>Active team with your role in it · environment · five bundled example notebooks</span></div>
     <div class="hint">↓ full screen</div>
   </section>
   <section class="full" data-background-image="screenshots/07-user-welcome.png" data-background-size="contain" data-background-color="#000000">
@@ -589,6 +596,76 @@
 </section>
 
 <section>
+  <div class="label">Demo · Iceberg v3</div>
+  <h2>Iceberg v3, written by DuckDB</h2>
+  <div class="cols-asym">
+    <pre style="font-size:0.58em"><code data-noescape><span class="k">CREATE TABLE</span> lakehouse.iceberg_v3.sensor_events (
+    event_id     <span class="n">BIGINT</span>,
+    device_id    <span class="n">VARCHAR</span>,
+    site         <span class="n">VARCHAR</span>,
+    location     <span class="k">GEOMETRY</span>,
+    measured_at  <span class="k">TIMESTAMP_NS</span>,
+    payload      <span class="k">VARIANT</span>,
+    synthetic    <span class="n">BOOLEAN</span>
+) <span class="k">WITH</span> (<span class="s">'format-version'</span> = <span class="n">3</span>);
+
+<span class="k">ALTER TABLE</span> … <span class="k">ADD COLUMN</span> firmware <span class="n">VARCHAR</span> <span class="k">DEFAULT</span> <span class="s">'v1.0'</span>;
+<span class="k">UPDATE</span> … <span class="k">SET</span> firmware = <span class="s">'v2.0'</span> <span class="k">WHERE</span> device_id = <span class="s">'SENSOR-001'</span>;
+<span class="k">DELETE FROM</span> … <span class="k">WHERE</span> payload.kind::<span class="n">VARCHAR</span> = <span class="s">'fault'</span>;</code></pre>
+    <ul>
+      <li><strong>VARIANT</strong> holds a different structure per event, no fixed schema.</li>
+      <li><strong>TIMESTAMP_NS</strong> and <strong>GEOMETRY</strong> are native column types.</li>
+      <li><strong>Column defaults.</strong> Adding <code>firmware</code> rewrites none of the 480 rows.</li>
+      <li><strong>Deletion vectors.</strong> Updates and deletes mark row positions in a small Puffin file.</li>
+      <li><strong>Row lineage.</strong> Every row keeps a stable ID and the commit that last changed it.</li>
+    </ul>
+  </div>
+  <div class="caption foot">Plain SQL through the Polaris REST catalog, with the user's own permissions · GEOGRAPHY and UNKNOWN are not in DuckDB yet · PyIceberg does not read these v3 types yet</div>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Notebook 04</span><h2>Write Iceberg v3 with DuckDB</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/25-notebook-04-v3-create.png" alt="marimo notebook creating a format-version 3 table with DuckDB and inserting events">
+      <img class="shot" src="screenshots/26-notebook-04-v3-delete.png" alt="marimo notebook updating and deleting rows in the v3 table">
+    </div>
+    <div class="caption foot two"><span>CREATE TABLE with format-version 3 · Polaris vends credentials for the table it just created · 480 events inserted</span><span>40 rows updated, 45 deleted · no data file rewritten · needs the read and write role, enforced by Polaris</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/25-notebook-04-v3-create.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 04 · create and insert</div>
+  </section>
+  <section class="full" data-background-image="screenshots/26-notebook-04-v3-delete.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 04 · update and delete</div>
+  </section>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Notebook 05</span><h2>Read what v3 adds, in SQL</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/27-notebook-05-variant.png" alt="DuckDB querying fields inside a VARIANT column">
+      <img class="shot" src="screenshots/28-notebook-05-lineage.png" alt="DuckDB querying row lineage and deletion vectors of the v3 table">
+    </div>
+    <div class="caption foot two"><span>Fields inside the VARIANT, addressed with dots and cast on read</span><span>Row lineage: which commit last touched a row · deletion vectors from the table metadata · time travel to the first snapshot</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/27-notebook-05-variant.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 05 · variant</div>
+  </section>
+  <section class="full" data-background-image="screenshots/28-notebook-05-lineage.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 05 · row lineage and deletion vectors</div>
+  </section>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">Demo · Iceberg v3</span><h2>A delete is one small file</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/31-rustfs-v3-puffin.png" alt="RustFS console listing the Parquet data files and Puffin deletion vectors of the v3 table"></div>
+  <div class="caption foot">RustFS · iceberg_v3/sensor_events/data · Parquet data files stay untouched · each update or delete adds a Puffin deletion vector of a few hundred bytes</div>
+</section>
+
+<section>
   <section class="shot-slide">
     <div class="head"><span class="label">Demo · Catalog details</span><h2>Inspect a table without opening a notebook</h2></div>
     <div class="fig two">
@@ -607,6 +684,9 @@
   <section class="full" data-background-image="screenshots/17-user-table-schema.png" data-background-size="contain" data-background-color="#000000">
     <div class="caption">User portal · schema</div>
   </section>
+  <section class="full" data-background-image="screenshots/29-user-table-v3-overview.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · the v3 table · format version 3, three delete files</div>
+  </section>
 </section>
 
 <section>
@@ -616,7 +696,7 @@
       <img class="shot" src="screenshots/18-user-table-snapshots.png" alt="Snapshot history and branches of the table">
       <img class="shot" src="screenshots/19-user-table-preview.png" alt="Preview of 100 rows at the selected snapshot">
     </div>
-    <div class="caption foot two"><span>History and refs · main branch</span><span>100 rows at a selected snapshot · read with the user's own permissions in a disposable process</span></div>
+    <div class="caption foot two"><span>History and refs · main branch</span><span>100 rows at a selected snapshot · DuckDB in a disposable process, with the user's own permissions</span></div>
     <div class="hint">↓ full screen</div>
   </section>
   <section class="full" data-background-image="screenshots/18-user-table-snapshots.png" data-background-size="contain" data-background-color="#000000">
@@ -624,6 +704,9 @@
   </section>
   <section class="full" data-background-image="screenshots/19-user-table-preview.png" data-background-size="contain" data-background-color="#000000">
     <div class="caption">User portal · preview at a snapshot</div>
+  </section>
+  <section class="full" data-background-image="screenshots/30-user-table-v3-preview.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · preview of the v3 table · geometry as text, VARIANT as JSON</div>
   </section>
 </section>
 
