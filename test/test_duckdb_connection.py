@@ -140,3 +140,27 @@ def test_table_reference_quotes_names():
         native.table_reference(("analytics", "nested"), 'odd";table')
         == '"lakehouse"."analytics.nested"."odd"";table"'
     )
+
+
+@pytest.mark.parametrize("exists,owner,dropped", [
+    (0, None, False),
+    (1, ("04_example",), True),
+    (1, ("another_example",), None),
+    (1, None, None),
+])
+def test_example_replaces_only_the_table_it_created(exists, owner, dropped):
+    connection = Mock()
+    connection.execute.return_value.fetchone.side_effect = [(exists,), owner]
+    if dropped is None:
+        with pytest.raises(RuntimeError, match="did not create it"):
+            native.drop_example_table(connection, ("iceberg_v3", "nested"), "sensor_events", "04_example")
+    else:
+        native.drop_example_table(connection, ("iceberg_v3", "nested"), "sensor_events", "04_example")
+    calls = connection.execute.call_args_list
+    assert calls[0].args[1] == ["iceberg_v3.nested", "sensor_events"]
+    assert any(call.args[0].startswith("DROP TABLE") for call in calls) == bool(dropped)
+    if exists:
+        assert calls[1].args == (
+            'SELECT value FROM iceberg_table_properties("lakehouse"."iceberg_v3.nested"."sensor_events") WHERE key = ?',
+            [native.EXAMPLE_PROPERTY],
+        )

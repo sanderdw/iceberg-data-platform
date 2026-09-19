@@ -14,6 +14,8 @@ WRITE_ERROR = (
     "Could not connect to the Iceberg catalog for writing. Check that your role in the active team "
     "allows writing, and rebuild the notebook image if DuckDB extensions are missing."
 )
+# Table property naming the example that created a table; only that example may replace it.
+EXAMPLE_PROPERTY = "iceberg-data-platform.example"
 
 
 def _register_variant_with_marimo():
@@ -144,6 +146,27 @@ def connect_duckdb(namespace, table, *, read_only=True, missing_ok=False):
             connection.close()
         # Provider/SQL errors can include tokens and generated CREATE SECRET SQL.
         raise RuntimeError(READ_ERROR if read_only else WRITE_ERROR) from None
+
+
+def drop_example_table(connection, namespace, table, example):
+    """Drop a table only when `example` created it, as its EXAMPLE_PROPERTY table property records."""
+    exists = connection.execute(
+        "SELECT count(*) FROM information_schema.tables "
+        "WHERE table_catalog = 'lakehouse' AND table_schema = ? AND table_name = ?",
+        [".".join(namespace), table],
+    ).fetchone()[0]
+    if not exists:
+        return
+    reference = table_reference(namespace, table)
+    owner = connection.execute(
+        f"SELECT value FROM iceberg_table_properties({reference}) WHERE key = ?", [EXAMPLE_PROPERTY]
+    ).fetchone()
+    if not owner or owner[0] != example:
+        raise RuntimeError(
+            f"{'.'.join(namespace)}.{table} already exists and this example did not create it, "
+            "so it is not replaced. Choose another NAMESPACE or TABLE in the first cell."
+        )
+    connection.execute(f"DROP TABLE {reference}")
 
 
 def refresh_table_credentials(connection, namespace, table):

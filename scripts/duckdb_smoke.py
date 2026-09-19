@@ -68,6 +68,18 @@ assert len(read['lineage']) == 3 and read['lineage']['first_row_id'].min() == 0
 assert 'puffin' in set(read['files']['file_format'])
 assert read['first_snapshot']['events'].sum() == 480
 read['lakehouse'].close()
+
+from user_portal.notebook.duckdb_connection import connect_duckdb, drop_example_table, table_reference
+
+foreign = connect_duckdb(['iceberg_v3'], 'foreign_events', read_only=False, missing_ok=True)
+foreign.execute(f"CREATE TABLE {table_reference(['iceberg_v3'], 'foreign_events')} (id BIGINT)")
+try:
+    drop_example_table(foreign, ['iceberg_v3'], 'foreign_events', '04_duckdb_iceberg_v3_write')
+except RuntimeError:
+    assert foreign.execute(f"SELECT count(*) FROM {table_reference(['iceberg_v3'], 'foreign_events')}").fetchone() == (0,)
+else:
+    raise AssertionError('Expected the example to keep a table it did not create')
+foreign.close()
 print('PASS: DuckDB writes an Iceberg v3 table (variant, timestamp_ns, geometry, default, deletion vectors) and reads it back with row lineage and time travel')
 """
 V3_READER_CODE = """

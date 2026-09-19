@@ -9,7 +9,9 @@ def _():
     import marimo as mo
 
     from user_portal.notebook.duckdb_connection import (
+        EXAMPLE_PROPERTY,
         connect_duckdb,
+        drop_example_table,
         refresh_table_credentials,
         schema_reference,
         table_reference,
@@ -18,10 +20,14 @@ def _():
 
     NAMESPACE = ["iceberg_v3"]
     TABLE = "sensor_events"
+    EXAMPLE = "04_duckdb_iceberg_v3_write"
     return (
+        EXAMPLE,
+        EXAMPLE_PROPERTY,
         NAMESPACE,
         TABLE,
         connect_duckdb,
+        drop_example_table,
         generate_sensor_events,
         mo,
         refresh_table_credentials,
@@ -43,8 +49,10 @@ def _(mo):
 
     This notebook runs from top to bottom without any input. It recreates
     `iceberg_v3.sensor_events` on every run, so the result is always the same, and it
-    touches no other table. Writing requires a writer role or higher in the active
-    team. Change `NAMESPACE` and `TABLE` in the first cell to write somewhere else.
+    touches no other table. It marks the table as its own with a table property and
+    stops if a table with that name exists without the mark, instead of replacing it.
+    Writing requires a writer role or higher in the active team. Change `NAMESPACE`
+    and `TABLE` in the first cell to write somewhere else.
     """)
 
 
@@ -82,9 +90,19 @@ def _(NAMESPACE, TABLE, connect_duckdb, schema_reference, table_reference):
 
 
 @app.cell
-def _(lakehouse, selected_schema, selected_table):
+def _(
+    EXAMPLE,
+    EXAMPLE_PROPERTY,
+    NAMESPACE,
+    TABLE,
+    drop_example_table,
+    lakehouse,
+    selected_schema,
+    selected_table,
+):
     lakehouse.execute(f"CREATE SCHEMA IF NOT EXISTS {selected_schema}")
-    lakehouse.execute(f"DROP TABLE IF EXISTS {selected_table}")
+    # Replaces only a table that an earlier run of this example created.
+    drop_example_table(lakehouse, NAMESPACE, TABLE, EXAMPLE)
     lakehouse.execute(f"""
         CREATE TABLE {selected_table} (
             event_id BIGINT,
@@ -94,7 +112,7 @@ def _(lakehouse, selected_schema, selected_table):
             measured_at TIMESTAMP_NS,
             payload VARIANT,
             synthetic BOOLEAN
-        ) WITH ('format-version' = 3)
+        ) WITH ('format-version' = 3, '{EXAMPLE_PROPERTY}' = '{EXAMPLE}')
     """)
     table_created = True
     return (table_created,)
