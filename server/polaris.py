@@ -8,6 +8,7 @@ import json
 import secrets
 import time
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -30,6 +31,10 @@ ROLES = {
     "writer": ["CATALOG_MANAGE_CONTENT"],
     "admin": ["CATALOG_MANAGE_CONTENT", "CATALOG_MANAGE_ACCESS", "CATALOG_MANAGE_METADATA"],
 }
+# One grant per shared object and nothing on the namespace or catalog: Polaris does
+# not filter listings, so any list privilege would reveal every other name.
+SHARE_PRIVILEGES = {"table": "TABLE_READ_DATA", "view": "VIEW_READ_PROPERTIES"}
+MAX_SHARES = 20
 
 
 def enc(value):
@@ -42,6 +47,19 @@ def catalog_role(role):
 
 def grants(access):
     return {(id, catalog_role(d["role"])) for id, d in access.items()}
+
+
+def share_grant(o):
+    return {
+        "type": o["kind"],
+        "namespace": o["namespace"],
+        f"{o['kind']}Name": o["name"],
+        "privilege": SHARE_PRIVILEGES[o["kind"]],
+    }
+
+
+def grant_key(grant):
+    return json.dumps(grant, sort_keys=True)
 
 
 def buckets(access):
@@ -122,7 +140,7 @@ class PolarisProvider:
         if response.status_code == 401 and retry:
             self.token = None
             return self.request(path, method, body, False)
-        if response.status_code == 400 and method == "DELETE":
+        if response.status_code == 400 and (method == "DELETE" or path.endswith("/grants?cascade=false")):
             # Polaris reports an already-absent grant as 400, not 404. Treat
             # only that explicit condition as successful idempotent removal.
             try:
@@ -666,3 +684,234 @@ class PolarisProvider:
             "storageLocation": catalog["properties"]["default-base-location"],
             "credential": "<client-id>:<client-secret>",
         }
+
+    def share(self, principal, actual=None):
+        p = principal["properties"]
+        objects = json.loads(p["portal.objects"])
+        result = {
+            "id": principal["name"],
+            "name": p["portal.name"],
+            "recipient": p.get("portal.recipient", ""),
+            "description": p.get("portal.description", ""),
+            "database": p["portal.database"],
+            "objects": objects,
+            "expiresAt": p.get("portal.expires-at"),
+            "createdAt": principal.get("createTimestamp"),
+            "createdBy": p.get("portal.created-by-name", ""),
+            "clientId": principal.get("clientId"),
+            "status": "revoking" if p.get("portal.deleting") == "true" else "active",
+        }
+        if actual is not None:
+            # Polaris keys grants by entity, not name: a renamed object stays granted
+            # under its new name and a recreated one is not. Show what is really granted.
+            wanted = {grant_key(share_grant(o)) for o in objects}
+            granted = {grant_key(g) for g in actual}
+            result["objects"] = [{**o, "granted": grant_key(share_grant(o)) in granted} for o in objects]
+            result["extraGrants"] = [
+                {
+                    "kind": g.get("type"),
+                    "namespace": g.get("namespace", []),
+                    "name": g.get("tableName") or g.get("viewName") or "",
+                    "privilege": g["privilege"],
+                }
+                for g in actual
+                if grant_key(g) not in wanted
+            ]
+        return result
+
+    def share_role(self, principal):
+        database = principal["properties"]["portal.database"]
+        return f"/catalogs/{enc(database)}/catalog-roles/{enc(principal['name'])}"
+
+    def share_principals(self):
+        """Live shares. Expired, orphaned and half-revoked shares are revoked first.
+
+        Expiry is enforced here, not in a user interface. The other portal process can
+        delete a database concurrently; its shares then surface here as orphans.
+        """
+        now = datetime.now(UTC)
+        databases = {c["name"] for c in self.management("/catalogs")["catalogs"] if self.managed(c)}
+        live = []
+        for principal in self.management("/principals")["principals"]:
+            if not self.is_share(principal):
+                continue
+            p = principal["properties"]
+            expires = p.get("portal.expires-at")
+            if (
+                p.get("portal.deleting") == "true"
+                or p["portal.database"] not in databases
+                or (expires and datetime.fromisoformat(expires) <= now)
+            ):
+                self.delete_share(principal["name"])
+            else:
+                live.append(principal)
+        return live
+
+    def expire_shares(self):
+        self.share_principals()
+
+    def list_shares(self, database=None, *, drift=False):
+        shares = []
+        for principal in self.share_principals():
+            if database and principal["properties"]["portal.database"] != database:
+                continue
+            actual = self.management(f"{self.share_role(principal)}/grants")["grants"] if drift else None
+            shares.append(self.share(principal, actual))
+        return sorted(shares, key=lambda s: (s["database"], s["name"]))
+
+    def require_share(self, id):
+        principal = self.require(f"/principals/{enc(id)}")
+        if not self.is_share(principal):
+            raise ServiceError(404, "Not found.")
+        return principal
+
+    def editable_share(self, id):
+        principal = self.require_share(id)
+        if principal["properties"].get("portal.deleting") == "true":
+            raise ServiceError(409, "This share is being revoked.")
+        return principal
+
+    def grant_share(self, role_path, grant):
+        try:
+            self.management(f"{role_path}/grants", "PUT", {"grant": grant})
+        except ServiceError as exc:
+            if exc.status == 404:
+                raise ServiceError(404, "A selected table or view no longer exists. Refresh and try again.") from exc
+            raise
+
+    def revoke_share_grant(self, role_path, grant):
+        try:
+            self.management(f"{role_path}/grants?cascade=false", "POST", {"grant": grant})
+        except ServiceError as exc:
+            # The object was dropped in the meantime; Polaris removed its grants with it.
+            if exc.status != 404:
+                raise
+
+    def reconcile_share(self, role_path, objects, undo):
+        desired = {grant_key(g): g for g in map(share_grant, objects)}
+        actual = {grant_key(g): g for g in self.management(f"{role_path}/grants")["grants"]}
+        # Revoke first, then grant, against what Polaris really holds.
+        for key in sorted(actual.keys() - desired.keys()):
+            self.revoke_share_grant(role_path, actual[key])
+            undo.append(lambda g=actual[key]: self.grant_share(role_path, g))
+        for key in sorted(desired.keys() - actual.keys()):
+            self.grant_share(role_path, desired[key])
+            undo.append(lambda g=desired[key]: self.revoke_share_grant(role_path, g))
+
+    def share_connection(self, principal, credentials):
+        p = principal["properties"]
+        connection = self.connection(p["portal.database"])
+        return {
+            "type": connection["type"],
+            "uri": connection["uri"],
+            "warehouse": connection["warehouse"],
+            "oauth2ServerUri": connection["oauth2ServerUri"],
+            "scope": connection["scope"],
+            "accessDelegation": "vended-credentials",
+            "s3Endpoint": connection["s3Endpoint"],
+            "credential": f"{credentials['clientId']}:{credentials['clientSecret']}",
+            # The credential cannot list namespaces or tables; these names are the contract.
+            "identifiers": [
+                {"kind": o["kind"], "identifier": ".".join([*o["namespace"], o["name"]])}
+                for o in json.loads(p["portal.objects"])
+            ],
+        }
+
+    def issued(self, principal, credentials):
+        # The secret leaves Polaris here only; it is never stored by the portal.
+        return {
+            "share": self.share(principal),
+            "credentials": credentials,
+            "connection": self.share_connection(principal, credentials),
+        }
+
+    def create_share(self, data, created_by):
+        catalog = self.require(f"/catalogs/{enc(data.database)}")
+        if catalog["properties"].get("portal.deleting") == "true":
+            raise ServiceError(409, "This database is being deleted.")
+        existing = self.list_shares(data.database)
+        if len(existing) >= MAX_SHARES:
+            raise ServiceError(409, f"A database can have at most {MAX_SHARES} data shares.")
+        if any(s["name"] == data.name for s in existing):
+            raise ServiceError(409, "This share name already exists in this database.")
+        id = f"share-{uuid4().hex}"
+        roles = f"/catalogs/{enc(data.database)}/catalog-roles"
+        marker = {"portal.managed-by": MANAGED, "portal.kind": "share"}
+        objects = [o.model_dump() for o in data.objects]
+        with provision() as undo:
+            self.management(roles, "POST", {"catalogRole": {"name": id, "properties": marker}})
+            # Removing the catalog role removes its grants.
+            undo.append(lambda: self.remove(f"{roles}/{id}"))
+            for o in objects:
+                self.grant_share(f"{roles}/{id}", share_grant(o))
+            self.management("/principal-roles", "POST", {"principalRole": {"name": id, "properties": marker}})
+            undo.append(lambda: self.remove(f"/principal-roles/{id}"))
+            self.management(
+                f"/principal-roles/{id}/catalog-roles/{enc(data.database)}", "PUT", {"catalogRole": {"name": id}}
+            )
+            result = self.management(
+                "/principals",
+                "POST",
+                {
+                    "principal": {
+                        "name": id,
+                        "properties": {
+                            **marker,
+                            "portal.name": data.name,
+                            "portal.recipient": data.recipient,
+                            "portal.description": data.description,
+                            "portal.database": data.database,
+                            "portal.objects": json.dumps(objects),
+                            **({"portal.expires-at": data.expires_at.isoformat()} if data.expires_at else {}),
+                            "portal.created-by": created_by["id"],
+                            "portal.created-by-name": created_by["name"],
+                        },
+                    }
+                },
+            )
+            undo.append(lambda: self.remove(f"/principals/{id}"))
+            # Activation last: until here the new secret opens nothing.
+            self.management(f"/principals/{id}/principal-roles", "PUT", {"principalRole": {"name": id}})
+            return self.issued(result["principal"], result["credentials"])
+
+    def update_share(self, id, data):
+        principal = self.editable_share(id)
+        properties = dict(principal["properties"])
+        changed = data.model_fields_set
+        if "recipient" in changed and data.recipient is not None:
+            properties["portal.recipient"] = data.recipient
+        if "description" in changed and data.description is not None:
+            properties["portal.description"] = data.description
+        if "expires_at" in changed:
+            properties.pop("portal.expires-at", None)
+            if data.expires_at:
+                properties["portal.expires-at"] = data.expires_at.isoformat()
+        with provision() as undo:
+            # Saving the selection also re-grants objects that were dropped and recreated.
+            if data.objects is not None:
+                objects = [o.model_dump() for o in data.objects]
+                self.reconcile_share(self.share_role(principal), objects, undo)
+                properties["portal.objects"] = json.dumps(objects)
+            updated = self.update_properties(f"/principals/{enc(id)}", properties)
+        actual = self.management(f"{self.share_role(principal)}/grants")["grants"]
+        return self.share(updated, actual)
+
+    def rotate_share(self, id):
+        principal = self.editable_share(id)
+        # `rotate` is reserved for the principal itself; `reset` keeps the client ID
+        # and invalidates the old secret at once.
+        result = self.management(f"/principals/{enc(id)}/reset", "POST", {})
+        return self.issued(principal, result["credentials"])
+
+    def delete_share(self, id):
+        path = f"/principals/{enc(id)}"
+        principal = self.require_share(id)
+        # Persist intent first. The principal is the retry marker and goes last;
+        # `share_principals` resumes a half-finished revocation.
+        if principal["properties"].get("portal.deleting") != "true":
+            self.update_properties(path, {**principal["properties"], "portal.deleting": "true"})
+        # Access stops with this first step: issued tokens lose their only role.
+        self.remove(f"{path}/principal-roles/{enc(id)}")
+        self.remove(self.share_role(principal))
+        self.remove(f"/principal-roles/{enc(id)}")
+        self.remove(path)
