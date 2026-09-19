@@ -99,6 +99,11 @@
     .reveal table td.num { font-family: var(--r-code-font); text-align: right; white-space: nowrap; }
     .reveal table th.num { text-align: right; }
     .reveal table td.mono { font-family: var(--r-code-font); }
+    /* API tables: two dense endpoint lists side by side */
+    .reveal table.api { font-size: 0.5em; }
+    .reveal table.api td { padding: 8px 12px 8px 0; }
+    .reveal table.api td.mono { white-space: nowrap; color: var(--text-display); }
+    .reveal table.api td.verb { color: var(--text-secondary); }
     /* Layer list: indentation is the hierarchy */
     .reveal .layers { font-size: 0.72em; }
     .reveal .layer { display: grid; grid-template-columns: 360px 1fr; gap: var(--space-lg); padding: 12px 0; border-bottom: 1px solid var(--border); align-items: baseline; }
@@ -461,6 +466,43 @@
   <p class="lede foot">Ownership is explicit: a team owns a database, a database owns a bucket. That is the whole governance model.</p>
 </section>
 
+<section>
+  <div class="label">03 · Platform</div>
+  <h2>API first: both portals are just clients</h2>
+  <div class="cols" style="grid-template-columns:11fr 9fr">
+    <div class="group">
+      <div class="label">Admin API · :3000 · OpenAPI at /docs</div>
+      <table class="api"><tbody>
+        <tr><td class="mono verb">GET POST DELETE</td><td class="mono">/api/session</td><td>Auth state, sign in, sign out</td></tr>
+        <tr><td class="mono verb">GET</td><td class="mono">/api/overview</td><td>Health, teams, databases, users</td></tr>
+        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/teams[/{id}]</td><td>Teams</td></tr>
+        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/databases[/{id}]</td><td>Catalog plus bucket, per team</td></tr>
+        <tr><td class="mono verb">GET</td><td class="mono">/api/databases/{id}/connection</td><td>Iceberg REST connection details</td></tr>
+        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/users[/{id}]</td><td>Users and their role per team</td></tr>
+        <tr><td class="mono verb">GET POST</td><td class="mono">/api/identity/{accounts,users,links}</td><td>Find, create, link Keycloak accounts</td></tr>
+        <tr><td class="mono verb">POST</td><td class="mono">/api/users/{id}/identity[/retry|/password]</td><td>Link, retry, reset password</td></tr>
+        <tr><td class="mono verb">GET</td><td class="mono">/api/admin/explorer/{databases,contents}</td><td>Browse every catalog</td></tr>
+        <tr><td class="mono verb">GET</td><td class="mono">/api/infrastructure · /api/health</td><td>Live service metrics, liveness</td></tr>
+      </tbody></table>
+    </div>
+    <div class="group">
+      <div class="label">User gateway · :3002</div>
+      <table class="api"><tbody>
+        <tr><td class="mono verb">GET POST DELETE</td><td class="mono">/api/session</td><td>Auth state, sign in, sign out</td></tr>
+        <tr><td class="mono verb">GET</td><td class="mono">/api/workspace</td><td>My teams, databases, notebooks</td></tr>
+        <tr><td class="mono verb">PATCH</td><td class="mono">/api/team · /api/environment</td><td>Switch team or Dev, Acc, Prod</td></tr>
+        <tr><td class="mono verb">GET</td><td class="mono">/api/contents · /api/details</td><td>Tables, schema, snapshots</td></tr>
+        <tr><td class="mono verb">POST</td><td class="mono">/api/preview</td><td>Table preview, 100 rows max</td></tr>
+        <tr><td class="mono verb">POST DELETE</td><td class="mono">/api/notebooks[/{id}]</td><td>Start and stop a marimo container</td></tr>
+        <tr><td class="mono verb">ANY · WS</td><td class="mono">/workspaces/{id}/…</td><td>Proxy into that container</td></tr>
+        <tr><td class="mono verb">GET</td><td class="mono">/api/health</td><td>Liveness</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+  <p class="secondary foot"><span class="dot"></span>No private backdoor for the UI: every button is a fetch to one of these routes, and the OpenAPI schema is generated from the same code. One level down it is open APIs again: Iceberg REST on Polaris, S3 on RustFS, OIDC on Keycloak.</p>
+  <aside class="notes">Both portals are static pages that only call their own FastAPI app. Everything in the demo that follows is one of these routes. Swagger UI sits behind the admin sign-in at :3000/docs; mutations need a session and the X-Portal-Request header.</aside>
+</section>
+
 <section class="shot-slide">
   <div class="head"><span class="label">Demo · Sign in</span><h2>One identity for everything</h2></div>
   <div class="fig"><img class="shot" src="screenshots/01-keycloak-login.png" alt="Keycloak sign-in page for the iceberg realm"></div>
@@ -492,7 +534,7 @@
 </section>
 
 <section class="shot-slide">
-  <div class="head"><span class="label">Demo · Administration</span><h2>A role per team, not per user</h2></div>
+  <div class="head"><span class="label">Demo · Administration</span><h2>A role per team</h2></div>
   <div class="fig"><img class="shot" src="screenshots/24-admin-edit-access.png" alt="Edit access dialog with a role select for every team of the user"></div>
   <div class="caption foot">Edit access · sander reads asset-management and writes grid-planning · each role reaches only the databases of that team</div>
   <aside class="notes">Read, read and write, or administrator, chosen per team. Saving re-syncs the Polaris grants of every database those teams own. Database administration never grants access to this portal.</aside>
@@ -728,7 +770,7 @@
 <section class="divider">
   <div class="doto num">04</div>
   <h1>What this means for us</h1>
-  <p class="secondary">Direction, ownership and three concrete steps.</p>
+  <p class="secondary">Direction and ownership.</p>
 </section>
 
 <section>
@@ -740,19 +782,6 @@
     <li><strong>Engines are replaceable.</strong> Treat them as workload decisions, not platform commitments.</li>
     <li><strong>Self-service with ownership.</strong> Teams create and own their databases. The platform team owns the building blocks.</li>
   </ul>
-</section>
-
-<section>
-  <div class="label">04 · Wrap up</div>
-  <h2>My advice: three concrete steps</h2>
-  <div class="cols-asym">
-    <ol>
-      <li><strong>Run it.</strong> One command, your laptop, twenty minutes. Load a real dataset and query it from two engines.</li>
-      <li><strong>Decide catalog and identity first.</strong> That is where lock-in and governance actually live. Storage and engines follow.</li>
-      <li><strong>Agree on ownership.</strong> Who owns buckets, who owns the catalog, who schedules table maintenance. Write it down before the first production table.</li>
-    </ol>
-  </div>
-  <p class="secondary foot">The ambition stays the same: open formats, our data, our choice of tools. This is a working example, not a slide about one.</p>
 </section>
 
 <section class="title">

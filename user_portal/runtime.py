@@ -123,7 +123,14 @@ class NotebookRuntime:
                 self.image,
                 detach=True,
                 name=f"{self.scope}-marimo-{id}",
-                labels=labels,
+                # One-off Compose labels group the notebook under this stack and
+                # surface it to the monitor; Compose itself leaves it alone.
+                labels={
+                    **labels,
+                    "com.docker.compose.project": self.scope,
+                    "com.docker.compose.service": "notebook",
+                    "com.docker.compose.oneoff": "True",
+                },
                 network=network.name,
                 user="10001:10001",
                 read_only=True,

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 — 2026-09-19
+
+- Open notebooks are grouped under the `iceberg-workspaces` stack in Docker tools and listed with their CPU and memory on the **Infrastructure** page. Compose commands leave them alone; the user portal still starts and removes them.
 
 ## 0.3.0 — 2026-09-19
 

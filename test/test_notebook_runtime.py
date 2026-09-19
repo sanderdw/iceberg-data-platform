@@ -121,6 +121,20 @@ def test_notebooks_allow_egress_with_separate_networks_and_writable_packages(run
         assert env["MARIMO_UV_TARGET"] in env["PYTHONPATH"].split(":")
 
 
+def test_notebook_container_joins_the_stack_as_compose_one_off(runtime):
+    runtime.start(session(), "db1", [], None)
+    labels = runtime.docker.containers.run.call_args.kwargs["labels"]
+    assert labels == {
+        LABEL: runtime.scope,
+        "com.docker.compose.project": runtime.scope,
+        "com.docker.compose.service": "notebook",
+        "com.docker.compose.oneoff": "True",
+    }
+    # Networks and volumes stay outside Compose so `down` never touches notebook files.
+    assert runtime.docker.networks.create.call_args.kwargs["labels"] == {LABEL: runtime.scope}
+    assert runtime.docker.volumes.create.call_args.kwargs["labels"] == {LABEL: runtime.scope}
+
+
 def test_volume_from_another_stack_is_rejected(runtime):
     runtime.docker.volumes.get.side_effect = None
     runtime.docker.volumes.get.return_value.attrs = {"Labels": {LABEL: "other-stack"}}

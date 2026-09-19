@@ -42,11 +42,11 @@ also serves installers pinned to itself: its bundle, Compose files and applicati
 images all carry that version. Replace `latest/download` with `download/vX.Y.Z`:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.3.0/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.3.1/install.sh | sh
 ```
 
 ```powershell
-irm https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.3.0/install.ps1 | iex
+irm https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.3.1/install.ps1 | iex
 ```
 
 ## Test a branch
