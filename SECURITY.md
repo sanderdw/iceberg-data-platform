@@ -1,6 +1,6 @@
 # Security policy
 
-This project is a local development platform. It has not undergone an independent security audit. The initial 0.2 release line receives fixes; there is no long-term support commitment.
+This project is a local development platform. It has not undergone an independent security audit. The current 0.3 release line receives fixes; there is no long-term support commitment.
 
 ## Reporting a vulnerability
 

@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 import re
 import subprocess
 import tarfile
@@ -84,6 +85,8 @@ def check(root=ROOT):
     package_lock = json.loads((root / "package-lock.json").read_text())
     if project["version"] != package["version"] or package["version"] != package_lock["version"]:
         raise ValueError("Release versions differ between Python, npm and the npm lockfile")
+    if f'version="{project["version"]}"' not in (root / "server/app.py").read_text():
+        raise ValueError("The API version in server/app.py differs from the project version")
     if project.get("license") != "Apache-2.0" or package.get("license") != "Apache-2.0":
         raise ValueError("Expected Apache-2.0 project metadata")
     local_secrets = []
@@ -146,6 +149,24 @@ def build(root=ROOT, output=None):
     )
     print(f"Built {archive.name} ({archive.stat().st_size:,} bytes)")
     return archive
+
+
+def release_channel(ref, version, run_id, attempt):
+    """Map a Git ref to its stable release or branch preview names."""
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError("The project version must be X.Y.Z")
+    if ref == f"refs/tags/v{version}":
+        return {"version": version, "preview": "false", "release_tag": f"v{version}", "image_tag": version,
+                "entrypoint": "", "slug": ""}
+    if not ref.startswith("refs/heads/"):
+        raise ValueError("Run this workflow on a branch or the vX.Y.Z tag matching the project version")
+    # Branch names become release and image tags: keep them simple and out of the stable v* namespace.
+    slug = re.sub(r"[^a-z0-9._-]", "-", ref.removeprefix("refs/heads/").lower())[:60].strip("-.")
+    if not slug or re.match(r"v\d", slug):
+        raise ValueError("This branch name cannot be used for a preview release")
+    build = f"{slug}-{run_id}-{attempt}"
+    return {"version": version, "preview": "true", "release_tag": build, "image_tag": build,
+            "entrypoint": f"{slug}-preview", "slug": slug}
 
 
 def installer_source(root, filename, release_tag="latest", image_tag="latest"):
@@ -225,8 +246,14 @@ def main():
     parser.add_argument("--install", action="store_true", help="Also build a Docker-only installation bundle")
     parser.add_argument("--release-tag", default="latest", help="GitHub release to download from the generated installers")
     parser.add_argument("--image-tag", default="latest", help="Matching application image tag for the installation bundle")
+    parser.add_argument("--channel", metavar="REF", help="Only print the release names for a Git ref as key=value lines")
     args = parser.parse_args()
     try:
+        if args.channel:
+            version = json.loads((ROOT / "package.json").read_text())["version"]
+            channel = release_channel(args.channel, version, os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"])
+            print("\n".join(f"{key}={value}" for key, value in channel.items()))
+            return
         build() if args.build else check()
         if args.install:
             build_install(release_tag=args.release_tag, image_tag=args.image_tag)

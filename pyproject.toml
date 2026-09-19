@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-platform-portal"
-version = "0.2.1"
+version = "0.3.0"
 description = "Team-based Apache Iceberg administration and shared team marimo workspaces"
 readme = "README.md"
 license = "Apache-2.0"

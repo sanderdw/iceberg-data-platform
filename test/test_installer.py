@@ -20,7 +20,8 @@ POWERSHELL = os.environ.get("ICEBERG_TEST_POWERSHELL") or shutil.which(
 )
 
 
-@pytest.fixture(params=["latest", "keycloak-123-1"])
+@pytest.fixture(params=[("latest", "latest"), ("keycloak-123-1", "keycloak-123-1"), ("v0.2.1", "0.2.1")],
+                ids=lambda tags: tags[0])
 def installer_env(tmp_path, request):
     release = tmp_path / "release"
     release.mkdir()
@@ -44,7 +45,8 @@ def installer_env(tmp_path, request):
         "TEST_RELEASE": str(release),
         "TEST_DOCKER_LOG": str(tmp_path / "docker.jsonl"),
         "TEST_DOWNLOAD_LOG": str(tmp_path / "downloads.txt"),
-        "TEST_RELEASE_TAG": request.param,
+        "TEST_RELEASE_TAG": request.param[0],
+        "TEST_IMAGE_TAG": request.param[1],
         "TEST_PYTHON": sys.executable,
         "TEST_FAIL": "",
     }
@@ -58,7 +60,7 @@ def calls(env):
 def assert_started(env):
     commands = calls(env)
     tag = env["TEST_RELEASE_TAG"]
-    setup_image = "ghcr.io/sanderdw/iceberg-data-platform-portal:" + tag
+    setup_image = "ghcr.io/sanderdw/iceberg-data-platform-portal:" + env["TEST_IMAGE_TAG"]
     assert ["pull", setup_image] in commands
     assert any(args[0] == "run" and setup_image in args for args in commands)
     downloads = Path(env["TEST_DOWNLOAD_LOG"]).read_text().splitlines()
@@ -116,8 +118,7 @@ if args[0] == 'run':
 
     def run():
         # Pipe source into sh, exactly as the documented curl command does.
-        tag = env["TEST_RELEASE_TAG"]
-        source = installer_source(ROOT, "install.sh", tag, tag).decode()
+        source = installer_source(ROOT, "install.sh", env["TEST_RELEASE_TAG"], env["TEST_IMAGE_TAG"]).decode()
         return subprocess.run(["sh"], input=source, env=env, text=True, capture_output=True, check=False)
 
     return run, env
@@ -183,9 +184,9 @@ try {
     exit 1
 }
 ''')
-    tag = installer_env["TEST_RELEASE_TAG"]
     script = tmp_path / "install.ps1"
-    script.write_bytes(installer_source(ROOT, "install.ps1", tag, tag))
+    script.write_bytes(installer_source(ROOT, "install.ps1", installer_env["TEST_RELEASE_TAG"],
+                                        installer_env["TEST_IMAGE_TAG"]))
     env = installer_env | {"TEST_INSTALLER": str(script)}
 
     def run():

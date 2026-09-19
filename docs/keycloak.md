@@ -62,8 +62,8 @@ Direct source runs use the same generated `.env`: `uv run python -m server` and
 The generated bundle contains the same two Compose files, using published application
 images. The installers generate Keycloak configuration, start the platform, then start
 the workspace project. Platform startup includes realm provisioning automatically.
-The [Keycloak preview installer](install.md#test-the-keycloak-branch) becomes available
-after the first successful branch publication, without merging into `main`.
+A [branch preview installer](install.md#test-a-branch) becomes available after the
+first successful publication of that branch, without merging into `main`.
 
 ## Manage users in the administration portal
 

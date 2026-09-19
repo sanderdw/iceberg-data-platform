@@ -2,8 +2,15 @@
 
 ## Unreleased
 
-- The `keycloak` branch publishes tested prereleases with one-command installers
-  and matching image tags, independently of stable releases.
+## 0.3.0 — 2026-09-19
+
+- Upgrade note: this release signs in through Keycloak and there is no migration from a password-based 0.2 installation. Rerunning the latest installation command on a 0.2 installation moves it to 0.3.0; start from a fresh installation instead.
+- Stable installers, Compose files and application images are pinned to their release. `/releases/latest/download/install.sh` installs the newest stable release from `main`; `/releases/download/vX.Y.Z/install.sh` installs exactly that version.
+- Any branch can publish tested prereleases with one-command installers and matching
+  image tags under `BRANCH-preview`, independently of stable releases: on every push
+  for branches listed in the `Release` workflow, on demand for all others. The five
+  newest builds of a branch are kept.
+- Stable tags must be on `main`, only the highest version is marked Latest, and the workflow verifies the latest installation command after every publication.
 - Supported Keycloak OIDC integration for both portals, Polaris and per-user notebooks.
 - Administration-portal account creation, explicit linking, temporary password reset and access revocation.
 - Keycloak in the existing platform/workspace Compose split and standard application images, optional demo fixtures and dedicated integration CI.

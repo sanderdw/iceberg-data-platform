@@ -1,24 +1,45 @@
 # Publishing a release
 
-The current version is **0.2.1**. The `Release` workflow publishes three versioned container packages and source/installation archives when a matching `vX.Y.Z` tag is pushed. Local tooling only prepares artifacts.
+The current version is **0.3.0**. The `Release` workflow publishes three versioned container packages and source/installation archives when a matching `vX.Y.Z` tag on `main` is pushed. Branches publish their own previews. Local tooling only prepares artifacts.
 
-## Publish the Keycloak branch for testers
+## Versions and channels
 
-Commit and push `keycloak`. The `Release` workflow calls the complete CI suite,
+| Channel | Published by | Release | Application images | Installation command |
+| --- | --- | --- | --- | --- |
+| Stable | `vX.Y.Z` tag on `main` | `vX.Y.Z`, marked Latest when it is the highest version | `:X.Y.Z` and `:latest` | `/releases/latest/download/install.sh` or `/releases/download/vX.Y.Z/install.sh` |
+| Branch preview | push to a listed branch, or **Run workflow** on any branch | prerelease `SLUG-RUN_ID-ATTEMPT` plus the rolling `SLUG-preview` | `:SLUG-RUN_ID-ATTEMPT` | `/releases/download/SLUG-preview/install.sh` |
+
+The project version lives in `pyproject.toml`, `package.json`, `package-lock.json`, `uv.lock` and the API title in `server/app.py`; `check:release` rejects any difference. Every published installer is pinned to its own release and image tag, so `/releases/latest/download/install.sh` is simply the installer of the newest stable release. Previews are prereleases, which GitHub never serves as Latest, and they never write `:latest` image tags. The workflow checks after each preview that the Latest release is unchanged and still downloads, and after each stable release that the latest command serves it.
+
+## Publish a branch for testers
+
+Branches listed under `on.push.branches` in `.github/workflows/release.yml` publish on
+every push; add or remove a branch there. Any other branch publishes on demand:
+**Actions → Release → Run workflow** and select the branch, or
+`gh workflow run Release --ref BRANCH`. The workflow calls the complete CI suite,
 including Keycloak onboarding, user lifecycle, notebook access and native installer
 tests, then builds images on AMD64 and ARM64. Publication waits for every check and
 image build. Failed checks or image builds leave the previously published installer entrypoints in place.
 No merge or stable version bump is required.
 
-Each run publishes an exact prerelease named `keycloak-RUN_ID-ATTEMPT` at the tested
+`SLUG` is the branch name in lowercase with every character other than letters,
+digits, `.`, `_` and `-` replaced by `-`, at most 60 characters (`feature/foo` becomes
+`feature-foo`). Branch names starting with `v` and a digit are rejected to keep the
+stable tag namespace free. Branches whose names reduce to the same slug share one
+entrypoint.
+
+Each run publishes an exact prerelease named `SLUG-RUN_ID-ATTEMPT` at the tested
 commit, with matching application image tags. The generated installers pin both the
-release and the image tag. A small `keycloak-preview` prerelease holds the current
+release and the image tag. A small `SLUG-preview` prerelease holds the current
 `install.sh` and `install.ps1` entrypoints. Those are updated only after the exact
 build is available; an installer downloaded during an update still selects a complete
 build. The entrypoint release notes link to the exact source/build release; its own
 Git tag is not moved. Keep release assets mutable for this rolling entrypoint.
+The five newest exact builds of a branch are kept; older ones are deleted together with
+their Git tags. Their container image versions remain in GitHub Packages. After a branch
+is merged, delete its `SLUG-preview` release so the command stops serving the last build.
 
-Share these commands after the first successful run:
+Share these commands after the first successful run, here for `keycloak`:
 
 ```bash
 curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/keycloak-preview/install.sh | sh
@@ -79,18 +100,18 @@ Scan the extracted archive with Gitleaks before uploading. CI does this automati
 
 ## Publication
 
-1. Update the version in `pyproject.toml`, `package.json` and both version fields in `package-lock.json`. Update the changelog and installation examples.
-2. Run the checks above, push the reviewed commit and wait for hosted CI to pass.
-3. Tag that commit and push the tag:
+1. Update the version in `pyproject.toml`, `package.json`, both version fields in `package-lock.json`, `uv.lock` (`uv lock`) and `server/app.py`. Update the changelog and installation examples.
+2. Run the checks above, merge the reviewed commit into `main` and wait for hosted CI to pass.
+3. Tag that commit on `main` and push the tag:
 
    ```bash
-   git tag -a v0.2.1 -m "Release 0.2.1"
-   git push origin v0.2.1
+   git tag -a v0.3.0 -m "Release 0.3.0"
+   git push origin v0.3.0
    ```
 
-The workflow rejects a tag that does not match the project version, runs verification and a source secret scan, then builds each image on native AMD64 and ARM64 runners. It publishes `ghcr.io/sanderdw/iceberg-data-platform-{portal,users,notebook}` with exact version tags (for example `0.2.0`), architecture tags and a `latest` alias. Only after every image builds does it publish the multi-platform tags and GitHub release with installation/source archives and `SHA256SUMS`. Installations follow `latest`; exact version tags remain available for manual pinning.
+The workflow rejects a tag that does not match the project version or is not on `main`, runs verification and a source secret scan, then builds each image on native AMD64 and ARM64 runners. It publishes `ghcr.io/sanderdw/iceberg-data-platform-{portal,users,notebook}` with exact version tags (for example `0.3.0`), architecture tags and a `latest` alias. Only after every image builds does it publish the multi-platform tags and GitHub release with installation/source archives and `SHA256SUMS`. The release is marked Latest only when it is the highest version, so a fix on an older line never takes over the installation command. The workflow then downloads `/releases/latest/download/install.sh` and `install.ps1` and fails unless they are pinned to the new version.
 
-The Docker-only bundle is generated from the source Compose definitions, removes all build contexts, keeps bind mounts relative, and uses `:latest` consistently for all application images, including the notebook image used by the user portal. It includes setup and pgAdmin configuration without local credentials. The two Compose files preserve the platform/workspace split, with Keycloak in the platform project. The `install.sh` and `install.ps1` release assets download the matching bundle, verify its checksum, generate `.env`, pull images and start both stacks. Their stable URLs are `/releases/latest/download/install.sh` and `/releases/latest/download/install.ps1`.
+The Docker-only bundle is generated from the source Compose definitions, removes all build contexts, keeps bind mounts relative, and pins all application images, including the notebook image used by the user portal, to the released version. It includes setup and pgAdmin configuration without local credentials. The two Compose files preserve the platform/workspace split, with Keycloak in the platform project. The `install.sh` and `install.ps1` release assets download the matching bundle, verify its checksum, generate `.env`, pull images and start both stacks. Their stable URLs are `/releases/latest/download/install.sh` and `/releases/latest/download/install.ps1`; `/releases/download/vX.Y.Z/` serves the same installers for one exact version. The unpinned `install.sh` and `install.ps1` in the source tree are templates that follow `latest`; the build pins them.
 
 On first publication, open each package's settings from [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and confirm visibility is **Public**. Change private packages to Public before sharing the installation command. Verify an anonymous pull of all three packages before announcing the release. Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no registry secret is needed. Images include the source repository label so GitHub links them to this repository. See [GitHub's container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 

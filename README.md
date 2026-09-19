@@ -41,30 +41,34 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 ```
 
 The installer creates `~/iceberg-data-platform`, prepares `.env`, pulls application
-images and starts both projects. To test this branch before a stable release, use the
-Keycloak preview below. See the
-[installation guide](docs/install.md) for configuration and updates.
+images and starts both projects. These commands always install the newest stable
+release from `main`; replace `latest/download` with `download/v0.3.0` to install
+exactly that version. See the [installation guide](docs/install.md) for configuration
+and updates.
 
-### Try the Keycloak branch (Docker only)
+### Install from a branch (Docker only)
 
-After the branch's first successful `Release` workflow, testers can run:
+A branch can publish its own tested preview without touching the stable release.
+Replace `BRANCH` with the branch name in lowercase, with `/` written as `-`
+(`feature/foo` becomes `feature-foo`):
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/keycloak-preview/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/BRANCH-preview/install.sh | sh
 ```
 
 On Windows PowerShell:
 
 ```powershell
-irm https://github.com/sanderdw/iceberg-data-platform/releases/download/keycloak-preview/install.ps1 | iex
+irm https://github.com/sanderdw/iceberg-data-platform/releases/download/BRANCH-preview/install.ps1 | iex
 ```
 
-Every successful push to `keycloak` publishes a tested preview with matching AMD64
-and ARM64 images. The same command picks up new previews when rerun; installations
-do not update automatically. Stable releases remain unchanged. Start with a fresh
-installation: preview and stable use the same Docker project names and ports, so
-use a separate Docker environment to run both. The initial administrator credentials
-are in `~/iceberg-data-platform/.env`; no demo users or data are created.
+Publish a branch with **Actions → Release → Run workflow** on that branch; see
+[publishing a branch](docs/releasing.md#publish-a-branch-for-testers). Each preview has
+matching AMD64 and ARM64 images. The same command picks up new previews when rerun;
+installations do not update automatically. Stable releases remain unchanged. Start
+with a fresh installation: preview and stable use the same Docker project names and
+ports, so use a separate Docker environment to run both. The initial administrator
+credentials are in `~/iceberg-data-platform/.env`; no demo users or data are created.
 
 ### Run from source
 

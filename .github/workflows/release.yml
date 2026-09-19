@@ -1,6 +1,8 @@
 name: Release
 on:
   push:
+    # Branches listed here publish a preview on every push. Any other branch publishes
+    # on demand with "Run workflow"; stable releases come from vX.Y.Z tags on main.
     branches: [keycloak]
     tags: ['v*']
     paths-ignore: ['presentation/**']
@@ -22,44 +24,31 @@ jobs:
       preview: ${{ steps.version.outputs.preview }}
       release_tag: ${{ steps.version.outputs.release_tag }}
       image_tag: ${{ steps.version.outputs.image_tag }}
+      entrypoint: ${{ steps.version.outputs.entrypoint }}
+      slug: ${{ steps.version.outputs.slug }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: '0.12.13'
-      - name: Select stable release or Keycloak preview
+      - name: Select stable release or branch preview
         id: version
-        env:
-          RELEASE_REF: ${{ github.ref }}
+        run: python3 -m scripts.release --channel "$GITHUB_REF" >> "$GITHUB_OUTPUT"
+      - name: Require stable tags on main
+        if: steps.version.outputs.preview != 'true'
         run: |
-          python3 - <<'PY'
-          import json, os, re
-          version = json.load(open('package.json'))['version']
-          preview = os.environ['RELEASE_REF'] == 'refs/heads/keycloak'
-          if not re.fullmatch(r'\d+\.\d+\.\d+', version) or (not preview and os.environ['RELEASE_REF'] != f'refs/tags/v{version}'):
-              raise SystemExit('Run this workflow on keycloak or the vX.Y.Z tag matching the project version')
-          build = f"keycloak-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'version={version}\n')
-              output.write(f'preview={str(preview).lower()}\n')
-              output.write(f'release_tag={build if preview else "v" + version}\n')
-              output.write(f'image_tag={build if preview else version}\n')
-          PY
+          # /releases/latest serves stable installers, so a stable release is always a main release.
+          git merge-base --is-ancestor HEAD origin/main || { echo 'Tag a commit on main for a stable release' >&2; exit 1; }
       - run: uv sync --locked --all-groups
       - run: uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
       - name: Build matching source, bundle and installers
         env:
-          PREVIEW: ${{ steps.version.outputs.preview }}
           RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
-        run: |
-          if [ "$PREVIEW" = true ]; then
-            uv run python -m scripts.release --build --install --release-tag "$RELEASE_TAG" --image-tag "$IMAGE_TAG"
-          else
-            uv run python -m scripts.release --build --install
-          fi
+        run: uv run python -m scripts.release --build --install --release-tag "$RELEASE_TAG" --image-tag "$IMAGE_TAG"
       - name: Scan source archive
         run: |
           curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
@@ -165,45 +154,70 @@ jobs:
           for component in portal users notebook; do
             docker --config "$anonymous_config" manifest inspect "${REGISTRY}-${component}:${IMAGE_TAG}" > /dev/null
           done
-      - name: Publish Keycloak preview
+      - name: Publish branch preview
         if: needs.validate.outputs.preview == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
           RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          ENTRYPOINT: ${{ needs.validate.outputs.entrypoint }}
         run: |
+          stable_before=$(gh api "repos/${GH_REPO}/releases/latest" --jq .tag_name || true)
           cat > "$RUNNER_TEMP/preview-notes.md" <<EOF_NOTES
-          ## Try Keycloak
+          ## Try the ${BRANCH} branch
 
-          This preview was built and tested from commit ${GITHUB_SHA} on the keycloak branch.
+          This preview was built and tested from commit ${GITHUB_SHA} on the ${BRANCH} branch.
 
           **Linux / macOS**
 
-          \`curl -fsSL https://github.com/${GH_REPO}/releases/download/keycloak-preview/install.sh | sh\`
+          \`curl -fsSL https://github.com/${GH_REPO}/releases/download/${ENTRYPOINT}/install.sh | sh\`
 
           **Windows PowerShell**
 
-          \`irm https://github.com/${GH_REPO}/releases/download/keycloak-preview/install.ps1 | iex\`
+          \`irm https://github.com/${GH_REPO}/releases/download/${ENTRYPOINT}/install.ps1 | iex\`
 
           Requires Docker with Compose v2 and a fresh installation. Uses the same project names, volumes and ports as stable; use a separate Docker environment to test alongside an existing installation.
 
           Open http://localhost:3000 and use PLATFORM_ADMIN_USERNAME and PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Change the initial password, then create a team, database and user. The user portal is http://localhost:3002 and Keycloak is http://localhost:8080/admin. No demo accounts or data are created automatically.
 
-          [Exact build and source](https://github.com/${GH_REPO}/releases/tag/${RELEASE_TAG}). Its installers and all application images are pinned to this build. The keycloak-preview release holds only the current installer entrypoints; use the exact build for source archives.
+          [Exact build and source](https://github.com/${GH_REPO}/releases/tag/${RELEASE_TAG}). Its installers and all application images are pinned to this build. The ${ENTRYPOINT} release holds only the current installer entrypoints; use the exact build for source archives.
 
           Rerunning the preview command installs the most recently published successful build. Existing installations do not update automatically. Stable latest releases and image tags are unchanged.
           EOF_NOTES
           if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
             gh release create "$RELEASE_TAG" dist/* --target "$GITHUB_SHA" --prerelease --latest=false \
-              --title "Keycloak preview ${RELEASE_TAG}" --notes-file "$RUNNER_TEMP/preview-notes.md"
+              --title "Preview ${RELEASE_TAG}" --notes-file "$RUNNER_TEMP/preview-notes.md"
           fi
-          if gh release view keycloak-preview > /dev/null 2>&1; then
-            gh release upload keycloak-preview dist/install.sh dist/install.ps1 --clobber
-            gh release edit keycloak-preview --prerelease --latest=false --notes-file "$RUNNER_TEMP/preview-notes.md"
+          if gh release view "$ENTRYPOINT" > /dev/null 2>&1; then
+            gh release upload "$ENTRYPOINT" dist/install.sh dist/install.ps1 --clobber
+            gh release edit "$ENTRYPOINT" --prerelease --latest=false --notes-file "$RUNNER_TEMP/preview-notes.md"
           else
-            gh release create keycloak-preview dist/install.sh dist/install.ps1 --target "$GITHUB_SHA" \
-              --prerelease --latest=false --title "Keycloak preview — install here" --notes-file "$RUNNER_TEMP/preview-notes.md"
+            gh release create "$ENTRYPOINT" dist/install.sh dist/install.ps1 --target "$GITHUB_SHA" \
+              --prerelease --latest=false --title "Preview of ${BRANCH} — install here" --notes-file "$RUNNER_TEMP/preview-notes.md"
           fi
+          # A preview must never take over the stable installation command.
+          stable_after=$(gh api "repos/${GH_REPO}/releases/latest" --jq .tag_name || true)
+          [ "$stable_before" = "$stable_after" ] || { echo "Latest release changed from ${stable_before} to ${stable_after}" >&2; exit 1; }
+          if [ -n "$stable_after" ]; then
+            curl -fsSL "https://github.com/${GH_REPO}/releases/latest/download/install.sh" > /dev/null
+          fi
+      - name: Prune older builds of this branch
+        if: needs.validate.outputs.preview == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SLUG: ${{ needs.validate.outputs.slug }}
+        run: |
+          # Keep the five newest exact builds; run ids only increase. Entrypoints, other
+          # branches and stable releases never match SLUG-RUN_ID-ATTEMPT.
+          gh release list --limit 200 --json tagName,isPrerelease --jq '($ENV.SLUG + "-") as $prefix
+              | [.[] | select(.isPrerelease and (.tagName | startswith($prefix)))
+              | .tagName | select(ltrimstr($prefix) | test("^[0-9]+-[0-9]+$"))]
+              | sort_by(ltrimstr($prefix) | split("-") | map(tonumber)) | reverse | .[5:][]' |
+            while read -r old; do
+              gh release delete "$old" --cleanup-tag --yes
+            done
       - name: Publish release and installation bundle
         if: needs.validate.outputs.preview != 'true'
         env:
@@ -224,7 +238,9 @@ jobs:
 
           \`irm https://github.com/${GH_REPO}/releases/latest/download/install.ps1 | iex\`
 
-          The installer creates configuration and random credentials, pulls latest images and starts both stacks. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
+          The installer creates configuration and random credentials, pulls the images of this release and starts both stacks. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
+
+          The commands above always install the newest release. To install exactly this version, replace \`latest/download\` with \`download/v${VERSION}\`; its installers, Compose files and images are pinned to ${VERSION}.
 
           Prebuilt images support Linux AMD64 and ARM64:
           - \`ghcr.io/${GH_REPO}-portal:${VERSION}\`
@@ -233,8 +249,24 @@ jobs:
 
           The installation bundle requires only Docker with Compose. It generates local credentials and preserves existing configuration and data volumes.
           EOF_NOTES
+          # Only the highest version serves /releases/latest; a later fix on an older line must not.
+          highest=$({ gh release list --limit 200 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName' |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; echo "v${VERSION}"; } | sort -V | tail -n 1)
+          if [ "$highest" = "v${VERSION}" ]; then latest=true; else latest=false; fi
           if gh release view "v${VERSION}" > /dev/null 2>&1; then
             gh release upload "v${VERSION}" dist/* --clobber
+            gh release edit "v${VERSION}" --latest="$latest"
           else
-            gh release create "v${VERSION}" dist/* --verify-tag --title "v${VERSION}" --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release create "v${VERSION}" dist/* --verify-tag --latest="$latest" --title "v${VERSION}" --notes-file "$RUNNER_TEMP/release-notes.md"
           fi
+          [ "$latest" = true ] || exit 0
+          # The documented installation command must now serve this release.
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsSL "https://github.com/${GH_REPO}/releases/latest/download/install.sh" | grep -qF "release_tag=v${VERSION}" &&
+               curl -fsSL "https://github.com/${GH_REPO}/releases/latest/download/install.ps1" | grep -qF "ReleaseTag = 'v${VERSION}'"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "releases/latest/download does not serve v${VERSION}" >&2
+          exit 1
