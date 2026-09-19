@@ -213,28 +213,29 @@ try {
     await signIn(sharing, env.USER_ORIGIN, TEAM_ADMIN, state.users[TEAM_ADMIN], chosen => { state.users[TEAM_ADMIN] = chosen; });
     await sharing.locator('#workspace-screen').waitFor();
     await sharing.locator('#databases button').filter({hasText: DEMO_DATABASE}).first().click();
-    await sharing.locator('summary').filter({hasText: 'Data shares'}).click();
-    await sharing.getByRole('button', {name: 'New data share', exact: true}).waitFor();
+    await sharing.getByRole('button', {name: 'Data shares', exact: true}).click();
+    const shareDatabase = sharing.locator('.database-shares').filter({has: sharing.getByRole('heading', {name: DEMO_DATABASE, exact: true})});
+    await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).waitFor();
     const existing = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares.find(s => s.name === SHARE.name);
-    await sharing.getByRole('button', {name: 'New data share', exact: true}).click();
+    await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).click();
     await sharing.getByLabel('Share name').fill(SHARE.name);
     await sharing.getByLabel('Recipient').fill(SHARE.recipient);
     await sharing.getByLabel('Description').fill(SHARE.description);
     await sharing.getByLabel(/^Expires/).fill(`${new Date().getUTCFullYear() + 1}-12-31`);
     await sharing.locator('.share-tree summary').filter({hasText: SHARE.namespace}).click();
     await sharing.getByLabel(SHARE.table).check();
-    // Database facts above the form, so the capture says which database is shared.
-    await sharing.locator('.catalog-summary').evaluate(s => s.scrollIntoView({block: 'start'}));
+    // Keep the database name above the share form in the capture.
+    await sharing.locator('.database-shares').filter({hasText: DEMO_DATABASE}).first().evaluate(s => s.scrollIntoView({block: 'start'}));
     await shot(sharing, '32-user-share-form');
     // The pictured secret must not outlive the capture: it is replaced once more at the end.
-    if (existing) { await sharing.getByRole('button', {name: 'Cancel', exact: true}).click(); await sharing.getByRole('button', {name: 'New secret', exact: true}).first().click(); }
+    if (existing) { await sharing.getByRole('button', {name: 'Cancel', exact: true}).click(); await shareDatabase.getByRole('button', {name: 'New secret', exact: true}).first().click(); }
     else await sharing.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
     await sharing.locator('.share-issued').waitFor();
     await sharing.locator('.share-issued h3').first().evaluate(h => h.scrollIntoView({block: 'start'}));
     await shot(sharing, '33-user-share-credential');
     await sharing.getByRole('button', {name: 'Done, I stored the secret', exact: true}).click();
-    await sharing.getByRole('region', {name: 'Data shares', exact: true}).waitFor();
-    await sharing.locator('summary').filter({hasText: 'Data shares'}).evaluate(h => h.scrollIntoView({block: 'start'}));
+    await shareDatabase.getByRole('region', {name: 'Data shares', exact: true}).waitFor();
+    await sharing.locator('#shares-page').evaluate(h => h.scrollIntoView({block: 'start'}));
     await shot(sharing, '34-user-share-list');
     const share = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares.find(s => s.name === SHARE.name);
     const renewed = await owner.request.post(`${env.USER_ORIGIN}/api/shares/${share.id}/rotate`, {data: {}, headers: {'X-Portal-Request': '1'}});

@@ -78,6 +78,10 @@ A view is only a definition. The recipient's engine reads the underlying tables 
 
 A share belongs to its database, and through it to the owning team; the team is not stored on the share. Every current Administrator or Database + bucket administrator of that team can manage it, including after the person who created it lost that role. A shared database cannot be moved to another team until its shares are revoked, so new owners never inherit external access. Deleting a database revokes its shares first.
 
+Readers and writers can list shares for databases in their active team and environment.
+The user portal disables management buttons for these roles; the API enforces the same
+administrator requirement for every mutation. Listing a share does not reveal its secret.
+
 The client secret is returned once, on creation and on **New secret**, and is never stored by the portal. A new secret keeps the client ID and ends the previous secret at once. Revocation removes the principal's only role first, which ends already issued tokens immediately, then the catalog role, the principal role and finally the principal, which serves as the marker for resuming an interrupted revocation. An expiry, when set, is enforced as a real revocation: the user gateway checks every 30 seconds, and every listing of shares in either portal revokes what has expired, what was left half revoked and what lost its database.
 
 ## Related data and inspection

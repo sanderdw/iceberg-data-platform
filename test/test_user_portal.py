@@ -518,8 +518,8 @@ def test_only_current_team_admins_manage_shares(users):
     c, (first, second, _), (db, other_db, foreign_db) = users.client, users.teams, users.databases
     assert c.get("/api/shares", params={"database": db}).status_code == 401
     login(c)
-    # Reader on the active team, writer on the second: neither may share.
-    assert c.get("/api/shares", params={"database": db}).status_code == 403
+    # Readers and writers can inspect shares, but cannot manage them.
+    assert c.get("/api/shares", params={"database": db}).status_code == 200
     assert c.post("/api/shares", json=share_body(db), headers=JSON).status_code == 403
     assert c.patch("/api/team", json={"team": second}, headers=JSON).status_code == 200
     assert c.post("/api/shares", json=share_body(other_db), headers=JSON).status_code == 403
@@ -538,9 +538,11 @@ def test_only_current_team_admins_manage_shares(users):
     assert c.get("/api/shares", params={"database": foreign_db}).status_code == 403
     assert c.post("/api/shares", json=share_body(foreign_db), headers=JSON).status_code == 403
     assert c.post("/api/shares", json=share_body(db), headers=JSON).status_code == 403
+    assert c.get("/api/shares", params={"database": db}).status_code == 403
     # The share belongs to the active team and environment only.
     assert c.patch("/api/environment", json={"environment": "production"}, headers=JSON).status_code == 200
     assert c.delete(f"/api/shares/{id}", headers=JSON).status_code == 403
+    assert c.get("/api/shares", params={"database": other_db}).status_code == 403
     assert c.patch("/api/environment", json={"environment": "development"}, headers=JSON).status_code == 200
     assert c.patch("/api/team", json={"team": first}, headers=JSON).status_code == 200
     assert c.post(f"/api/shares/{id}/rotate", json={}, headers=JSON).status_code == 403
@@ -556,6 +558,12 @@ def test_only_current_team_admins_manage_shares(users):
     ):
         assert response.status_code == 403
     assert [s["id"] for s in users.provider.list_shares()] == [id]
+    for role in ("reader", "writer"):
+        promote(users, {first: "reader", second: role})
+        response = c.get("/api/shares", params={"database": other_db})
+        assert response.status_code == 200
+        assert response.json() == listed
+        assert "clientSecret" not in response.text
     promote(users, {first: "reader", second: "bucket-admin"})
     edited = c.patch(f"/api/shares/{id}", json={"objects": share_body(db)["objects"][:1]}, headers=JSON)
     assert edited.status_code == 200 and [o["name"] for o in edited.json()["share"]["objects"]] == ["events"]

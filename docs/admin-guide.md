@@ -4,7 +4,7 @@ For Keycloak account creation, linking, password resets and access revocation, u
 [identity management guide](keycloak.md). Human accounts use Keycloak. Polaris client credentials apply to service accounts.
 
 
-Iceberg Platform runs the administration portal, Apache Polaris, PostgreSQL 18, pgAdmin and RustFS in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and shared team marimo notebooks.
+Iceberg Platform runs the administration portal, Keycloak, Apache Polaris, PostgreSQL 18, pgAdmin, RustFS and monitoring in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and shared team marimo notebooks.
 
 Python **3.14.7**, FastAPI **0.141.1** and uv **0.12.13** are pinned in the project manifests and Dockerfiles. Node is needed only for browser tests.
 
@@ -16,7 +16,7 @@ Install Docker Compose and [uv](https://docs.astral.sh/uv/getting-started/instal
 uv python install
 uv sync --locked
 uv run python -m scripts.setup
-docker compose up -d --build
+docker compose up -d --build --wait
 ```
 
 Open http://localhost:3000 and sign in through Keycloak with `PLATFORM_ADMIN_USERNAME` and the initial `PLATFORM_ADMIN_PASSWORD` from `.env`. Setup preserves existing configuration and never prints credentials.
@@ -27,19 +27,23 @@ Open http://localhost:3000 and sign in through Keycloak with `PLATFORM_ADMIN_USE
 | FastAPI documentation | http://localhost:3000/docs | Sign in to the admin portal first |
 | OpenAPI schema | http://localhost:3000/openapi.json | Admin portal session |
 | RustFS console | http://localhost:9001 | Bucket administrator S3 credentials or local root credentials |
-| Iceberg REST API | http://localhost:8181/api/catalog | OAuth2 client ID and secret |
+| Iceberg REST API | http://localhost:8181/api/catalog | Keycloak bearer token; client credentials for services and shares |
 | pgAdmin | http://localhost:5050 | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD` |
 
-Published ports bind to `127.0.0.1`. PostgreSQL is internal only. Set `PORT` to change the portal port. Swagger UI loads assets from jsDelivr; the OpenAPI schema remains available without the CDN.
+Published ports bind to `127.0.0.1`. PostgreSQL is internal only. Set `PORT` before initial setup to change the portal port; later changes also require matching [Keycloak origins and redirects](keycloak.md#configuration). Swagger UI loads assets from jsDelivr; the OpenAPI schema remains available without the CDN.
 
 For development with automatic reload:
 
 ```bash
-docker compose up -d postgres rustfs polaris
+docker compose up -d --build --wait
+docker compose stop portal
 uv run python -m server --reload
 ```
 
-The Python entry point reads `.env`; existing environment variables take precedence. Use `PORT=3001 uv run python -m server` when the Docker portal already occupies port 3000.
+The Python entry point reads `.env`; existing environment variables take precedence.
+Stopping the container frees the configured port and preserves the existing Keycloak
+redirect URL. After stopping the local process, run `docker compose up -d --wait portal`
+to restore the container. See [development instructions](../README.md#development-and-tests).
 
 ### PostgreSQL and pgAdmin
 
@@ -83,11 +87,13 @@ provisioning is not part of the Keycloak user workflow. A team without databases
 no data access. See [identity management](keycloak.md#manage-users-in-the-administration-portal)
 for linking, password reset, and access revocation.
 
+Navigation and search/filter values are kept in the URL, so browser refresh and Back/Forward return to the same page. Database, user, team and data-share lists refresh every 30 seconds while visible and when the tab regains focus. Open dialogs and focused form fields are preserved. Infrastructure keeps its existing 15-second polling; catalog tree expansion stays under your control.
+
 ## Share data with an external party
 
-A team's Administrator (or Database + bucket administrator) shares selected tables and views of one database in the user portal: open the database, expand **Data shares** and choose **New data share**. No portal administrator is involved. The result is a client ID and secret for the recipient, shown once, with a ready PyIceberg snippet.
+A team's Administrator (or Database + bucket administrator) shares selected tables and views of one database in the user portal: select **Data shares** in the top menu and choose **New data share** under the database. No portal administrator is involved. The result is a client ID and secret for the recipient, shown once, with a runnable DuckDB Python script.
 
-- The recipient reads exactly the selected objects and cannot list anything. Send the full names along with the credential. Engines that enumerate namespaces when attaching a catalog, such as DuckDB `ATTACH` or Trino, do not work with a share; PyIceberg `load_table` and Spark `spark.table("catalog.namespace.table")` do.
+- The recipient reads exactly the selected objects and cannot list anything. Send the full names along with the credential. Use the generated DuckDB script to query a shared table by its full name. Catalog listing operations are not permitted.
 - A view shares only its definition. Add every table it reads; the recipient can read those tables in full. To hide rows or columns, publish the result as its own table and share that.
 - **New secret** replaces a lost or leaked secret and ends the old one at once. **Revoke** ends access immediately. An optional expiry revokes the share at the end of the chosen UTC day.
 - After a table is dropped and recreated, or renamed, the share list says what is no longer granted or still granted under a new name. Edit and save the share to bring the grants back in line.
@@ -112,26 +118,11 @@ catalog = connect()
 ```
 
 An external party connects with the client credentials of a [data share](#share-data-with-an-external-party).
-The catalog ID is the warehouse. The user portal shows this snippet filled in when the share is created:
+The catalog ID is the warehouse. The user portal fills in a DuckDB script when the share is created.
 
-```python
-from pyiceberg.catalog import load_catalog
+Save the script as `read_share_duckdb.py` and run `uv run read_share_duckdb.py`. It declares `duckdb` as its dependency, installs and loads `httpfs` and `iceberg`, creates an in-memory OAuth secret, and attaches the shared catalog with vended storage credentials. Comments list every shared table and view by its full Iceberg name. The final query selects the first shared table by its full name and prints it with `.show()`; it does not query every object or execute views. View execution requires support from the recipient's engine for the view's SQL dialect and catalog integration.
 
-catalog = load_catalog(
-    "analytics",
-    type="rest",
-    uri="http://localhost:8181/api/catalog",
-    warehouse="<catalog-id>",
-    credential="<client-id>:<client-secret>",
-    scope="PRINCIPAL_ROLE:ALL",
-    **{
-        "oauth2-server-uri": "http://localhost:8181/api/catalog/v1/oauth/tokens",
-        "header.X-Iceberg-Access-Delegation": "vended-credentials",
-    },
-)
-```
-
-A share credential loads the shared tables and views by name, for example `catalog.load_table("sales.orders")`; listing is not permitted. Human portal passwords are not Polaris client secrets.
+The generated script contains the issued client ID, client secret, token endpoint, scope, catalog ID, and catalog endpoint. **Copy DuckDB snippet** copies the complete script. The code is not displayed in the panel. Creating a share or replacing its secret makes the script available through the copy button; store it securely before closing the credential panel. Human portal passwords are not Polaris client secrets.
 
 ## Persistence and operational behavior
 
@@ -139,7 +130,7 @@ See [architecture](architecture.md) for component boundaries. Teams are marked P
 
 Only resources marked `portal.managed-by=iceberg-portal-v2` belong to this resource model. A fresh setup has no default teams or users. `docker compose down -v` deletes PostgreSQL, pgAdmin and RustFS data and resets the local environment.
 
-Run one Uvicorn worker. A lock serializes administration changes, such as creating a user while deleting a team. Sessions are process-local and expire after eight hours or a restart. Multiple replicas require shared sessions and coordination.
+Run one Uvicorn worker. A lock serializes administration changes, such as creating a user while deleting a team. Sessions are process-local and last at most eight hours, ending sooner on restart or when Keycloak refuses renewal. Access tokens renew automatically during a valid session. Multiple replicas require shared sessions and coordination.
 
 Creation and moves use compensating actions when Polaris or RustFS fails. Failed compensation is reported explicitly. Database deletion is irreversible and stores a persistent deletion marker so cleanup can resume. Existing clients may retain temporary S3 credentials or cached metadata until their validity expires.
 

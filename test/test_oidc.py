@@ -1,5 +1,6 @@
 """Exercise real OIDC signature/claim validation with a simulated token endpoint."""
 
+import asyncio
 import base64
 import hashlib
 import time
@@ -39,10 +40,17 @@ def issuer():
         state["calls"] += 1
         form = parse_qs(request.content.decode())
         state["form"] = form
-        assert form["grant_type"] == ["authorization_code"]
-        assert form["redirect_uri"] == ["http://localhost:13000/auth/callback"]
-        challenge = base64.urlsafe_b64encode(hashlib.sha256(form["code_verifier"][0].encode()).digest())
-        assert challenge.rstrip(b"=").decode() == state["query"]["code_challenge"][0]
+        if form["grant_type"] == ["refresh_token"]:
+            assert form["refresh_token"] == [state["refresh_token"]]
+            if state.get("unavailable"):
+                raise httpx2.ConnectError("private endpoint details", request=request)
+            if state.get("revoked"):
+                return httpx2.Response(400, json={"error": "invalid_grant", "error_description": "private token details"})
+        else:
+            assert form["grant_type"] == ["authorization_code"]
+            assert form["redirect_uri"] == ["http://localhost:13000/auth/callback"]
+            challenge = base64.urlsafe_b64encode(hashlib.sha256(form["code_verifier"][0].encode()).digest())
+            assert challenge.rstrip(b"=").decode() == state["query"]["code_challenge"][0]
         common = {"iss": ISSUER, "sub": "subject-123", "exp": int(time.time()) + 900,
                   "iat": int(time.time())}
         identity = {**common, "aud": "iceberg-admin", "nonce": state["query"]["nonce"][0],
@@ -51,21 +59,44 @@ def issuer():
                   "resource_access": {"iceberg-admin": {"roles": ["platform-admin"]}},
                   **state["access_changes"]}
         sign = lambda claims: jwt.encode({"alg": "RS256", "kid": "test"}, claims, state["signing_key"])
+        state["refresh_token"] = f"private-refresh-{state['calls']}"
         return httpx2.Response(200, json={"token_type": "Bearer", "expires_in": 900,
+                                        "refresh_token": state["refresh_token"], "refresh_expires_in": 1800,
                                         "id_token": sign(identity), "access_token": sign(access)})
 
     oidc.client.client_kwargs["transport"] = httpx2.MockTransport(wire)
+    create_session = oidc.session
+    state["sessions"] = []
+
+    def capture_session(*args):
+        session = create_session(*args)
+        state["sessions"].append(session)
+        return session
+
+    oidc.session = capture_session
     return oidc, state
 
 
-def start(client, state):
-    response = client.get("/auth/login", follow_redirects=False)
+def start(client, state, target="/"):
+    response = client.get("/auth/login", params={"return_to": target}, follow_redirects=False)
     assert response.status_code == 302
     state["query"] = parse_qs(urlsplit(response.headers["location"]).query)
     assert state["query"]["code_challenge_method"] == ["S256"]
     assert "HttpOnly" in response.headers["set-cookie"]
     assert "SameSite=lax" in response.headers["set-cookie"]
     return "/auth/callback?code=one-use-code&state=" + state["query"]["state"][0]
+
+
+@pytest.mark.parametrize("target,expected", [
+    ("/#users?search=alice", "/#users?search=alice"),
+    ("https://evil.test", "/"), ("//evil.test", "/"), ("/\\evil.test", "/"),
+])
+def test_sign_in_restores_only_local_portal_location(issuer, target, expected):
+    oidc, state = issuer
+    with TestClient(create_app(MemoryPolaris(), PASSWORD, oidc=oidc)) as client:
+        response = client.get(start(client, state, target), follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == expected
 
 
 def test_admin_login_pkce_single_use_and_logout(issuer):
@@ -84,6 +115,80 @@ def test_admin_login_pkce_single_use_and_logout(issuer):
         response = client.delete("/api/session", headers=HEADERS)
         assert response.json()["logoutUrl"].startswith(ISSUER)
         assert client.get("/api/teams").status_code == 401
+
+
+def test_admin_renews_rotating_tokens_without_replacing_session(issuer):
+    oidc, state = issuer
+    with TestClient(create_app(MemoryPolaris(), PASSWORD, oidc=oidc)) as client:
+        client.get(start(client, state), follow_redirects=False)
+        cookie = client.cookies.get("portal_session")
+        grant = state["sessions"][0]
+        for expected_calls in (2, 3):
+            previous_refresh = state["refresh_token"]
+            grant.access_until = 0
+            assert client.get("/api/teams").status_code == 200
+            assert state["form"]["refresh_token"] == [previous_refresh]
+            assert state["calls"] == expected_calls
+            assert grant.refresh_token == state["refresh_token"] != previous_refresh
+            assert client.cookies.get("portal_session") == cookie
+            response = client.get("/api/session")
+            assert response.json()["authenticated"]
+            assert "private-refresh" not in response.text and "eyJ" not in response.text
+            assert state["calls"] == expected_calls
+        grant.expires = 0
+        assert client.get("/api/teams").status_code == 401
+
+
+@pytest.mark.parametrize("changes", [
+    {"sub": "different-user"}, {"iss": "https://wrong.test"}, {"aud": "wrong-resource"},
+    {"resource_access": {}}, {"exp": 1},
+])
+def test_invalid_refreshed_claims_end_admin_session(issuer, changes):
+    oidc, state = issuer
+    with TestClient(create_app(MemoryPolaris(), PASSWORD, oidc=oidc)) as client:
+        client.get(start(client, state), follow_redirects=False)
+        state["access_changes"] = changes
+        state["sessions"][0].access_until = 0
+        assert client.get("/api/teams").status_code == 401
+        assert not client.get("/api/session").json()["authenticated"]
+
+
+def test_renewal_retries_transient_failure_but_rejects_revocation(issuer):
+    oidc, state = issuer
+    with TestClient(create_app(MemoryPolaris(), PASSWORD, oidc=oidc)) as client:
+        client.get(start(client, state), follow_redirects=False)
+        state["sessions"][0].access_until = 0
+        state["unavailable"] = True
+        response = client.get("/api/teams")
+        assert response.status_code == 503 and "private" not in response.text
+        state["unavailable"] = False
+        assert client.get("/api/teams").status_code == 200
+        state["sessions"][0].access_until = 0
+        state["revoked"] = True
+        response = client.get("/api/teams")
+        assert response.status_code == 401 and "private" not in response.text
+        assert not client.get("/api/session").json()["authenticated"]
+
+
+def test_concurrent_requests_refresh_only_once(issuer, monkeypatch):
+    oidc, state = issuer
+    with TestClient(create_app(MemoryPolaris(), PASSWORD, oidc=oidc)) as client:
+        client.get(start(client, state), follow_redirects=False)
+        grant = state["sessions"][0]
+        grant.access_until = 0
+        fetch = oidc.client.fetch_access_token
+
+        async def delayed(**kwargs):
+            await asyncio.sleep(0.01)
+            return await fetch(**kwargs)
+
+        monkeypatch.setattr(oidc.client, "fetch_access_token", delayed)
+
+        async def renew():
+            await asyncio.gather(*(oidc.renew(grant) for _ in range(5)))
+
+        asyncio.run(renew())
+        assert state["calls"] == 2
 
 
 @pytest.mark.parametrize("kind,changes", [
@@ -181,6 +286,21 @@ def test_user_link_identity_permissions_and_token_expiry(issuer):
         assert workspace["activeRole"] == "reader"
         assert [t["id"] for t in workspace["teams"]] == [team]
         assert len(calls) == 1
+        # Renewal preserves the team, browser cookie and running notebook identity.
+        cookie = client.cookies.get("iceberg_user_session")
+        notebook = client.post("/api/notebooks", headers=HEADERS, json={"database": workspace["databases"][0]["id"]}).json()
+        token_path = f"/internal/notebooks/{notebook['id']}/token"
+        assert client.get(token_path).status_code == 401
+        assert client.get(token_path, headers={"Authorization": "Bearer wrong"}).status_code == 401
+        state["sessions"][0].access_until = 0
+        response = client.get(token_path, headers={"Authorization": "Bearer hidden-runtime-token"})
+        assert response.status_code == 200
+        assert list(response.json()) == ["access_token"]
+        assert response.headers["cache-control"] == "no-store"
+        assert state["calls"] == 2
+        assert client.cookies.get("iceberg_user_session") == cookie
+        refreshed = client.get("/api/workspace").json()
+        assert refreshed["activeTeam"] == team and refreshed["notebooks"][0]["id"] == notebook["id"]
         session = directory.login_oidc(
             {"sub": "subject-123", "iss": ISSUER, **state["access_changes"]}, "eyJ-token", 30, "test-session"
         )
@@ -189,5 +309,6 @@ def test_user_link_identity_permissions_and_token_expiry(issuer):
         with pytest.raises(ServiceError, match="expired"):
             directory.request(session, "/api/catalog/v1/config")
         principal["properties"]["portal.oidc-subject"] = "different-subject"
+        assert client.get(token_path, headers={"Authorization": "Bearer hidden-runtime-token"}).status_code == 403
         assert client.get("/api/workspace").status_code == 403
         assert client.get(start(client, state), follow_redirects=False).status_code == 403

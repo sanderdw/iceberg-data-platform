@@ -497,7 +497,7 @@
         <tr><td class="mono verb">GET</td><td class="mono">/api/contents · /api/details</td><td>Tables, schema, snapshots</td></tr>
         <tr><td class="mono verb">POST</td><td class="mono">/api/preview</td><td>Table preview, 100 rows max</td></tr>
         <tr><td class="mono verb">POST DELETE</td><td class="mono">/api/notebooks[/{id}]</td><td>Start and stop a marimo container</td></tr>
-        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/shares[/{id}]</td><td>Data shares, for team administrators</td></tr>
+        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/shares[/{id}]</td><td>Team members list shares; team administrators manage them</td></tr>
         <tr><td class="mono verb">POST</td><td class="mono">/api/shares/{id}/rotate</td><td>Replace the secret of a share</td></tr>
         <tr><td class="mono verb">ANY · WS</td><td class="mono">/workspaces/{id}/…</td><td>Proxy into that container</td></tr>
         <tr><td class="mono verb">GET</td><td class="mono">/api/health</td><td>Liveness</td></tr>
@@ -783,9 +783,9 @@
     <div class="head"><span class="label">Demo · Data sharing</span><h2>Pick the tables, get a credential</h2></div>
     <div class="fig two">
       <img class="shot" src="screenshots/32-user-share-form.png" alt="User portal form for a data share with a recipient, an expiry and a namespace tree with a selected table">
-      <img class="shot" src="screenshots/33-user-share-credential.png" alt="User portal panel with the client ID, the client secret and a PyIceberg snippet for the recipient">
+      <img class="shot" src="screenshots/33-user-share-credential.png" alt="User portal credential panel for a data share, captured before the copy-only DuckDB update">
     </div>
-    <div class="caption foot two"><span>mila administers grid-planning · one table for the municipality, with an expiry</span><span>Client ID, secret and a PyIceberg snippet · shown once, never stored</span></div>
+    <div class="caption foot two"><span>mila administers grid-planning · one table for the municipality, with an expiry</span><span>Credentials shown once · now with Copy DuckDB snippet (capture shows earlier UI)</span></div>
     <div class="hint">↓ full screen</div>
   </section>
   <section class="full" data-background-image="screenshots/32-user-share-form.png" data-background-size="contain" data-background-color="#000000">
@@ -794,7 +794,7 @@
   <section class="full" data-background-image="screenshots/33-user-share-credential.png" data-background-size="contain" data-background-color="#000000">
     <div class="caption">User portal · credential for the recipient · the secret in this capture has been replaced</div>
   </section>
-  <aside class="notes">The Data shares section only exists for the administrator role of the active team; the gateway re-reads that role from Polaris on every request. A view can be shared too, but it is only a definition: the tables it reads go into the share with it.</aside>
+  <aside class="notes">The Data shares page is available to all members of the active team and environment. Readers and writers see disabled management buttons; the gateway re-reads the administrator role from Polaris for every mutation. A view can be shared too, but it is only a definition: the tables it reads go into the share with it. The current credential panel has a Copy DuckDB snippet button without a code preview. The script lists every shared table and view in comments and queries the first table.</aside>
 </section>
 
 <section>

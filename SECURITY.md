@@ -19,7 +19,7 @@ Include the affected version, a minimal reproduction using synthetic data, the e
 - The user gateway mounts the Docker socket and has host-level administrative capability. Run it on a dedicated, trusted development Docker host. Container isolation here is not a hardened boundary for hostile tenants.
 - The internal monitoring collector also mounts the Docker socket and must be trusted with host-level capability. A read-only socket mount does not restrict Docker API methods. Its implementation only reads selected metrics, and its snapshot endpoint requires the portal secret and has no published host port. PostgreSQL collection uses read-only transactions; the default local setup reuses the database account.
 - Notebook runtimes receive only that user's data credentials, have no Docker socket, run without root privileges or Linux capabilities, and use individual Docker bridge networks and resource limits. These networks allow outbound internet access; notebook ports are not published to the host.
-- Sessions are in memory, expire with the Keycloak access token (15 minutes by default), and require one gateway replica. Restarting the gateway invalidates sessions and stops active runtimes; saved notebook files persist.
+- Sessions and OIDC refresh tokens stay in server memory and require one gateway replica. Access tokens renew automatically; sessions end after at most eight hours or when Keycloak refuses renewal. Notebooks can retrieve only their owner’s current access token using their runtime credential; they never receive refresh tokens. Restarting the gateway invalidates sessions and stops active runtimes; saved notebook files persist.
 - Team switches, membership changes and catalog moves affect notebook access. Credentials already issued by external services remain subject to those services' expiration and revocation behavior.
 - Team members share writable notebook files within each environment. They must trust each other’s code: a shared notebook executes with the credentials of the member running it. File sharing does not merge live editor state.
 - The active team and environment filter the user interface and gateway access. A user's underlying credentials remain valid for every team to which that user belongs.
@@ -33,7 +33,8 @@ Keep `.env`, keys, data volumes and team notebooks private. Database deletion re
 The portal uses a dedicated realm provisioning service account. It does not receive the
 master administrator password. Identity attributes are editable only by realm admins.
 Revocation removes platform grants and identity links while preserving the Keycloak
-account. There is no automatic token refresh or back-channel logout. Issued JWTs and
-vended storage credentials can remain valid until expiry; removing an administrator
-role does not immediately invalidate an existing admin session. Keycloak runs in local
+account. Access tokens refresh automatically, but back-channel logout is not implemented.
+Issued JWTs and vended storage credentials can remain valid until expiry; administrator
+roles are rechecked on token renewal, so removing a role does not immediately invalidate
+an existing admin session. Keycloak runs in local
 development mode with a persistent development database. See [deployment boundaries](docs/keycloak.md#deployment-boundaries).

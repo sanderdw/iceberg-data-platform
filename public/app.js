@@ -1,6 +1,24 @@
 const $ = selector => document.querySelector(selector);
 let loginUrl = null;
 const state = { page: 'databases', query: '', team: '', environment: '', data: null, loading: false, status: '' };
+const adminPages = ['databases', 'users', 'teams', 'shares', 'explorer', 'infrastructure', 'guide'];
+let refreshingOverview = false, activeMutations = 0;
+function readAdminRoute() {
+  const [page, query = ''] = location.hash.slice(1).split('?');
+  const params = new URLSearchParams(query);
+  state.page = adminPages.includes(page) ? page : 'databases';
+  state.query = params.get('search') || ''; state.team = params.get('team') || ''; state.environment = params.get('environment') || '';
+}
+function saveAdminRoute(replace = false) {
+  const params = new URLSearchParams();
+  if (state.query) params.set('search', state.query);
+  if (state.team) params.set('team', state.team);
+  if (state.environment) params.set('environment', state.environment);
+  const hash = `#${state.page}${params.size ? '?' + params : ''}`;
+  if (location.hash !== hash) history[replace ? 'replaceState' : 'pushState'](null, '', hash);
+}
+readAdminRoute();
+window.addEventListener('hashchange', () => { readAdminRoute(); if (state.data) { closeModal(); render(); } });
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const paths = {
   database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>',
@@ -19,6 +37,8 @@ const roleNames = { reader: 'Read', writer: 'Read & write', admin: 'Administrato
 const envNames = { development: 'Development', acceptance: 'Acceptance', production: 'Production' };
 const date = timestamp => timestamp ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(timestamp)) : 'Just now';
 async function api(path, method = 'GET', body) {
+  if (method !== 'GET') activeMutations++;
+  try {
   const response = await fetch(`/api${path}`, { method, headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1' }, ...(body ? { body: JSON.stringify(body) } : {}) });
   const result = await response.json();
   if (!response.ok) {
@@ -26,6 +46,7 @@ async function api(path, method = 'GET', body) {
     throw new Error(result.error || 'The action failed.');
   }
   return result;
+  } finally { if (method !== 'GET') activeMutations--; }
 }
 function notifyStatus(message) { state.status = message; const target = modal.open ? modal.querySelector('.modal-status') : $('#status'); if (target) target.textContent = `[ ${message} ]`; }
 function themeControls() { for (const button of document.querySelectorAll('[data-theme-toggle]')) { button.textContent = document.documentElement.dataset.theme === 'dark' ? 'Light / ○' : 'Dark / ●'; button.onclick = () => { const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = theme; try { localStorage.setItem('iceberg-theme', theme); } catch {} themeControls(); }; } }
@@ -36,6 +57,7 @@ function login() {
   $('#app').innerHTML = `<main class="login"><div class="login-story"><a class="brand" href="/"> <img src="/favicon.svg" alt="">iceberg<span> / </span></a><div><span class="eyebrow">ICEBERG / DATA PLATFORM</span><h1>Data.<br>Under control.</h1><p>Databases, buckets and access. One workspace for your team.</p><div class="system-label">[ 01 ] CATALOG<br>[ 02 ] OBJECT STORAGE<br>[ 03 ] ACCESS</div></div><small>LOCAL / OPEN STANDARDS / YOUR INFRASTRUCTURE</small></div><section class="login-form"><button class="theme-button" data-theme-toggle aria-label="Toggle color theme"></button><span class="pill"><span class="dot"></span> Local workspace</span><h2>Welcome to Iceberg</h2><p>Sign in to manage your data platform.</p><form id="login-form"><label>Admin password<input type="password" name="password" autocomplete="current-password" required autofocus placeholder="Enter your password"></label><p class="form-error" role="alert"></p><button class="button primary" type="submit">Open workspace ${icon('arrow')}</button></form><p class="subtle">Your local password is stored in <code>.env</code> under <code>PORTAL_PASSWORD</code>.</p></section></main>`;
   if (loginUrl) {
     $('#login-form').innerHTML = '<a class="button primary" href="/auth/login">Sign in with Keycloak</a>';
+    $('#login-form a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`;
     $('.login-form .subtle').textContent = 'Use your platform administrator account.';
   }
   themeControls();
@@ -51,6 +73,7 @@ async function load() {
   catch (error) { if (state.data) notifyStatus(error.message); else if (!$('#login-form')) $('#app').innerHTML = `<main class="initial"><p>${esc(error.message)}</p><button class="button" id="retry">Try again</button></main>`; if ($('#retry')) $('#retry').onclick = load; }
 }
 function render() {
+  saveAdminRoute();
   stopInfrastructure();
   const { databases, users, health } = state.data;
   const teams = state.data.teams;
@@ -79,13 +102,13 @@ function renderPage() {
   const isDb = state.page === 'databases';
   const teams = state.data.teams;
   $('#page-content').innerHTML = `<section class="panel"><div class="panel-heading"><div><h2>${isDb ? 'All databases' : 'All users'} <span class="number-badge">${isDb ? databases.length : users.length}</span></h2><p>${isDb ? 'Catalog and storage, organized by team.' : 'Service accounts with access to team databases.'}</p></div><button class="icon-button" id="refresh" aria-label="Refresh">${icon('refresh')}</button></div><div class="filters"><label class="search">${icon('search')}<input id="search" placeholder="${isDb ? 'Search databases…' : 'Search users…'}" value="${esc(state.query)}" aria-label="Search"></label>${isDb ? `<select id="team-filter" aria-label="Filter by team"><option value="">All teams</option>${teams.map(t => `<option value="${esc(t.id)}" ${t.id === state.team ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select><select id="env-filter" aria-label="Filter by environment"><option value="">All environments</option>${Object.entries(envNames).map(([v, t]) => `<option value="${v}" ${v === state.environment ? 'selected' : ''}>${t}</option>`).join('')}</select>` : '<span class="filter-note">Credentials are shown only once</span>'}</div><div id="table"></div></section><div class="bottom-callout"><div class="callout-icon">${icon('layers')}</div><div><h3>One database. One bucket.</h3><p>Connect through Iceberg REST, or give your team direct S3 access.</p></div><button id="guide-link">View the first steps ${icon('arrow')}</button></div>`;
-  $('#search').oninput = event => { state.query = event.target.value; renderTable(); };
+  $('#search').oninput = event => { state.query = event.target.value; saveAdminRoute(true); renderTable(); };
   if (keycloakUsers) {
     if (!isDb) $('.panel-heading p').textContent = 'Keycloak accounts with access to team databases.';
     if (!isDb) $('.filter-note').textContent = 'Sign-in with Keycloak · permissions managed here';
     $('.bottom-callout p').textContent = 'Sign in to the user portal and open a notebook with your own permissions.';
   }
-  if (isDb) { $('#team-filter').onchange = e => { state.team = e.target.value; renderTable(); }; $('#env-filter').onchange = e => { state.environment = e.target.value; renderTable(); }; }
+  if (isDb) { $('#team-filter').onchange = e => { state.team = e.target.value; saveAdminRoute(true); renderTable(); }; $('#env-filter').onchange = e => { state.environment = e.target.value; saveAdminRoute(true); renderTable(); }; }
   $('#refresh').onclick = load;
   $('#guide-link').onclick = () => { state.page = 'guide'; render(); };
   renderTable();
@@ -105,7 +128,7 @@ function renderTeams() {
     for (const b of document.querySelectorAll('[data-edit-team]')) b.onclick = () => teamModal(b.dataset.editTeam);
     for (const b of document.querySelectorAll('[data-delete-team]')) b.onclick = () => confirmAction('Delete team', `Team ${esc(teamName(b.dataset.deleteTeam))} will be deleted. Move or delete its databases first. Users must remain members of at least one other team.`, `/teams/${b.dataset.deleteTeam}`, 'Team deleted.');
   }
-  $('#search').oninput = e => { state.query = e.target.value; table(); };
+  $('#search').oninput = e => { state.query = e.target.value; saveAdminRoute(true); table(); };
   $('#refresh').onclick = load;
   table();
 }
@@ -291,7 +314,7 @@ function renderShares() {
     $('#share-table').innerHTML = items.length ? `<div class="table-scroll"><table><thead><tr><th>Share</th><th>Database</th><th>Team</th><th>Tables and views</th><th>Expires</th><th>Created</th><th>Actions</th></tr></thead><tbody>${items.map(s => `<tr><td><strong>${esc(s.name)}</strong><p class="subtle">${esc(s.recipient || '—')}</p></td><td>${esc(database(s.database)?.name || s.database)}</td><td>${esc(owner(s))}</td><td><div class="team-tags">${s.objects.map(o => `<span class="tag">${esc([...o.namespace, o.name].join('.'))}</span>`).join('')}</div></td><td>${s.expiresAt ? `${utcDate(s.expiresAt)}<p class="subtle">end of day UTC</p>` : 'Never'}</td><td>${date(s.createdAt)}<p class="subtle">${esc(s.createdBy || '—')}</p></td><td><div class="row-actions"><button class="text-button danger" data-revoke-share="${esc(s.id)}">${s.status === 'revoking' ? 'Resume revocation' : 'Revoke'}</button></div></td></tr>`).join('')}</tbody></table></div>` : `<div class="empty"><span class="empty-icon">${icon('key')}</span><h3>${shares.length ? 'No results found' : '[ NO DATA SHARES ]'}</h3><p>${shares.length ? 'Adjust your search.' : 'Nothing is shared with external parties.'}</p></div>`;
     for (const b of document.querySelectorAll('[data-revoke-share]')) { const share = shares.find(s => s.id === b.dataset.revokeShare); b.onclick = () => confirmAction('Revoke data share', `The credential of ${esc(share.name)}${share.recipient ? ` (${esc(share.recipient)})` : ''} stops working immediately. Storage credentials that were already issued expire on their own shortly after.`, `/shares/${share.id}`, 'Data share revoked.', 'Revoke'); }
   }
-  $('#search').oninput = e => { state.query = e.target.value; table(); };
+  $('#search').oninput = e => { state.query = e.target.value; saveAdminRoute(true); table(); };
   $('#refresh').onclick = load;
   table();
 }
@@ -315,3 +338,23 @@ function deleteModal(id) {
   confirmAction('Revoke access', `User ${esc(user.name)} and their database permissions will be removed.${keycloakUsers ? ' Their Keycloak account is preserved. Notebook shutdown is checked every 30 seconds. Previously issued storage credentials expire separately.' : ' Associated S3 access will also be removed.'}`, `/users/${encodeURIComponent(id)}`, 'Access revoked.');
 }
 api('/session').then(session => { loginUrl = session.loginUrl; keycloakUsers = session.userManagement === 'keycloak'; return session.authenticated ? load() : login(); }).catch(() => login());
+
+async function refreshOverview() {
+  if (!state.data || document.hidden || refreshingOverview || activeMutations) return;
+  refreshingOverview = true;
+  const previous = state.data, page = state.page;
+  try {
+    const next = await api('/overview');
+    if (!state.data || state.data !== previous || page !== state.page || activeMutations || modal.open || document.activeElement?.matches('input, select, textarea')) return;
+    if (JSON.stringify(previous) === JSON.stringify(next)) return;
+    state.data = next;
+    // These pages own their own tree/polling state; update their overview on the next navigation.
+    if (['explorer', 'infrastructure', 'guide'].includes(state.page)) return;
+    const position = {left: scrollX, top: scrollY};
+    render(); scrollTo(position);
+  } catch (error) { if (state.data) notifyStatus(error.message); }
+  finally { refreshingOverview = false; }
+}
+setInterval(refreshOverview, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshOverview(); });
+window.addEventListener('focus', refreshOverview);

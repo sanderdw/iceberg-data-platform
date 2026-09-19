@@ -92,6 +92,22 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             raise ServiceError(401, "Sign in to open your workspace.")
         return session
 
+    async def renew_session(session):
+        if not oidc or not session.oidc_session:
+            return
+        grant = session.oidc_session
+        try:
+            await oidc.renew(grant)
+            if grant.claims.get("polaris", {}).get("principal_name") != session.user_id:
+                raise ServiceError(401, "Your account link changed. Sign in again.")
+        except ServiceError as exc:
+            if exc.status == 401:
+                sessions.pop(session.id, None)
+                await run_in_threadpool(runtime.stop_session, session.id)
+            raise
+        session.token = grant.access_token
+        session.token_until = grant.access_until
+
     def workspace_state(session):
         profile = directory.profile(session)
         if session.team not in {t["id"] for t in profile["teams"]}:
@@ -134,6 +150,8 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     try:
                         if session.expires <= now:
                             raise ServiceError(401, "Session expired.")
+                        if any(w.session_id == id for w in runtime.workspaces.values()):
+                            await renew_session(session)
                         await run_in_threadpool(workspace_state, session)
                     except ServiceError as exc:
                         # Fail closed on metadata outages as well: notebooks must
@@ -175,17 +193,19 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
     )
 
     if oidc:
-        async def accept_oidc(request, claims, token, lifetime):
+        async def accept_oidc(request, claims, token, lifetime, grant):
             async with lock:
                 session = await run_in_threadpool(
                     directory.login_oidc, claims, token, lifetime, secrets.token_urlsafe(32)
                 )
+                session.oidc_session = grant
+                session.expires = grant.expires
                 previous = sessions.pop(request.cookies.get(session_cookie), None)
                 if previous:
                     await run_in_threadpool(runtime.stop_session, previous.id)
                 sessions[session.id] = session
-                response = oidc.redirect()
-                response.set_cookie(session_cookie, session.id, max_age=int(lifetime), httponly=True,
+                response = oidc.redirect(request.state.oidc_return_to)
+                response.set_cookie(session_cookie, session.id, max_age=int(grant.expires - time.monotonic()), httponly=True,
                                     secure=secure, samesite="strict")
                 return response
 
@@ -232,8 +252,13 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     raise ServiceError(403, "Invalid request origin.")
             if path.startswith("/api/") and path not in ("/api/health", "/api/preview"):
                 async with lock:
+                    if protected:
+                        await renew_session(session_for(request.cookies))
                     response = await call_next(request)
             else:
+                if protected:
+                    async with lock:
+                        await renew_session(session_for(request.cookies))
                 response = await call_next(request)
         except ServiceError as exc:
             response = JSONResponse({"error": str(exc)}, status_code=exc.status)
@@ -260,10 +285,12 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         return {"status": "ok"}
 
     @app.get("/api/session")
-    def session(request: Request):
+    async def session(request: Request):
         try:
-            session_for(request.cookies)
-        except ServiceError:
+            await renew_session(session_for(request.cookies))
+        except ServiceError as exc:
+            if exc.status != 401:
+                raise
             return {"authenticated": False, **({"loginUrl": "/auth/login"} if oidc else {})}
         return {"authenticated": True, **({"loginUrl": "/auth/login"} if oidc else {})}
 
@@ -404,6 +431,22 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         directory.database(session, workspace.database)
         return workspace
 
+    @app.get("/internal/notebooks/{id}/token", include_in_schema=False)
+    async def notebook_token(id: str, request: Request):
+        # A runtime may retrieve only its owner's short-lived token. Portal cookies
+        # never authorize this endpoint, and refresh tokens never leave the gateway.
+        async with lock:
+            workspace = runtime.workspaces.get(id)
+            supplied = request.headers.get("authorization", "")
+            if not workspace or not secrets.compare_digest(supplied, f"Bearer {workspace.token}"):
+                raise ServiceError(401, "Notebook authorization required.")
+            session = sessions.get(workspace.session_id)
+            if not session or session.expires <= time.monotonic() or not session.oidc_session:
+                raise ServiceError(401, "Notebook session expired.")
+            await renew_session(session)
+            await run_in_threadpool(authorize_workspace, id, session)
+            return {"access_token": session.token}
+
     def proxy_headers(headers, workspace):
         # Never give notebook code either portal's cookies, user bearer headers,
         # Docker credentials or platform-admin credentials.
@@ -468,6 +511,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                 raise ServiceError(403, "Invalid request origin.")
             async with lock:
                 session = session_for(websocket.cookies)
+                await renew_session(session)
                 workspace = await run_in_threadpool(authorize_workspace, id, session)
             url = workspace.upstream.replace("http://", "ws://", 1) + websocket.scope["raw_path"].decode(
                 "ascii"
@@ -517,7 +561,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
 
     @app.get("/api/shares")
     def shares(request: Request, database: Annotated[str, Query(pattern=r"^db-[a-f0-9]{32}$")]):
-        directory.share_database(request.state.session, database)
+        directory.database(request.state.session, database)
         return {
             "shares": directory.metadata.list_shares(database, drift=True),
             "limits": {"shares": MAX_SHARES, "objects": 50},

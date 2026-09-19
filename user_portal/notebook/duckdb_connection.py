@@ -6,6 +6,8 @@ from urllib.parse import quote, urlsplit
 import duckdb
 import httpx
 
+from user_portal.notebook.credentials import access_token
+
 READ_ERROR = (
     "Could not connect to the Iceberg table. Check the selected table and your read permissions, "
     "and rebuild the notebook image if DuckDB extensions are missing."
@@ -49,7 +51,7 @@ def _catalog(client):
     """Authenticate this user and resolve the catalog's REST prefix."""
     endpoint = os.environ["ICEBERG_CATALOG_URI"].rstrip("/")
     warehouse = os.environ["ICEBERG_DATABASE"]
-    token = os.environ.get("ICEBERG_ACCESS_TOKEN")
+    token = access_token()
     if not token:
         response = client.post(
             os.environ["ICEBERG_TOKEN_URI"],

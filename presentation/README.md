@@ -2,6 +2,10 @@
 
 reveal.js deck about the platform, with screenshots captured from a running local stack on 2026-09-19.
 
+The checked-in captures predate the latest navigation and copy-only DuckDB snippet UI.
+The slide text describes the current behavior; recapture the affected screenshots
+after rebuilding the portals to update the images.
+
 - `index.html` — the deck. Styled after the [Nothing design skill](https://github.com/dominikmartn/nothing-design-skill): OLED black, Doto for hero moments, Space Grotesk body, Space Mono labels, no shadows or gradients. reveal.js 5.1 loads from cdnjs, so an internet connection is needed the first time.
 - `fonts/` — Doto, Space Grotesk and Space Mono with their OFL licenses, copied from `public/fonts/` so the deck matches the portals and renders offline.
 - `screenshots/` — PNG captures of the admin portal, user portal, a data share from form to credential, the five marimo example notebooks (PyIceberg, DuckDB, Iceberg v3), RustFS console and Keycloak, all 4000×2500 PNG: a 2000×1250 CSS pixel viewport at a 2× device pixel ratio. The access dialog uses 1600×1000 at 2.5× so it fills more of the same image.

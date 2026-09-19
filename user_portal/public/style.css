@@ -244,3 +244,25 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
   .preview-controls { align-items: stretch; flex-direction: column; }
   .view-sql { padding: 16px; }
 }
+
+/* Match the administration portal's top navigation and active brackets. */
+header { justify-content: flex-start; gap: 40px; }
+.header-actions { margin-left: auto; }
+#workspace-nav { display: flex; align-items: center; gap: 24px; }
+#workspace-nav .nav-item { background: transparent; border: 0; border-radius: 0; padding: 16px 0; color: var(--text-secondary); white-space: nowrap; }
+#workspace-nav .nav-item:hover, #workspace-nav .nav-item[aria-current='page'] { color: var(--text-display); }
+#workspace-nav .nav-item[aria-current='page']::before { content: '['; }
+#workspace-nav .nav-item[aria-current='page']::after { content: ']'; }
+#notebooks-page .saved:first-child { margin-top: 0; }
+.database-shares { min-width: 0; border-top: 1px solid var(--border); padding: 32px 0; }
+#share-permissions { margin-bottom: 24px; }
+.shares button:disabled { background: var(--surface-raised); border-color: var(--border-visible); color: var(--text-disabled); opacity: 1; }
+@media (max-width: 1100px) {
+  header { flex-wrap: wrap; gap: 16px 24px; }
+  #workspace-nav { order: 3; width: 100%; }
+}
+@media (max-width: 700px) {
+  #workspace-nav { gap: 20px; overflow-x: auto; }
+  #workspace-nav .nav-item { flex-shrink: 0; gap: 4px; font-size: .65rem; }
+  .database-shares { padding: 24px 0; }
+}

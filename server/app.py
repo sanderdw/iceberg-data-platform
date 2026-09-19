@@ -72,15 +72,15 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
             return principal
 
     if oidc:
-        async def accept_oidc(request, claims, token, lifetime):
+        async def accept_oidc(request, claims, token, lifetime, grant):
             roles = claims.get("resource_access", {}).get(oidc.client_id, {}).get("roles", [])
             if "platform-admin" not in roles:
                 raise ServiceError(403, "Platform administrator access is required.")
             sessions.pop(request.cookies.get(session_cookie), None)
             session_id = secrets.token_urlsafe(32)
-            sessions[session_id] = time.monotonic() + lifetime
-            response = oidc.redirect()
-            response.set_cookie(session_cookie, session_id, max_age=int(lifetime), httponly=True,
+            sessions[session_id] = grant
+            response = oidc.redirect(request.state.oidc_return_to)
+            response.set_cookie(session_cookie, session_id, max_age=int(grant.expires - time.monotonic()), httponly=True,
                                 samesite="strict", secure=secure_cookie)
             return response
 
@@ -102,12 +102,14 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
     async def security(request: Request, call_next):
         path, now = request.url.path, time.monotonic()
         for key, expiry in list(sessions.items()):
-            if expiry <= now:
+            if (expiry.expires if oidc else expiry) <= now:
                 sessions.pop(key, None)
         for key, (_, expiry) in list(attempts.items()):
             if expiry <= now:
                 attempts.pop(key, None)
-        request.state.authenticated = sessions.get(request.cookies.get(session_cookie), 0) > now
+        session_id = request.cookies.get(session_cookie)
+        current = sessions.get(session_id)
+        request.state.authenticated = bool(current) if oidc else (current or 0) > now
         try:
             if path.startswith("/api/") and request.method not in ("GET", "HEAD"):
                 origin = request.headers.get("origin")
@@ -126,6 +128,20 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
             protected = (
                 path.startswith("/api/") and path not in ("/api/session", "/api/health")
             ) or path in ("/docs", "/openapi.json", "/docs/oauth2-redirect")
+            if oidc and current and (protected or (path == "/api/session" and request.method == "GET")):
+                try:
+                    await oidc.renew(current)
+                    roles = current.claims.get("resource_access", {}).get(oidc.client_id, {}).get("roles", [])
+                    if "platform-admin" not in roles:
+                        raise ServiceError(401, "Administrator access ended. Sign in again.")
+                    if sessions.get(session_id) is not current:
+                        raise ServiceError(401, "Sign in to continue.")
+                except ServiceError as exc:
+                    if exc.status == 401:
+                        sessions.pop(session_id, None)
+                        request.state.authenticated = False
+                    if exc.status != 401 or protected:
+                        raise
             if protected and not request.state.authenticated:
                 raise ServiceError(401, "Sign in to continue.")
             if protected and path != "/api/infrastructure":

@@ -31,6 +31,10 @@ The user portal follows the same Nothing-inspired design as the administration p
 
 ## Work with your team data
 
+The top menu, selected database and namespace, and active team/environment are recorded in the URL. Reloading or using browser Back/Forward restores that location. Workspace lists, catalog listings and data shares refresh every 30 seconds while visible and when you return to the tab. Refresh preserves share forms, credential panels, catalog filters and open notebook frames. Table details and previews retain their explicit refresh controls.
+
+Keycloak access renews automatically while the portal or a notebook is in use, for up to eight hours and subject to the Keycloak session limits. Saved team files survive session expiry. Existing native DuckDB attachments cache credentials; reconnect them to retrieve a fresh token without restarting marimo.
+
 Select an **Active team** and **Environment**, choose a database and browse its namespaces. The team selector shows your role in each team; roles are assigned per team, so you can read in one team and write in another. Filter the current listing by name or object type. Database summaries show the team, environment and catalog connection information; namespace summaries include their properties.
 
 Choose **Details →** on a table or view. Table tabs show the schema (including nested field IDs and descriptions), snapshot statistics, history, branches and tags, partition specifications, sort orders and properties. **Preview** reads up to 100 rows from the selected snapshot only when you choose **Load preview**. **Preview snapshot** in the history selects that snapshot for a historical read. Snapshot IDs and large integer values retain their full precision. Record totals are metadata statistics and can include rows affected by delete files.
@@ -63,9 +67,16 @@ The base notebook image includes Altair for charts, Polars for dataframes, `nbfo
 
 ## Share data with an external party
 
-With the Administrator or Database + bucket administration role in the active team, a database shows **Data shares** under its summary. Choose **New data share**, name the share and its recipient, tick the tables and views, and optionally set an expiry. The client ID, client secret and a PyIceberg snippet appear once; send them to the recipient over a secure channel.
+Use the top menu to switch between **Catalog**, **Notebooks**, and **Data shares**. Switching sections keeps your running notebook open. Team and environment selectors apply to all three sections.
+
+**Data shares** lists shares by database for the active team and environment. Readers and writers can view these shares; management buttons are greyed out with an explanation that team administrator privileges are required. With the Administrator or Database + bucket administration role, choose **New data share** under a database, name the share and its recipient, tick the tables and views, and optionally set an expiry. The client ID and client secret appear once. Use **Copy DuckDB snippet** to copy a runnable Python script; the code is not displayed in the panel. Send these to the recipient over a secure channel.
 
 The recipient can read exactly what you selected and cannot list anything else, so the snippet names the shared objects in full. A view shares only its definition: add every table it reads, and remember the recipient can read those tables completely. **Edit** changes the selection or expiry, **New secret** replaces a lost secret and ends the old one, **Revoke** ends access immediately. Every administrator of the team manages the same shares. See [the resource model](../docs/CONTEXT.md#data-shares) for the details.
+
+Save the copied script as `read_share_duckdb.py` and run `uv run read_share_duckdb.py`.
+Comments list all shared tables and views; the example query prints only the first
+shared table. Change that query to read another shared table. The script does not
+execute views; see [client connection details](../docs/admin-guide.md#connect-an-iceberg-client).
 
 ## Bundled examples
 
@@ -102,8 +113,8 @@ The browser test runs the examples, verifies that example 1 writes only after an
 - Each editor has a private container and a separate Docker bridge network shared only with the gateway, Polaris and RustFS. The network allows outbound internet access. Runtime ports are not published.
 - Runtimes use UID 10001, writable `/work` and `/tmp`, no Linux capabilities, up to two CPUs, 256 processes and 1 GiB RAM by default. Notebook code receives only its user's credentials, with no platform secret, administrator cookies or Docker socket.
 - The trusted gateway has Docker socket access to start and stop runtimes. It belongs to trusted platform administration. This shared Docker host is intended for local development and does not provide isolation for hostile tenants.
-- HTTP and WebSocket proxy requests check session ownership and database access. Neither portal's cookies are forwarded to marimo. The internal marimo token stays on the server.
-- Sessions last eight hours and expire on restart. Authorization is checked on API and notebook requests and every 30 seconds for active sessions. User deletion, membership revocation and database moves close affected runtimes. Previously issued external data credentials remain subject to Polaris and RustFS expiry rules.
+- HTTP and WebSocket proxy requests check session ownership and database access. Neither portal's cookies are forwarded to marimo. The internal runtime token is shared only between the gateway and notebook, never with the browser; it also authenticates requests for the owner's current access token.
+- Sessions last at most eight hours, subject to Keycloak's session limits, and expire on restart or refused renewal. Authorization is checked on API and notebook requests and every 30 seconds for active sessions. User deletion, membership revocation and database moves close affected runtimes. Previously issued external data credentials remain subject to Polaris and RustFS expiry rules.
 - Run one gateway replica because sessions and runtime coordination are process-local. The default limit is eight active notebooks.
 
 ## Configuration
@@ -132,8 +143,12 @@ Shared team/environment volumes are named `iceberg-workspaces-work-<hash>` and l
 
 ```bash
 uv run --all-groups pytest
-node scripts/catalog-browser.mjs
-node scripts/shares-browser.mjs
+# Browser fixtures need Chromium, but no running stack:
+npm ci
+npx playwright install chromium
+npm run test:catalog
+npm run test:shares-ui
+npm run test:navigation-ui
 # With Polaris and RustFS running, using temporary test data:
 uv run --all-groups python -m scripts.catalog_smoke
 uv run --all-groups python -m scripts.share_smoke
@@ -142,8 +157,6 @@ uv run --all-groups marimo check user_portal/notebook/template.py
 # With both stacks running:
 uv run --all-groups python -m scripts.users_smoke
 # Including Chromium, live marimo WebSockets and table execution:
-npm ci
-npx playwright install chromium
 npm run test:users
 ```
 

@@ -15,6 +15,7 @@ flowchart LR
     UserAPI --> Docker[Trusted Docker daemon]
     Docker --> Notebook[Session marimo container]
     UserAPI -->|Authenticated HTTP and WebSocket proxy| Notebook
+    Notebook -->|Runtime-authenticated current user token| UserAPI
     Notebook -->|User credentials| Polaris
     Notebook -->|Vended credentials| Storage
     Polaris --> Postgres[(PostgreSQL metadata)]
@@ -32,6 +33,14 @@ independently of the platform and has no dependency on the admin portal API.
 Authentication and account management live in `server/oidc.py`, `server/identity.py`
 and `server/entrypoints.py`. Both standard application images include OIDC support.
 The installed portals always use Keycloak authentication.
+
+Both portals keep OIDC grants in process memory and renew access tokens before expiry,
+revalidating identity and required roles. Sessions last at most eight hours and also
+depend on Keycloak's session limits. Refresh tokens never reach browsers or notebooks.
+Notebook connection helpers retrieve the owner's current access token from an internal
+gateway endpoint authenticated with that runtime's credential. PyIceberg retrieves it
+for each REST request; existing DuckDB attachments must reconnect to replace cached
+credentials. Successful renewal keeps the notebook running.
 
 Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, a role per team, an individual principal role and, per database, the grant that matches their role in the owning team. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. There is no second application metadata database.
 

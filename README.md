@@ -9,9 +9,9 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 
 - **Administration portal:** create and manage teams, assign users to one or more teams with a role per team, create databases, move databases between teams, and delete databases with their stored data.
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
-- **Separate user portal:** sign in with Keycloak, switch teams and browse the active team's databases.
+- **Separate user portal:** sign in with Keycloak and use a consistent top menu for Catalog, Notebooks and Data shares within your active team and environment. Navigation survives browser refresh; lists update automatically.
 - **User catalog details:** inspect table schemas, snapshots, branches/tags, partitioning, sort orders and view SQL; preview up to 100 rows at a selected snapshot with your own data permissions.
-- **Data shares:** team administrators give an external party read access to selected tables and views, with a dedicated credential they can renew, expire or revoke themselves. Platform administrators see every share and can revoke it.
+- **Data shares:** team administrators give an external party read access to selected tables and views, with a dedicated credential and a copyable DuckDB script. They can renew, expire or revoke access themselves. Readers and writers can view their team's shares with management controls disabled. Platform administrators see every share and can revoke it.
 - **Shared team workspaces:** one shared filespace per team and environment, with isolated execution using each user's data permissions.
 - **Five included examples:** create 26,880 synthetic energy measurements with PyIceberg, visualize them with DuckDB, attach Polaris directly for native DuckDB queries on Iceberg, and write and read an Iceberg v3 table (variant, nanosecond timestamps, geometry, default values, row lineage, deletion vectors) with DuckDB.
 
@@ -79,13 +79,22 @@ From a checkout or extracted source release:
 uv python install
 uv sync --locked --all-groups
 uv run python -m scripts.setup
+
+# Build and start the platform, including the administration portal.
 docker compose up -d --build --wait
+
+# Build the user portal and the image used for on-demand notebooks.
 docker compose -f compose.users.yaml --profile images build
-docker compose -f compose.users.yaml up -d --build --wait users
+
+# Start the user portal using the images just built; wait until healthy.
+docker compose -f compose.users.yaml up -d --wait users
 ```
 
 Setup generates random development credentials in `.env`, sets restrictive file permissions, and preserves an existing `.env`. Do not commit or share this file.
 
+After source changes, rerun the three Docker commands above to rebuild and apply them. The `images` profile includes the notebook image in the build; notebooks start on demand when opened in the user portal. Save your notebook work before recreating the user portal: its sessions and running notebooks stop, while saved team files remain.
+
+For changes only to the user portal, use `docker compose -f compose.users.yaml up -d --build --wait users`. This rebuilds and restarts the user portal without rebuilding the notebook image. After changing notebook code or dependencies, use the full build sequence above and reopen your notebooks.
 
 | Service                  | URL                               | Login                                                     |
 | ------------------------ | --------------------------------- | --------------------------------------------------------- |
@@ -131,11 +140,28 @@ npm run check:release
 uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
 ```
 
-For live reload, start the data services and run the administration backend locally:
+For live reload, start the platform (including Keycloak provisioning), stop its
+administration container to free the port, then run that backend locally:
 
 ```bash
 docker compose up -d --build --wait
+docker compose stop portal
 uv run python -m server --reload
+```
+
+The local backend reads the generated `.env` and uses the same URL and Keycloak
+redirect configuration. Infrastructure monitoring requires access to the internal
+collector; see [monitoring configuration](docs/admin-guide.md#api). After stopping
+the local process, restore the container with `docker compose up -d --wait portal`.
+
+Browser checks for catalog browsing, shares and navigation use fixtures and do not
+need a running stack:
+
+```bash
+npx playwright install chromium
+npm run test:catalog
+npm run test:shares-ui
+npm run test:navigation-ui
 ```
 
 With the two projects running, [create optional test fixtures](docs/keycloak.md#verification-and-optional-demo-data), then run:

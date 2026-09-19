@@ -25,6 +25,7 @@ class UserSession:
     environment: Environment = "development"
     oidc_subject: str = ""
     oidc_issuer: str = ""
+    oidc_session: object | None = field(default=None, repr=False)
 
 
 class UserDirectory:

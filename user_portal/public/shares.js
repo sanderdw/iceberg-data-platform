@@ -2,28 +2,49 @@
 const VIEW_WARNING = 'A view shares only its definition. The recipient’s engine reads the underlying tables with this credential, so add every table the view reads. The recipient can then read those tables in full; a view is not a row or column filter.';
 const objectKey = o => JSON.stringify([o.kind, o.namespace, o.name]);
 const objectPath = o => [...o.namespace, o.name].join('.');
-function canShare() { return ['admin', 'bucket-admin'].includes(state.activeRole); }
+function canShare() { return ['admin', 'bucket-admin'].includes(state?.activeRole); }
 function field(label, input) { const wrap = element('label', label); wrap.append(input); return wrap; }
 function textInput(value, maxLength, required = false) { const input = element('input'); input.value = value || ''; input.maxLength = maxLength; input.required = required; return input; }
 function copyButton(label, text, done) { return action(label, async () => { await navigator.clipboard.writeText(text); notice(done); }); }
 
-function sharesDisclosure(db) {
-  const section = element('details', undefined, 'catalog-disclosure'), host = element('div', undefined, 'shares');
-  section.append(element('summary', 'Data shares'), host);
-  section.addEventListener('toggle', () => { if (section.open && !host.childElementCount) loadShares(host, db); });
-  return section;
+function renderTeamShares() {
+  $('#share-permissions').hidden = canShare();
+  const root = $('#team-shares');
+  if (root.childElementCount) return;
+  if (!state.databases.length) root.append(element('p', 'This team has no databases in this environment yet.', 'catalog-empty'));
+  state.databases.forEach(db => {
+    const section = element('section', undefined, 'database-shares'), host = element('div', undefined, 'shares');
+    section.append(element('h3', db.name), host); root.append(section);
+    loadShares(host, db);
+  });
 }
+document.querySelector('#refresh-shares').addEventListener('click', event => busy(event.currentTarget, async () => {
+  await loadState(); $('#team-shares').replaceChildren(); renderTeamShares();
+}));
 
-async function loadShares(host, db) {
-  host.replaceChildren(element('p', 'Loading data shares…', 'catalog-empty'));
-  try { const result = await api(`/shares?database=${encodeURIComponent(db.id)}`); if (host.isConnected) renderShares(host, db, result); }
-  catch (error) { host.replaceChildren(element('p', error.message, 'catalog-empty')); }
+async function refreshTeamShares() {
+  await Promise.all(state.databases.map(db => {
+    const host = [...$('#team-shares').querySelectorAll('.shares')].find(h => h.dataset.database === db.id);
+    if (host && !host.querySelector('.share-form, .share-issued, .share-confirmation')) return loadShares(host, db, true);
+  }));
+}
+async function loadShares(host, db, background = false) {
+  host.dataset.database = db.id;
+  if (!background) host.replaceChildren(element('p', 'Loading data shares…', 'catalog-empty'));
+  const current = host.firstChild;
+  try {
+    const result = await api(`/shares?database=${encodeURIComponent(db.id)}`);
+    if (!host.isConnected || host.firstChild !== current) return;
+    if (background && (pendingActions || host.querySelector('.share-form, .share-issued, .share-confirmation') || host.dataset.shares === JSON.stringify(result))) return;
+    renderShares(host, db, result);
+  } catch (error) { if (!background) host.replaceChildren(element('p', error.message, 'catalog-empty')); }
 }
 
 function renderShares(host, db, result) {
-  const intro = element('p', 'Give an external party read access to selected tables and views in this database. Each share has its own credential, which you can replace or revoke at any time.', 'hint');
+  const intro = element('p', 'Data shares give external parties read access to selected tables and views in this database. Each share has its own credential, which team administrators can replace or revoke.', 'hint');
   const create = action('New data share', async () => shareForm(host, db)); create.classList.remove('quiet');
-  create.disabled = result.shares.length >= result.limits.shares;
+  create.disabled = !canShare() || result.shares.length >= result.limits.shares;
+  if (canShare() && create.disabled) create.title = 'This database has reached its data share limit.';
   const rows = result.shares.map(share => {
     const missing = share.objects.filter(o => !o.granted), extra = share.extraGrants || [];
     const objects = element('div');
@@ -38,12 +59,19 @@ function renderShares(host, db, result) {
   });
   const list = rows.length ? dataGrid(['Share / recipient', 'Tables and views', 'Expires', 'Created', ''], rows, 'Data shares') : element('p', 'Nothing in this database is shared.', 'catalog-empty');
   host.replaceChildren(intro, create, list);
+  host.dataset.shares = JSON.stringify(result);
+  if (!canShare()) host.querySelectorAll('button').forEach(button => {
+    button.disabled = true;
+    button.title = 'Only team administrators can manage data shares.';
+    button.setAttribute('aria-describedby', 'share-permissions');
+  });
 }
 
 function revokeButton(host, db, share) {
   const wrap = element('span', undefined, 'share-actions'), start = element('button', 'Revoke', 'quiet'); start.type = 'button';
   start.addEventListener('click', () => {
-    const cancel = element('button', 'Cancel', 'quiet'); cancel.type = 'button'; cancel.addEventListener('click', () => wrap.replaceChildren(start));
+    wrap.classList.add('share-confirmation');
+    const cancel = element('button', 'Cancel', 'quiet'); cancel.type = 'button'; cancel.addEventListener('click', () => { wrap.classList.remove('share-confirmation'); wrap.replaceChildren(start); });
     wrap.replaceChildren(action(`Revoke ${share.name} now`, async () => { await api(`/shares/${share.id}`, 'DELETE'); notice('Share revoked. Its credential no longer opens anything.'); await loadShares(host, db); }), cancel);
   });
   wrap.append(start); return wrap;
@@ -105,34 +133,74 @@ function shareForm(host, db, share) {
   refresh(); host.replaceChildren(form); name.disabled ? recipient.focus() : name.focus();
 }
 
-function pythonSnippet(connection) {
-  const s = JSON.stringify, table = connection.identifiers.find(i => i.kind === 'table');
-  return `from pyiceberg.catalog import load_catalog
+function duckdbSnippet(share, credentials, connection) {
+  const table = share.objects.find(o => o.kind === 'table');
+  // Escape SQL values first, then the surrounding Python multiline string.
+  const literal = value => ("'" + value.replaceAll("'", "''") + "'").replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  const identifier = value => '"' + value.replaceAll('"', '""') + '"';
+  // DuckDB represents nested Iceberg namespaces as one dotted schema name.
+  const reference = ['shared', table.namespace.join('.'), table.name].map(identifier).join('.');
+  const sharedObjects = share.objects.map(o => `# ${o.kind === 'table' ? 'Table' : 'View'}: ${JSON.stringify(objectPath(o))}`).join('\n');
+  return `# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "duckdb",
+# ]
+# ///
+"""Read the shared Iceberg table natively with DuckDB and print its contents.
 
-catalog = load_catalog(
-    "shared",
-    type="rest",
-    uri=${s(connection.uri)},
-    warehouse=${s(connection.warehouse)},
-    credential=${s(connection.credential)},
-    scope=${s(connection.scope)},
-    **{
-        "oauth2-server-uri": ${s(connection.oauth2ServerUri)},
-        "header.X-Iceberg-Access-Delegation": ${s(connection.accessDelegation)},
-    },
-)
-table = catalog.load_table(${s(table.identifier)})
-print(table.scan().to_arrow())`;
+Run with: uv run read_share_duckdb.py
+"""
+
+# Shared objects (full Iceberg names):
+${sharedObjects}
+# The example below queries the first shared table.
+
+import duckdb
+
+
+def main() -> None:
+    con = duckdb.connect()
+    con.execute("INSTALL httpfs; LOAD httpfs;")
+    con.execute("INSTALL iceberg; LOAD iceberg;")
+
+    con.execute(
+        """
+        CREATE SECRET shared_secret (
+            TYPE ICEBERG,
+            CLIENT_ID ${literal(credentials.clientId)},
+            CLIENT_SECRET ${literal(credentials.clientSecret)},
+            OAUTH2_SERVER_URI ${literal(connection.oauth2ServerUri)},
+            OAUTH2_SCOPE ${literal(connection.scope)}
+        );
+        """
+    )
+    con.execute(
+        """
+        ATTACH ${literal(connection.warehouse)} AS shared (
+            TYPE ICEBERG,
+            ENDPOINT ${literal(connection.uri)},
+            SECRET shared_secret,
+            ACCESS_DELEGATION_MODE 'vended_credentials'
+        );
+        """
+    )
+
+    con.sql(${JSON.stringify(`SELECT * FROM ${reference}`)}).show()
+
+
+if __name__ == "__main__":
+    main()
+`;
 }
 
 function issued(host, db, result, message) {
   // The secret lives in this panel only. Closing it discards the last copy the portal ever had.
-  const {share, credentials, connection} = result, panel = element('section', undefined, 'share-issued'), snippet = pythonSnippet(connection);
+  const {share, credentials, connection} = result, panel = element('section', undefined, 'share-issued'), snippet = duckdbSnippet(share, credentials, connection);
   panel.append(element('h3', `Credential for ${share.name}`), element('p', 'This secret is shown once. Send it to the recipient over a secure channel; replace it with “New secret” if it is lost or leaked.', 'share-warning'));
   panel.append(facts([['Client ID', credentials.clientId], ['Client secret', credentials.clientSecret], ['Catalog URI', connection.uri], ['Catalog / warehouse', connection.warehouse], ['Token endpoint', connection.oauth2ServerUri], ['Scope', connection.scope], ['Storage endpoint', connection.s3Endpoint]]));
   panel.append(element('h3', 'Shared names'), element('p', 'The credential cannot list namespaces or tables. The recipient loads these names directly.', 'hint'), dataGrid(['Kind', 'Identifier'], connection.identifiers.map(i => [i.kind, i.identifier]), 'Shared identifiers'));
-  panel.append(element('h3', 'PyIceberg'), element('pre', snippet, 'view-sql'));
   const done = action('Done, I stored the secret', async () => loadShares(host, db)); done.classList.remove('quiet');
-  const buttons = element('div', undefined, 'share-actions'); buttons.append(copyButton('Copy credential', connection.credential, 'Credential copied.'), copyButton('Copy PyIceberg snippet', snippet, 'Snippet copied.'), done);
+  const buttons = element('div', undefined, 'share-actions'); buttons.append(copyButton('Copy credential', connection.credential, 'Credential copied.'), copyButton('Copy DuckDB snippet', snippet, 'Snippet copied.'), done);
   panel.append(buttons); host.replaceChildren(panel); notice(message);
 }
