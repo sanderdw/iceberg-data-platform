@@ -147,6 +147,4 @@ def generate_sensor_events(devices=12, events=40):
     sensor_events = pa.Table.from_pylist(rows, schema=arrow_schema)
     assert sensor_events.num_rows == devices * events
     assert len({(r["device_id"], r["measured_at"]) for r in rows}) == len(rows)
-    # The nanosecond digits carry information: truncating to microseconds collides events.
-    assert len({(r["device_id"], r["measured_at"] // 1_000) for r in rows}) < len(rows)
     return sensor_events

@@ -53,6 +53,9 @@ def test_sensor_events_are_reproducible_and_need_iceberg_v3_types():
     nanoseconds = {(r["device_id"], r["measured_at"].value) for r in rows}
     microseconds = {(r["device_id"], r["measured_at"].value // 1_000) for r in rows}
     assert len(microseconds) < len(nanoseconds) == len(rows)
+    # Sizes too small for a microsecond collision are still valid.
+    assert generate_sensor_events(devices=1, events=1).num_rows == 1
+    assert generate_sensor_events(devices=0).num_rows == 0
 
 
 def test_energy_data_is_reproducible_and_balanced():
