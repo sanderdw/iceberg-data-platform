@@ -56,7 +56,7 @@ services:
         condition: service_healthy
 
   rustfs:
-    image: rustfs/rustfs:1.0.0-rc.6
+    image: rustfs/rustfs:1.0.0
     environment:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
@@ -79,14 +79,31 @@ services:
 
   polaris:
     image: apache/polaris:1.7.0
+    networks:
+      default:
+        aliases:
+        - polaris-control-plane
     environment:
       <<: *polaris-env
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      POLARIS_AUTHENTICATION_TYPE: mixed
+      QUARKUS_OIDC_TENANT_ENABLED: 'true'
+      QUARKUS_OIDC_AUTH_SERVER_URL: http://keycloak:8080/realms/iceberg
+      QUARKUS_OIDC_CLIENT_ID: polaris
+      QUARKUS_OIDC_TOKEN_ISSUER: ${OIDC_ISSUER}
+      QUARKUS_OIDC_TOKEN_AUDIENCE: polaris
+      QUARKUS_OIDC_JWKS_PATH: http://keycloak:8080/realms/iceberg/protocol/openid-connect/certs
+      QUARKUS_OIDC_DISCOVERY_ENABLED: 'false'
+      QUARKUS_OIDC_ROLES_ROLE_CLAIM_PATH: polaris/roles
+      POLARIS_OIDC_PRINCIPAL_MAPPER_ID_CLAIM_PATH: polaris/principal_id
+      POLARIS_OIDC_PRINCIPAL_MAPPER_NAME_CLAIM_PATH: polaris/principal_name
     ports:
       - "127.0.0.1:8181:8181"
     depends_on:
+      keycloak:
+        condition: service_healthy
       polaris-bootstrap:
         condition: service_completed_successfully
       rustfs:
@@ -102,7 +119,14 @@ services:
   portal:
     build: .
     environment:
+      OIDC_ISSUER: ${OIDC_ISSUER:?Run scripts.setup first}
+      OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/iceberg
+      OIDC_CLIENT_ID: iceberg-admin
+      OIDC_CLIENT_SECRET: ${OIDC_PORTAL_SECRET}
+      OIDC_MANAGEMENT_SECRET: ${OIDC_MANAGEMENT_SECRET:?Run scripts.setup first}
+      OIDC_ORIGIN: ${PORTAL_ORIGIN}
       HOST: 0.0.0.0
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
       MONITOR_URL: http://monitor:3003
       PORTAL_PASSWORD: ${PORTAL_PASSWORD}
       PROVIDER: polaris
@@ -119,6 +143,8 @@ services:
     ports:
       - "127.0.0.1:${PORT:-3000}:3000"
     depends_on:
+      keycloak-bootstrap:
+        condition: service_completed_successfully
       polaris:
         condition: service_healthy
     healthcheck:
@@ -143,7 +169,7 @@ services:
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       MONITOR_PROJECTS: ${MONITOR_PROJECTS:-iceberg-platform,iceberg-workspaces}
-      MONITOR_USERS_URL: ${MONITOR_USERS_URL:-}
+      MONITOR_USERS_URL: ${MONITOR_USERS_URL:-http://users:3002}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - rustfs-data:/storage:ro
@@ -159,7 +185,83 @@ services:
       retries: 3
     restart: unless-stopped
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.3
+    command:
+    - start-dev
+    - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run scripts.setup
+        first}
+      KC_HOSTNAME: ${KEYCLOAK_ORIGIN}
+      KC_HEALTH_ENABLED: 'true'
+      OIDC_PORTAL_SECRET: ${OIDC_PORTAL_SECRET}
+      OIDC_USERS_SECRET: ${OIDC_USERS_SECRET}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
+    ports:
+    - 127.0.0.1:${KEYCLOAK_PORT:-8080}:8080
+    volumes:
+    - keycloak-data:/opt/keycloak/data
+    - type: bind
+      source: ${KEYCLOAK_IMPORT_FILE:?Run scripts.setup first}
+      target: /opt/keycloak/data/import/iceberg-realm.json
+      read_only: true
+    healthcheck:
+      test:
+      - CMD
+      - bash
+      - -c
+      - 'exec 3<>/dev/tcp/127.0.0.1/9000; printf ''GET /health/ready HTTP/1.0\r\n\r\n''
+        >&3; cat <&3 | grep -q ''"status": "UP"'''
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+    mem_limit: 1g
+    restart: unless-stopped
+  keycloak-bootstrap:
+    build:
+      context: .
+    environment:
+      HOST: 0.0.0.0
+      PORTAL_PASSWORD: ${PORTAL_PASSWORD}
+      PROVIDER: polaris
+      POLARIS_URL: http://polaris:8181
+      POLARIS_PUBLIC_URL: ${POLARIS_PUBLIC_URL:-http://localhost:8181}
+      POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}
+      POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:9000}
+      S3_INTERNAL_ENDPOINT: http://rustfs:9000
+      S3_ADMIN_ENDPOINT: http://rustfs:9000
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/iceberg
+      OIDC_CLIENT_ID: iceberg-admin
+      OIDC_CLIENT_SECRET: ${OIDC_PORTAL_SECRET}
+      OIDC_MANAGEMENT_SECRET: ${OIDC_MANAGEMENT_SECRET}
+      OIDC_ORIGIN: ${PORTAL_ORIGIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      PLATFORM_ADMIN_USERNAME: ${PLATFORM_ADMIN_USERNAME:-platform-admin}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}
+      DEMO_WRITER_PASSWORD: ${DEMO_WRITER_PASSWORD:-}
+      DEMO_READER_PASSWORD: ${DEMO_READER_PASSWORD:-}
+      DEMO_OUTSIDER_PASSWORD: ${DEMO_OUTSIDER_PASSWORD:-}
+    entrypoint:
+    - /app/.venv/bin/python
+    - -m
+    - server.keycloak_bootstrap
+    command: []
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      polaris:
+        condition: service_healthy
+
 volumes:
   postgres18-data:
   pgadmin-data:
   rustfs-data:
+  keycloak-data:

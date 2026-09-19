@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the latest released Iceberg Data Platform with Docker Compose.
+# Install a released Iceberg Data Platform with Docker Compose.
 set -eu
 
 main() {
@@ -46,16 +46,26 @@ main() {
     trap 'rm -rf "$temporary_dir"' 0
     trap 'exit 1' HUP INT TERM
     release_url=https://github.com/sanderdw/iceberg-data-platform/releases
-    printf 'Downloading the latest release...\n'
-    curl -fsSL "$release_url/latest/download/SHA256SUMS" -o "$temporary_dir/SHA256SUMS"
+    release_tag=latest
+    setup_image=ghcr.io/sanderdw/iceberg-data-platform-portal:latest
+    if [ "$release_tag" = latest ]; then
+        download_url=$release_url/latest/download
+    else
+        download_url=$release_url/download/$release_tag
+    fi
+    printf 'Downloading release %s...\n' "$release_tag"
+    curl -fsSL "$download_url/SHA256SUMS" -o "$temporary_dir/SHA256SUMS"
     # Read only the versioned installation archive, then download from that exact
     # release so a concurrent publication cannot mix the archive and checksum.
     archive=$(awk '$2 ~ /^iceberg-data-platform-[0-9]+\.[0-9]+\.[0-9]+-install\.tar\.gz$/ {print $2}' "$temporary_dir/SHA256SUMS")
-    [ -n "$archive" ] || fail 'The latest release has no installation bundle.'
+    [ -n "$archive" ] || fail 'The selected release has no installation bundle.'
     [ "$(printf '%s\n' "$archive" | wc -l)" -eq 1 ] || fail 'The release has multiple installation bundles.'
     version=${archive#iceberg-data-platform-}
     version=${version%-install.tar.gz}
-    curl -fsSL "$release_url/download/v$version/$archive" -o "$temporary_dir/$archive"
+    if [ "$release_tag" = latest ]; then
+        download_url=$release_url/download/v$version
+    fi
+    curl -fsSL "$download_url/$archive" -o "$temporary_dir/$archive"
     awk -v archive="$archive" '$2 == archive' "$temporary_dir/SHA256SUMS" > "$temporary_dir/install.sha256"
     (cd "$temporary_dir" && verify_checksum) || fail 'Installation bundle checksum failed.'
     mkdir "$temporary_dir/bundle"
@@ -76,10 +86,10 @@ main() {
     cp -R "$bundle_dir/." "$install_dir/"
     cd "$install_dir"
     printf 'Preparing credentials in %s/.env...\n' "$install_dir"
-    docker pull ghcr.io/sanderdw/iceberg-data-platform-portal:latest
+    docker pull "$setup_image"
     docker run --rm --user "$(id -u):$(id -g)" \
         --mount "type=bind,src=$install_dir,dst=/install" \
-        --entrypoint python ghcr.io/sanderdw/iceberg-data-platform-portal:latest \
+        --entrypoint python "$setup_image" \
         /install/scripts/setup.py
 
     printf 'Pulling images for both stacks (the notebook image may take a few minutes)...\n'
@@ -89,7 +99,7 @@ main() {
     admin_compose up -d --no-build --wait --wait-timeout 300
     printf 'Starting the user portal...\n'
     users_compose up -d --no-build --wait --wait-timeout 300 users
-    printf '\nIceberg Data Platform is ready.\nAdministration: http://localhost:3000\nUser portal:    http://localhost:3002\nPassword: PORTAL_PASSWORD in %s/.env\nConfiguration: %s\n' "$install_dir" "$install_dir"
+    printf '\nIceberg Data Platform is ready.\nAdministration: http://localhost:3000\nUser portal:    http://localhost:3002\nKeycloak:      http://localhost:8080\nLogin: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in %s/.env\nConfiguration: %s\n' "$install_dir" "$install_dir"
 }
 
 verify_checksum() {
@@ -106,11 +116,11 @@ fail() {
 }
 
 admin_compose() {
-    docker compose --project-name iceberg-platform --env-file "$install_dir/.env" -f "$install_dir/compose.yaml" "$@"
+    docker compose --env-file "$install_dir/.env" -f "$install_dir/compose.yaml" "$@"
 }
 
 users_compose() {
-    docker compose --project-name iceberg-workspaces --env-file "$install_dir/.env" -f "$install_dir/compose.users.yaml" "$@"
+    docker compose --env-file "$install_dir/.env" -f "$install_dir/compose.users.yaml" "$@"
 }
 
 # Keep execution last so a truncated download cannot start a partial install.

@@ -12,14 +12,17 @@ from pathlib import Path
 
 import pytest
 
+from scripts.release import installer_source
+
 ROOT = Path(__file__).resolve().parents[1]
 POWERSHELL = os.environ.get("ICEBERG_TEST_POWERSHELL") or shutil.which(
     "powershell" if sys.platform == "win32" else "pwsh"
 )
 
 
-@pytest.fixture
-def installer_env(tmp_path):
+@pytest.fixture(params=[("latest", "latest"), ("keycloak-123-1", "keycloak-123-1"), ("v0.2.1", "0.2.1")],
+                ids=lambda tags: tags[0])
+def installer_env(tmp_path, request):
     release = tmp_path / "release"
     release.mkdir()
     archive_name = "iceberg-data-platform-0.2.1-install.tar.gz"
@@ -41,6 +44,9 @@ def installer_env(tmp_path):
         "ICEBERG_INSTALL_DIR": str(tmp_path / "install with spaces"),
         "TEST_RELEASE": str(release),
         "TEST_DOCKER_LOG": str(tmp_path / "docker.jsonl"),
+        "TEST_DOWNLOAD_LOG": str(tmp_path / "downloads.txt"),
+        "TEST_RELEASE_TAG": request.param[0],
+        "TEST_IMAGE_TAG": request.param[1],
         "TEST_PYTHON": sys.executable,
         "TEST_FAIL": "",
     }
@@ -53,12 +59,21 @@ def calls(env):
 
 def assert_started(env):
     commands = calls(env)
+    tag = env["TEST_RELEASE_TAG"]
+    setup_image = "ghcr.io/sanderdw/iceberg-data-platform-portal:" + env["TEST_IMAGE_TAG"]
+    assert ["pull", setup_image] in commands
+    assert any(args[0] == "run" and setup_image in args for args in commands)
+    downloads = Path(env["TEST_DOWNLOAD_LOG"]).read_text().splitlines()
+    base = "https://github.com/sanderdw/iceberg-data-platform/releases/"
+    prefix = "latest/download/" if tag == "latest" else f"download/{tag}/"
+    archive_prefix = "download/v0.2.1/" if tag == "latest" else prefix
+    assert downloads == [base + prefix + "SHA256SUMS", base + archive_prefix + "iceberg-data-platform-0.2.1-install.tar.gz"]
     pulls = [i for i, args in enumerate(commands) if args[-1] == "pull"]
     starts = [(i, args) for i, args in enumerate(commands) if "up" in args]
     assert len(starts) == 2
     assert pulls and max(pulls) < starts[0][0]
-    assert "iceberg-platform" in starts[0][1]
-    assert "iceberg-workspaces" in starts[1][1]
+    assert Path(starts[0][1][starts[0][1].index("-f") + 1]).name == "compose.yaml"
+    assert Path(starts[1][1][starts[1][1].index("-f") + 1]).name == "compose.users.yaml"
     assert starts[1][1][-1] == "users"
     assert any("images" in args and args[-1] == "pull" for args in commands)
     assert all("--wait" in args and "--no-build" in args for _, args in starts)
@@ -79,6 +94,8 @@ def shell_installer(installer_env, tmp_path):
         "curl": '''import os, pathlib, shutil, sys
 args = sys.argv[1:]
 url = next(arg for arg in args if arg.startswith('https:'))
+with open(os.environ['TEST_DOWNLOAD_LOG'], 'a') as log:
+    log.write(url + '\\n')
 shutil.copyfile(pathlib.Path(os.environ['TEST_RELEASE']) / url.rsplit('/', 1)[1], args[args.index('-o') + 1])
 ''',
         "docker": '''import json, os, pathlib, runpy, sys
@@ -101,7 +118,8 @@ if args[0] == 'run':
 
     def run():
         # Pipe source into sh, exactly as the documented curl command does.
-        return subprocess.run(["sh"], input=(ROOT / "install.sh").read_text(), env=env, text=True, capture_output=True, check=False)
+        source = installer_source(ROOT, "install.sh", env["TEST_RELEASE_TAG"], env["TEST_IMAGE_TAG"]).decode()
+        return subprocess.run(["sh"], input=source, env=env, text=True, capture_output=True, check=False)
 
     return run, env
 
@@ -155,6 +173,7 @@ function docker {
 }
 function Invoke-WebRequest {
     param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
+    Add-Content $env:TEST_DOWNLOAD_LOG $Uri
     Copy-Item (Join-Path $env:TEST_RELEASE ($Uri.Split('/')[-1])) $OutFile
 }
 try {
@@ -165,7 +184,10 @@ try {
     exit 1
 }
 ''')
-    env = installer_env | {"TEST_INSTALLER": str(ROOT / "install.ps1")}
+    script = tmp_path / "install.ps1"
+    script.write_bytes(installer_source(ROOT, "install.ps1", installer_env["TEST_RELEASE_TAG"],
+                                        installer_env["TEST_IMAGE_TAG"]))
+    env = installer_env | {"TEST_INSTALLER": str(script)}
 
     def run():
         return subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(harness)],

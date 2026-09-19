@@ -1,4 +1,4 @@
-"""Run the native notebook as a reader on temporary data in an offline container."""
+"""Run the native DuckDB notebooks on temporary data in offline containers, as a reader and a writer."""
 
 import json
 import os
@@ -40,6 +40,72 @@ connection.close()
 print('PASS: native notebook reads 26,880 Iceberg rows, previews 100, aggregates 40 homes, inspects snapshots and rejects writes')
 """
 
+V3_CODE = """
+import importlib.util
+
+
+def run(name):
+    spec = importlib.util.spec_from_file_location('v3_notebook', '/app/user_portal/notebook/examples/' + name)
+    notebook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(notebook)
+    return notebook.app.run()[1]
+
+
+for attempt in range(2):  # A full rerun recreates the table with the same result.
+    written = run('04_duckdb_iceberg_v3_write.py')
+    assert (written['inserted_rows'], written['updated_rows'], written['deleted_rows']) == (480, 40, 45)
+    assert len(written['snapshots']) == 4
+    written['lakehouse'].close()
+read = run('05_duckdb_iceberg_v3_read.py')
+types = dict(zip(read['columns']['column_name'], read['columns']['column_type']))
+assert (types['payload'], types['measured_at'], types['location']) == ('VARIANT', 'TIMESTAMP_NS', 'GEOMETRY')
+assert read['row_count'].iloc[0]['rows'] == 436
+assert set(read['kinds']['kind']) == {'temperature', 'vibration', 'door'}
+precision = read['precision'].iloc[0]
+assert precision['distinct_at_microseconds'] < precision['distinct_at_nanoseconds'] == 436
+assert dict(zip(read['firmware']['firmware'], read['firmware']['events'])) == {'v1.0': 399, 'v2.0': 37}
+assert len(read['lineage']) == 3 and read['lineage']['first_row_id'].min() == 0
+assert 'puffin' in set(read['files']['file_format'])
+assert read['first_snapshot']['events'].sum() == 480
+read['lakehouse'].close()
+
+from user_portal.notebook.duckdb_connection import connect_duckdb, drop_example_table, table_reference
+
+foreign = connect_duckdb(['iceberg_v3'], 'foreign_events', read_only=False, missing_ok=True)
+foreign.execute(f"CREATE TABLE {table_reference(['iceberg_v3'], 'foreign_events')} (id BIGINT)")
+try:
+    drop_example_table(foreign, ['iceberg_v3'], 'foreign_events', '04_duckdb_iceberg_v3_write')
+except RuntimeError:
+    assert foreign.execute(f"SELECT count(*) FROM {table_reference(['iceberg_v3'], 'foreign_events')}").fetchone() == (0,)
+else:
+    raise AssertionError('Expected the example to keep a table it did not create')
+foreign.close()
+print('PASS: DuckDB writes an Iceberg v3 table (variant, timestamp_ns, geometry, default, deletion vectors) and reads it back with row lineage and time travel')
+"""
+V3_READER_CODE = """
+import importlib.util
+
+import duckdb
+
+from user_portal.notebook.duckdb_connection import connect_duckdb
+
+spec = importlib.util.spec_from_file_location('v3_notebook', '/app/user_portal/notebook/examples/04_duckdb_iceberg_v3_write.py')
+notebook = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(notebook)
+try:
+    notebook.app.run()
+except duckdb.Error as error:
+    # Only Polaris's refusal passes: a broken import, extension or connection raises something else.
+    assert 'Forbidden' in str(error), error
+else:
+    raise AssertionError('Expected Polaris to refuse the write for a reader')
+lakehouse = connect_duckdb(['synthetic'], 'neighborhood_electricity')
+schemas = lakehouse.execute("SELECT schema_name FROM information_schema.schemata WHERE catalog_name = 'lakehouse'").fetchall()
+assert ('synthetic',) in schemas and ('iceberg_v3',) not in schemas, schemas
+lakehouse.close()
+print('PASS: Polaris refuses the Iceberg v3 write notebook for a reader and nothing is created')
+"""
+
 
 def main():
     context = json.loads(subprocess.check_output(["docker", "context", "inspect"]))[0]
@@ -52,7 +118,7 @@ def main():
         databases.append(database["id"])
         accounts = []
         for role in ("writer", "reader"):
-            account = provider.create_user(UserInput(name=f"native-{role}-{suffix}", teams=teams, role=role))
+            account = provider.create_user(UserInput(name=f"native-{role}-{suffix}", memberships=[{"team": t, "role": role} for t in teams]))
             users.append(account["user"]["id"])
             accounts.append(account["credentials"])
         writer, reader = accounts
@@ -69,7 +135,6 @@ def main():
         catalog.create_namespace("synthetic")
         catalog.create_table(("synthetic", "neighborhood_electricity"), schema=data.schema).append(data)
         network = daemon.networks.create(f"native-duckdb-test-{suffix}", internal=True)
-        container = None
         try:
             network.connect(
                 os.environ.get("POLARIS_CONTAINER", "iceberg-platform-polaris-1"), aliases=["polaris"]
@@ -77,45 +142,51 @@ def main():
             network.connect(
                 os.environ.get("RUSTFS_CONTAINER", "iceberg-platform-rustfs-1"), aliases=["rustfs"]
             )
-            container = daemon.containers.run(
-                "iceberg-user-notebook:0.1.0",
-                ["/app/.venv/bin/python", "-c", CODE],
-                detach=True,
-                network=network.name,
-                read_only=True,
-                user="10001:10001",
-                cap_drop=["ALL"],
-                security_opt=["no-new-privileges:true"],
-                mem_limit="1g",
-                tmpfs={"/tmp": "rw,nosuid,nodev,size=256m,mode=1777"},
-                volumes={
-                    str(Path("user_portal/notebook").resolve()): {
-                        "bind": "/app/user_portal/notebook",
-                        "mode": "ro",
-                    }
-                },
-                environment={
-                    "ICEBERG_DATABASE": database["id"],
-                    "ICEBERG_CLIENT_ID": reader["clientId"],
-                    "ICEBERG_CLIENT_SECRET": reader["clientSecret"],
-                    "ICEBERG_CATALOG_URI": "http://polaris:8181/api/catalog",
-                    "ICEBERG_TOKEN_URI": "http://polaris:8181/api/catalog/v1/oauth/tokens",
-                    "ICEBERG_S3_ENDPOINT": "http://rustfs:9000",
-                    "HOME": "/tmp",
-                    "MARIMO_SKIP_UPDATE_CHECK": "1",
-                },
-            )
-            status = container.wait(timeout=120)
-            output = container.logs().decode()
-            assert status["StatusCode"] == 0, output
-            print(output.strip())
+            for code, account in ((CODE, reader), (V3_READER_CODE, reader), (V3_CODE, writer)):
+                run_notebook(daemon, network, database, account, code)
         finally:
-            if container:
-                container.remove(force=True)
             network.reload()
             for container_id in network.attrs.get("Containers", {}):
                 network.disconnect(container_id, force=True)
             network.remove()
+
+
+def run_notebook(daemon, network, database, account, code):
+    container = daemon.containers.run(
+        "iceberg-user-notebook:0.1.0",
+        ["/app/.venv/bin/python", "-c", code],
+        detach=True,
+        network=network.name,
+        read_only=True,
+        user="10001:10001",
+        cap_drop=["ALL"],
+        security_opt=["no-new-privileges:true"],
+        mem_limit="1g",
+        tmpfs={"/tmp": "rw,nosuid,nodev,size=256m,mode=1777"},
+        volumes={
+            str(Path("user_portal/notebook").resolve()): {
+                "bind": "/app/user_portal/notebook",
+                "mode": "ro",
+            }
+        },
+        environment={
+            "ICEBERG_DATABASE": database["id"],
+            "ICEBERG_CLIENT_ID": account["clientId"],
+            "ICEBERG_CLIENT_SECRET": account["clientSecret"],
+            "ICEBERG_CATALOG_URI": "http://polaris:8181/api/catalog",
+            "ICEBERG_TOKEN_URI": "http://polaris:8181/api/catalog/v1/oauth/tokens",
+            "ICEBERG_S3_ENDPOINT": "http://rustfs:9000",
+            "HOME": "/tmp",
+            "MARIMO_SKIP_UPDATE_CHECK": "1",
+        },
+    )
+    try:
+        status = container.wait(timeout=180)
+        output = container.logs().decode()
+        assert status["StatusCode"] == 0, output
+        print(output.strip())
+    finally:
+        container.remove(force=True)
 
 
 if __name__ == "__main__":

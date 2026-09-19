@@ -19,7 +19,7 @@ test('portal admin explores namespaces, tables and views; database credentials a
     await api.post('/api/session', { headers, data: { password: process.env.PORTAL_PASSWORD } });
     team = await create('teams', { name: `explorer-team-${suffix}` });
     database = await create('databases', { name, team: team.id });
-    const account = await create('users', { name: `explorer-user-${suffix}`, teams: [team.id], role: 'admin' });
+    const account = await create('users', { name: `explorer-user-${suffix}`, memberships: [{ team: team.id, role: 'admin' }] });
     user = account.user;
     const oauth = await request.post(`${process.env.POLARIS_URL}/api/catalog/v1/oauth/tokens`, { form: {
       grant_type: 'client_credentials', scope: 'PRINCIPAL_ROLE:ALL', client_id: account.credentials.clientId, client_secret: account.credentials.clientSecret,

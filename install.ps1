@@ -1,8 +1,10 @@
-# Install the latest released Iceberg Data Platform with Docker Desktop.
+# Install a released Iceberg Data Platform with Docker Desktop.
 & {
     $ErrorActionPreference = 'Stop'
     $InstallDir = if ($env:ICEBERG_INSTALL_DIR) { $env:ICEBERG_INSTALL_DIR } else { Join-Path $HOME 'iceberg-data-platform' }
     $ReleaseUrl = 'https://github.com/sanderdw/iceberg-data-platform/releases'
+    $ReleaseTag = 'latest'
+    $SetupImage = 'ghcr.io/sanderdw/iceberg-data-platform-portal:latest'
     $TemporaryDir = Join-Path ([IO.Path]::GetTempPath()) ('iceberg-install-' + [guid]::NewGuid().ToString('N'))
 
     function Invoke-Docker {
@@ -10,10 +12,10 @@
         if ($LASTEXITCODE -ne 0) { throw "Docker failed (exit $LASTEXITCODE). Check the output above." }
     }
     function Invoke-AdminCompose {
-        Invoke-Docker compose --project-name iceberg-platform --env-file "$InstallDir/.env" -f "$InstallDir/compose.yaml" @args
+        Invoke-Docker compose --env-file "$InstallDir/.env" -f "$InstallDir/compose.yaml" @args
     }
     function Invoke-UsersCompose {
-        Invoke-Docker compose --project-name iceberg-workspaces --env-file "$InstallDir/.env" -f "$InstallDir/compose.users.yaml" @args
+        Invoke-Docker compose --env-file "$InstallDir/.env" -f "$InstallDir/compose.users.yaml" @args
     }
 
     Get-Command docker -ErrorAction Stop | Out-Null
@@ -27,19 +29,21 @@
 
     try {
         New-Item -ItemType Directory -Path $TemporaryDir | Out-Null
-        Write-Host 'Downloading the latest release...'
+        Write-Host "Downloading release $ReleaseTag..."
+        $DownloadUrl = if ($ReleaseTag -eq 'latest') { "$ReleaseUrl/latest/download" } else { "$ReleaseUrl/download/$ReleaseTag" }
         # TLS 1.2 also supports Windows PowerShell 5.1 on older system defaults.
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -UseBasicParsing "$ReleaseUrl/latest/download/SHA256SUMS" -OutFile "$TemporaryDir/SHA256SUMS"
+        Invoke-WebRequest -UseBasicParsing "$DownloadUrl/SHA256SUMS" -OutFile "$TemporaryDir/SHA256SUMS"
         $Entries = @(Get-Content "$TemporaryDir/SHA256SUMS" | ForEach-Object {
             if ($_ -match '^([0-9a-f]{64})  (iceberg-data-platform-([0-9]+\.[0-9]+\.[0-9]+)-install\.tar\.gz)$') {
                 [PSCustomObject]@{ Hash = $Matches[1]; Archive = $Matches[2]; Version = $Matches[3] }
             }
         })
-        if ($Entries.Count -ne 1) { throw 'The latest release must contain exactly one installation bundle.' }
+        if ($Entries.Count -ne 1) { throw 'The selected release must contain exactly one installation bundle.' }
         $Entry = $Entries[0]
         $ArchivePath = Join-Path $TemporaryDir $Entry.Archive
-        Invoke-WebRequest -UseBasicParsing "$ReleaseUrl/download/v$($Entry.Version)/$($Entry.Archive)" -OutFile $ArchivePath
+        if ($ReleaseTag -eq 'latest') { $DownloadUrl = "$ReleaseUrl/download/v$($Entry.Version)" }
+        Invoke-WebRequest -UseBasicParsing "$DownloadUrl/$($Entry.Archive)" -OutFile $ArchivePath
         $Hasher = [Security.Cryptography.SHA256]::Create()
         try {
             $ActualHash = [BitConverter]::ToString($Hasher.ComputeHash([IO.File]::ReadAllBytes($ArchivePath))).Replace('-', '')
@@ -61,9 +65,9 @@
         }
         Get-ChildItem -Force $BundleDir | Copy-Item -Destination $InstallDir -Recurse -Force
         Write-Host "Preparing credentials in $InstallDir/.env..."
-        Invoke-Docker pull ghcr.io/sanderdw/iceberg-data-platform-portal:latest
+        Invoke-Docker pull $SetupImage
         Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" `
-            --entrypoint python ghcr.io/sanderdw/iceberg-data-platform-portal:latest /install/scripts/setup.py
+            --entrypoint python $SetupImage /install/scripts/setup.py
 
         Write-Host 'Pulling images for both stacks (the notebook image may take a few minutes)...'
         Invoke-AdminCompose pull
@@ -75,7 +79,8 @@
         Write-Host "`nIceberg Data Platform is ready."
         Write-Host 'Administration: http://localhost:3000'
         Write-Host 'User portal:    http://localhost:3002'
-        Write-Host "Password: PORTAL_PASSWORD in $InstallDir/.env"
+        Write-Host "Keycloak:      http://localhost:8080"
+        Write-Host "Login: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in $InstallDir/.env"
         Write-Host "Configuration: $InstallDir"
     }
     finally {

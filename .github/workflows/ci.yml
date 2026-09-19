@@ -2,8 +2,10 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['presentation/**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
@@ -63,9 +65,21 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: uv run python -m scripts.setup
-      - run: docker compose up -d --build --wait
+      - name: Start native API test fixtures
+        run: |
+          docker compose -f compose.yaml -f - up -d --build --wait <<'YAML'
+          services:
+            portal:
+              command: ["/app/.venv/bin/uvicorn", "server.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3000", "--no-access-log"]
+          YAML
       - run: docker compose -f compose.users.yaml --profile images build
-      - run: docker compose -f compose.users.yaml up -d --wait users
+      - name: Start native workspace API test fixture
+        run: |
+          docker compose -f compose.users.yaml -f - up -d --wait users <<'YAML'
+          services:
+            users:
+              command: ["/app/.venv/bin/uvicorn", "user_portal.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3002", "--no-access-log"]
+          YAML
       - run: UV_NO_SYNC=1 npm run test:e2e
       - run: npm run test:catalog
       - run: uv run --all-groups python -m scripts.catalog_smoke
@@ -81,6 +95,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Clean this runner's development stacks
+        if: always()
+        run: |
+          if [ -f .env ]; then
+            docker compose -f compose.users.yaml down --remove-orphans
+            docker compose down --remove-orphans --volumes
+          fi
+  keycloak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: '0.12.13'
+          enable-cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: uv sync --locked --all-groups
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: uv run python -m scripts.setup --demo
+      - run: docker compose -f compose.users.yaml --profile images build notebook-image
+      - run: docker compose up -d --build --wait
+      - run: docker compose -f compose.users.yaml up -d --build --wait users
+      - run: node scripts/keycloak-onboarding-smoke.mjs
+      - run: docker compose run --build --rm keycloak-bootstrap --demo
+      - run: npm run test:keycloak
+      - name: Clean this runner's Keycloak stack
         if: always()
         run: |
           if [ -f .env ]; then

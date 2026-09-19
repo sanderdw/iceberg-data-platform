@@ -76,16 +76,16 @@ def same_origin(origin, url):
     )
 
 
-def create_app(directory=None, runtime=None):
+def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE):
     directory = directory or UserDirectory(os.environ)
     runtime = runtime or NotebookRuntime(os.environ)
     sessions, attempts = {}, {}
     lock = asyncio.Lock()
     previews = asyncio.Semaphore(2)
-    secure = os.environ.get("USER_COOKIE_SECURE") == "true"
+    secure = oidc.secure if oidc else os.environ.get("USER_COOKIE_SECURE") == "true"
 
     def session_for(cookies):
-        session = sessions.get(cookies.get(COOKIE))
+        session = sessions.get(cookies.get(session_cookie))
         if not session or session.expires <= time.monotonic():
             raise ServiceError(401, "Sign in to open your workspace.")
         return session
@@ -104,6 +104,7 @@ def create_app(directory=None, runtime=None):
             **profile,
             "databases": available,
             "activeTeam": session.team,
+            "activeRole": next(t["role"] for t in profile["teams"] if t["id"] == session.team),
             "activeEnvironment": session.environment,
             "environments": list(ENVIRONMENTS),
             "filespaces": [
@@ -165,6 +166,23 @@ def create_app(directory=None, runtime=None):
     app = FastAPI(
         title="Iceberg User Workspace", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
     )
+
+    if oidc:
+        async def accept_oidc(request, claims, token, lifetime):
+            async with lock:
+                session = await run_in_threadpool(
+                    directory.login_oidc, claims, token, lifetime, secrets.token_urlsafe(32)
+                )
+                previous = sessions.pop(request.cookies.get(session_cookie), None)
+                if previous:
+                    await run_in_threadpool(runtime.stop_session, previous.id)
+                sessions[session.id] = session
+                response = oidc.redirect()
+                response.set_cookie(session_cookie, session.id, max_age=int(lifetime), httponly=True,
+                                    secure=secure, samesite="strict")
+                return response
+
+        oidc.install(app, accept_oidc)
 
     @app.exception_handler(ServiceError)
     async def service_error(request, exc):
@@ -234,11 +252,13 @@ def create_app(directory=None, runtime=None):
         try:
             session_for(request.cookies)
         except ServiceError:
-            return {"authenticated": False}
-        return {"authenticated": True}
+            return {"authenticated": False, **({"loginUrl": "/auth/login"} if oidc else {})}
+        return {"authenticated": True, **({"loginUrl": "/auth/login"} if oidc else {})}
 
     @app.post("/api/session")
     def login(data: LoginInput, request: Request):
+        if oidc:
+            raise ServiceError(403, "Use Keycloak to sign in.")
         key = request.client.host if request.client else "local"
         now = time.monotonic()
         count, until = attempts.get(key, (0, now + 60))
@@ -248,24 +268,24 @@ def create_app(directory=None, runtime=None):
             raise ServiceError(429, "Too many attempts. Try again in one minute.")
         attempts[key] = (count + 1, until)
         session = directory.login(data.username, data.secret, secrets.token_urlsafe(32))
-        previous = sessions.pop(request.cookies.get(COOKIE), None)
+        previous = sessions.pop(request.cookies.get(session_cookie), None)
         if previous:
             runtime.stop_session(previous.id)
         sessions[session.id] = session
         attempts.pop(key, None)
         response = JSONResponse({"authenticated": True})
         response.set_cookie(
-            COOKIE, session.id, httponly=True, secure=secure, samesite="strict", max_age=28800
+            session_cookie, session.id, httponly=True, secure=secure, samesite="strict", max_age=28800
         )
         return response
 
     @app.delete("/api/session")
     def logout(request: Request):
-        session = sessions.pop(request.cookies.get(COOKIE), None)
+        session = sessions.pop(request.cookies.get(session_cookie), None)
         if session:
             runtime.stop_session(session.id)
-        response = JSONResponse({"authenticated": False})
-        response.delete_cookie(COOKIE, httponly=True, secure=secure, samesite="strict")
+        response = JSONResponse({"authenticated": False, **({"logoutUrl": oidc.logout_url} if oidc else {})})
+        response.delete_cookie(session_cookie, httponly=True, secure=secure, samesite="strict")
         return response
 
     @app.get("/api/workspace")

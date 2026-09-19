@@ -39,6 +39,6 @@ npm run test:examples
 
 Integration tests create uniquely named resources and clean up only their own resources. Never run a blanket volume deletion against a shared development environment.
 
-Update `uv.lock` or `package-lock.json` together with dependency manifests. Use `uv` for Python dependency management. Format Python changes with Ruff. Follow marimo's reactive cell model for example notebooks; put writes behind an explicit run button and preserve existing user notebooks when seeding examples.
+Update `uv.lock` or `package-lock.json` together with dependency manifests. Use `uv` for Python dependency management. Format Python changes with Ruff. Follow marimo's reactive cell model for example notebooks; put writes behind an explicit run button, unless the example is a linear notebook that only recreates its own table and preserve existing user notebooks when seeding examples.
 
 By submitting a contribution, you agree to license it under this project's Apache-2.0 license. Do not submit material you do not have permission to contribute. Be respectful, discuss ideas rather than people, and keep reports and reviews relevant to the project.

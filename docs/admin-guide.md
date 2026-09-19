@@ -1,5 +1,9 @@
 # Administration guide
 
+For Keycloak account creation, linking, password resets and access revocation, use the
+[identity management guide](keycloak.md). Human accounts use Keycloak. Polaris client credentials apply to service accounts.
+
+
 Iceberg Platform runs the administration portal, Apache Polaris, PostgreSQL 18, pgAdmin and RustFS in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and shared team marimo notebooks.
 
 Python **3.14.7**, FastAPI **0.141.1** and uv **0.12.13** are pinned in the project manifests and Dockerfiles. Node is needed only for browser tests.
@@ -15,11 +19,11 @@ uv run python -m scripts.setup
 docker compose up -d --build
 ```
 
-Open http://localhost:3000 and sign in with `PORTAL_PASSWORD` from `.env`. Setup preserves existing configuration and never prints credentials.
+Open http://localhost:3000 and sign in through Keycloak with `PLATFORM_ADMIN_USERNAME` and the initial `PLATFORM_ADMIN_PASSWORD` from `.env`. Setup preserves existing configuration and never prints credentials.
 
 | Service | Address | Authentication |
 | --- | --- | --- |
-| Administration portal | http://localhost:3000 | `PORTAL_PASSWORD` |
+| Administration portal | http://localhost:3000 | Keycloak platform administrator |
 | FastAPI documentation | http://localhost:3000/docs | Sign in to the admin portal first |
 | OpenAPI schema | http://localhost:3000/openapi.json | Admin portal session |
 | RustFS console | http://localhost:9001 | Bucket administrator S3 credentials or local root credentials |
@@ -47,50 +51,56 @@ pgAdmin 9.17 runs at http://localhost:5050 and stores its settings in `pgadmin-d
 
 After signing in, expand **Iceberg Platform → Polaris metadata** and enter `POSTGRES_PASSWORD` from `.env`. The predefined connection uses host `postgres`, port `5432`, database `polaris` and username `polaris`. PostgreSQL remains accessible only on the Docker network. pgAdmin administers Polaris's metadata database; use the notebooks to query Iceberg table data.
 
-### Phone access
+### Access beyond localhost
 
-Set `PORTAL_LAN_IP` in `.env` to the host's LAN address, then run:
-
-```bash
-docker compose -f compose.yaml -f compose.lan.yaml up -d --no-deps --wait portal
-```
-
-Open `http://<LAN-IP>:3000` on a phone connected to the same network. Only the portal gets the extra binding. Run `docker compose up -d --no-deps --wait portal` to return to localhost only.
+Keycloak requires HTTPS and matching issuer/redirect URLs for remote portal access.
+The optional LAN Compose files only change host bindings; configure the identity
+origins and TLS before using them. See [Keycloak configuration](keycloak.md#configuration).
 
 ## Teams, databases and users
 
 1. **Create teams** on the Teams page. Teams exist independently of databases and users. Editing a name or description preserves the stable team ID.
-2. **Create a database** and select an existing team and Development, Acceptance or Production. Names are unique within that team and environment; `db1` can exist in both Development and Production. Each database gets its own catalog and RustFS bucket. Existing team members receive access immediately.
-3. **Create a user** and select one or more teams. Every user must belong to at least one existing team. The selected role applies to all current and future databases in those teams.
-4. **Save credentials** when they appear. Secrets are returned once and are never stored or logged by the administration portal.
-5. **Edit memberships** under Users → Edit teams. Existing credentials gain or lose catalog and S3 permissions according to the selected teams.
-6. **Change roles** under Users → Edit role. The new role applies across all team databases without changing the username or database credentials. First-time bucket administrators receive new S3 credentials, shown once. Removing bucket administration denies all direct S3 access; restoring it reuses the same S3 credentials with the user’s current team buckets.
-6. **Move a database** under Databases → Move. Members of the new team receive access. Previous members lose access unless they also belong to the new team. The bucket, data, database name and connection details stay the same.
-7. **Delete a database** under Databases → Delete. After confirmation, the operation removes catalog grants, namespaces, tables, views, objects, object versions, multipart uploads and the dedicated bucket. Users and teams remain. If cleanup fails, use **Resume deletion** to finish it.
-8. **Delete a team** after moving or deleting its databases. The API refuses deletion if a user would lose their last team. Assign that user to another team or delete the user first. Users with multiple teams lose only the deleted membership.
+2. **Create a database** and select an existing team and Development, Acceptance or Production. Names are unique within that team and environment; `db1` can exist in both Development and Production. Each database gets its own catalog and RustFS bucket. Existing team members receive access immediately, with the role they hold in that team.
+3. **Create a user**, select one or more teams and choose a role for each team. Every user must belong to at least one existing team. A role applies to all current and future databases of that team only, so one person can be Administrator in one team and Read in another.
+4. **Copy the temporary password** shown once for a new Keycloak account. The user must change it at first sign-in. Existing linked accounts keep their own passwords.
+5. **Edit memberships** under Users → Edit access. Check or clear teams; Polaris grants or removes access according to the selected teams.
+6. **Change roles** in the same Edit access dialog, per team. Changing the role for one team leaves the user's access to other teams untouched. A data role does not grant portal administration.
+7. **Move a database** under Databases → Move. Members of the new team receive access with their role in that team. Previous members lose access unless they also belong to the new team; a member of both teams switches to their role in the new team. The bucket, data, database name and connection details stay the same.
+8. **Delete a database** under Databases → Delete. After confirmation, the operation removes catalog grants, namespaces, tables, views, objects, object versions, multipart uploads and the dedicated bucket. Users and teams remain. If cleanup fails, use **Resume deletion** to finish it.
+9. **Delete a team** after moving or deleting its databases. The API refuses deletion if a user would lose their last team. Assign that user to another team or delete the user first. Users with multiple teams lose only the deleted membership.
 
-Users have OAuth2 client credentials and can also use their username and client secret to sign in to the user portal. The administration portal has a separate local administrator login. A database is an Iceberg catalog; engines such as Spark or Trino execute queries.
+Both portals use Keycloak. Human users are linked explicitly to Polaris principals; notebooks receive their Keycloak access token. Portal administrators require the Keycloak `platform-admin` client role. A database is an Iceberg catalog; engines such as Spark or Trino execute queries.
 
-| Role | Permissions within the selected teams' databases |
+| Role | Permissions within the databases of the team it is assigned for |
 | --- | --- |
 | Read | Read namespaces, tables, views and data |
 | Read & write | Manage data, tables, views and namespaces |
 | Administrator | Manage contents, metadata and catalog access |
-| Database + bucket administration | Catalog administration plus direct S3 access to team buckets |
 
-Bucket administrators also receive an S3 access key and secret. Their policy grants `s3:*` only on their team buckets and the objects inside them. A team without databases grants no data access. Policies update when databases are created or moved and when memberships change. Other buckets and platform IAM administration are excluded. Direct S3 operations can modify Iceberg files; use Iceberg clients for normal table operations.
+Human accounts access storage through credentials vended by Polaris. Direct S3 account
+provisioning is not part of the Keycloak user workflow. A team without databases grants
+no data access. See [identity management](keycloak.md#manage-users-in-the-administration-portal)
+for linking, password reset, and access revocation.
 
 ## Administrator catalog browser
 
 The **Catalog** page lets the signed-in portal administrator browse all Polaris databases, including catalogs created outside the portal. Expand databases and nested namespaces to see namespaces, tables and views. The browser supports search, refresh, empty states, retries and complete provider pagination. Contents load on expansion.
 
-Both `/api/admin/explorer/` routes require the portal administrator session. A database user with an Administrator or Database + bucket administration role does not receive portal administrator access. Polaris bearer tokens are not accepted as portal sessions. Signing out immediately revokes API access.
+Both `/api/admin/explorer/` routes require the portal administrator session. A database user with an Administrator role does not receive portal administrator access. Polaris bearer tokens are not accepted as portal sessions. Signing out immediately revokes API access.
 
 The browser receives only names, object kinds and namespace paths. It does not expose table data, view SQL, arbitrary metadata properties or credentials. While listing, the server temporarily grants itself listing privileges through a unique catalog role attached to `service_admin`, then removes that role even if the request fails. Existing team permissions and catalog roles are preserved. Failed cleanup produces an explicit error.
 
 ## Connect an Iceberg client
 
-Open a database and copy its connection configuration. For example:
+Managed notebooks automatically receive the user's Keycloak token:
+
+```python
+from user_portal.notebook.connection import connect
+catalog = connect()
+```
+
+For external automation, a separately provisioned Polaris service identity can use
+client credentials. Use its catalog ID as the warehouse. For example:
 
 ```python
 from pyiceberg.catalog import load_catalog
@@ -99,7 +109,7 @@ catalog = load_catalog(
     "analytics",
     type="rest",
     uri="http://localhost:8181/api/catalog",
-    warehouse="analytics",
+    warehouse="<catalog-id>",
     credential="<client-id>:<client-secret>",
     scope="PRINCIPAL_ROLE:ALL",
     **{
@@ -109,11 +119,11 @@ catalog = load_catalog(
 )
 ```
 
-The same credentials work across the user's team databases; change the warehouse name to select another database.
+The service identity must have the required grants for each selected catalog. Human portal passwords are not Polaris client secrets.
 
 ## Persistence and operational behavior
 
-See [architecture](architecture.md) for component boundaries. Teams are marked Polaris principal roles; users are principals with stable team IDs. Each user has a dedicated principal role granting only the catalog roles for their teams. Polaris stores this metadata in PostgreSQL; the portal has no separate database.
+See [architecture](architecture.md) for component boundaries. Teams are marked Polaris principal roles; users are principals with stable team IDs and a role per team. Each user has a dedicated principal role granting, per database, only the catalog role that matches the user's role in the owning team. Polaris stores this metadata in PostgreSQL; the portal has no separate database.
 
 Only resources marked `portal.managed-by=iceberg-portal-v2` belong to this resource model. A fresh setup has no default teams or users. `docker compose down -v` deletes PostgreSQL, pgAdmin and RustFS data and resets the local environment.
 
@@ -164,8 +174,7 @@ a scan. Filesystem usage can include other data sharing RustFS's backing filesys
 | PATCH / DELETE | `/api/databases/{id}` | Move with `{"team":"team-id"}` / delete including data |
 | GET | `/api/databases/{id}/connection` | Iceberg connection details |
 | GET / POST | `/api/users` | List / create users |
-| PATCH / DELETE | `/api/users/{id}` | Edit memberships with `{"teams":["team-id"]}` / revoke access |
-| PATCH | `/api/users/{id}/role` | Change role with `{"role":"writer"}`; returns the user and, on first S3 promotion, one-time `bucketCredentials` |
+| PATCH / DELETE | `/api/users/{id}` | Replace memberships and per-team roles with `{"memberships":[{"team":"team-id","role":"writer"}]}`; returns the user and, on first S3 promotion, one-time `bucketCredentials` / revoke access |
 
 Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, including DELETE without a body. Administration requires an authenticated portal session. Use stable team IDs from `/api/teams`. Validation errors return 422, missing teams 404 and dependency conflicts 409. Errors contain `error`; provider error bodies and secrets are never forwarded.
 

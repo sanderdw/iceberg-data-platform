@@ -10,10 +10,10 @@ The administration portal manages resources through the Apache Polaris managemen
 
 | Concept | Polaris representation | Application properties |
 | --- | --- | --- |
-| User | Principal with a dedicated principal role | `portal.name`, `portal.teams`, `portal.role` |
+| User | Principal with a dedicated principal role | `portal.name`, `portal.memberships` |
 | Team | Principal role marked `portal.kind=team` | `portal.name`, `portal.description` |
-| Membership | Team IDs recorded on the user principal | `portal.teams`, a JSON-encoded list |
-| Role assignment | User's principal role receives catalog roles for accessible catalogs | `portal.role`; Polaris catalog-role assignments and privilege grants enforce access |
+| Membership | Team IDs and the role per team, recorded on the user principal | `portal.memberships`, a JSON-encoded object of team ID to role |
+| Role assignment | User's principal role receives, per catalog, the catalog role that matches the user's role in the owning team | `portal.memberships`; Polaris catalog-role assignments and privilege grants enforce access |
 | Database definition | Internal Iceberg catalog with a dedicated RustFS bucket | `portal.name`, `portal.team`, `portal.environment`, `portal.description`, `portal.bucket`, `default-base-location` |
 
 Managed team, user and catalog records carry `portal.managed-by=iceberg-portal-v2`. Teams are represented as Polaris roles, so there is no application-specific `teams` SQL table.
@@ -22,9 +22,9 @@ PostgreSQL data persists in the Docker volume `iceberg-platform_postgres18-data`
 
 ## Users
 
-A user is a person who signs in to the user portal with a username and issued Polaris client secret. The gateway resolves the username to a Polaris client ID and authenticates with Polaris's OAuth token endpoint.
+A user is a person who signs in through Keycloak. The gateway resolves the exact issuer and subject to a linked Polaris principal; catalog requests and notebooks use that person's Keycloak access token.
 
-Each user has a stable internal ID such as `portal-<uuid>`, a globally unique display username, one or more team memberships, and one application role. The dedicated principal role has the same internal name as the user principal. Application users are not PostgreSQL login roles.
+Each user has a stable internal ID such as `portal-<uuid>`, a globally unique display username, one or more team memberships, and one application role per membership. The dedicated principal role has the same internal name as the user principal. Application users are not PostgreSQL login roles.
 
 Usernames are 3–48 characters, start with a lowercase letter, and contain lowercase letters, digits, underscores or hyphens. Issued credentials are presented during creation; this document contains no credentials.
 
@@ -32,26 +32,28 @@ Usernames are 3–48 characters, start with a lowercase letter, and contain lowe
 
 A team groups users and owns database definitions. It has a stable `team-<uuid>` ID, a globally unique name and an optional description. Renaming a team preserves its ID and relationships.
 
-Users can belong to multiple teams and must retain at least one membership. Memberships are stored explicitly in `portal.teams`. Team records describe ownership and grouping; the portal separately grants each user's principal role the appropriate catalog roles. A team membership is therefore not implemented as a direct assignment of the team's principal role to the user.
+Users can belong to multiple teams and must retain at least one membership. Memberships are stored explicitly in `portal.memberships`, together with the role the user holds in each team. Team records describe ownership and grouping; the portal separately grants each user's principal role the appropriate catalog roles. A team membership is therefore not implemented as a direct assignment of the team's principal role to the user.
 
-Effective catalog access is the union of databases owned by the user's teams. Creating a database, changing memberships or moving a database synchronizes the affected catalog-role assignments and, where applicable, RustFS bucket policies.
+Effective catalog access is the union of databases owned by the user's teams, each with the role of its owning team. Creating a database, changing memberships or roles, or moving a database synchronizes the affected catalog-role assignments and, where applicable, RustFS bucket policies.
 
 The active team and environment select the user's portal and notebook context. The user's credentials retain access granted through all their team memberships.
 
 ## Roles
 
-A user has one application role across all accessible team databases; there are no separate per-team role selections.
+A user has one application role per team. The role applies to every database that team owns, so the same person can administer one team's databases and only read another's. Changing the role for one team leaves the grants of the other teams untouched; a changed role is revoked before the new one is granted.
+
+Principals written before per-team roles carry `portal.teams` and a single `portal.role`. They are read as that role in every team and are rewritten to `portal.memberships` the next time their access is saved. An older portal version cannot read the new property, so downgrading is not supported.
 
 | Role | Portal label | Access |
 | --- | --- | --- |
 | `reader` | Read | List and read catalog, namespace, table and view metadata; read table data |
 | `writer` | Read & write | Manage catalog contents, including creating and writing tables |
 | `admin` | Administrator | Manage catalog contents, metadata and access |
-| `bucket-admin` | Database + bucket administration | Catalog `admin` access plus separately issued RustFS credentials and policies for the user's team buckets |
+| `bucket-admin` | Database + bucket administration | Catalog `admin` access plus separately issued RustFS credentials and a policy covering the buckets of the teams where the user holds this role |
 
-Each catalog has `reader`, `writer` and `admin` catalog roles. The `bucket-admin` application role maps to the `admin` catalog role and adds direct S3 bucket access. RustFS stores those S3 identities and policies; the user principal records the associated access-key ID in `portal.bucket-access-key`.
+Each catalog has `reader`, `writer` and `admin` catalog roles. The `bucket-admin` application role maps to the `admin` catalog role and adds direct S3 bucket access. A user has at most one S3 identity; its policy lists only buckets of teams with `bucket-admin`, and becomes deny-all when the last such membership goes. RustFS stores those S3 identities and policies; the user principal records the associated access-key ID in `portal.bucket-access-key`.
 
-The platform administration portal has its own `PORTAL_PASSWORD` login. An application user's `admin` or `bucket-admin` role does not grant access to that portal.
+The platform administration portal requires the Keycloak `iceberg-admin/platform-admin` role. An application user's `admin` or `bucket-admin` role does not grant access to that portal.
 
 ## Database definitions
 
@@ -61,7 +63,7 @@ Supported environments are `development`, `acceptance` and `production`. A displ
 
 Moving a database changes its owning team and updates access. Its catalog ID, environment, bucket and stored table files remain the same.
 
-For example, a user with role `writer` in both `analytics` and `operations` receives write access to ready catalogs owned by either team, across all three environments. An `events` catalog in `analytics/development` and an `events` catalog in `analytics/production` have separate IDs and buckets.
+For example, a user with role `writer` in `analytics` and `reader` in `operations` receives write access to ready catalogs owned by `analytics` and read access to those owned by `operations`, across all three environments. Moving a catalog from `operations` to `analytics` raises that user's access to it from read to write. An `events` catalog in `analytics/development` and an `events` catalog in `analytics/production` have separate IDs and buckets.
 
 ## Related data and inspection
 

@@ -19,7 +19,6 @@ from .models import (
     DatabaseMove,
     Login,
     Memberships,
-    RoleInput,
     ServiceError,
     TeamInput,
     UserInput,
@@ -29,13 +28,14 @@ from .storage import RustFSStorage
 
 PUBLIC = Path(__file__).resolve().parent.parent / "public"
 FILES = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg",
-         "/infrastructure.js": "infrastructure.js"}
+         "/infrastructure.js": "infrastructure.js", "/identity.js": "identity.js"}
 FILES.update({f"/fonts/{name}.ttf": f"fonts/{name}.ttf" for name in ("doto", "space-grotesk", "space-mono")})
 
 
-def create_app(provider=None, password=None, secure_cookie=None):
+def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
+               session_cookie="portal_session", user_management=None):
     password = password if password is not None else os.environ.get("PORTAL_PASSWORD", "")
-    if len(password) < 16:
+    if oidc is None and len(password) < 16:
         raise RuntimeError(
             "Set PORTAL_PASSWORD (at least 16 characters). Run uv run python -m scripts.setup."
         )
@@ -49,14 +49,41 @@ def create_app(provider=None, password=None, secure_cookie=None):
     @asynccontextmanager
     async def lifespan(app):
         yield
+        if user_management:
+            user_management.close()
         if owned:
             provider.close()
 
-    app = FastAPI(title="Iceberg Workspace API", version="0.2.0", lifespan=lifespan, redoc_url=None)
+    app = FastAPI(title="Iceberg Workspace API", version="0.3.0", lifespan=lifespan, redoc_url=None)
     sessions, attempts = {}, {}
     # This local control plane intentionally runs one worker. Serializing reads and
     # mutations also prevents orphan memberships during concurrent team deletion.
     mutation_lock = asyncio.Lock()
+
+    def list_users():
+        return user_management.users(provider) if user_management else provider.list_users()
+
+    def require_editable_user(id):
+        if user_management:
+            principal = user_management.principal(provider, id)
+            if principal["properties"].get("portal.identity-status") in ("pending", "revoking"):
+                raise ServiceError(409, "Finish setup or revocation before editing this user.")
+            return principal
+
+    if oidc:
+        async def accept_oidc(request, claims, token, lifetime):
+            roles = claims.get("resource_access", {}).get(oidc.client_id, {}).get("roles", [])
+            if "platform-admin" not in roles:
+                raise ServiceError(403, "Platform administrator access is required.")
+            sessions.pop(request.cookies.get(session_cookie), None)
+            session_id = secrets.token_urlsafe(32)
+            sessions[session_id] = time.monotonic() + lifetime
+            response = oidc.redirect()
+            response.set_cookie(session_cookie, session_id, max_age=int(lifetime), httponly=True,
+                                samesite="strict", secure=secure_cookie)
+            return response
+
+        oidc.install(app, accept_oidc)
 
     @app.exception_handler(ServiceError)
     async def service_error(request, exc):
@@ -66,7 +93,7 @@ def create_app(provider=None, password=None, secure_cookie=None):
     async def validation_error(request, exc):
         fields = sorted({str(e["loc"][-1]) for e in exc.errors()})
         message = "Check the input: " + ", ".join(fields) + "."
-        if "teams" in fields:
+        if {"memberships", "team"} & set(fields):
             message += " Select at least one existing team, without duplicates."
         return JSONResponse({"error": message}, status_code=422)
 
@@ -79,7 +106,7 @@ def create_app(provider=None, password=None, secure_cookie=None):
         for key, (_, expiry) in list(attempts.items()):
             if expiry <= now:
                 attempts.pop(key, None)
-        request.state.authenticated = sessions.get(request.cookies.get("portal_session"), 0) > now
+        request.state.authenticated = sessions.get(request.cookies.get(session_cookie), 0) > now
         try:
             if path.startswith("/api/") and request.method not in ("GET", "HEAD"):
                 origin = request.headers.get("origin")
@@ -133,10 +160,13 @@ def create_app(provider=None, password=None, secure_cookie=None):
 
     @app.get("/api/session")
     async def session(request: Request):
-        return {"authenticated": request.state.authenticated}
+        return {"authenticated": request.state.authenticated, **({"loginUrl": "/auth/login"} if oidc else {}),
+                **({"userManagement": "keycloak"} if user_management else {})}
 
     @app.post("/api/session")
     async def login(data: Login, request: Request):
+        if oidc:
+            raise ServiceError(403, "Use Keycloak to sign in.")
         key = request.client.host if request.client else "local"
         count, until = attempts.get(key, (0, time.monotonic() + 60))
         if count >= 10:
@@ -145,20 +175,20 @@ def create_app(provider=None, password=None, secure_cookie=None):
         if not hmac.compare_digest(data.password.encode(), password.encode()):
             raise ServiceError(401, "Incorrect password.")
         attempts.pop(key, None)
-        sessions.pop(request.cookies.get("portal_session"), None)
+        sessions.pop(request.cookies.get(session_cookie), None)
         id = secrets.token_urlsafe(32)
         sessions[id] = time.monotonic() + 28800
         response = JSONResponse({"authenticated": True})
         response.set_cookie(
-            "portal_session", id, max_age=28800, httponly=True, samesite="strict", secure=secure_cookie
+            session_cookie, id, max_age=28800, httponly=True, samesite="strict", secure=secure_cookie
         )
         return response
 
     @app.delete("/api/session")
     async def logout(request: Request):
-        sessions.pop(request.cookies.get("portal_session"), None)
-        response = JSONResponse({"authenticated": False})
-        response.delete_cookie("portal_session", httponly=True, samesite="strict", secure=secure_cookie)
+        sessions.pop(request.cookies.get(session_cookie), None)
+        response = JSONResponse({"authenticated": False, **({"logoutUrl": oidc.logout_url} if oidc else {})})
+        response.delete_cookie(session_cookie, httponly=True, samesite="strict", secure=secure_cookie)
         return response
 
     @app.get("/api/overview")
@@ -170,7 +200,7 @@ def create_app(provider=None, password=None, secure_cookie=None):
             "health": health,
             "teams": provider.list_teams(),
             "databases": provider.list_databases(),
-            "users": provider.list_users(),
+            "users": list_users(),
         }
 
     @app.get("/api/infrastructure")
@@ -188,7 +218,7 @@ def create_app(provider=None, password=None, secure_cookie=None):
             raise ServiceError(503, "The monitoring service is unavailable. Retrying automatically.") from None
 
     async def require_portal_admin(request: Request):
-        # A portal password session is the only admin identity. Never accept a
+        # A validated portal session is the only admin identity. Never accept a
         # Polaris bearer token, database role, request header or browser flag.
         if not request.state.authenticated:
             raise ServiceError(401, "Sign in as a portal administrator to browse the catalog.")
@@ -255,24 +285,35 @@ def create_app(provider=None, password=None, secure_cookie=None):
 
     @app.get("/api/users")
     def users():
-        return provider.list_users()
+        return list_users()
 
     @app.post("/api/users", status_code=201)
     def create_user(data: UserInput):
+        if user_management:
+            raise ServiceError(409, "Use Create Keycloak account or Link existing account.")
         return provider.create_user(data)
 
     @app.patch("/api/users/{id}")
     def update_user(id: str, data: Memberships):
-        return provider.update_memberships(id, data.teams)
-
-    @app.patch("/api/users/{id}/role")
-    def update_role(id: str, data: RoleInput):
-        return provider.update_role(id, data.role)
+        principal = require_editable_user(id)
+        if user_management:
+            # A linked legacy account keeps the bucket administration it already holds.
+            current = provider.user(principal)["memberships"]
+            held = {m["team"] for m in current if m["role"] == "bucket-admin"}
+            if any(m.role == "bucket-admin" and m.team not in held for m in data.memberships):
+                raise ServiceError(422, "Keycloak users access storage through Polaris; direct S3 accounts are not supported.")
+        return provider.update_memberships(id, data.roles)
 
     @app.delete("/api/users/{id}")
     def delete_user(id: str):
-        provider.delete_user(id)
+        if user_management:
+            user_management.revoke(provider, id)
+        else:
+            provider.delete_user(id)
         return {"deleted": True}
+
+    if user_management:
+        user_management.install(app, provider)
 
     @app.get("/{path:path}", include_in_schema=False)
     def static(path: str):

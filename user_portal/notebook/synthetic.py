@@ -1,4 +1,4 @@
-"""Deterministic fictional quarter-hour energy data for the bundled notebooks."""
+"""Deterministic fictional data for the bundled notebooks: quarter-hour energy and sensor events."""
 
 from datetime import UTC
 
@@ -86,3 +86,65 @@ def generate_energy_data(homes=40, days=7):
     )
 
     return energy_data
+
+
+def generate_sensor_events(devices=12, events=40):
+    """Fictional sensor events that need Iceberg v3: free-form payloads, nanosecond timestamps, locations."""
+    import json
+    import random
+
+    import pyarrow as pa
+
+    rng = random.Random(42)
+    start_ns = 1_790_000_000 * 1_000_000_000  # 2026-09-21T14:13:20Z
+    sites = ["Example Plant North", "Example Plant South", "Example Depot"]
+    rows = []
+    for device_index in range(devices):
+        device_id = f"SENSOR-{device_index + 1:03d}"
+        site = sites[device_index % len(sites)]
+        # Fictional coordinates on a small grid; WKT text becomes GEOMETRY in DuckDB.
+        location = f"POINT ({5.0 + device_index % len(sites) / 10:.4f} {52.0 + device_index // len(sites) / 100:.4f})"
+        clock_ns = start_ns + device_index * 1_000
+        for _ in range(events):
+            # Bursts arrive within one microsecond: microsecond precision would merge them.
+            clock_ns += rng.randint(120, 880) if rng.random() < 0.4 else rng.randint(40_000, 900_000)
+            kind = rng.choices(["temperature", "vibration", "door", "fault"], weights=[5, 3, 2, 1])[0]
+            if kind == "temperature":
+                payload = {"kind": kind, "celsius": round(rng.uniform(17.0, 84.0), 2), "unit": "C"}
+            elif kind == "vibration":
+                payload = {"kind": kind, "axes": {a: round(rng.uniform(0.0, 4.0), 3) for a in "xyz"}}
+            elif kind == "door":
+                payload = {"kind": kind, "open": rng.random() < 0.5, "badge": rng.randint(1000, 9999)}
+            else:
+                payload = {
+                    "kind": kind,
+                    "code": rng.choice(["E17", "E42", "E90"]),
+                    "details": {"retries": rng.randint(0, 5), "tags": rng.sample(["power", "bus", "heat"], 2)},
+                }
+            rows.append(
+                {
+                    "event_id": len(rows) + 1,
+                    "device_id": device_id,
+                    "site": site,
+                    "location_wkt": location,
+                    "measured_at": clock_ns,
+                    "payload": json.dumps(payload),
+                    "synthetic": True,
+                }
+            )
+
+    arrow_schema = pa.schema(
+        [
+            ("event_id", pa.int64()),
+            ("device_id", pa.string()),
+            ("site", pa.string()),
+            ("location_wkt", pa.string()),
+            ("measured_at", pa.timestamp("ns")),
+            ("payload", pa.string()),
+            ("synthetic", pa.bool_()),
+        ]
+    )
+    sensor_events = pa.Table.from_pylist(rows, schema=arrow_schema)
+    assert sensor_events.num_rows == devices * events
+    assert len({(r["device_id"], r["measured_at"]) for r in rows}) == len(rows)
+    return sensor_events

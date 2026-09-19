@@ -42,8 +42,21 @@ def _(catalog, mo, namespace, selected_table):
             'Open a table from the portal or use `catalog.load_table(("namespace", "table"))` in a new cell.'
         ),
     )
-    table = catalog.load_table((*namespace, selected_table))
-    df = table.scan(limit=100).to_pandas()
+    from pyiceberg.exceptions import ResolveError as _ResolveError
+
+    try:
+        table = catalog.load_table((*namespace, selected_table))
+        df = table.scan(limit=100).to_pandas()
+    except (ValueError, _ResolveError) as _error:
+        # PyIceberg cannot read every Iceberg v3 type yet: variant fails to load, geometry to scan.
+        mo.stop(
+            True,
+            mo.callout(
+                f"PyIceberg cannot read this table ({_error}). "
+                "Example 05 reads Iceberg v3 tables with DuckDB.",
+                kind="warn",
+            ),
+        )
     mo.ui.table(df)
     return df, table
 

@@ -32,6 +32,8 @@ def connection_setup(monkeypatch):
             return httpx.Response(
                 200, json={"defaults": {"prefix": "ignored"}, "overrides": {"prefix": "db"}}
             )
+        if request.url.path.endswith("/tables/missing"):
+            return httpx.Response(404)
         return httpx.Response(
             200,
             json={
@@ -45,8 +47,9 @@ def connection_setup(monkeypatch):
             },
         )
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
-    monkeypatch.setattr(native.httpx, "Client", lambda **kwargs: client)
+    # A fresh client per call: the helper closes each one after use.
+    transport, real_client = httpx.MockTransport(handler), httpx.Client
+    monkeypatch.setattr(native.httpx, "Client", lambda **kwargs: real_client(transport=transport))
     connection = Mock()
     monkeypatch.setattr(native.duckdb, "connect", lambda **kwargs: connection)
     return connection, requests
@@ -66,6 +69,47 @@ def test_native_connection_uses_scoped_vended_credentials_and_internal_endpoint(
     assert "PERSISTENT" not in sql
 
 
+def test_writable_connection_to_a_new_table_waits_for_credentials(connection_setup):
+    connection, requests = connection_setup
+    assert native.connect_duckdb(("iceberg_v3",), "missing", read_only=False, missing_ok=True) is connection
+    sql = "\n".join(call.args[0] for call in connection.execute.call_args_list)
+    assert "READ_ONLY" not in sql and "TYPE s3" not in sql
+    assert "ACCESS_DELEGATION_MODE 'none'" in sql
+    connection.execute.reset_mock()
+    native.refresh_table_credentials(connection, ("iceberg_v3",), "sensor_events")
+    assert requests[-1].headers["X-Iceberg-Access-Delegation"] == "vended-credentials"
+    sql = connection.execute.call_args.args[0]
+    assert "CREATE OR REPLACE SECRET table_storage" in sql
+    assert "ENDPOINT 'rustfs:9000'" in sql and "SCOPE 's3://bucket/table/'" in sql
+
+
+@pytest.mark.parametrize("options", [{}, {"read_only": False}, {"missing_ok": True}])
+def test_missing_table_needs_an_explicit_writable_opt_in(connection_setup, options):
+    with pytest.raises(RuntimeError) as error:
+        native.connect_duckdb(("iceberg_v3",), "missing", **options)
+    assert ("writing" in str(error.value)) == (options.get("read_only") is False)
+
+
+def test_failed_credential_refresh_does_not_expose_provider_details(connection_setup):
+    connection, _ = connection_setup
+    with pytest.raises(RuntimeError) as error:
+        native.refresh_table_credentials(connection, ("iceberg_v3",), "missing")
+    assert error.value.__suppress_context__
+    connection.execute.side_effect = native.duckdb.Error("SQL contains private-storage-secret")
+    with pytest.raises(RuntimeError) as error:
+        native.refresh_table_credentials(connection, ("iceberg_v3",), "sensor_events")
+    assert "private-storage-secret" not in str(error.value)
+
+
+def test_external_token_skips_client_secret_exchange(connection_setup, monkeypatch):
+    connection, requests = connection_setup
+    monkeypatch.setenv("ICEBERG_ACCESS_TOKEN", "private'token")
+    monkeypatch.delenv("ICEBERG_CLIENT_SECRET")
+    monkeypatch.delenv("ICEBERG_CLIENT_ID")
+    assert native.connect_duckdb(("analytics",), "events") is connection
+    assert all(request.method == "GET" for request in requests)
+
+
 def test_failed_connection_closes_and_does_not_expose_provider_sql(connection_setup):
     connection, _ = connection_setup
     connection.execute.side_effect = native.duckdb.Error("SQL contains private-client-secret")
@@ -76,8 +120,47 @@ def test_failed_connection_closes_and_does_not_expose_provider_sql(connection_se
     assert error.value.__suppress_context__
 
 
+def test_variant_columns_do_not_warn_in_the_marimo_datasets_panel(caplog):
+    pytest.importorskip("marimo")
+    from marimo._data import get_datasets
+
+    connection = native.duckdb.connect()
+    connection.execute("CREATE TABLE events AS SELECT {'kind': 'door'}::VARIANT AS payload")
+    (database,) = get_datasets.get_databases_from_duckdb(connection)
+    assert database.schemas[0].tables[0].columns[0].type == "unknown"
+    assert "Unknown DuckDB type" not in caplog.text
+
+
+def test_schema_reference_quotes_names():
+    assert native.schema_reference(("analytics", 'ne"sted')) == '"lakehouse"."analytics.ne""sted"'
+
+
 def test_table_reference_quotes_names():
     assert (
         native.table_reference(("analytics", "nested"), 'odd";table')
         == '"lakehouse"."analytics.nested"."odd"";table"'
     )
+
+
+@pytest.mark.parametrize("exists,owner,dropped", [
+    (0, None, False),
+    (1, ("04_example",), True),
+    (1, ("another_example",), None),
+    (1, None, None),
+])
+def test_example_replaces_only_the_table_it_created(exists, owner, dropped):
+    connection = Mock()
+    connection.execute.return_value.fetchone.side_effect = [(exists,), owner]
+    if dropped is None:
+        with pytest.raises(RuntimeError, match="did not create it"):
+            native.drop_example_table(connection, ("iceberg_v3", "nested"), "sensor_events", "04_example")
+    else:
+        native.drop_example_table(connection, ("iceberg_v3", "nested"), "sensor_events", "04_example")
+    calls = connection.execute.call_args_list
+    assert calls[0].args[1] == ["iceberg_v3.nested", "sensor_events"]
+    assert any(call.args[0].startswith("DROP TABLE") for call in calls) == bool(dropped)
+    if exists:
+        assert calls[1].args == (
+            'SELECT value FROM iceberg_table_properties("lakehouse"."iceberg_v3.nested"."sensor_events") WHERE key = ?',
+            [native.EXAMPLE_PROPERTY],
+        )

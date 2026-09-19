@@ -86,7 +86,7 @@ def main():
         accounts = []
         for idx in range(2):
             result = p.create_user(
-                UserInput(name=f"user-{idx}-{suffix}", teams=[teams[idx]], role="bucket-admin")
+                UserInput(name=f"user-{idx}-{suffix}", memberships=[{"team": teams[idx], "role": "bucket-admin"}])
             )
             users.append(result["user"]["id"])
             accounts.append(result)
@@ -109,25 +109,31 @@ def main():
         assert catalog_request(p, accounts[0]["credentials"], other["id"]).status_code == 200
         assert_denied(lambda: target.list_objects_v2(Bucket=other["bucket"]))
         print("PASS: moving a database changes actual catalog and S3 permissions; other database is isolated")
-        p.update_memberships(users[0], teams)
+        p.update_memberships(users[0], dict.fromkeys(teams, "bucket-admin"))
         assert source.get_object(Bucket=db["bucket"], Key="evidence.txt")["Body"].read() == b"team access"
-        p.update_memberships(users[0], [teams[0]])
+        p.update_memberships(users[0], {teams[0]: "bucket-admin", teams[1]: "reader"})
         assert_denied(lambda: source.get_object(Bucket=db["bucket"], Key="evidence.txt"))
+        assert catalog_request(p, accounts[0]["credentials"], db["id"]).status_code == 200
+        source.list_objects_v2(Bucket=other["bucket"])
+        print("PASS: roles differ per team: bucket administration in one, read-only catalog access in another")
+        p.update_memberships(users[0], {teams[0]: "bucket-admin"})
+        assert_denied(lambda: source.get_object(Bucket=db["bucket"], Key="evidence.txt"))
+        assert catalog_request(p, accounts[0]["credentials"], db["id"]).status_code in (403, 404)
         print("PASS: adding/removing memberships updates existing credentials")
-        p.update_role(users[0], "reader")
+        p.update_memberships(users[0], {teams[0]: "reader"})
         assert_denied(lambda: source.list_objects_v2(Bucket=other["bucket"]))
         assert catalog_request(p, accounts[0]["credentials"], other["id"]).status_code == 200
-        restored = p.update_role(users[0], "bucket-admin")
+        restored = p.update_memberships(users[0], {teams[0]: "bucket-admin"})
         assert "bucketCredentials" not in restored
         source.list_objects_v2(Bucket=other["bucket"])
         assert_denied(lambda: source.list_objects_v2(Bucket=db["bucket"]))
-        new_account = p.create_user(UserInput(name=f"promoted-{suffix}", teams=[teams[0]], role="reader"))
+        new_account = p.create_user(UserInput(name=f"promoted-{suffix}", memberships=[{"team": teams[0], "role": "reader"}]))
         users.append(new_account["user"]["id"])
-        promoted = p.update_role(users[-1], "bucket-admin")
+        promoted = p.update_memberships(users[-1], {teams[0]: "bucket-admin"})
         promoted_s3 = s3_client(promoted["bucketCredentials"])
         promoted_s3.list_objects_v2(Bucket=other["bucket"])
         assert_denied(lambda: promoted_s3.list_objects_v2(Bucket=db["bucket"]))
-        p.update_role(users[-1], "writer")
+        p.update_memberships(users[-1], {teams[0]: "writer"})
         assert_denied(lambda: promoted_s3.list_objects_v2(Bucket=other["bucket"]))
         p.delete_user(users.pop())
         print("PASS: role changes grant/revoke direct S3 access and preserve existing credentials")

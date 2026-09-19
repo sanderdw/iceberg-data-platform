@@ -24,6 +24,38 @@ def test_existing_workspace_receives_examples_without_overwriting_edits(tmp_path
     third.write_text("# My native analysis")
     seed_workspace(tmp_path)
     assert third.read_text() == "# My native analysis"
+    for name in ("04_duckdb_iceberg_v3_write.py", "05_duckdb_iceberg_v3_read.py"):
+        source = (tmp_path / name).read_text()
+        assert "engine=lakehouse" in source
+        # These examples run from top to bottom without input.
+        assert "mo.ui." not in source and "mo.stop(" not in source
+    assert "'format-version' = 3" in (tmp_path / "04_duckdb_iceberg_v3_write.py").read_text()
+
+
+def test_sensor_events_are_reproducible_and_need_iceberg_v3_types():
+    pytest.importorskip("pyarrow", reason="Run with --all-groups for notebook data tests")
+    import json
+
+    from user_portal.notebook.synthetic import generate_sensor_events
+
+    data = generate_sensor_events()
+    assert data.num_rows == 12 * 40 == 480
+    assert data.equals(generate_sensor_events())
+    assert str(data.schema.field("measured_at").type) == "timestamp[ns]"
+    rows = data.to_pylist()
+    assert [r["event_id"] for r in rows] == list(range(1, 481))
+    assert all(r["synthetic"] and r["site"].startswith("Example") for r in rows)
+    assert all(r["location_wkt"].startswith("POINT (") for r in rows)
+    # Free-form payloads: several shapes, one of them nested.
+    shapes = {tuple(sorted(json.loads(r["payload"]))) for r in rows}
+    assert len(shapes) == 4 and ("code", "details", "kind") in shapes
+    # Nanoseconds identify events that microseconds would merge.
+    nanoseconds = {(r["device_id"], r["measured_at"].value) for r in rows}
+    microseconds = {(r["device_id"], r["measured_at"].value // 1_000) for r in rows}
+    assert len(microseconds) < len(nanoseconds) == len(rows)
+    # Sizes too small for a microsecond collision are still valid.
+    assert generate_sensor_events(devices=1, events=1).num_rows == 1
+    assert generate_sensor_events(devices=0).num_rows == 0
 
 
 def test_energy_data_is_reproducible_and_balanced():

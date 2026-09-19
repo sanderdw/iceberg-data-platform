@@ -5,8 +5,6 @@ import re
 SENSITIVE = re.compile(
     r"secret|token|credential|password|access.key|private.key|authorization", re.IGNORECASE
 )
-
-
 def properties(values):
     return {str(k): str(v) for k, v in values.items() if not SENSITIVE.search(str(k))}
 

@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iceberg Data Platform</title>
+  <meta name="description" content="An open lakehouse you actually own: Apache Iceberg, Apache Polaris, Keycloak and marimo, all open source.">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/black.min.css">
+  <style>
+    /* Fonts: Doto (display), Space Grotesk (body), Space Mono (labels, data). Bundled from public/fonts, OFL licensed. */
+    @font-face { font-family: "Doto"; src: url("fonts/doto.ttf") format("truetype"); font-weight: 400 700; font-display: swap; }
+    @font-face { font-family: "Space Grotesk"; src: url("fonts/space-grotesk.ttf") format("truetype"); font-weight: 300 700; font-display: swap; }
+    @font-face { font-family: "Space Mono"; src: url("fonts/space-mono.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+
+    /* Nothing design tokens, dark mode (OLED black) */
+    :root {
+      --black: #000000;
+      --surface: #111111;
+      --surface-raised: #1A1A1A;
+      --border: #222222;
+      --border-visible: #333333;
+      --text-disabled: #666666;
+      --text-secondary: #999999;
+      --text-primary: #E8E8E8;
+      --text-display: #FFFFFF;
+      --accent: #D71921;
+      --success: #4A9E5C;
+      --warning: #D4A843;
+      --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px; --space-3xl: 64px; --space-4xl: 96px;
+
+      /* reveal.js theme overrides */
+      --r-background-color: var(--black);
+      --r-main-font: "Space Grotesk", "DM Sans", system-ui, sans-serif;
+      --r-heading-font: "Space Grotesk", "DM Sans", system-ui, sans-serif;
+      --r-code-font: "Space Mono", "JetBrains Mono", ui-monospace, monospace;
+      --r-main-font-size: 28px;
+      --r-main-color: var(--text-primary);
+      --r-heading-color: var(--text-display);
+      --r-heading-text-transform: none;
+      --r-heading-font-weight: 500;
+      --r-heading-letter-spacing: -0.02em;
+      --r-heading1-size: 1.7em;
+      --r-heading2-size: 1.7em;
+      --r-heading3-size: 1em;
+      --r-link-color: var(--text-display);
+      --r-link-color-hover: var(--text-display);
+      --r-selection-background-color: var(--surface-raised);
+      --r-block-margin: 16px;
+      --r-controls-spacing: 10px;
+    }
+    /* Every slide is a full-height column so anything with .foot sits at the bottom */
+    .reveal { font-weight: 400; font-synthesis: none; }
+    .reveal .slides section { text-align: left; }
+    .reveal .slides section.present:not(.stack) { display: flex !important; flex-direction: column; height: 100%; box-sizing: border-box; }
+    .reveal .foot { margin-top: auto; padding-top: var(--space-md); }
+    .reveal h1, .reveal h2, .reveal h3 { font-weight: 500; line-height: 1.1; margin: 0 0 var(--space-xl) 0; }
+    .reveal h3 { font-size: 1em; margin-bottom: var(--space-sm); color: var(--text-display); }
+    .reveal p { margin: 0 0 var(--space-md) 0; line-height: 1.45; }
+    .reveal ul, .reveal ol { display: block; margin: 0 0 var(--space-md) 1.1em; }
+    .reveal li { margin: 0 0 var(--space-md) 0; line-height: 1.4; }
+    .reveal strong { font-weight: 500; color: var(--text-display); }
+    .reveal em { font-style: normal; color: var(--text-display); }
+    .reveal .label { font-family: var(--r-code-font); font-size: 0.5em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); line-height: 1.2; margin-bottom: var(--space-2xl); }
+    .reveal .label.tight { margin-bottom: var(--space-sm); }
+    .reveal .mono { font-family: var(--r-code-font); }
+    .reveal .secondary { color: var(--text-secondary); }
+    .reveal .disabled { color: var(--text-disabled); }
+    .reveal .display { color: var(--text-display); }
+    .reveal .doto { font-family: "Doto", "Space Mono", monospace; font-weight: 700; letter-spacing: -0.02em; line-height: 1; color: var(--text-display); }
+    .reveal .lede { font-size: 1.15em; color: var(--text-display); max-width: 30em; }
+    .reveal .link-row { margin-top: var(--space-lg); }
+    .reveal a.url { font-family: var(--r-code-font); font-size: 0.55em; line-height: 2; color: var(--text-display); text-decoration: underline; text-decoration-color: var(--text-disabled); text-underline-offset: 4px; word-break: break-all; }
+    .reveal a.url:hover { text-decoration-color: var(--text-display); }
+    .reveal .cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3xl); align-items: start; }
+    .reveal .cols-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-2xl); align-items: start; }
+    .reveal .cols-asym { display: grid; grid-template-columns: 3fr 2fr; gap: var(--space-3xl); align-items: start; }
+    .reveal .group { margin-bottom: var(--space-xl); }
+    .reveal .group .label { margin-bottom: var(--space-sm); }
+    .reveal .dot { display: inline-block; width: 10px; height: 10px; border-radius: 999px; background: var(--accent); vertical-align: middle; margin-right: var(--space-sm); }
+    .reveal .caption { font-family: var(--r-code-font); font-size: 0.45em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); line-height: 1.4; }
+    /* Screenshot slides: one-line header, the image fills what is left, caption pinned to the bottom */
+    .reveal .head { display: flex; align-items: baseline; gap: var(--space-lg); margin-bottom: var(--space-md); flex: none; }
+    .reveal .head .label { margin: 0; white-space: nowrap; }
+    .reveal .head h2 { font-size: 1em; margin: 0; }
+    .reveal .fig { flex: 1 1 auto; min-height: 0; display: flex; align-items: flex-start; justify-content: flex-start; }
+    .reveal .fig .shot { max-height: 100%; max-width: 100%; width: auto; height: auto; border: 1px solid var(--border-visible); border-radius: 8px; display: block; }
+    .reveal .fig.two { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 100%; gap: var(--space-lg); }
+    .reveal .fig.two .shot { max-height: 100%; width: auto; max-width: 100%; }
+    .reveal .foot.two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); }
+    .reveal .hint { position: absolute; top: 6px; right: 0; font-family: var(--r-code-font); font-size: 0.4em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-disabled); }
+    /* Full-bleed vertical slides for two-image pages: the screenshot is the slide */
+    .reveal .slides section.full { padding: 0; justify-content: flex-end; align-items: flex-start; }
+    .reveal .full .caption { background: var(--black); color: var(--text-secondary); padding: 6px 10px; border-radius: 4px; margin: 0; }
+    /* Tables: data-dense lists get dividers, nothing else does */
+    .reveal table { font-size: 0.6em; border-collapse: collapse; width: 100%; margin: 0; }
+    .reveal table th { text-align: left; font-family: var(--r-code-font); font-weight: 400; font-size: 0.75em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); border-bottom: 1px solid var(--border-visible); padding: 8px 16px 12px 0; }
+    .reveal table td { border-bottom: 1px solid var(--border); padding: 12px 16px 12px 0; vertical-align: top; color: var(--text-primary); }
+    .reveal table td.num { font-family: var(--r-code-font); text-align: right; white-space: nowrap; }
+    .reveal table th.num { text-align: right; }
+    .reveal table td.mono { font-family: var(--r-code-font); }
+    /* Layer list: indentation is the hierarchy */
+    .reveal .layers { font-size: 0.72em; }
+    .reveal .layer { display: grid; grid-template-columns: 360px 1fr; gap: var(--space-lg); padding: 12px 0; border-bottom: 1px solid var(--border); align-items: baseline; }
+    .reveal .layer .n { font-family: var(--r-code-font); color: var(--text-display); }
+    .reveal .layer .d { color: var(--text-secondary); }
+    .reveal .layer:nth-child(2) .n { padding-left: 24px; } .reveal .layer:nth-child(3) .n { padding-left: 48px; } .reveal .layer:nth-child(4) .n { padding-left: 72px; } .reveal .layer:nth-child(5) .n { padding-left: 96px; }
+    /* Code: monochrome */
+    .reveal pre { width: 100%; font-size: 0.48em; box-shadow: none; margin: 0; }
+    .reveal pre code { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-height: 64vh; padding: var(--space-md) var(--space-lg); color: var(--text-secondary); line-height: 1.45; }
+    .reveal pre code .k { color: var(--text-display); }
+    .reveal pre code .s { color: var(--text-primary); }
+    .reveal pre code .n { color: var(--text-primary); }
+    .reveal code { font-family: var(--r-code-font); font-size: 0.9em; }
+    /* Section dividers and title: dot-matrix motif */
+    .reveal .slides section.divider, .reveal .slides section.title { background-image: radial-gradient(circle, var(--border-visible) 1px, transparent 1px); background-size: 16px 16px; justify-content: flex-end; }
+    .reveal .divider .num { font-size: 7em; margin-bottom: var(--space-xl); }
+    .reveal .divider h1 { margin-bottom: var(--space-md); }
+    .reveal .title h1 { font-size: 3.6em; margin-bottom: var(--space-2xl); max-width: 11em; }
+    .reveal .title h1.quote { font-size: 2.6em; max-width: 14em; }
+    .reveal .meta-row { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: var(--space-2xl); padding-right: var(--space-3xl); padding-bottom: var(--space-md); }
+    .reveal .meta-row .label { margin: 0; }
+    /* Architecture diagram: monoline */
+    .arch svg { width: 100%; height: auto; }
+    .arch text { font-family: "Space Grotesk", sans-serif; font-size: 16px; fill: var(--text-primary); }
+    .arch text.hi { fill: var(--text-display); font-weight: 500; }
+    .arch .lbl { font-family: "Space Mono", monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--text-secondary); }
+    .arch .sub { font-family: "Space Mono", monospace; font-size: 11px; fill: var(--text-secondary); }
+    .arch rect { fill: var(--black); stroke: var(--border-visible); stroke-width: 1.5; }
+    .arch rect.hi { stroke: var(--text-display); }
+    .arch line, .arch path { stroke: var(--text-disabled); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+    /* Chrome: small quiet controls, thin progress, dim slide number */
+    .reveal .progress { color: var(--text-secondary); height: 2px; }
+    .reveal .controls { font-size: 5px; color: var(--text-disabled); opacity: 0.35; transition: opacity 200ms cubic-bezier(0.25, 0.1, 0.25, 1); }
+    .reveal .controls:hover { opacity: 1; }
+    .reveal .slide-number { background: transparent; font-family: var(--r-code-font); font-size: 11px; letter-spacing: 0.08em; color: var(--text-disabled); }
+    .reveal .fade > .fade-in, .reveal .slides section { transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1) !important; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ========== TITLE ========== -->
+<section class="title">
+  <div class="label">Iceberg Data Platform · September 2026</div>
+  <h1 class="doto">An open lakehouse you actually own.</h1>
+  <div class="meta-row">
+    <p class="lede">Apache Iceberg as the table format. Every other building block open source, replaceable, and running on one laptop.</p>
+    <div class="label">Sander de Wildt<br>Apache Iceberg · Polaris · Keycloak<br>RustFS · marimo · DuckDB</div>
+  </div>
+  <aside class="notes">Three parts: what Iceberg is and is not, why the all open source approach matters for autonomy and portability, and a demo of the platform itself. Slides with two screenshots have vertical slides below them (arrow down) with each capture full screen.</aside>
+</section>
+
+<!-- ========== INTRO ========== -->
+<section>
+  <div class="label">Intro</div>
+  <h2>Hi all,</h2>
+  <div class="cols-asym">
+    <div>
+      <p>I started this project because knowledge about Apache Iceberg is not spreading as easily as it should. In short: to get started you need quite a few components. A catalog, object storage, identity, an engine, a place to work. Vendors make that easy, and that is exactly where vendor lock-in begins.</p>
+      <p>So I built a small platform that shows the other route: every building block open source, running on one laptop with one command. My point today: <strong>Iceberg can be a very good choice for autonomy and portability</strong>, not only for scale.</p>
+      <p class="link-row"><span class="label tight" style="display:block">Read more</span><a class="url" href="https://medium.com/@sanderdw/making-apache-iceberg-feel-like-a-database-service-e89c5d0bed98" target="_blank" rel="noopener">https://medium.com/@sanderdw/making-apache-iceberg-feel-like-a-database-service-e89c5d0bed98</a><br><a class="url" href="https://www.linkedin.com/posts/sanderdw_at-alliander-we-want-to-take-data-sharing-ugcPost-7505007789820256256-eoeA/" target="_blank" rel="noopener">https://www.linkedin.com/posts/sanderdw_at-alliander-we-want-to-take-data-sharing-ugcPost-7505007789820256256-eoeA/</a></p>
+    </div>
+    <div>
+      <div class="label tight">Three things to land today</div>
+      <ol>
+        <li>How Iceberg actually works, and why it is not Snowflake.</li>
+        <li>What fully open source buys you: no lock-in, autonomy, portability.</li>
+        <li>A demo: teams, databases, notebooks, one identity.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="caption foot">Background: Making Apache Iceberg feel like a database service on Medium · the LinkedIn post on data sharing at Alliander</div>
+  <aside class="notes">Tone: direct, no consultancy language. Keep it about capabilities and ownership. The Medium post covers the same ground in writing.</aside>
+</section>
+
+<section class="title">
+  <div class="label">The one-liner</div>
+  <h1 class="doto quote">What APIs did for applications, Apache Iceberg is doing for data.</h1>
+  <div class="meta-row">
+    <p class="lede" style="max-width:36em">For years we have relied on REST and OpenAPI specs to abstract software, so any service can talk to any application. Today Apache Iceberg is doing the exact same thing for structured data: it provides an open and standard interface, including the way you want to run it, so that no single engine owns your data anymore.</p>
+    <div class="label">Sander de Wildt</div>
+  </div>
+</section>
+
+<!-- ========== PART 1: ICEBERG ========== -->
+<section class="divider">
+  <div class="doto num">01</div>
+  <h1>How Apache Iceberg works</h1>
+  <p class="secondary">And why it is not a database platform like Snowflake.</p>
+</section>
+
+<section>
+  <div class="label">01 · Iceberg</div>
+  <h2>A table format, not a product</h2>
+  <div class="cols">
+    <div>
+      <div class="label tight">Snowflake · Databricks · BigQuery</div>
+      <ul>
+        <li>One vendor delivers storage, compute, catalog, security and the UI as a single product.</li>
+        <li>Your tables live in the vendor's format and account.</li>
+        <li>You rent the capability. Leaving means migrating data <em>and</em> everything around it.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="label tight">Apache Iceberg</div>
+      <ul>
+        <li>An open <strong>specification</strong> for how table data and metadata are laid out in object storage.</li>
+        <li>Data files are plain Parquet. Metadata is JSON and Avro. No server owns them.</li>
+        <li>You bring the catalog, the engines, the storage and the identity provider. Each is replaceable.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="secondary foot">The comparison is not "which is better". It is "what do you own and what do you rent".</p>
+</section>
+
+<section>
+  <div class="label">01 · Iceberg</div>
+  <h2>The layers of one Iceberg table</h2>
+  <div class="layers">
+    <div class="layer"><span class="n">catalog</span><span class="d">Apache Polaris, Iceberg REST. Holds the pointer to the current metadata file per table, plus permissions. This is where a commit becomes atomic.</span></div>
+    <div class="layer"><span class="n">metadata.json</span><span class="d">Schema with field IDs, partition spec, sort order, properties and the list of snapshots. A new version on every commit; the old one stays.</span></div>
+    <div class="layer"><span class="n">manifest list .avro</span><span class="d">One per snapshot. Lists the manifests of that snapshot with partition statistics, so engines skip whole manifests.</span></div>
+    <div class="layer"><span class="n">manifest .avro</span><span class="d">Lists data files and delete files with per column min and max, null counts and row counts. This is what makes pruning cheap.</span></div>
+    <div class="layer"><span class="n">data files .parquet</span><span class="d">The actual rows. Immutable. Any engine that speaks Parquet and the Iceberg spec reads them directly from the bucket.</span></div>
+  </div>
+  <p class="secondary foot">The catalog is tiny. Everything else is files. A commit is the swap of one pointer.</p>
+  <aside class="notes">Key point: the catalog is tiny. Everything else is files. A commit is a swap of one pointer.</aside>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">01 · Iceberg</span><h2>This is the whole table.</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/21-rustfs-metadata-files.png" alt="RustFS console listing the metadata folder of an Iceberg table"></div>
+  <div class="caption foot">RustFS · bucket of the smart-meter-readings database · synthetic/neighborhood_electricity/metadata · two metadata versions, one manifest, one manifest list; the Parquet file sits in the data folder next to it</div>
+</section>
+
+<section>
+  <div class="label">01 · Iceberg</div>
+  <h2>metadata.json, straight from object storage</h2>
+  <div class="cols-asym">
+    <pre><code data-noescape>{
+  <span class="k">"format-version"</span>: <span class="n">2</span>,
+  <span class="k">"table-uuid"</span>: <span class="s">"68abb0f3-1b50-4658-899a-da8035f031b2"</span>,
+  <span class="k">"location"</span>: <span class="s">"s3://db-…/synthetic/neighborhood_electricity"</span>,
+  <span class="k">"schemas"</span>: [{ <span class="k">"schema-id"</span>: <span class="n">0</span>, <span class="k">"fields"</span>: [
+      { <span class="k">"id"</span>: <span class="n">1</span>, <span class="k">"name"</span>: <span class="s">"timestamp_utc"</span>, <span class="k">"type"</span>: <span class="s">"timestamptz"</span> },
+      { <span class="k">"id"</span>: <span class="n">2</span>, <span class="k">"name"</span>: <span class="s">"home_id"</span>, <span class="k">"type"</span>: <span class="s">"string"</span> },
+      …
+      { <span class="k">"id"</span>: <span class="n">13</span>, <span class="k">"name"</span>: <span class="s">"grid_draw_kwh"</span>, <span class="k">"type"</span>: <span class="s">"double"</span> }
+  ]}],
+  <span class="k">"partition-specs"</span>: [{ <span class="k">"spec-id"</span>: <span class="n">0</span>, <span class="k">"fields"</span>: [] }],
+  <span class="k">"current-snapshot-id"</span>: <span class="n">1208397818083668235</span>,
+  <span class="k">"refs"</span>: { <span class="k">"main"</span>: { <span class="k">"snapshot-id"</span>: <span class="n">1208397818083668235</span>,
+                      <span class="k">"type"</span>: <span class="s">"branch"</span> } },
+  <span class="k">"snapshots"</span>: [{
+    <span class="k">"sequence-number"</span>: <span class="n">1</span>,
+    <span class="k">"snapshot-id"</span>: <span class="n">1208397818083668235</span>,
+    <span class="k">"summary"</span>: { <span class="k">"operation"</span>: <span class="s">"append"</span>,
+                 <span class="k">"added-records"</span>: <span class="s">"26880"</span>,
+                 <span class="k">"total-data-files"</span>: <span class="s">"1"</span> },
+    <span class="k">"manifest-list"</span>: <span class="s">"s3://db-…/metadata/snap-1208…avro"</span>
+  }]
+}</code></pre>
+    <ul>
+      <li><strong>Field IDs</strong>, not names, identify columns. Renaming never rewrites data.</li>
+      <li><strong>Snapshots</strong> are the history. Time travel is reading an older pointer.</li>
+      <li><strong>Refs</strong> give a table branches and tags, like git.</li>
+      <li><strong>Partition specs</strong> can evolve. Old files keep their layout.</li>
+      <li>Nothing here is vendor specific.</li>
+    </ul>
+  </div>
+  <div class="caption foot">Abbreviated. The real file from the demo is on the next slide.</div>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">01 · Iceberg</span><h2>Same file, viewed in the storage console</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/22-rustfs-metadata-json.png" alt="Preview of the metadata.json file in the RustFS console"></div>
+  <div class="caption foot">RustFS · metadata.json preview · no database engine involved, just an object in a bucket</div>
+</section>
+
+<section>
+  <div class="label">01 · Iceberg</div>
+  <h2>What the format gives you out of the box</h2>
+  <div class="cols">
+    <ul>
+      <li><strong>ACID commits</strong> on object storage. Concurrent writers, atomic pointer swap in the catalog.</li>
+      <li><strong>Snapshots and time travel.</strong> Every write is a snapshot. Read yesterday's table, roll back a bad load.</li>
+      <li><strong>Schema evolution</strong> without rewriting files: add, drop, rename, widen types.</li>
+      <li><strong>Hidden partitioning.</strong> Users query on <code>timestamp_utc</code>, Iceberg prunes on <code>day(timestamp_utc)</code>.</li>
+    </ul>
+    <ul>
+      <li><strong>Statistics in metadata.</strong> Planning skips files without opening them.</li>
+      <li><strong>Many engines, one copy.</strong> DuckDB, Spark, Trino, Flink, PyIceberg. Snowflake and Databricks read Iceberg too.</li>
+      <li><strong>Branches, tags and views.</strong> Refs per table for audits and write-audit-publish; views are first class catalog objects.</li>
+      <li><strong>Format version 3.</strong> Semi-structured <code>VARIANT</code>, nanosecond timestamps, geometry, column defaults, row lineage and deletion vectors.</li>
+    </ul>
+  </div>
+  <p class="lede foot">In short: the capabilities you associate with a data warehouse, without the warehouse owning your data.</p>
+</section>
+
+<section>
+  <div class="label">01 · Iceberg</div>
+  <h2>What Iceberg is <em>not</em></h2>
+  <div class="cols-asym">
+    <ul>
+      <li>Not a query engine. It does not execute SQL. You pick DuckDB, Trino, Spark, Snowflake, or all of them.</li>
+      <li>Not a storage system. It sits on S3 compatible object storage you already have.</li>
+      <li>Not a security layer by itself. Permissions and credential vending live in the catalog and your identity provider.</li>
+      <li>Not maintenance free. Compaction, snapshot expiry and orphan cleanup are yours to schedule.</li>
+    </ul>
+  </div>
+  <p class="secondary foot">That is exactly the point. The building blocks are separate, so you decide who owns which one.</p>
+</section>
+
+<!-- ========== PART 2: OPEN SOURCE ========== -->
+<section class="divider">
+  <div class="doto num">02</div>
+  <h1>Fully open source</h1>
+  <p class="secondary">No lock-in, autonomy, portability. And the honest trade-offs.</p>
+</section>
+
+<section>
+  <div class="label">02 · Open source</div>
+  <h2>Every building block is open source</h2>
+  <table>
+    <thead><tr><th>Capability</th><th>Component</th><th class="num">Version</th><th>License</th><th>Swappable for</th></tr></thead>
+    <tbody>
+      <tr><td>Table format</td><td>Apache Iceberg (PyIceberg)</td><td class="num">spec v2 and v3 · 0.12</td><td class="mono">Apache-2.0</td><td>It is the standard. Engines come and go.</td></tr>
+      <tr><td>Catalog and permissions</td><td>Apache Polaris</td><td class="num">1.7.0</td><td class="mono">Apache-2.0</td><td>Lakekeeper, Nessie, Gravitino, Unity Catalog OSS, AWS Glue</td></tr>
+      <tr><td>Identity (OIDC)</td><td>Keycloak</td><td class="num">26.7.3</td><td class="mono">Apache-2.0</td><td>Entra ID, Okta, any OIDC provider</td></tr>
+      <tr><td>Object storage (S3 API)</td><td>RustFS</td><td class="num">1.0.0</td><td class="mono">Apache-2.0</td><td>AWS S3, MinIO, Ceph, Cloudflare R2, on-prem</td></tr>
+      <tr><td>Catalog metadata store</td><td>PostgreSQL</td><td class="num">18</td><td class="mono">PostgreSQL</td><td>Managed Postgres anywhere</td></tr>
+      <tr><td>Notebooks</td><td>marimo</td><td class="num">0.24.2</td><td class="mono">Apache-2.0</td><td>Jupyter, VS Code, any Python client</td></tr>
+      <tr><td>Query engine</td><td>DuckDB with the iceberg extension, reads and writes</td><td class="num">1.5.5</td><td class="mono">MIT</td><td>Trino, Spark, Flink, Polars, ClickHouse</td></tr>
+      <tr><td>Portals and API</td><td>FastAPI, Python 3.14</td><td class="num">0.141</td><td class="mono">MIT</td><td>Ours. Thin by design.</td></tr>
+    </tbody>
+  </table>
+  <div class="caption foot">The platform itself is Apache-2.0. An independent project, not an Apache Software Foundation project.</div>
+</section>
+
+<section>
+  <div class="label">02 · Open source</div>
+  <h2>No lock-in: what that means in practice</h2>
+  <div class="cols-3">
+    <div class="group">
+      <div class="label">Data</div>
+      <p>Parquet files in a bucket you control. Copy the bucket, point another catalog at it, done. No export job, no egress negotiation.</p>
+    </div>
+    <div class="group">
+      <div class="label">Catalog</div>
+      <p>Iceberg REST is an open API. Polaris today, another REST catalog tomorrow. Table metadata already lives next to the data.</p>
+    </div>
+    <div class="group">
+      <div class="label">Engines</div>
+      <p>DuckDB for a laptop, Trino for a cluster, Snowflake if a team wants it. All read the same table. No second copy.</p>
+    </div>
+  </div>
+  <p class="lede foot">Lock-in is not one big decision. It is the sum of small defaults. Open formats make every default reversible.</p>
+</section>
+
+<section>
+  <div class="label">02 · Open source</div>
+  <h2>Autonomy and portability</h2>
+  <div class="cols">
+    <div>
+      <div class="label tight">Autonomy</div>
+      <ul>
+        <li>Runs on a laptop, a VM, Kubernetes or a cloud account. Same Compose definition.</li>
+        <li>One command installer for Linux, macOS and Windows. No vendor account, no trial clock.</li>
+        <li>You decide where data lives and which network it ever touches.</li>
+        <li>Costs are compute and storage you already pay for.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="label tight">Portability</div>
+      <ul>
+        <li>Storage: anything with an S3 API.</li>
+        <li>Identity: any OIDC provider. Users and roles stay yours.</li>
+        <li>Catalog: any Iceberg REST implementation.</li>
+        <li>Compute: whichever engine fits the job, per team, per workload.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><pre><code>curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh</code></pre></div>
+</section>
+
+<section>
+  <div class="label">02 · Open source</div>
+  <h2>PS: the honest part</h2>
+  <div class="cols-asym">
+    <ul>
+      <li><strong>Operations are yours.</strong> Upgrades, backups of Postgres and buckets, monitoring, HTTPS, secrets.</li>
+      <li><strong>Table maintenance is yours.</strong> Compaction, snapshot expiration, orphan file cleanup need a schedule.</li>
+      <li><strong>Security boundaries are explicit.</strong> This build is a local development platform: in-memory sessions, a trusted Docker host. Read the security model before running it anywhere else.</li>
+      <li><strong>Fewer vendors, more decisions.</strong> A feature for architecture, a real cost for a small team.</li>
+    </ul>
+  </div>
+  <p class="secondary foot">Open source does not mean free of work. What you gain in ownership you also gain in responsibility.</p>
+</section>
+
+<!-- ========== PART 3: DEMO ========== -->
+<section class="divider">
+  <div class="doto num">03</div>
+  <h1>The platform</h1>
+  <p class="secondary">Teams, databases, notebooks. One identity, your own permissions everywhere.</p>
+</section>
+
+<section>
+  <div class="label">03 · Platform</div>
+  <h2>Architecture</h2>
+  <div class="arch">
+    <svg viewBox="0 0 1200 520" role="img" aria-label="Architecture diagram">
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#666666"/></marker></defs>
+      <rect x="20" y="60" width="180" height="60" rx="8"/><text x="110" y="96" text-anchor="middle">Administrator</text>
+      <rect x="20" y="300" width="180" height="60" rx="8"/><text x="110" y="336" text-anchor="middle">Team member</text>
+      <rect class="hi" x="280" y="40" width="240" height="100" rx="8"/><text class="hi" x="400" y="80" text-anchor="middle">Admin portal :3000</text><text class="sub" x="400" y="108" text-anchor="middle">FastAPI · teams, users, databases</text>
+      <rect class="hi" x="280" y="280" width="240" height="100" rx="8"/><text class="hi" x="400" y="320" text-anchor="middle">User portal :3002</text><text class="sub" x="400" y="348" text-anchor="middle">FastAPI gateway · catalog, notebooks</text>
+      <rect x="600" y="160" width="220" height="80" rx="8"/><text x="710" y="195" text-anchor="middle">Keycloak</text><text class="sub" x="710" y="222" text-anchor="middle">OIDC · realm iceberg</text>
+      <rect class="hi" x="600" y="300" width="220" height="80" rx="8"/><text class="hi" x="710" y="335" text-anchor="middle">Apache Polaris</text><text class="sub" x="710" y="362" text-anchor="middle">Iceberg REST catalog · grants</text>
+      <rect x="920" y="300" width="240" height="80" rx="8"/><text x="1040" y="335" text-anchor="middle">PostgreSQL 18</text><text class="sub" x="1040" y="362" text-anchor="middle">catalog metadata only</text>
+      <rect class="hi" x="920" y="420" width="240" height="80" rx="8"/><text class="hi" x="1040" y="455" text-anchor="middle">RustFS (S3)</text><text class="sub" x="1040" y="482" text-anchor="middle">one bucket per database</text>
+      <rect x="600" y="420" width="220" height="80" rx="8"/><text x="710" y="455" text-anchor="middle">marimo runtime</text><text class="sub" x="710" y="482" text-anchor="middle">container per user session</text>
+      <line x1="200" y1="90" x2="280" y2="90"/>
+      <line x1="200" y1="330" x2="280" y2="330"/>
+      <line x1="520" y1="90" x2="600" y2="180"/>
+      <line x1="520" y1="300" x2="600" y2="230"/>
+      <line x1="520" y1="120" x2="600" y2="310"/>
+      <line x1="520" y1="340" x2="600" y2="340"/>
+      <line x1="520" y1="370" x2="600" y2="450"/>
+      <line x1="820" y1="340" x2="920" y2="340"/>
+      <line x1="820" y1="460" x2="920" y2="460"/>
+      <line x1="710" y1="420" x2="710" y2="380"/>
+      <line x1="710" y1="300" x2="710" y2="240"/>
+      <path d="M520,50 L1185,50 L1185,470 L1162,470"/>
+      <text class="lbl" x="560" y="40">bucket and IAM provisioning (S3 API)</text>
+      <text class="lbl" x="725" y="275">token validation (JWKS)</text>
+      <text class="lbl" x="725" y="405">vended, table-scoped credentials</text>
+    </svg>
+  </div>
+  <div class="caption foot">Two Compose projects: iceberg-platform (admin, identity, data services) and iceberg-workspaces (user gateway, notebooks). The gateway restarts independently.</div>
+</section>
+
+<section>
+  <div class="label">03 · Platform</div>
+  <h2>The capability model</h2>
+  <div class="cols">
+    <ul>
+      <li><strong>Team</strong> owns databases. Stable ID, unique name, a description.</li>
+      <li><strong>User</strong> signs in with Keycloak, belongs to one or more teams, has a role per team: read, read and write, admin.</li>
+      <li><strong>Database</strong> is an Iceberg catalog in Polaris plus a dedicated S3 bucket. Namespaces, tables and views live inside.</li>
+      <li><strong>Environment</strong> per database: development, acceptance, production.</li>
+    </ul>
+    <ul>
+      <li>Effective access is the union of the user's teams, each at its own role. Moving a database re-syncs grants and bucket policies.</li>
+      <li>No second application database. Polaris <em>is</em> the source of truth for teams, users and catalogs.</li>
+      <li>Portal admin is a Keycloak role. Database admin does not grant portal admin.</li>
+      <li>Self-service for teams, governance in one place.</li>
+    </ul>
+  </div>
+  <p class="lede foot">Ownership is explicit: a team owns a database, a database owns a bucket. That is the whole governance model.</p>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">Demo · Sign in</span><h2>One identity for everything</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/01-keycloak-login.png" alt="Keycloak sign-in page for the iceberg realm"></div>
+  <div class="caption foot">Keycloak · realm iceberg · the admin portal, the user portal and Polaris all trust the same tokens</div>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">Demo · Administration</span><h2>Databases: a catalog plus a bucket, per team</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/02-admin-databases.png" alt="Admin portal databases page"></div>
+  <div class="caption foot">Admin portal :3000 · five databases across three fictional grid operator teams, development and production</div>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Administration</span><h2>Teams and their members</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/04-admin-teams.png" alt="Admin portal teams page">
+      <img class="shot" src="screenshots/03-admin-users.png" alt="Admin portal users page">
+    </div>
+    <div class="caption foot two"><span>Teams · a central place for ownership and membership</span><span>Users · Keycloak accounts with a role in every team they belong to</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/04-admin-teams.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">Admin portal · teams</div>
+  </section>
+  <section class="full" data-background-image="screenshots/03-admin-users.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">Admin portal · users</div>
+  </section>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">Demo · Administration</span><h2>A role per team, not per user</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/24-admin-edit-access.png" alt="Edit access dialog with a role select for every team of the user"></div>
+  <div class="caption foot">Edit access · sander reads asset-management and writes grid-planning · each role reaches only the databases of that team</div>
+  <aside class="notes">Read, read and write, or administrator, chosen per team. Saving re-syncs the Polaris grants of every database those teams own. Database administration never grants access to this portal.</aside>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">Demo · Administration</span><h2>Creating a user creates a Keycloak account</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/23-keycloak-users.png" alt="Keycloak admin console listing the users of the iceberg realm"></div>
+  <div class="caption foot">Keycloak admin console · accounts created by the portal · temporary password shown once · change forced at first sign-in</div>
+  <aside class="notes">The portal links the Keycloak subject to a Polaris principal. Revoke in the portal and the notebook session stops within 30 seconds.</aside>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Administration</span><h2>Catalog explorer and live infrastructure</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/20-admin-explorer.png" alt="Admin catalog explorer showing database, namespace and table">
+      <img class="shot" src="screenshots/05-admin-infrastructure.png" alt="Admin infrastructure page with service health">
+    </div>
+    <div class="caption foot two"><span>All catalogs, namespaces, tables and views · read only for the portal admin</span><span>Health, CPU, memory, bucket data · separate monitor service</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/20-admin-explorer.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">Admin portal · catalog explorer</div>
+  </section>
+  <section class="full" data-background-image="screenshots/05-admin-infrastructure.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">Admin portal · infrastructure</div>
+  </section>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Team workspace</span><h2>The user portal: your teams, your databases</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/07-user-welcome.png" alt="User portal welcome page">
+      <img class="shot" src="screenshots/08-user-catalog-empty.png" alt="User portal with active team, environment and database selected">
+    </div>
+    <div class="caption foot two"><span>User portal :3002 · sign in with the same Keycloak account</span><span>Active team with your role in it · environment · five bundled example notebooks</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/07-user-welcome.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · welcome</div>
+  </section>
+  <section class="full" data-background-image="screenshots/08-user-catalog-empty.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · team, environment, database</div>
+  </section>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">Demo · Notebook 01</span><h2>Write to Iceberg: PyIceberg, DuckDB, or your own engine</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/10-notebook-01-created.png" alt="marimo notebook with the Create example table button"></div>
+  <div class="caption foot">Example 01 writes with PyIceberg · DuckDB's iceberg extension, Spark and Trino write the same table · 26,880 rows behind an explicit button</div>
+  <aside class="notes">The notebook runs in its own container with only this user's credentials. No platform secrets, no Docker socket. Writing needs the writer role, enforced by Polaris, not by the UI. The engine is a choice: PyIceberg here because it is small and explicit, DuckDB or Spark for bigger loads.</aside>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">Demo · Notebook 02</span><h2>Analyze with DuckDB and SQL cells</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/11-notebook-02-duckdb-chart.png" alt="marimo notebook with DuckDB aggregation and a consumption versus solar chart"></div>
+  <div class="caption foot">PyIceberg reads the table with the user's permissions · DuckDB runs SQL on it · charts react to the street filter</div>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Notebook 03</span><h2>Native DuckDB on Iceberg: no dataframe in between</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/12-notebook-03-attach.png" alt="DuckDB attached to Polaris, describing the Iceberg table">
+      <img class="shot" src="screenshots/13-notebook-03-snapshots.png" alt="DuckDB querying Iceberg snapshots">
+    </div>
+    <div class="caption foot two"><span>ATTACH the Polaris catalog · DESCRIBE the table · DuckDB reads manifests and Parquet from RustFS with credentials vended by Polaris</span><span>Row count and snapshots straight from the metadata · only query results come back to the notebook</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/12-notebook-03-attach.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 03 · ATTACH and DESCRIBE</div>
+  </section>
+  <section class="full" data-background-image="screenshots/13-notebook-03-snapshots.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 03 · snapshots</div>
+  </section>
+  <section class="full" data-background-image="screenshots/14-notebook-03-aggregate.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 03 · aggregation in DuckDB</div>
+  </section>
+</section>
+
+<section>
+  <div class="label">Demo · Same table, three engines</div>
+  <h2>That is the Iceberg promise in one demo</h2>
+  <div class="cols-3">
+    <div class="group">
+      <div class="label">01 · PyIceberg</div>
+      <p>Python writes Parquet and commits a snapshot through the REST catalog.</p>
+    </div>
+    <div class="group">
+      <div class="label">02 · DuckDB via PyIceberg</div>
+      <p>Scan to Arrow, then SQL in marimo. Good for small, interactive work.</p>
+    </div>
+    <div class="group">
+      <div class="label">03 · DuckDB native</div>
+      <p>The engine reads the table files directly. Swap in Trino or Spark and nothing about the data changes.</p>
+    </div>
+  </div>
+  <p class="lede foot">One copy of the data. The engine is a choice per workload, not a platform decision.</p>
+</section>
+
+<section>
+  <div class="label">Demo · Iceberg v3</div>
+  <h2>Iceberg v3, written by DuckDB</h2>
+  <div class="cols-asym">
+    <pre style="font-size:0.58em"><code data-noescape><span class="k">CREATE TABLE</span> lakehouse.iceberg_v3.sensor_events (
+    event_id     <span class="n">BIGINT</span>,
+    device_id    <span class="n">VARCHAR</span>,
+    site         <span class="n">VARCHAR</span>,
+    location     <span class="k">GEOMETRY</span>,
+    measured_at  <span class="k">TIMESTAMP_NS</span>,
+    payload      <span class="k">VARIANT</span>,
+    synthetic    <span class="n">BOOLEAN</span>
+) <span class="k">WITH</span> (<span class="s">'format-version'</span> = <span class="n">3</span>);
+
+<span class="k">ALTER TABLE</span> … <span class="k">ADD COLUMN</span> firmware <span class="n">VARCHAR</span> <span class="k">DEFAULT</span> <span class="s">'v1.0'</span>;
+<span class="k">UPDATE</span> … <span class="k">SET</span> firmware = <span class="s">'v2.0'</span> <span class="k">WHERE</span> device_id = <span class="s">'SENSOR-001'</span>;
+<span class="k">DELETE FROM</span> … <span class="k">WHERE</span> payload.kind::<span class="n">VARCHAR</span> = <span class="s">'fault'</span>;</code></pre>
+    <ul>
+      <li><strong>VARIANT</strong> holds a different structure per event, no fixed schema.</li>
+      <li><strong>TIMESTAMP_NS</strong> and <strong>GEOMETRY</strong> are native column types.</li>
+      <li><strong>Column defaults.</strong> Adding <code>firmware</code> rewrites none of the 480 rows.</li>
+      <li><strong>Deletion vectors.</strong> Updates and deletes mark row positions in a small Puffin file.</li>
+      <li><strong>Row lineage.</strong> Every row keeps a stable ID and the commit that last changed it.</li>
+    </ul>
+  </div>
+  <div class="caption foot">Plain SQL through the Polaris REST catalog, with the user's own permissions · GEOGRAPHY and UNKNOWN are not in DuckDB yet · PyIceberg does not read these v3 types yet</div>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Notebook 04</span><h2>Write Iceberg v3 with DuckDB</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/25-notebook-04-v3-create.png" alt="marimo notebook creating a format-version 3 table with DuckDB and inserting events">
+      <img class="shot" src="screenshots/26-notebook-04-v3-delete.png" alt="marimo notebook updating and deleting rows in the v3 table">
+    </div>
+    <div class="caption foot two"><span>CREATE TABLE with format-version 3 · Polaris vends credentials for the table it just created · 480 events inserted</span><span>40 rows updated, 45 deleted · no data file rewritten · needs the read and write role, enforced by Polaris</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/25-notebook-04-v3-create.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 04 · create and insert</div>
+  </section>
+  <section class="full" data-background-image="screenshots/26-notebook-04-v3-delete.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 04 · update and delete</div>
+  </section>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Notebook 05</span><h2>Read what v3 adds, in SQL</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/27-notebook-05-variant.png" alt="DuckDB querying fields inside a VARIANT column">
+      <img class="shot" src="screenshots/28-notebook-05-lineage.png" alt="DuckDB querying row lineage and deletion vectors of the v3 table">
+    </div>
+    <div class="caption foot two"><span>Fields inside the VARIANT, addressed with dots and cast on read</span><span>Row lineage: which commit last touched a row · deletion vectors from the table metadata · time travel to the first snapshot</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/27-notebook-05-variant.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 05 · variant</div>
+  </section>
+  <section class="full" data-background-image="screenshots/28-notebook-05-lineage.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">marimo · example 05 · row lineage and deletion vectors</div>
+  </section>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">Demo · Iceberg v3</span><h2>A delete is one small file</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/31-rustfs-v3-puffin.png" alt="RustFS console listing the Parquet data files and Puffin deletion vectors of the v3 table"></div>
+  <div class="caption foot">RustFS · iceberg_v3/sensor_events/data · Parquet data files stay untouched · each update or delete adds a Puffin deletion vector of a few hundred bytes</div>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Catalog details</span><h2>Inspect a table without opening a notebook</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/16-user-table-overview.png" alt="Table overview with current snapshot, format version and location">
+      <img class="shot" src="screenshots/17-user-table-schema.png" alt="Table schema tab with field IDs and types">
+    </div>
+    <div class="caption foot two"><span>Overview · snapshot, format version, location, statistics</span><span>Schema with Iceberg field IDs</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/15-user-catalog-namespace.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · namespace with one Iceberg table</div>
+  </section>
+  <section class="full" data-background-image="screenshots/16-user-table-overview.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · table overview</div>
+  </section>
+  <section class="full" data-background-image="screenshots/17-user-table-schema.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · schema</div>
+  </section>
+  <section class="full" data-background-image="screenshots/29-user-table-v3-overview.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · the v3 table · format version 3, three delete files</div>
+  </section>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">Demo · Catalog details</span><h2>Snapshots, branches and a preview at any snapshot</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/18-user-table-snapshots.png" alt="Snapshot history and branches of the table">
+      <img class="shot" src="screenshots/19-user-table-preview.png" alt="Preview of 100 rows at the selected snapshot">
+    </div>
+    <div class="caption foot two"><span>History and refs · main branch</span><span>100 rows at a selected snapshot · DuckDB in a disposable process, with the user's own permissions</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/18-user-table-snapshots.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · snapshots and refs</div>
+  </section>
+  <section class="full" data-background-image="screenshots/19-user-table-preview.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · preview at a snapshot</div>
+  </section>
+  <section class="full" data-background-image="screenshots/30-user-table-v3-preview.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · preview of the v3 table · geometry as text, VARIANT as JSON</div>
+  </section>
+</section>
+
+<section>
+  <div class="label">03 · Platform</div>
+  <h2>Security model, in one slide</h2>
+  <div class="cols-asym">
+    <ul>
+      <li>Keycloak issues the token. The user portal, Polaris and notebooks all use <em>that user's</em> token. No shared service account for data access.</li>
+      <li>Polaris vends short lived, table scoped S3 credentials. Notebooks never see bucket root keys.</li>
+      <li>Each notebook session runs in its own container and network: read-only root filesystem, dropped capabilities, CPU and memory limits, no Docker socket.</li>
+      <li>Revoking a membership or deleting a user stops the affected runtimes. Authorization is re-checked every 30 seconds.</li>
+    </ul>
+  </div>
+  <p class="secondary foot"><span class="dot"></span>Boundaries are documented: this build is for local development. HTTPS, persistent sessions and hostile-tenant isolation are on the list, not in the box.</p>
+</section>
+
+<!-- ========== WRAP UP ========== -->
+<section class="divider">
+  <div class="doto num">04</div>
+  <h1>What this means for us</h1>
+  <p class="secondary">Direction, ownership and three concrete steps.</p>
+</section>
+
+<section>
+  <div class="label">04 · Wrap up</div>
+  <h2>As far as I'm concerned</h2>
+  <ul>
+    <li><strong>Iceberg is the storage standard.</strong> Whatever engine or vendor we use, tables should land as Iceberg on object storage we own.</li>
+    <li><strong>Catalog and identity are the governance points.</strong> Permissions belong in the catalog, users in the identity provider. Not in every tool separately.</li>
+    <li><strong>Engines are replaceable.</strong> Treat them as workload decisions, not platform commitments.</li>
+    <li><strong>Self-service with ownership.</strong> Teams create and own their databases. The platform team owns the building blocks.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="label">04 · Wrap up</div>
+  <h2>My advice: three concrete steps</h2>
+  <div class="cols-asym">
+    <ol>
+      <li><strong>Run it.</strong> One command, your laptop, twenty minutes. Load a real dataset and query it from two engines.</li>
+      <li><strong>Decide catalog and identity first.</strong> That is where lock-in and governance actually live. Storage and engines follow.</li>
+      <li><strong>Agree on ownership.</strong> Who owns buckets, who owns the catalog, who schedules table maintenance. Write it down before the first production table.</li>
+    </ol>
+  </div>
+  <p class="secondary foot">The ambition stays the same: open formats, our data, our choice of tools. This is a working example, not a slide about one.</p>
+</section>
+
+<section class="title">
+  <div class="label">Thanks</div>
+  <h1 class="doto">Reach out.</h1>
+  <div class="meta-row">
+    <p class="lede">If you want to run this yourself, or if you see a gap I missed. Let me know, we take it from there.</p>
+    <div class="label">Regards, Sander<br>github.com/sanderdw/iceberg-data-platform<br>Apache-2.0</div>
+  </div>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/notes/notes.min.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1600,
+    height: 900,
+    margin: 0.04,
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'fade',
+    transitionSpeed: 'fast',
+    backgroundTransition: 'fade',
+    controls: true,
+    controlsTutorial: false,
+    controlsLayout: 'bottom-right',
+    controlsBackArrows: 'hidden',
+    progress: true,
+    center: false,
+    plugins: [RevealNotes]
+  });
+</script>
+</body>
+</html>

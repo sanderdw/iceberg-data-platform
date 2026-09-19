@@ -55,6 +55,14 @@ class Workspace:
                 },
                 {"title": "02 · Visualize with DuckDB", "url": self.url + "?file=02_duckdb_visualization.py"},
                 {"title": "03 · Native DuckDB on Iceberg", "url": self.url + "?file=03_duckdb_iceberg.py"},
+                {
+                    "title": "04 · Write Iceberg v3 with DuckDB",
+                    "url": self.url + "?file=04_duckdb_iceberg_v3_write.py",
+                },
+                {
+                    "title": "05 · Read Iceberg v3 with DuckDB",
+                    "url": self.url + "?file=05_duckdb_iceberg_v3_read.py",
+                },
             ],
         }
 
@@ -140,8 +148,10 @@ class NotebookRuntime:
                     "ICEBERG_ENVIRONMENT": session.environment,
                     "ICEBERG_NAMESPACE": json.dumps(namespace),
                     "ICEBERG_TABLE": table or "",
-                    "ICEBERG_CLIENT_ID": session.client_id,
-                    "ICEBERG_CLIENT_SECRET": session.secret,
+                    **({"ICEBERG_ACCESS_TOKEN": session.token} if session.oidc_subject else {
+                        "ICEBERG_CLIENT_ID": session.client_id,
+                        "ICEBERG_CLIENT_SECRET": session.secret,
+                    }),
                     "ICEBERG_CATALOG_URI": "http://polaris:8181/api/catalog",
                     "ICEBERG_TOKEN_URI": "http://polaris:8181/api/catalog/v1/oauth/tokens",
                     "ICEBERG_S3_ENDPOINT": "http://rustfs:9000",

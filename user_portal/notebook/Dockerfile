@@ -11,7 +11,8 @@ RUN /app/.venv/bin/python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 ENV PLAYWRIGHT_BROWSERS_PATH=/tmp/playwright
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
-RUN /app/.venv/bin/python -c "import duckdb; c = duckdb.connect(config={'extension_directory': '/opt/duckdb/extensions'}); c.execute('INSTALL httpfs; INSTALL iceberg; LOAD httpfs; LOAD iceberg'); c.close()"
+COPY user_portal/duckdb_extensions.py ./user_portal/
+RUN /app/.venv/bin/python user_portal/duckdb_extensions.py
 COPY user_portal/__init__.py ./user_portal/
 COPY user_portal/notebook ./user_portal/notebook
 RUN useradd --uid 10001 --create-home notebook && mkdir /work && touch /work/.keep && chown -R 10001:10001 /work

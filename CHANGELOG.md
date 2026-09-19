@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+## 0.3.0 — 2026-09-19
+
+- Upgrade note: this release signs in through Keycloak and there is no migration from a password-based 0.2 installation. Rerunning the latest installation command on a 0.2 installation moves it to 0.3.0; start from a fresh installation instead.
+- Stable installers, Compose files and application images are pinned to their release. `/releases/latest/download/install.sh` installs the newest stable release from `main`; `/releases/download/vX.Y.Z/install.sh` installs exactly that version.
+- Any branch can publish tested prereleases with one-command installers and matching
+  image tags under `BRANCH-preview`, independently of stable releases: on every push
+  for branches listed in the `Release` workflow, on demand for all others. The five
+  newest builds of a branch are kept.
+- Stable tags must be on `main`, only the highest version is marked Latest, and the workflow verifies the latest installation command after every publication.
+- Supported Keycloak OIDC integration for both portals, Polaris and per-user notebooks.
+- Administration-portal account creation, explicit linking, temporary password reset and access revocation.
+- Keycloak in the existing platform/workspace Compose split and standard application images, optional demo fixtures and dedicated integration CI.
+- Source and Docker installation bundles include Keycloak setup and operating documentation.
+- Roles are assigned per team: a user can hold a different role in each team, managed in one **Edit access** dialog. The user portal shows the role of the active team.
+- Breaking: users are created and edited with `memberships: [{team, role}]`; `PATCH /api/users/{id}` replaces the full list and `PATCH /api/users/{id}/role` is removed. Existing users keep their access and are rewritten to the new `portal.memberships` property on their next edit. Downgrading to an older portal version is not supported afterwards.
+- Two example notebooks write and read an Iceberg format-version 3 table with DuckDB's native Iceberg extension: `VARIANT`, `TIMESTAMP_NS`, `GEOMETRY`, default values, row lineage, deletion vectors and time travel. They run from top to bottom without controls. The writing example replaces only a table it created itself, recorded in a table property.
+- The DuckDB connection helper can attach writable and vend storage credentials for a table it just created.
+- The table preview reads with DuckDB's Iceberg extension instead of PyIceberg, so Iceberg v3 tables with `variant` and `geometry` columns preview too. It stays an isolated, bounded process that cannot take the portal down; the user portal image no longer contains PyIceberg and PyArrow. The starter notebook explains when PyIceberg cannot read a v3 table.
+- Both images log the DuckDB extension builds they installed and keep them in `/opt/duckdb/extensions/VERSIONS`, because extensions are not pinned by `uv.lock`.
+- `FORWARDED_ALLOW_IPS` reaches both portals, so sign-in limits apply per visitor behind a reverse proxy.
+- RustFS 1.0.0 replaces the 1.0.0-rc.6 release candidate; existing `rustfs-data` volumes are kept.
+
 ## 0.2.1 — 2026-09-16
 
 - One-command installers for Linux/macOS and Windows PowerShell: download and verify configuration, generate `.env`, pull images, and start both stacks automatically.

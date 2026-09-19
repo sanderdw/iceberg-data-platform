@@ -1,6 +1,7 @@
 """Verify user catalog details and disposable previews on temporary Polaris data."""
 
 import os
+from pathlib import Path
 
 import pyarrow as pa
 from pyiceberg.catalog import load_catalog
@@ -8,18 +9,24 @@ from pyiceberg.view import ViewVersion
 
 from scripts.smoke import stack_resources
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
+from user_portal import duckdb_extensions
 from user_portal.directory import UserDirectory
 from user_portal.preview import run_preview
 
 
 def main():
+    # Previews never download DuckDB extensions. The portal image installs them at
+    # build; this host run installs them the same way, where run_preview looks.
+    os.environ.setdefault("DUCKDB_EXTENSION_DIRECTORY", str(Path.home() / ".duckdb" / "extensions"))
+    Path(os.environ["DUCKDB_EXTENSION_DIRECTORY"]).mkdir(parents=True, exist_ok=True)
+    duckdb_extensions.main()
     with stack_resources() as (provider, teams, databases, users, suffix):
         teams.append(provider.save_team(TeamInput(name=f"catalog-{suffix}"))["id"])
         db = provider.create_database(DatabaseInput(name=f"catalog_{suffix}", team=teams[0]))["id"]
         databases.append(db)
-        writer = provider.create_user(UserInput(name=f"writer-{suffix}", teams=teams, role="writer"))
+        writer = provider.create_user(UserInput(name=f"writer-{suffix}", memberships=[{"team": t, "role": "writer"} for t in teams]))
         users.append(writer["user"]["id"])
-        reader = provider.create_user(UserInput(name=f"reader-{suffix}", teams=teams, role="reader"))
+        reader = provider.create_user(UserInput(name=f"reader-{suffix}", memberships=[{"team": t, "role": "reader"} for t in teams]))
         users.append(reader["user"]["id"])
         credentials = writer["credentials"]
         catalog = load_catalog(

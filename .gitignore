@@ -37,8 +37,7 @@ htmlcov/
 # Private historical material is kept outside the repository
 docs/conversation.md
 notebooktest/
-presentation/
 
 # Personal sample data and generated user credentials
 /personal/*
-
+docs/dbaas-reference-architecture.drawio

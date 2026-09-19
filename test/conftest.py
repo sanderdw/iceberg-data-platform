@@ -13,6 +13,12 @@ PASSWORD = "local-test-password-at-least-16"
 HEADERS = {"X-Portal-Request": "1", "Content-Type": "application/json"}
 
 
+def members(teams, role="reader"):
+    """Memberships payload; `role` is one role for all teams or a {team: role} mapping."""
+    roles = role if isinstance(role, dict) else dict.fromkeys(teams, role)
+    return [{"team": team, "role": roles[team]} for team in teams]
+
+
 class MemoryPolaris(PolarisProvider):
     """In-memory implementation of Polaris's wire protocol, not the domain rules."""
 
