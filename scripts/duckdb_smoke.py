@@ -85,15 +85,25 @@ print('PASS: DuckDB writes an Iceberg v3 table (variant, timestamp_ns, geometry,
 V3_READER_CODE = """
 import importlib.util
 
+import duckdb
+
+from user_portal.notebook.duckdb_connection import connect_duckdb
+
 spec = importlib.util.spec_from_file_location('v3_notebook', '/app/user_portal/notebook/examples/04_duckdb_iceberg_v3_write.py')
 notebook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(notebook)
 try:
     notebook.app.run()
-except Exception:
-    print('PASS: a reader cannot run the Iceberg v3 write notebook')
+except duckdb.Error as error:
+    # Only Polaris's refusal passes: a broken import, extension or connection raises something else.
+    assert 'Forbidden' in str(error), error
 else:
     raise AssertionError('Expected Polaris to refuse the write for a reader')
+lakehouse = connect_duckdb(['synthetic'], 'neighborhood_electricity')
+schemas = lakehouse.execute("SELECT schema_name FROM information_schema.schemata WHERE catalog_name = 'lakehouse'").fetchall()
+assert ('synthetic',) in schemas and ('iceberg_v3',) not in schemas, schemas
+lakehouse.close()
+print('PASS: Polaris refuses the Iceberg v3 write notebook for a reader and nothing is created')
 """
 
 
