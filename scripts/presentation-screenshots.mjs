@@ -185,7 +185,7 @@ try {
     await shot(workspace, '27-notebook-05-variant');
     await toHeading(frame, '5. Row lineage');
     await shot(workspace, '28-notebook-05-lineage');
-    await workspace.getByRole('button', {name: 'Catalog', exact: true}).click();
+    await workspace.getByRole('navigation', {name: 'Workspace', exact: true}).getByRole('button', {name: 'Catalog', exact: true}).click();
   }
 
   // The same tables in the catalog browser, without a notebook.

@@ -64,7 +64,7 @@ try {
   await page.locator('#notebook-databases button').click();
   await expect(page.locator('#editor')).toBeVisible();
   await page.locator('#frame-host iframe').evaluate(frame => { frame.dataset.preserved = 'yes'; });
-  await page.getByRole('button', {name: 'Catalog', exact: true}).first().click();
+  await page.getByRole('navigation', {name: 'Workspace', exact: true}).getByRole('button', {name: 'Catalog', exact: true}).click();
   await expect(page.locator('.catalog-summary')).toContainText('Energy analytics');
 
   await page.getByRole('button', {name: 'Notebooks', exact: true}).click();

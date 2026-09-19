@@ -7,6 +7,7 @@ try {
   const context = await browser.newContext({viewport: {width: 1440, height: 1000}});
   await context.addCookies([{name: 'iceberg_user_session', value: data.cookie, url: data.baseURL, httpOnly: true, sameSite: 'Strict'}]);
   page = await context.newPage();
+  const navigation = page.getByRole('navigation', {name: 'Workspace', exact: true});
   page.setDefaultTimeout(20000);
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   const sockets = []; page.on('websocket', ws => { const socket = {url: ws.url(), received: 0}; sockets.push(socket); ws.on('framereceived', () => socket.received++); });
@@ -26,7 +27,7 @@ try {
   await expect(page.locator('#open-notebook')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(page.locator('#open-notebook')).toHaveCSS('color', 'rgb(0, 0, 0)');
   await page.screenshot({path: 'test-results/users-catalog-dark.png', fullPage: true});
-  await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
+  await navigation.getByRole('button', {name: 'Notebooks', exact: true}).click();
   await page.locator('#notebooks button').first().click();
   const frame = page.frameLocator('#frame-host iframe');
   await frame.locator('.cm-content').first().waitFor();
@@ -46,7 +47,7 @@ try {
   if (!sockets.some(s => s.url.includes('/workspaces/') && s.received > 0)) throw new Error('No working marimo WebSocket');
   if (errors.length) throw new Error(errors.join('\n'));
   await page.screenshot({path: 'test-results/users-desktop.png', fullPage: true});
-  await page.getByRole('button', {name: 'Catalog', exact: true}).click();
+  await navigation.getByRole('button', {name: 'Catalog', exact: true}).click();
   await page.setViewportSize({width: 390, height: 844});
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Mobile page overflows');
   await page.screenshot({path: 'test-results/users-mobile.png', fullPage: true});
@@ -56,20 +57,27 @@ try {
   await expect(page.locator('#open-notebook')).toHaveCSS('color', 'rgb(245, 245, 245)');
   await page.screenshot({path: 'test-results/users-mobile-light.png', fullPage: true});
   console.log('PASS: persistent dark/light themes, browser catalog, marimo WebSocket and table execution, mobile layout');
-  await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
+  await navigation.getByRole('button', {name: 'Notebooks', exact: true}).click();
   await page.locator('#notebooks button').first().click();
   await page.getByRole('combobox', {name: 'Notebook', exact: true}).selectOption({label: 'Shared files'});
   await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', data.notebook.filesUrl);
-  await page.getByRole('button', {name: 'Catalog', exact: true}).click();
+  await navigation.getByRole('button', {name: 'Catalog', exact: true}).click();
   await expect(page.getByRole('combobox', {name: 'Environment', exact: true}).locator('option')).toHaveText(['Development', 'Acceptance', 'Production']);
-  await page.getByRole('combobox', {name: 'Environment', exact: true}).selectOption('production');
+  const switchEnvironment = async value => {
+    // Changing environment tears down the runtime and Docker network before replying.
+    const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/environment' && r.request().method() === 'PATCH', {timeout: 60000});
+    await page.getByRole('combobox', {name: 'Environment', exact: true}).selectOption(value);
+    expect((await response).ok()).toBe(true);
+    await expect(page.getByRole('combobox', {name: 'Environment', exact: true})).toBeEnabled();
+  };
+  await switchEnvironment('production');
   await expect(page.locator('#databases button')).toHaveCount(1);
   await expect(page.locator('#databases button')).toContainText(data.databaseName);
   await expect(page.locator('#databases button small')).toHaveText('Production');
-  await page.getByRole('combobox', {name: 'Environment', exact: true}).selectOption('acceptance');
+  await switchEnvironment('acceptance');
   await expect(page.locator('#databases button')).toHaveCount(0);
   await expect(page.locator('#databases')).toContainText('no databases in this environment');
-  await page.getByRole('combobox', {name: 'Environment', exact: true}).selectOption('development');
+  await switchEnvironment('development');
   await expect(page.locator('#databases button small')).toHaveText('Development');
   console.log('PASS: shared-file selector and Development / Acceptance / Production navigation');
   await context.close();
