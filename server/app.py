@@ -68,6 +68,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
             principal = user_management.principal(provider, id)
             if principal["properties"].get("portal.identity-status") in ("pending", "revoking"):
                 raise ServiceError(409, "Finish setup or revocation before editing this user.")
+            return principal
 
     if oidc:
         async def accept_oidc(request, claims, token, lifetime):
@@ -294,10 +295,10 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
 
     @app.patch("/api/users/{id}")
     def update_user(id: str, data: Memberships):
-        require_editable_user(id)
+        principal = require_editable_user(id)
         if user_management:
             # A linked legacy account keeps the bucket administration it already holds.
-            current = provider.user(user_management.principal(provider, id))["memberships"]
+            current = provider.user(principal)["memberships"]
             held = {m["team"] for m in current if m["role"] == "bucket-admin"}
             if any(m.role == "bucket-admin" and m.team not in held for m in data.memberships):
                 raise ServiceError(422, "Keycloak users access storage through Polaris; direct S3 accounts are not supported.")
