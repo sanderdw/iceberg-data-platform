@@ -13,6 +13,7 @@ services:
       OIDC_ORIGIN: ${USER_ORIGIN}
       USER_PORT: 3002
       USER_HOST: 0.0.0.0
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
       USER_COOKIE_SECURE: ${USER_COOKIE_SECURE:-false}
       USER_STACK_NAME: iceberg-workspaces
       POLARIS_URL: http://polaris-control-plane:8181

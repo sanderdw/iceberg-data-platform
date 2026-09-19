@@ -24,6 +24,7 @@ from .models import ServiceError
 PENDING_PER_CLIENT = 20
 PENDING_TOTAL = 1000
 
+
 class OIDC:
     def __init__(self, env=None):
         env = os.environ if env is None else env
@@ -74,6 +75,7 @@ class OIDC:
         @app.get("/auth/login", include_in_schema=False)
         async def login(request: Request):
             now = time.monotonic()
+            # Behind a reverse proxy this is the visitor only if FORWARDED_ALLOW_IPS names the proxy.
             host = request.client.host if request.client else "local"
             self.pending = {k: v for k, v in self.pending.items() if v[0] > now}
             # This route is unauthenticated, so a full table evicts instead of refusing: a

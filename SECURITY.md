@@ -21,7 +21,7 @@ Include the affected version, a minimal reproduction using synthetic data, the e
 - Team members share writable notebook files within each environment. They must trust each other’s code: a shared notebook executes with the credentials of the member running it. File sharing does not merge live editor state.
 - The active team and environment filter the user interface and gateway access. A user's underlying credentials remain valid for every team to which that user belongs.
 
-Default ports bind to localhost. LAN overrides require an explicit host address. For access beyond a trusted local network, add HTTPS, secure cookies and an appropriate authentication/deployment design. Reverse proxies must preserve Host and support WebSockets. Do not expose the Docker socket, Polaris management API or storage administration endpoints publicly.
+Default ports bind to localhost. LAN overrides require an explicit host address. For access beyond a trusted local network, add HTTPS, secure cookies and an appropriate authentication/deployment design. Reverse proxies must preserve Host and support WebSockets. Behind a reverse proxy, set `FORWARDED_ALLOW_IPS` in `.env` to the proxy's address as the portal containers see it: both portals limit sign-in attempts per client address, and without it every visitor shares the proxy's address and one limit. Never set it to `*` on a directly reachable portal, because clients could then forge `X-Forwarded-For`. Do not expose the Docker socket, Polaris management API or storage administration endpoints publicly.
 
 Keep `.env`, keys, data volumes and team notebooks private. Database deletion removes the catalog and its stored data; it is irreversible. Routine upgrades and tests must preserve volumes.
 

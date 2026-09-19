@@ -14,6 +14,7 @@
 - The DuckDB connection helper can attach writable and vend storage credentials for a table it just created.
 - The table preview reads with DuckDB's Iceberg extension instead of PyIceberg, so Iceberg v3 tables with `variant` and `geometry` columns preview too. It stays an isolated, bounded process that cannot take the portal down; the user portal image no longer contains PyIceberg and PyArrow. The starter notebook explains when PyIceberg cannot read a v3 table.
 - Both images log the DuckDB extension builds they installed and keep them in `/opt/duckdb/extensions/VERSIONS`, because extensions are not pinned by `uv.lock`.
+- `FORWARDED_ALLOW_IPS` reaches both portals, so sign-in limits apply per visitor behind a reverse proxy.
 - RustFS 1.0.0 replaces the 1.0.0-rc.6 release candidate; existing `rustfs-data` volumes are kept.
 
 ## 0.2.1 — 2026-09-16

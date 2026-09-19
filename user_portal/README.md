@@ -116,7 +116,7 @@ The shared `.env` supplies `POLARIS_CLIENT_ID` and `POLARIS_CLIENT_SECRET`. Ther
 | `USER_COOKIE_SECURE` | `false` | Set to `true` with HTTPS |
 | `USER_S3_ENDPOINT` | `http://rustfs:9000` | Preview storage endpoint; set to the host-facing S3 URL when running the gateway outside Docker |
 
-Default bindings use HTTP on localhost or LAN. Use HTTPS outside this local environment. A reverse proxy must support WebSockets and preserve the original Host header.
+Default bindings use HTTP on localhost or LAN. Use HTTPS outside this local environment. A reverse proxy must support WebSockets and preserve the original Host header; set `FORWARDED_ALLOW_IPS` to its address so sign-in limits apply per visitor (see [SECURITY.md](../SECURITY.md)).
 
 Shared team/environment volumes are named `iceberg-workspaces-work-<hash>` and labeled `iceberg.users.runtime=iceberg-workspaces`. Back them up before removing Docker data. `docker compose down` preserves these directories. Deleting a user or database closes affected runtimes but does not automatically erase shared notebook files.
 

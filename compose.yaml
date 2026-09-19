@@ -126,6 +126,7 @@ services:
       OIDC_MANAGEMENT_SECRET: ${OIDC_MANAGEMENT_SECRET:?Run scripts.setup first}
       OIDC_ORIGIN: ${PORTAL_ORIGIN}
       HOST: 0.0.0.0
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
       MONITOR_URL: http://monitor:3003
       PORTAL_PASSWORD: ${PORTAL_PASSWORD}
       PROVIDER: polaris
