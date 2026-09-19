@@ -20,6 +20,9 @@ from joserfc.jws import JWSRegistry
 
 from .models import ServiceError
 
+# Sign-ins awaiting their callback; every entry expires after five minutes.
+PENDING_PER_CLIENT = 20
+PENDING_TOTAL = 1000
 
 class OIDC:
     def __init__(self, env=None):
@@ -71,13 +74,19 @@ class OIDC:
         @app.get("/auth/login", include_in_schema=False)
         async def login(request: Request):
             now = time.monotonic()
+            host = request.client.host if request.client else "local"
             self.pending = {k: v for k, v in self.pending.items() if v[0] > now}
-            if len(self.pending) >= 1000:
-                raise ServiceError(429, "Too many sign-in attempts. Try again shortly.")
+            # This route is unauthenticated, so a full table evicts instead of refusing: a
+            # flooding client replaces its own oldest sign-ins and cannot deny others a login.
+            mine = [k for k, v in self.pending.items() if v[2] == host]
+            if len(mine) >= PENDING_PER_CLIENT:
+                del self.pending[mine[0]]
+            while len(self.pending) >= PENDING_TOTAL:
+                del self.pending[next(iter(self.pending))]
             transaction = secrets.token_urlsafe(32)
             request.scope["session"] = {}
             response = await self.client.authorize_redirect(request, self.origin + "/auth/callback")
-            self.pending[transaction] = (now + 300, request.session)
+            self.pending[transaction] = (now + 300, request.session, host)
             response.set_cookie(self.cookie, transaction, max_age=300, httponly=True,
                                 secure=self.secure, samesite="lax", path="/auth")
             return response

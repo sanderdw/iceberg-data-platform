@@ -16,7 +16,7 @@ from joserfc.jwk import RSAKey
 
 from server.app import create_app
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
-from server.oidc import OIDC
+from server.oidc import OIDC, PENDING_PER_CLIENT
 from test.conftest import HEADERS, PASSWORD, MemoryPolaris, members
 from test.test_user_portal import FakeRuntime
 from user_portal.app import create_app as create_users
@@ -121,11 +121,33 @@ def test_expired_or_wrong_state_never_exchanges_code(issuer):
     with TestClient(create_app(MemoryPolaris(), PASSWORD, oidc=oidc)) as client:
         callback = start(client, state)
         transaction = next(iter(oidc.pending))
-        oidc.pending[transaction] = (0, oidc.pending[transaction][1])
+        oidc.pending[transaction] = (0, *oidc.pending[transaction][1:])
         assert client.get(callback).status_code == 403
         start(client, state)
         assert client.get("/auth/callback?state=wrong&code=x").status_code == 403
         assert state["calls"] == 0
+
+
+def test_login_flood_cannot_block_another_client(issuer, monkeypatch):
+    oidc, state = issuer
+    app = create_app(MemoryPolaris(), PASSWORD, oidc=oidc)
+    with (
+        TestClient(app, client=("10.0.0.1", 50000)) as victim,
+        TestClient(app, client=("10.0.0.2", 50000)) as attacker,
+    ):
+        callback = start(victim, state)
+        for _ in range(PENDING_PER_CLIENT + 5):
+            assert attacker.get("/auth/login", follow_redirects=False).status_code == 302
+        assert [entry[2] for entry in oidc.pending.values()].count("10.0.0.2") == PENDING_PER_CLIENT
+        assert victim.get(callback, follow_redirects=False).status_code == 303
+        # A full table drops its oldest sign-in, so many clients together cannot refuse a login either.
+        monkeypatch.setattr("server.oidc.PENDING_TOTAL", 3)
+        for host in range(3, 8):
+            with TestClient(app, client=(f"10.0.0.{host}", 50000)) as other:
+                assert other.get("/auth/login", follow_redirects=False).status_code == 302
+            assert len(oidc.pending) <= 3
+        callback = start(victim, state)
+        assert victim.get(callback, follow_redirects=False).status_code == 303
 
 
 def test_user_link_identity_permissions_and_token_expiry(issuer):
