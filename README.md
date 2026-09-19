@@ -1,11 +1,9 @@
 # Iceberg Data Platform
 
-A local platform for managing team access to Apache Iceberg and exploring data in shared team marimo notebooks. It combines two FastAPI portals with Keycloak, Apache Polaris, PostgreSQL and RustFS.
+A local platform for managing team access to Apache Iceberg and exploring data in shared team marimo notebooks. It combines admin and user portals with Keycloak, Apache Polaris, PostgreSQL and RustFS.
 
 ![Iceberg Data Platform](docs/portal.png)
 
-
-**Independent project · Apache-2.0 · Python 3.14 · uv · English interface and documentation**
 
 ## What it does
 
@@ -42,7 +40,7 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 The installer creates `~/iceberg-data-platform`, prepares `.env`, pulls application
 images and starts both projects. These commands always install the newest stable
-release from `main`; replace `latest/download` with `download/v0.3.0` to install
+release from `main`; replace `latest/download` with `download/v0.3.1` to install
 exactly that version. See the [installation guide](docs/install.md) for configuration
 and updates.
 
@@ -96,6 +94,7 @@ Setup generates random development credentials in `.env`, sets restrictive file 
 | Polaris Iceberg REST API | http://localhost:8181/api/catalog | Keycloak bearer token (native credentials for services)    |
 | RustFS console           | http://localhost:9001             | Issued bucket-admin credentials or local root credentials |
 | pgAdmin                  | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD` from `.env`            |
+| FastAPI Endpoints        | http://localhost:3000/docs        | `platform-admin` + initial `PLATFORM_ADMIN_PASSWORD`       |
 
 All default host ports bind to `127.0.0.1`. PostgreSQL is internal only. The portal's authenticated API documentation is available at `/docs` on port 3000.
 

@@ -146,6 +146,8 @@ a private connection. The collector has no published host port by default.
 Set `MONITOR_USERS_URL=http://users:3002` in `.env` and recreate `monitor` to include
 health checks for the optional user portal. `MONITOR_PROJECTS` selects the Compose
 projects whose container resources are collected.
+Open notebooks carry the `iceberg-workspaces` project label, so each one appears as
+a `notebook` container while its workspace is open.
 
 Each source shows its own last successful update and marks stale or unavailable
 readings. Missing metrics display a dash. Probe history holds up to 60 checks in

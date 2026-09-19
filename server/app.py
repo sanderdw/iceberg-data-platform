@@ -54,7 +54,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         if owned:
             provider.close()
 
-    app = FastAPI(title="Iceberg Workspace API", version="0.3.0", lifespan=lifespan, redoc_url=None)
+    app = FastAPI(title="Iceberg Workspace API", version="0.3.1", lifespan=lifespan, redoc_url=None)
     sessions, attempts = {}, {}
     # This local control plane intentionally runs one worker. Serializing reads and
     # mutations also prevents orphan memberships during concurrent team deletion.
