@@ -15,6 +15,7 @@
     "test:e2e": "playwright test",
     "test:stack": "uv run python -m scripts.smoke",
     "test:data": "uv run --group data python -m scripts.data_smoke",
+    "test:shares": "uv run --all-groups python -m scripts.share_smoke",
     "users:build": "docker compose -f compose.users.yaml --profile images build",
     "users:start": "docker compose -f compose.users.yaml up -d users",
     "users:stop": "docker compose -f compose.users.yaml down",
