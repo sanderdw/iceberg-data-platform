@@ -15,8 +15,9 @@ The administration portal manages resources through the Apache Polaris managemen
 | Membership | Team IDs and the role per team, recorded on the user principal | `portal.memberships`, a JSON-encoded object of team ID to role |
 | Role assignment | User's principal role receives, per catalog, the catalog role that matches the user's role in the owning team | `portal.memberships`; Polaris catalog-role assignments and privilege grants enforce access |
 | Database definition | Internal Iceberg catalog with a dedicated RustFS bucket | `portal.name`, `portal.team`, `portal.environment`, `portal.description`, `portal.bucket`, `default-base-location` |
+| Data share | Principal marked `portal.kind=share`, with a principal role and a catalog role of the same name | `portal.name`, `portal.recipient`, `portal.description`, `portal.database`, `portal.objects`, `portal.expires-at`, `portal.created-by`, `portal.created-by-name` |
 
-Managed team, user and catalog records carry `portal.managed-by=iceberg-portal-v2`. Teams are represented as Polaris roles, so there is no application-specific `teams` SQL table.
+Managed team, user, data share and catalog records carry `portal.managed-by=iceberg-portal-v2`. Teams are represented as Polaris roles, so there is no application-specific `teams` SQL table.
 
 PostgreSQL data persists in the Docker volume `iceberg-platform_postgres18-data`, mounted at `/var/lib/postgresql`. The database files are under `/var/lib/postgresql/18/docker`.
 
@@ -65,11 +66,25 @@ Moving a database changes its owning team and updates access. Its catalog ID, en
 
 For example, a user with role `writer` in `analytics` and `reader` in `operations` receives write access to ready catalogs owned by `analytics` and read access to those owned by `operations`, across all three environments. Moving a catalog from `operations` to `analytics` raises that user's access to it from read to write. An `events` catalog in `analytics/development` and an `events` catalog in `analytics/production` have separate IDs and buckets.
 
+## Data shares
+
+A data share gives an external party read access to selected tables and views of one database. It is a machine identity, not a user: it has no memberships, never appears in user listings and cannot sign in to either portal.
+
+Each share has a stable `share-<uuid>` ID that names three Polaris records: the principal whose client ID and secret the recipient uses, its principal role, and a catalog role inside the shared database. That catalog role holds exactly one grant per selected object: `TABLE_READ_DATA` on a table, `VIEW_READ_PROPERTIES` on a view. It holds nothing on the namespace or the catalog. Polaris does not filter listings per object, so the recipient cannot list namespaces, tables or views at all and loads the shared objects by their full names. Storage credentials are vended by Polaris per table, read-only and confined to that table's location.
+
+`portal.objects` is the selection as the team administrator saved it: a JSON list of `{kind, namespace, name}`, at most 50 per share and 20 shares per database. Polaris binds grants to the table or view itself, not to its name. A renamed object therefore stays shared under its new name, and an object that was dropped and recreated is no longer shared. The portal compares the saved selection with the grants Polaris really holds and shows the difference; saving the selection again revokes what is no longer selected and then grants what is missing.
+
+A view is only a definition. The recipient's engine reads the underlying tables with the same credential, so the tables a view reads must be part of the share, and the recipient can read those tables in full. A view in a share is a convenience, never a row or column filter. A share without a table is refused.
+
+A share belongs to its database, and through it to the owning team; the team is not stored on the share. Every current Administrator or Database + bucket administrator of that team can manage it, including after the person who created it lost that role. A shared database cannot be moved to another team until its shares are revoked, so new owners never inherit external access. Deleting a database revokes its shares first.
+
+The client secret is returned once, on creation and on **New secret**, and is never stored by the portal. A new secret keeps the client ID and ends the previous secret at once. Revocation removes the principal's only role first, which ends already issued tokens immediately, then the catalog role, the principal role and finally the principal, which serves as the marker for resuming an interrupted revocation. An expiry, when set, is enforced as a real revocation: the user gateway checks every 30 seconds, and every listing of shares in either portal revokes what has expired, what was left half revoked and what lost its database.
+
 ## Related data and inspection
 
 | Data | Storage |
 | --- | --- |
-| Polaris users, teams, membership properties, grants and catalog records | PostgreSQL `polaris` database |
+| Polaris users, teams, data shares, membership properties, grants and catalog records | PostgreSQL `polaris` database |
 | Iceberg metadata files, manifests and Parquet data | RustFS object storage in catalog buckets |
 | Direct S3 identities and bucket policies | RustFS |
 | Saved notebook files | Shared Docker volumes per team/environment |

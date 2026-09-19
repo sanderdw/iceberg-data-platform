@@ -35,7 +35,7 @@ The installed portals always use Keycloak authentication.
 
 Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, a role per team, an individual principal role and, per database, the grant that matches their role in the owning team. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. There is no second application metadata database.
 
-The admin identity manages metadata and grants. The user gateway uses that identity only to resolve the directory, then uses the user's OAuth token for catalog browsing. Notebook containers receive the user's own credentials. A user may belong to several teams; the active team and environment control the UI and workspace context, while the credentials retain the union of the user's team grants, each at the role held in that team.
+The admin identity manages metadata and grants. The user gateway uses that identity to resolve the directory and to create, edit and revoke [data shares](CONTEXT.md#data-shares) for team administrators, whose role it re-reads from Polaris on every such request. Catalog browsing uses the user's OAuth token. Notebook containers receive the user's own credentials. A user may belong to several teams; the active team and environment control the UI and workspace context, while the credentials retain the union of the user's team grants, each at the role held in that team.
 
 ## Notebook lifecycle
 

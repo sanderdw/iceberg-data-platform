@@ -67,7 +67,8 @@ origins and TLS before using them. See [Keycloak configuration](keycloak.md#conf
 6. **Change roles** in the same Edit access dialog, per team. Changing the role for one team leaves the user's access to other teams untouched. A data role does not grant portal administration.
 7. **Move a database** under Databases → Move. Members of the new team receive access with their role in that team. Previous members lose access unless they also belong to the new team; a member of both teams switches to their role in the new team. The bucket, data, database name and connection details stay the same.
 8. **Delete a database** under Databases → Delete. After confirmation, the operation removes catalog grants, namespaces, tables, views, objects, object versions, multipart uploads and the dedicated bucket. Users and teams remain. If cleanup fails, use **Resume deletion** to finish it.
-9. **Delete a team** after moving or deleting its databases. The API refuses deletion if a user would lose their last team. Assign that user to another team or delete the user first. Users with multiple teams lose only the deleted membership.
+9. **Review data shares** on the Data shares page. Team administrators create and edit them in the user portal; here you see every share with its database, team, shared tables and views, expiry and creator, and you can revoke one. A database with shares cannot be moved until they are revoked, and deleting a database revokes them.
+10. **Delete a team** after moving or deleting its databases. The API refuses deletion if a user would lose their last team. Assign that user to another team or delete the user first. Users with multiple teams lose only the deleted membership.
 
 Both portals use Keycloak. Human users are linked explicitly to Polaris principals; notebooks receive their Keycloak access token. Portal administrators require the Keycloak `platform-admin` client role. A database is an Iceberg catalog; engines such as Spark or Trino execute queries.
 
@@ -81,6 +82,17 @@ Human accounts access storage through credentials vended by Polaris. Direct S3 a
 provisioning is not part of the Keycloak user workflow. A team without databases grants
 no data access. See [identity management](keycloak.md#manage-users-in-the-administration-portal)
 for linking, password reset, and access revocation.
+
+## Share data with an external party
+
+A team's Administrator (or Database + bucket administrator) shares selected tables and views of one database in the user portal: open the database, expand **Data shares** and choose **New data share**. No portal administrator is involved. The result is a client ID and secret for the recipient, shown once, with a ready PyIceberg snippet.
+
+- The recipient reads exactly the selected objects and cannot list anything. Send the full names along with the credential. Engines that enumerate namespaces when attaching a catalog, such as DuckDB `ATTACH` or Trino, do not work with a share; PyIceberg `load_table` and Spark `spark.table("catalog.namespace.table")` do.
+- A view shares only its definition. Add every table it reads; the recipient can read those tables in full. To hide rows or columns, publish the result as its own table and share that.
+- **New secret** replaces a lost or leaked secret and ends the old one at once. **Revoke** ends access immediately. An optional expiry revokes the share at the end of the chosen UTC day.
+- After a table is dropped and recreated, or renamed, the share list says what is no longer granted or still granted under a new name. Edit and save the share to bring the grants back in line.
+
+Recipients outside this machine need addresses they can reach. Put Polaris and RustFS behind your own TLS reverse proxy and set `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` in `.env` to those addresses **before creating the databases you intend to share**: Polaris records the storage endpoint in each catalog when it is created and hands that endpoint to every client. Expose only the Iceberg REST catalog path (`/api/catalog`) of Polaris, never `/api/management`, and only the S3 API of RustFS. The platform does not provide this proxy. Read [the security model](../SECURITY.md) first.
 
 ## Administrator catalog browser
 
@@ -99,8 +111,8 @@ from user_portal.notebook.connection import connect
 catalog = connect()
 ```
 
-For external automation, a separately provisioned Polaris service identity can use
-client credentials. Use its catalog ID as the warehouse. For example:
+An external party connects with the client credentials of a [data share](#share-data-with-an-external-party).
+The catalog ID is the warehouse. The user portal shows this snippet filled in when the share is created:
 
 ```python
 from pyiceberg.catalog import load_catalog
@@ -119,7 +131,7 @@ catalog = load_catalog(
 )
 ```
 
-The service identity must have the required grants for each selected catalog. Human portal passwords are not Polaris client secrets.
+A share credential loads the shared tables and views by name, for example `catalog.load_table("sales.orders")`; listing is not permitted. Human portal passwords are not Polaris client secrets.
 
 ## Persistence and operational behavior
 
@@ -175,6 +187,7 @@ a scan. Filesystem usage can include other data sharing RustFS's backing filesys
 | GET / POST | `/api/databases` | List / create databases |
 | PATCH / DELETE | `/api/databases/{id}` | Move with `{"team":"team-id"}` / delete including data |
 | GET | `/api/databases/{id}/connection` | Iceberg connection details |
+| DELETE | `/api/shares/{id}` | Revoke a data share; shares are listed in `/api/overview` and created in the user portal |
 | GET / POST | `/api/users` | List / create users |
 | PATCH / DELETE | `/api/users/{id}` | Replace memberships and per-team roles with `{"memberships":[{"team":"team-id","role":"writer"}]}`; returns the user and, on first S3 promotion, one-time `bucketCredentials` / revoke access |
 
@@ -186,6 +199,7 @@ Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, in
 npm run verify
 uv run python -m scripts.smoke
 uv run --all-groups python -m scripts.data_smoke
+uv run --all-groups python -m scripts.share_smoke
 UV_NO_SYNC=1 npm run test:e2e
 ```
 

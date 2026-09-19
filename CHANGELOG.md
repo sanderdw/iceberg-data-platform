@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Data shares: a team's Administrator shares selected tables and views of a database with an external party from the user portal, without a portal administrator. Each share has its own Polaris client ID and secret, shown once with a ready PyIceberg snippet, an optional expiry, **New secret** and **Revoke**. The recipient reads exactly the selected objects and cannot list, write or reach any other table or database; vended storage credentials are read-only and confined to the shared table. A view shares only its definition, so its tables must be shared with it.
+- The administration portal lists every data share on a new **Data shares** page and can revoke it. Deleting a database revokes its shares.
+- Breaking: a database with data shares cannot be moved to another team until the shares are revoked.
+- Upgrade note: the user gateway now also writes to Polaris with the platform identity, to manage data shares. `compose.users.yaml` passes `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` to it. Sharing with parties outside this machine needs your own TLS reverse proxy for the Polaris catalog API and RustFS, with both variables set before the shared databases are created; see `SECURITY.md`.
+
 ## 0.3.1 — 2026-09-19
 
 - Open notebooks are grouped under the `iceberg-workspaces` stack in Docker tools and listed with their CPU and memory on the **Infrastructure** page. Compose commands leave them alone; the user portal still starts and removes them.

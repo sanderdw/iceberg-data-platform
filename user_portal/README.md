@@ -61,6 +61,12 @@ Installed packages are available to notebook imports from `/tmp/packages`. They 
 
 The base notebook image includes Altair for charts, Polars for dataframes, `nbformat` for Jupyter export, and `nbconvert[webpdf]` with Chromium and its system dependencies for PDF export.
 
+## Share data with an external party
+
+With the Administrator or Database + bucket administration role in the active team, a database shows **Data shares** under its summary. Choose **New data share**, name the share and its recipient, tick the tables and views, and optionally set an expiry. The client ID, client secret and a PyIceberg snippet appear once; send them to the recipient over a secure channel.
+
+The recipient can read exactly what you selected and cannot list anything else, so the snippet names the shared objects in full. A view shares only its definition: add every table it reads, and remember the recipient can read those tables completely. **Edit** changes the selection or expiry, **New secret** replaces a lost secret and ends the old one, **Revoke** ends access immediately. Every administrator of the team manages the same shares. See [the resource model](../docs/CONTEXT.md#data-shares) for the details.
+
 ## Bundled examples
 
 1. **01 · Neighborhood data with PyIceberg** creates `synthetic.neighborhood_electricity` with 40 homes, seven days and 26,880 quarter-hour readings. The deterministic model includes consumption, solar generation, grid draw, grid export and fictional addresses. Run the cells and click **Create example table**. A populated table is skipped; existing rows are never overwritten or duplicated. Writing requires a writer role or higher in the active team.
@@ -92,7 +98,7 @@ The browser test runs the examples, verifies that example 1 writes only after an
 ## Execution and access
 
 - Python **3.14.7**, FastAPI **0.141.1** and marimo **0.24.2** are pinned in `uv.lock`.
-- The gateway uses the platform identity only to read the user, team and database directory. Catalog requests and notebook operations use the signed-in user's identity.
+- The gateway uses the platform identity to read the user, team and database directory and to manage data shares for team administrators. Catalog requests and notebook operations use the signed-in user's identity.
 - Each editor has a private container and a separate Docker bridge network shared only with the gateway, Polaris and RustFS. The network allows outbound internet access. Runtime ports are not published.
 - Runtimes use UID 10001, writable `/work` and `/tmp`, no Linux capabilities, up to two CPUs, 256 processes and 1 GiB RAM by default. Notebook code receives only its user's credentials, with no platform secret, administrator cookies or Docker socket.
 - The trusted gateway has Docker socket access to start and stop runtimes. It belongs to trusted platform administration. This shared Docker host is intended for local development and does not provide isolation for hostile tenants.
@@ -102,7 +108,7 @@ The browser test runs the examples, verifies that example 1 writes only after an
 
 ## Configuration
 
-The shared `.env` supplies `POLARIS_CLIENT_ID` and `POLARIS_CLIENT_SECRET`. There is no second password file or user database.
+The shared `.env` supplies `POLARIS_CLIENT_ID` and `POLARIS_CLIENT_SECRET`. There is no second password file or user database. `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` are the addresses handed to data share recipients.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -114,6 +120,8 @@ The shared `.env` supplies `POLARIS_CLIENT_ID` and `POLARIS_CLIENT_SECRET`. Ther
 | `MAX_NOTEBOOKS` | `8` | Maximum simultaneous runtimes |
 | `NOTEBOOK_MEMORY` | `1g` | Runtime memory limit |
 | `USER_COOKIE_SECURE` | `false` | Set to `true` with HTTPS |
+| `POLARIS_PUBLIC_URL` | `http://localhost:8181` | Catalog address given to data share recipients |
+| `S3_ENDPOINT` | `http://localhost:9000` | Storage address shown to data share recipients; the address Polaris actually vends is fixed per database when it is created |
 | `USER_S3_ENDPOINT` | `http://rustfs:9000` | Preview storage endpoint; set to the host-facing S3 URL when running the gateway outside Docker |
 
 Default bindings use HTTP on localhost or LAN. Use HTTPS outside this local environment. A reverse proxy must support WebSockets and preserve the original Host header; set `FORWARDED_ALLOW_IPS` to its address so sign-in limits apply per visitor (see [SECURITY.md](../SECURITY.md)).
@@ -125,8 +133,10 @@ Shared team/environment volumes are named `iceberg-workspaces-work-<hash>` and l
 ```bash
 uv run --all-groups pytest
 node scripts/catalog-browser.mjs
+node scripts/shares-browser.mjs
 # With Polaris and RustFS running, using temporary test data:
 uv run --all-groups python -m scripts.catalog_smoke
+uv run --all-groups python -m scripts.share_smoke
 uv run --all-groups ruff check server user_portal test scripts/*.py
 uv run --all-groups marimo check user_portal/notebook/template.py
 # With both stacks running:

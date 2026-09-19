@@ -11,6 +11,7 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
 - **Separate user portal:** sign in with Keycloak, switch teams and browse the active team's databases.
 - **User catalog details:** inspect table schemas, snapshots, branches/tags, partitioning, sort orders and view SQL; preview up to 100 rows at a selected snapshot with your own data permissions.
+- **Data shares:** team administrators give an external party read access to selected tables and views, with a dedicated credential they can renew, expire or revoke themselves. Platform administrators see every share and can revoke it.
 - **Shared team workspaces:** one shared filespace per team and environment, with isolated execution using each user's data permissions.
 - **Five included examples:** create 26,880 synthetic energy measurements with PyIceberg, visualize them with DuckDB, attach Polaris directly for native DuckDB queries on Iceberg, and write and read an Iceberg v3 table (variant, nanosecond timestamps, geometry, default values, row lineage, deletion vectors) with DuckDB.
 

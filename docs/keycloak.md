@@ -147,7 +147,8 @@ sequenceDiagram
   principal in Polaris. It does not grant all platform privileges. Membership and role
   edits continue to use the existing administration portal and Polaris grants.
 - Polaris runs in **mixed** mode. The gateway's internal service identity still handles
-  administrative directory queries; user catalog requests and notebook runtimes use
+  administrative directory queries and manages data shares for team administrators;
+  user catalog requests and notebook runtimes use
   that user's Keycloak access token. No platform credential or refresh token is sent
   to a notebook. PyIceberg, native DuckDB and previews all support this token path.
 - The user gateway reaches Polaris through a persistent Compose-network alias,
@@ -200,7 +201,8 @@ administrator password. Passwords and tokens are never printed.
 - An incomplete new account may remain disabled in Keycloak after revocation. Review
   such abandoned accounts in Keycloak; the portal preserves accounts by design.
 - Existing Polaris client-secret authentication remains available in mixed mode.
-  OIDC-enabled portals themselves reject password/client-secret login. A future
+  Data shares rely on it: a share is a Polaris principal with its own client secret and
+  is not a Keycloak account. OIDC-enabled portals themselves reject password/client-secret login. A future
   external-only deployment needs a separate machine-identity migration.
 - Keycloak uses `start-dev` and its local development database. Production decisions
   include HTTPS, persistent PostgreSQL for Keycloak, backups, MFA, key rotation,
