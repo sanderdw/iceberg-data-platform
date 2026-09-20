@@ -41,7 +41,7 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 The installer creates `~/iceberg-data-platform`, prepares `.env`, pulls application
 images and starts both projects. These commands always install the newest stable
-release from `main`; replace `latest/download` with `download/v0.3.1` to install
+release from `main`; replace `latest/download` with `download/v0.4.0` to install
 exactly that version. See the [installation guide](docs/install.md) for configuration
 and updates.
 

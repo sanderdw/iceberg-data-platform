@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-20
 
 - Data shares: a team's Administrator shares selected tables and views of a database with an external party from the user portal, without a portal administrator. Each share has its own Polaris client ID and secret, shown once with **Copy DuckDB snippet**, an optional expiry, **New secret** and **Revoke**. The copied Python script runs with `uv`, lists every shared table and view in comments, and queries the first table; the UI does not display the code. The recipient reads exactly the selected objects and cannot list, write or reach any other table or database; vended storage credentials are read-only and confined to the shared table. A view shares only its definition, so its tables must be shared with it.
 - The user portal has a consistent top menu for **Catalog**, **Notebooks** and **Data shares**. Readers and writers can see shares for their active team and environment, with disabled management buttons explaining the required administrator role.
