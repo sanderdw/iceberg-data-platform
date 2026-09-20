@@ -50,7 +50,7 @@ function renderCatalogListing(detail, contents, rows) {
 
 async function inspectObject(db, ns, kind, name) {
   clearNotice(); const version = ++browseVersion;
-  database = db; namespace = [...ns]; selectedObject = {kind, name}; saveRoute();
+  database = db; namespace = [...ns]; selectedObject = {kind, name}; $('#create-report').hidden = kind !== 'table'; saveRoute();
   $('#browser').hidden = false; $('#examples').hidden = true;
   $('#namespace-title').textContent = name;
   $('#objects').replaceChildren(element('p', 'Loading details…', 'catalog-empty'));

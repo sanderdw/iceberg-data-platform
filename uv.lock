@@ -781,6 +781,7 @@ dev = [
     { name = "httpx2" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "sqlglot" },
 ]
 notebook = [
     { name = "altair" },
@@ -800,6 +801,7 @@ oidc = [
 users = [
     { name = "docker" },
     { name = "duckdb" },
+    { name = "sqlglot" },
 ]
 
 [package.metadata]
@@ -826,6 +828,7 @@ dev = [
     { name = "httpx2", specifier = ">=2.12.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.16.7" },
+    { name = "sqlglot", specifier = "==30.18.0" },
 ]
 notebook = [
     { name = "altair", specifier = ">=6.2.2" },
@@ -845,6 +848,7 @@ oidc = [
 users = [
     { name = "docker", specifier = "==7.2.0" },
     { name = "duckdb", specifier = "==1.5.5" },
+    { name = "sqlglot", specifier = "==30.18.0" },
 ]
 
 [[package]]

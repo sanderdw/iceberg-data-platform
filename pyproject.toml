@@ -20,6 +20,7 @@ oidc = ["Authlib==1.8.0", "httpx2>=2.12.0"]
 dev = [{include-group = "users"}, {include-group = "oidc"}, "pytest>=9.1.1", "ruff>=0.16.7", "httpx2>=2.12.0"]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "pandas>=3.0.5", "ipykernel>=7.3.0", "matplotlib>=3.10.0"]
 users = [
+    "sqlglot==30.18.0",
     "docker==7.2.0",
     "duckdb==1.5.5",
 ]

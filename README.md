@@ -9,7 +9,8 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 
 - **Administration portal:** create and manage teams, assign users to one or more teams with a role per team, create databases, move databases between teams, and delete databases with their stored data.
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
-- **Separate user portal:** sign in with Keycloak and use a consistent top menu for Catalog, Notebooks and Data shares within your active team and environment. Navigation survives browser refresh; lists update automatically.
+- **Separate user portal:** sign in with Keycloak and use a consistent top menu for Catalog, Notebooks, Reports and Data shares within your active team and environment. Navigation survives browser refresh; lists update automatically.
+- **Reports and dashboards:** build visual queries or SQL reports over live Iceberg tables and save dashboards for your team/environment. Each viewer uses their own data permissions. DuckDB reads snapshots on demand and dbt Charts renders charts on the backend; no transformation pipeline or reporting table is created. See [reporting workflows and limits](user_portal/README.md#reports-and-dashboards).
 - **User catalog details:** inspect table schemas, snapshots, branches/tags, partitioning, sort orders and view SQL; preview up to 100 rows at a selected snapshot with your own data permissions.
 - **Data shares:** team administrators give an external party read access to selected tables and views, with a dedicated credential and a copyable DuckDB script. They can renew, expire or revoke access themselves. Readers and writers can view their team's shares with management controls disabled. Platform administrators see every share and can revoke it.
 - **Shared team workspaces:** one shared filespace per team and environment, with isolated execution using each user's data permissions.
@@ -83,7 +84,7 @@ uv run python -m scripts.setup
 # Build and start the platform, including the administration portal.
 docker compose up -d --build --wait
 
-# Build the user portal and the image used for on-demand notebooks.
+# Build the user portal, notebook image and reporting image.
 docker compose -f compose.users.yaml --profile images build
 
 # Start the user portal using the images just built; wait until healthy.
@@ -92,7 +93,7 @@ docker compose -f compose.users.yaml up -d --wait users
 
 Setup generates random development credentials in `.env`, sets restrictive file permissions, and preserves an existing `.env`. Do not commit or share this file.
 
-After source changes, rerun the three Docker commands above to rebuild and apply them. The `images` profile includes the notebook image in the build; notebooks start on demand when opened in the user portal. Save your notebook work before recreating the user portal: its sessions and running notebooks stop, while saved team files remain.
+After source changes, rerun the three Docker commands above to rebuild and apply them. The `images` profile includes notebook and reporting images; their containers start on demand. Save your notebook work before recreating the user portal: its sessions and running notebooks stop, while saved team files and report definitions remain.
 
 For changes only to the user portal, use `docker compose -f compose.users.yaml up -d --build --wait users`. This rebuilds and restarts the user portal without rebuilding the notebook image. After changing notebook code or dependencies, use the full build sequence above and reopen your notebooks.
 

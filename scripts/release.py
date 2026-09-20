@@ -41,11 +41,13 @@ ROOT_FILES = (
     "playwright.config.mjs",
     "pyproject.toml",
     "uv.lock",
+    "user_portal/reporting/pyproject.toml",
+    "user_portal/reporting/uv.lock",
 )
 SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", ".github")
 BINARY_SUFFIXES = {".png", ".ttf"}
 SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml"} | BINARY_SUFFIXES
-IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache"}
+IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv"}
 LOCAL_FILES = {"docs/conversation.md", "docs/dbaas-reference-architecture.drawio"}
 # Tracked in git and published by the GitHub Pages workflow, but not part of the source release.
 TRACKED_UNRELEASED = ("presentation/",)
@@ -61,7 +63,7 @@ def release_files(root=ROOT):
             if path.is_symlink():
                 raise ValueError(f"Symlinks are not allowed in public source: {relative}")
             if path.is_file():
-                if path.name != "Dockerfile" and path.suffix not in SUFFIXES:
+                if path.name != "Dockerfile" and path.suffix not in SUFFIXES and relative.as_posix() not in ROOT_FILES:
                     raise ValueError(f"Unexpected file in source directory: {relative}")
                 files.append(path)
     for path in files:
@@ -191,7 +193,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
     output.mkdir(parents=True, exist_ok=True)
     registry = "ghcr.io/sanderdw/iceberg-data-platform"
     image_names = {"portal": "portal", "monitor": "portal", "users": "users", "notebook-image": "notebook",
-                   "keycloak-bootstrap": "portal"}
+                   "keycloak-bootstrap": "portal", "reporting-image": "reporting"}
     contents = {name: installer_source(root, name, release_tag, image_tag) for name in ("install.sh", "install.ps1")}
     for filename in ("compose.yaml", "compose.users.yaml"):
         model = json.loads(subprocess.check_output([
@@ -211,6 +213,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
                 service["image"] = f"{registry}-{image_names[name]}:{image_tag}"
             if name == "users":
                 service["environment"]["NOTEBOOK_IMAGE"] = f"{registry}-notebook:{image_tag}"
+                service["environment"]["REPORTING_IMAGE"] = f"{registry}-reporting:{image_tag}"
         # JSON is valid YAML; keep Compose's normalized model without another dependency.
         contents[filename] = (json.dumps(model, indent=2) + "\n").encode()
     for filename in (".env.example", "scripts/setup.py", "pgadmin/servers.json", "compose.lan.yaml",

@@ -8,6 +8,7 @@ let restoringRoute = false, refreshingWorkspace = false, pendingActions = 0;
 function saveRoute(replace = false) {
   if (!state || restoringRoute) return;
   const params = new URLSearchParams({team: state.activeTeam, environment: state.activeEnvironment});
+  if (workspacePage === 'reports' && Reporting.routeId) params.set('report', Reporting.routeId);
   if (database) { params.set('database', database); namespace.forEach(part => params.append('namespace', part)); }
   if (selectedObject) { params.set('kind', selectedObject.kind); params.set('name', selectedObject.name); }
   if (activeNotebook) { params.set('notebook', activeNotebook.id); params.set('file', activeNotebook.selectedUrl); }
@@ -36,12 +37,14 @@ async function restoreRoute() {
       showNotebook(notebook, urls.includes(params.get('file')) ? params.get('file') : notebook.url);
     }
     showPage(Object.hasOwn(workspacePages, page) ? page : 'catalog');
+    if (page === 'reports') { if (params.get('report')) await Reporting.open(params.get('report'), false); else Reporting.home(); }
   } finally { restoringRoute = false; saveRoute(true); }
 }
 window.addEventListener('hashchange', () => restoreRoute().catch(error => notice(error.message, true)));
 const workspacePages = {
   catalog: ['Catalog', 'Explore your team catalogs and inspect Iceberg tables and views.'],
   notebooks: ['Notebooks', 'Analyze your team data with shared Python and SQL notebooks in marimo.'],
+  reports: ['Reports', 'Build reports and dashboards from your team’s live Iceberg tables.'],
   shares: ['Data shares', 'Review data shared with external parties across your team’s databases in this environment.'],
 };
 function showPage(page, updateRoute = true) {
@@ -54,6 +57,7 @@ function showPage(page, updateRoute = true) {
   $('#page-title').textContent = workspacePages[page][0];
   $('#page-description').textContent = workspacePages[page][1];
   if (page === 'shares') renderTeamShares();
+  if (page === 'reports') Reporting.show();
   placeNotice();
   if (updateRoute) saveRoute();
 }
@@ -78,10 +82,12 @@ function symbol(kind) {
   return e;
 }
 function resetEditor() { $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
-function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; sharesContext = null; $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
+function loginScreen() { Reporting.reset(); if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; sharesContext = null; $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
 async function api(path, method = 'GET', body) { const response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); const result = await response.json(); if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
 function renderState() {
+  Reporting.syncState();
+  if (workspacePage === 'reports') Reporting.show();
   $('#login-screen').hidden = true; $('#identity').hidden = false; $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; $('#workspace-nav').hidden = false; placeNotice();
   $('#team').replaceChildren(...state.teams.map(t => { const option = element('option', `${t.name} · ${roleNames[t.role] || t.role}`); option.value = t.id; return option; })); $('#team').value = state.activeTeam;
   $('#environment').replaceChildren(...state.environments.map(env => { const option = element('option', envNames[env]); option.value = env; return option; })); $('#environment').value = state.activeEnvironment;
@@ -94,7 +100,7 @@ function renderState() {
   const context = JSON.stringify([state.activeTeam, state.activeEnvironment, state.activeRole, state.databases.map(db => db.id)]);
   if (sharesContext !== context) { sharesContext = context; $('#team-shares').replaceChildren(); if (workspacePage === 'shares') renderTeamShares(); }
 }
-function clearBrowser() { clearNotice(); database = null; namespace = []; selectedObject = null; browseVersion++; $('#database-label').textContent = 'CATALOG'; $('#namespace-title').textContent = 'Select a database'; $('#breadcrumbs').replaceChildren(); $('#open-notebook').hidden = true; $('#examples').hidden = true; $('#objects').replaceChildren(element('p', 'Select a database from the catalog.', 'empty')); }
+function clearBrowser() { clearNotice(); database = null; namespace = []; selectedObject = null; browseVersion++; $('#database-label').textContent = 'CATALOG'; $('#namespace-title').textContent = 'Select a database'; $('#breadcrumbs').replaceChildren(); $('#open-notebook').hidden = true; $('#create-report').hidden = true; $('#examples').hidden = true; $('#objects').replaceChildren(element('p', 'Select a database from the catalog.', 'empty')); }
 async function loadState(background = false) {
   const previous = state, next = await api('/workspace');
   if (background && (pendingActions || state !== previous)) return;
@@ -117,7 +123,7 @@ async function browse(db, ns, background = false) {
     return;
   }
   showPage('catalog', false); clearNotice(); selectedObject = null; const version = ++browseVersion; database = db; namespace = [...ns]; saveRoute(); $('#browser').hidden = false; renderState();
-  $('#database-label').textContent = state.databases.find(d => d.id === db)?.name || db; $('#namespace-title').textContent = ns.length ? ns.at(-1) : 'Namespaces'; $('#open-notebook').hidden = false; $('#examples').hidden = false;
+  $('#database-label').textContent = state.databases.find(d => d.id === db)?.name || db; $('#namespace-title').textContent = ns.length ? ns.at(-1) : 'Namespaces'; $('#open-notebook').hidden = false; $('#create-report').hidden = true; $('#examples').hidden = false;
   const crumbs = [[], ...ns.map((_, i) => ns.slice(0, i + 1))];
   $('#breadcrumbs').replaceChildren(...crumbs.flatMap((parts, i) => { const b = element('button', parts.at(-1) || state.databases.find(d => d.id === db)?.name || db); b.addEventListener('click', () => browse(db, parts)); return i ? [element('span', '/'), b] : [b]; }));
   $('#objects').replaceChildren(element('p', '[ LOADING... ]', 'empty'));
@@ -168,3 +174,5 @@ $('#example-native').addEventListener('click', e => busy(e.currentTarget, () => 
 $('#example-v3-write').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 3)));
 $('#example-v3-read').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 4)));
 $('#notebook-file').addEventListener('change', e => showNotebook(activeNotebook, e.target.value));
+
+$('#create-report').addEventListener('click', e => busy(e.currentTarget, () => Reporting.fromTable(database, namespace, selectedObject.name)));

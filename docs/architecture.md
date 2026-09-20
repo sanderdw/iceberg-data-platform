@@ -42,7 +42,7 @@ gateway endpoint authenticated with that runtime's credential. PyIceberg retriev
 for each REST request; existing DuckDB attachments must reconnect to replace cached
 credentials. Successful renewal keeps the notebook running.
 
-Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, a role per team, an individual principal role and, per database, the grant that matches their role in the owning team. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. There is no second application metadata database.
+Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, a role per team, an individual principal role and, per database, the grant that matches their role in the owning team. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. Report and dashboard definitions use a separate gateway-owned SQLite store; identity and catalog metadata remain in Polaris.
 
 The admin identity manages metadata and grants. The user gateway uses that identity to resolve the directory and to create, edit and revoke [data shares](CONTEXT.md#data-shares) for team administrators, whose role it re-reads from Polaris on every such request. Catalog browsing uses the user's OAuth token. Notebook containers receive the user's own credentials. A user may belong to several teams; the active team and environment control the UI and workspace context, while the credentials retain the union of the user's team grants, each at the role held in that team.
 

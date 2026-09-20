@@ -27,6 +27,8 @@ from server.polaris import MAX_SHARES
 
 from .directory import UserDirectory
 from .preview import run_preview
+from .reporting.api import Reports
+from .reporting.api import install as install_reports
 from .runtime import NotebookRuntime, filespace_key
 
 PUBLIC = Path(__file__).parent / "public"
@@ -78,13 +80,18 @@ def same_origin(origin, url):
     )
 
 
-def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE):
+def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE, report_store=None, report_runner=None):
     directory = directory or UserDirectory(os.environ)
     runtime = runtime or NotebookRuntime(os.environ)
     sessions, attempts = {}, {}
     lock = asyncio.Lock()
     previews = asyncio.Semaphore(2)
+    reports = Reports(directory, sessions, lock, store=report_store, runner=report_runner)
     secure = oidc.secure if oidc else os.environ.get("USER_COOKIE_SECURE") == "true"
+
+    def stop_session(identifier):
+        reports.cancel_session(identifier)
+        runtime.stop_session(identifier)
 
     def session_for(cookies):
         session = sessions.get(cookies.get(session_cookie))
@@ -103,7 +110,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         except ServiceError as exc:
             if exc.status == 401:
                 sessions.pop(session.id, None)
-                await run_in_threadpool(runtime.stop_session, session.id)
+                await run_in_threadpool(stop_session, session.id)
             raise
         session.token = grant.access_token
         session.token_until = grant.access_until
@@ -111,7 +118,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
     def workspace_state(session):
         profile = directory.profile(session)
         if session.team not in {t["id"] for t in profile["teams"]}:
-            runtime.stop_session(session.id)
+            stop_session(session.id)
             session.team = profile["teams"][0]["id"]
         team_databases = [d for d in profile["databases"] if d["team"] == session.team]
         available = [d for d in team_databases if d["environment"] == session.environment]
@@ -159,7 +166,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                         LOG.info("Closing user session after authorization check: %s", exc.status)
                         sessions.pop(id, None)
                         try:
-                            await run_in_threadpool(runtime.stop_session, id)
+                            await run_in_threadpool(stop_session, id)
                         except DockerException:
                             LOG.error("Notebook cleanup failed; retrying on next sweep")
                     except DockerException:
@@ -184,6 +191,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                 with suppress(asyncio.CancelledError):
                     await task
                 try:
+                    await reports.close()
                     await run_in_threadpool(runtime.close)
                 finally:
                     directory.close()
@@ -202,7 +210,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                 session.expires = grant.expires
                 previous = sessions.pop(request.cookies.get(session_cookie), None)
                 if previous:
-                    await run_in_threadpool(runtime.stop_session, previous.id)
+                    await run_in_threadpool(stop_session, previous.id)
                 sessions[session.id] = session
                 response = oidc.redirect(request.state.oidc_return_to)
                 response.set_cookie(session_cookie, session.id, max_age=int(grant.expires - time.monotonic()), httponly=True,
@@ -245,7 +253,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     body = bytearray()
                     async for chunk in request.stream():
                         body.extend(chunk)
-                        if len(body) > 8192:
+                        if len(body) > (32768 if path.startswith(("/api/reports", "/api/dashboards", "/api/report-")) else 8192):
                             raise ServiceError(413, "Request is too large.")
                     request._body = bytes(body)
                 elif path.startswith("/workspaces/") and not same_origin(origin, request.url):
@@ -309,7 +317,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         session = directory.login(data.username, data.secret, secrets.token_urlsafe(32))
         previous = sessions.pop(request.cookies.get(session_cookie), None)
         if previous:
-            runtime.stop_session(previous.id)
+            stop_session(previous.id)
         sessions[session.id] = session
         attempts.pop(key, None)
         response = JSONResponse({"authenticated": True})
@@ -322,7 +330,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
     def logout(request: Request):
         session = sessions.pop(request.cookies.get(session_cookie), None)
         if session:
-            runtime.stop_session(session.id)
+            stop_session(session.id)
         response = JSONResponse({"authenticated": False, **({"logoutUrl": oidc.logout_url} if oidc else {})})
         response.delete_cookie(session_cookie, httponly=True, secure=secure, samesite="strict")
         return response
@@ -338,7 +346,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         if data.team not in {t["id"] for t in profile["teams"]}:
             raise ServiceError(403, "You are not a member of this team.")
         if session.team != data.team:
-            runtime.stop_session(session.id)
+            stop_session(session.id)
             session.team = data.team
         return workspace_state(session)
 
@@ -346,7 +354,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
     def switch_environment(data: EnvironmentInput, request: Request):
         session = request.state.session
         if session.environment != data.environment:
-            runtime.stop_session(session.id)
+            stop_session(session.id)
             session.environment = data.environment
         return workspace_state(session)
 
@@ -588,11 +596,15 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         directory.metadata.delete_share(id)
         return {"deleted": True}
 
+    install_reports(app, reports)
+    app.state.reports = reports
+
     files = {
         "": "index.html",
         "app.js": "app.js",
         "catalog.js": "catalog.js",
         "shares.js": "shares.js",
+        "reports.js": "reports.js",
         "style.css": "style.css",
         "favicon.svg": "favicon.svg",
     }

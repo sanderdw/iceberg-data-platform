@@ -35,6 +35,9 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
     (release_tree / ".env").write_text("LOCAL_PASSWORD=" + secrets.token_hex(24))
     (release_tree / ".venv").mkdir()
     (release_tree / ".venv" / "private.txt").write_text("private data")
+    nested_venv = release_tree / "user_portal" / "reporting" / ".venv"
+    nested_venv.mkdir()
+    (nested_venv / "private.txt").write_text("private reporting data")
     (release_tree / "docs" / "conversation.md").write_text("Private local development conversation")
     first = build(release_tree)
     digest = hashlib.sha256(first.read_bytes()).hexdigest()
@@ -45,6 +48,8 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
         assert any(name.endswith("/.env.example") for name in members)
         assert any(name.endswith("/LICENSE") for name in members)
         assert any(name.endswith("/01_pyiceberg_neighborhood.py") for name in members)
+        assert any(name.endswith("/user_portal/reporting/pyproject.toml") for name in members)
+        assert any(name.endswith("/user_portal/reporting/uv.lock") for name in members)
         pgadmin = next(name for name in members if name.endswith("/pgadmin/servers.json"))
         assert archive.extractfile(pgadmin).read() == (release_tree / "pgadmin" / "servers.json").read_bytes()
         screenshot = next(name for name in members if name.endswith("/docs/portal.png"))
@@ -110,6 +115,10 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
     notebook_image = users["services"]["notebook-image"]["image"]
     assert users["services"]["users"]["environment"]["NOTEBOOK_IMAGE"] == notebook_image
     assert notebook_image == f"ghcr.io/sanderdw/iceberg-data-platform-notebook:{image_tag}"
+    reporting_image = users["services"]["reporting-image"]["image"]
+    assert users["services"]["users"]["environment"]["REPORTING_IMAGE"] == reporting_image
+    assert reporting_image == f"ghcr.io/sanderdw/iceberg-data-platform-reporting:{image_tag}"
+    assert any(v.get("source") == "reports-data" and v["target"] == "/data" for v in users["services"]["users"]["volumes"])
     for model in (admin, users):
         for service in model["services"].values():
             if service["image"].startswith("ghcr.io/sanderdw/"):

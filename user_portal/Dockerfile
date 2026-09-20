@@ -13,6 +13,7 @@ RUN /app/.venv/bin/python user_portal/duckdb_extensions.py
 COPY server/__init__.py server/models.py server/polaris.py server/oidc.py server/entrypoints.py ./server/
 COPY user_portal/__init__.py user_portal/app.py user_portal/directory.py user_portal/runtime.py user_portal/__main__.py ./user_portal/
 COPY user_portal/catalog.py user_portal/preview.py ./user_portal/
+COPY user_portal/reporting/__init__.py user_portal/reporting/api.py user_portal/reporting/definitions.py user_portal/reporting/store.py user_portal/reporting/runtime.py ./user_portal/reporting/
 COPY user_portal/public ./user_portal/public
 COPY public/fonts ./user_portal/public/fonts
 COPY public/favicon.svg ./user_portal/public/favicon.svg

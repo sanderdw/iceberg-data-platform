@@ -45,6 +45,8 @@ jobs:
         run: |
           uv export --locked --all-groups --no-hashes --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt" > /dev/null
           uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+          uv export --locked --project user_portal/reporting --no-hashes --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/reporting-requirements.txt" > /dev/null
+          uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/reporting-requirements.txt" --no-deps --disable-pip
       - run: npm audit
   integration:
     runs-on: ubuntu-24.04
@@ -84,6 +86,8 @@ jobs:
       - run: npm run test:catalog
       - run: npm run test:shares-ui
       - run: npm run test:navigation-ui
+      - run: npm run test:reports-ui
+      - run: uv run --all-groups python -m scripts.reporting_smoke
       - run: uv run --all-groups python -m scripts.catalog_smoke
       - run: uv run --all-groups python -m scripts.smoke
       - run: uv run --all-groups python -m scripts.data_smoke

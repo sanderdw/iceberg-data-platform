@@ -13,6 +13,7 @@
 !user_portal/
 !user_portal/**
 **/__pycache__/
+**/.venv/
 **/*.pyc
 **/.env*
 **/*.key

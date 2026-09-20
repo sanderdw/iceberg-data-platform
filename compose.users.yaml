@@ -27,10 +27,13 @@ services:
       NOTEBOOK_IMAGE: iceberg-user-notebook:0.1.0
       MAX_NOTEBOOKS: ${MAX_NOTEBOOKS:-8}
       NOTEBOOK_MEMORY: ${NOTEBOOK_MEMORY:-1g}
+      REPORTING_IMAGE: iceberg-user-reporting:0.1.0
+      USER_REPORTS_PATH: /data/reports.sqlite
     ports:
       - "127.0.0.1:${USER_PORT:-3002}:3002"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - reports-data:/data
     networks:
       - catalog
     healthcheck:
@@ -48,6 +51,16 @@ services:
       context: .
       dockerfile: user_portal/notebook/Dockerfile
     profiles: [images]
+
+  reporting-image:
+    image: iceberg-user-reporting:0.1.0
+    build:
+      context: .
+      dockerfile: user_portal/reporting/Dockerfile
+    profiles: [images]
+
+volumes:
+  reports-data:
 
 networks:
   catalog:
