@@ -96,6 +96,8 @@ async function runNotebook(page, label, done, click) {
   await page.keyboard.press('Control+Shift+r');
   if (click) await frame.getByRole('button', {name: click, exact: true}).click({timeout: 120000});
   await frame.getByText(done).first().waitFor({timeout: 180000});
+  // Text of a markdown cell shows up long before the queries below it have finished.
+  await expect(frame.locator('[data-status="queued"], [data-status="running"]')).toHaveCount(0, {timeout: 180000});
   return frame;
 }
 const toHeading = (frame, name) => frame.getByRole('heading', {name}).first().evaluate(h => h.scrollIntoView({block: 'start'}));
@@ -155,7 +157,8 @@ try {
     await workspace.locator('#example-write').click();
     let frame = workspace.frameLocator('#frame-host iframe');
     await frame.locator('.cm-content').first().waitFor({timeout: 180000});
-    frame = await runNotebook(workspace, '01 · Neighborhood data with PyIceberg', /Created and populated|Table already contains/, 'Create example table');
+    // With the row count, so the f-string in the cell's own code does not match.
+    frame = await runNotebook(workspace, '01 · Neighborhood data with PyIceberg', /(Created and populated:|Table already contains) [\d,]+ rows/, 'Create example table');
     await toHeading(frame, '2. Write to Iceberg');
     await shot(workspace, '10-notebook-01-created');
 

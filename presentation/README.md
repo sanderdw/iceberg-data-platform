@@ -1,10 +1,6 @@
 # Presentation
 
-reveal.js deck about the platform, with screenshots captured from a running local stack on 2026-09-19.
-
-The checked-in captures predate the latest navigation and copy-only DuckDB snippet UI.
-The slide text describes the current behavior; recapture the affected screenshots
-after rebuilding the portals to update the images.
+reveal.js deck about the platform, with screenshots captured from a running local stack on 2026-09-20.
 
 - `index.html` — the deck. Styled after the [Nothing design skill](https://github.com/dominikmartn/nothing-design-skill): OLED black, Doto for hero moments, Space Grotesk body, Space Mono labels, no shadows or gradients. reveal.js 5.1 loads from cdnjs, so an internet connection is needed the first time.
 - `fonts/` — Doto, Space Grotesk and Space Mono with their OFL licenses, copied from `public/fonts/` so the deck matches the portals and renders offline.

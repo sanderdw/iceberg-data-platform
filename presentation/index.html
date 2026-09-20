@@ -152,7 +152,7 @@
   <div class="label">Iceberg Data Platform · September 2026</div>
   <h1 class="doto">An open lakehouse you actually own.</h1>
   <div class="meta-row">
-    <p class="lede">Apache Iceberg as the table format. Every other building block open source, replaceable, and running on one laptop.</p>
+    <p class="lede">Apache Iceberg as the table format, with every other building block open source, replaceable, and running on a single laptop.</p>
     <div class="label">Sander de Wildt<br>Apache Iceberg · Polaris · Keycloak<br>RustFS · marimo · DuckDB</div>
   </div>
   <aside class="notes">Three parts: what Iceberg is and is not, why the all open source approach matters for autonomy and portability, and a demo of the platform itself. Slides with two screenshots have vertical slides below them (arrow down) with each capture full screen.</aside>
@@ -164,16 +164,16 @@
   <h2>Hi all,</h2>
   <div class="cols-asym">
     <div>
-      <p>I started this project because knowledge about Apache Iceberg is not spreading as easily as it should. In short: to get started you need quite a few components. A catalog, object storage, identity, an engine, a place to work. Vendors make that easy, and that is exactly where vendor lock-in begins.</p>
-      <p>So I built a small platform that shows the other route: every building block open source, running on one laptop with one command. My point today: <strong>Iceberg can be a very good choice for autonomy and portability</strong>, not only for scale.</p>
+      <p>I started this project because knowledge about Apache Iceberg is not spreading as easily as it should. In short, you need quite a few components before you can start: a catalog, object storage, identity, an engine and a place to work. Vendors make that part easy, and that is usually where vendor lock-in starts.</p>
+      <p>So I built a small platform that shows the other route: every building block open source, running on one laptop with a single command. As far as I'm concerned, <strong>Iceberg is a very good choice for autonomy and portability</strong>, not only for scale.</p>
       <p class="link-row"><span class="label tight" style="display:block">Read more</span><a class="url" href="https://medium.com/@sanderdw/making-apache-iceberg-feel-like-a-database-service-e89c5d0bed98" target="_blank" rel="noopener">https://medium.com/@sanderdw/making-apache-iceberg-feel-like-a-database-service-e89c5d0bed98</a><br><a class="url" href="https://www.linkedin.com/posts/sanderdw_at-alliander-we-want-to-take-data-sharing-ugcPost-7505007789820256256-eoeA/" target="_blank" rel="noopener">https://www.linkedin.com/posts/sanderdw_at-alliander-we-want-to-take-data-sharing-ugcPost-7505007789820256256-eoeA/</a></p>
     </div>
     <div>
       <div class="label tight">Three things to land today</div>
       <ol>
-        <li>How Iceberg actually works, and why it is not Snowflake.</li>
-        <li>What fully open source buys you: no lock-in, autonomy, portability.</li>
-        <li>A demo: teams, databases, notebooks, data sharing, one identity.</li>
+        <li>How Iceberg actually works, and why it is not a platform like Snowflake.</li>
+        <li>What a fully open source stack gives us: autonomy, portability and no lock-in.</li>
+        <li>A demo of teams, databases, notebooks and data sharing on one identity.</li>
       </ol>
     </div>
   </div>
@@ -183,9 +183,9 @@
 
 <section class="title">
   <div class="label">The one-liner</div>
-  <h1 class="doto quote">What APIs did for applications, Apache Iceberg is doing for data.</h1>
+  <h1 class="doto quote">Apache Iceberg is doing for data what open APIs did for applications.</h1>
   <div class="meta-row">
-    <p class="lede" style="max-width:36em">For years we have relied on REST and OpenAPI specs to abstract software, so any service can talk to any application. Today Apache Iceberg is doing the exact same thing for structured data: it provides an open and standard interface, including the way you want to run it, so that no single engine owns your data anymore.</p>
+    <p class="lede" style="max-width:36em">For years we have relied on REST and OpenAPI to abstract software, so that any service can talk to any application. Apache Iceberg does the same for structured data: it provides an open, standard interface, including how you choose to run it, so that no single engine owns your data anymore.</p>
     <div class="label">Sander de Wildt</div>
   </div>
 </section>
@@ -199,26 +199,26 @@
 
 <section>
   <div class="label">01 · Iceberg</div>
-  <h2>A table format, not a product</h2>
+  <h2>Iceberg is a specification, not a product you buy</h2>
   <div class="cols">
     <div>
       <div class="label tight">Snowflake · Databricks · BigQuery</div>
       <ul>
         <li>One vendor delivers storage, compute, catalog, security and the UI as a single product.</li>
-        <li>Your tables live in the vendor's format and account.</li>
-        <li>You rent the capability. Leaving means migrating data <em>and</em> everything around it.</li>
+        <li>Your tables live in the vendor's format and in the vendor's account.</li>
+        <li>You rent the capability, so leaving means migrating the data and everything built around it.</li>
       </ul>
     </div>
     <div>
       <div class="label tight">Apache Iceberg</div>
       <ul>
         <li>An open <strong>specification</strong> for how table data and metadata are laid out in object storage.</li>
-        <li>Data files are plain Parquet. Metadata is JSON and Avro. No server owns them.</li>
-        <li>You bring the catalog, the engines, the storage and the identity provider. Each is replaceable.</li>
+        <li>Data files are plain Parquet and metadata is JSON and Avro, so no server owns them.</li>
+        <li>You bring the catalog, the engines, the storage and the identity provider, and each one stays replaceable.</li>
       </ul>
     </div>
   </div>
-  <p class="secondary foot">The comparison is not "which is better". It is "what do you own and what do you rent".</p>
+  <p class="secondary foot">The point of the comparison is ownership: which parts of the stack you control yourself, and which parts you rent.</p>
 </section>
 
 <section>
@@ -231,12 +231,12 @@
     <div class="layer"><span class="n">manifest .avro</span><span class="d">Lists data files and delete files with per column min and max, null counts and row counts. This is what makes pruning cheap.</span></div>
     <div class="layer"><span class="n">data files .parquet</span><span class="d">The actual rows. Immutable. Any engine that speaks Parquet and the Iceberg spec reads them directly from the bucket.</span></div>
   </div>
-  <p class="secondary foot">The catalog is tiny. Everything else is files. A commit is the swap of one pointer.</p>
-  <aside class="notes">Key point: the catalog is tiny. Everything else is files. A commit is a swap of one pointer.</aside>
+  <p class="secondary foot">The catalog itself stays small. Everything else is files in object storage, and a commit is the swap of a single pointer.</p>
+  <aside class="notes">Key point: the catalog stays small, everything else is files, and a commit is the swap of one pointer.</aside>
 </section>
 
 <section class="shot-slide">
-  <div class="head"><span class="label">01 · Iceberg</span><h2>This is the whole table.</h2></div>
+  <div class="head"><span class="label">01 · Iceberg</span><h2>A complete Iceberg table is a handful of files in a bucket</h2></div>
   <div class="fig"><img class="shot" src="screenshots/21-rustfs-metadata-files.png" alt="RustFS console listing the metadata folder of an Iceberg table"></div>
   <div class="caption foot">RustFS · bucket of the smart-meter-readings database · synthetic/neighborhood_electricity/metadata · two metadata versions, one manifest, one manifest list; the Parquet file sits in the data folder next to it</div>
 </section>
@@ -247,7 +247,7 @@
   <div class="cols-asym">
     <pre><code data-noescape>{
   <span class="k">"format-version"</span>: <span class="n">2</span>,
-  <span class="k">"table-uuid"</span>: <span class="s">"3e611aa6-56f1-4a49-9ce4-43508ab1a1fa"</span>,
+  <span class="k">"table-uuid"</span>: <span class="s">"dffd4aa0-93f0-4d1a-ae4f-52eb661d3c13"</span>,
   <span class="k">"location"</span>: <span class="s">"s3://db-…/synthetic/neighborhood_electricity"</span>,
   <span class="k">"schemas"</span>: [{ <span class="k">"schema-id"</span>: <span class="n">0</span>, <span class="k">"fields"</span>: [
       { <span class="k">"id"</span>: <span class="n">1</span>, <span class="k">"name"</span>: <span class="s">"timestamp_utc"</span>, <span class="k">"type"</span>: <span class="s">"timestamptz"</span> },
@@ -256,24 +256,24 @@
       { <span class="k">"id"</span>: <span class="n">13</span>, <span class="k">"name"</span>: <span class="s">"grid_draw_kwh"</span>, <span class="k">"type"</span>: <span class="s">"double"</span> }
   ]}],
   <span class="k">"partition-specs"</span>: [{ <span class="k">"spec-id"</span>: <span class="n">0</span>, <span class="k">"fields"</span>: [] }],
-  <span class="k">"current-snapshot-id"</span>: <span class="n">6783783537935539897</span>,
-  <span class="k">"refs"</span>: { <span class="k">"main"</span>: { <span class="k">"snapshot-id"</span>: <span class="n">6783783537935539897</span>,
+  <span class="k">"current-snapshot-id"</span>: <span class="n">4747982721264509729</span>,
+  <span class="k">"refs"</span>: { <span class="k">"main"</span>: { <span class="k">"snapshot-id"</span>: <span class="n">4747982721264509729</span>,
                       <span class="k">"type"</span>: <span class="s">"branch"</span> } },
   <span class="k">"snapshots"</span>: [{
     <span class="k">"sequence-number"</span>: <span class="n">1</span>,
-    <span class="k">"snapshot-id"</span>: <span class="n">6783783537935539897</span>,
+    <span class="k">"snapshot-id"</span>: <span class="n">4747982721264509729</span>,
     <span class="k">"summary"</span>: { <span class="k">"operation"</span>: <span class="s">"append"</span>,
                  <span class="k">"added-records"</span>: <span class="s">"26880"</span>,
                  <span class="k">"total-data-files"</span>: <span class="s">"1"</span> },
-    <span class="k">"manifest-list"</span>: <span class="s">"s3://db-…/metadata/snap-6783…avro"</span>
+    <span class="k">"manifest-list"</span>: <span class="s">"s3://db-…/metadata/snap-4747…avro"</span>
   }]
 }</code></pre>
     <ul>
-      <li><strong>Field IDs</strong>, not names, identify columns. Renaming never rewrites data.</li>
-      <li><strong>Snapshots</strong> are the history. Time travel is reading an older pointer.</li>
-      <li><strong>Refs</strong> give a table branches and tags, like git.</li>
-      <li><strong>Partition specs</strong> can evolve. Old files keep their layout.</li>
-      <li>Nothing here is vendor specific.</li>
+      <li><strong>Field IDs</strong> identify columns instead of names, so renaming a column never rewrites data.</li>
+      <li><strong>Snapshots</strong> hold the history, which means time travel is reading an older pointer.</li>
+      <li><strong>Refs</strong> give a table branches and tags, comparable to git.</li>
+      <li><strong>Partition specs</strong> can evolve while older files keep their original layout.</li>
+      <li>None of this is vendor specific.</li>
     </ul>
   </div>
   <div class="caption foot">Abbreviated. The real file from the demo is on the next slide.</div>
@@ -282,7 +282,7 @@
 <section class="shot-slide">
   <div class="head"><span class="label">01 · Iceberg</span><h2>Same file, viewed in the storage console</h2></div>
   <div class="fig"><img class="shot" src="screenshots/22-rustfs-metadata-json.png" alt="Preview of the metadata.json file in the RustFS console"></div>
-  <div class="caption foot">RustFS · metadata.json preview · no database engine involved, just an object in a bucket</div>
+  <div class="caption foot">RustFS · metadata.json preview · there is no database engine involved, it is an object in a bucket</div>
 </section>
 
 <section>
@@ -290,19 +290,19 @@
   <h2>What the format gives you out of the box</h2>
   <div class="cols">
     <ul>
-      <li><strong>ACID commits</strong> on object storage. Concurrent writers, atomic pointer swap in the catalog.</li>
-      <li><strong>Snapshots and time travel.</strong> Every write is a snapshot. Read yesterday's table, roll back a bad load.</li>
-      <li><strong>Schema evolution</strong> without rewriting files: add, drop, rename, widen types.</li>
-      <li><strong>Hidden partitioning.</strong> Users query on <code>timestamp_utc</code>, Iceberg prunes on <code>day(timestamp_utc)</code>.</li>
+      <li><strong>ACID commits</strong> on object storage: concurrent writers are settled by an atomic pointer swap in the catalog.</li>
+      <li><strong>Snapshots and time travel.</strong> Every write creates a snapshot, so you can read yesterday's table or roll back a bad load.</li>
+      <li><strong>Schema evolution</strong> without rewriting files: add, drop, rename and widen types.</li>
+      <li><strong>Hidden partitioning.</strong> Users query on <code>timestamp_utc</code> while Iceberg prunes on <code>day(timestamp_utc)</code>.</li>
     </ul>
     <ul>
-      <li><strong>Statistics in metadata.</strong> Planning skips files without opening them.</li>
-      <li><strong>Many engines, one copy.</strong> DuckDB, Spark, Trino, Flink, PyIceberg. Snowflake and Databricks read Iceberg too.</li>
-      <li><strong>Branches, tags and views.</strong> Refs per table for audits and write-audit-publish; views are first class catalog objects.</li>
-      <li><strong>Format version 3.</strong> Semi-structured <code>VARIANT</code>, nanosecond timestamps, geometry, column defaults, row lineage and deletion vectors.</li>
+      <li><strong>Statistics in the metadata</strong>, so query planning skips files without opening them.</li>
+      <li><strong>One copy for many engines.</strong> DuckDB, Spark, Trino, Flink and PyIceberg read the same table, and Snowflake and Databricks support Iceberg as well.</li>
+      <li><strong>Branches, tags and views.</strong> Refs per table support audits and write-audit-publish, and views are first class catalog objects.</li>
+      <li><strong>Format version 3</strong> adds semi-structured <code>VARIANT</code>, nanosecond timestamps, geometry, column defaults, row lineage and deletion vectors.</li>
     </ul>
   </div>
-  <p class="lede foot">In short: the capabilities you associate with a data warehouse, without the warehouse owning your data.</p>
+  <p class="lede foot">In short, you get the capabilities you expect from a data warehouse, without a warehouse owning your data.</p>
 </section>
 
 <section>
@@ -310,20 +310,20 @@
   <h2>What Iceberg is <em>not</em></h2>
   <div class="cols-asym">
     <ul>
-      <li>Not a query engine. It does not execute SQL. You pick DuckDB, Trino, Spark, Snowflake, or all of them.</li>
-      <li>Not a storage system. It sits on S3 compatible object storage you already have.</li>
-      <li>Not a security layer by itself. Permissions and credential vending live in the catalog and your identity provider.</li>
-      <li>Not maintenance free. Compaction, snapshot expiry and orphan cleanup are yours to schedule.</li>
+      <li>It is not a query engine and does not execute SQL, so you pick DuckDB, Trino, Spark, Snowflake, or all of them.</li>
+      <li>It is not a storage system: it sits on the S3 compatible object storage you already have.</li>
+      <li>It is not a security layer by itself. Permissions and credential vending live in the catalog and in your identity provider.</li>
+      <li>It is not maintenance free. Compaction, snapshot expiry and orphan cleanup are yours to schedule.</li>
     </ul>
   </div>
-  <p class="secondary foot">That is exactly the point. The building blocks are separate, so you decide who owns which one.</p>
+  <p class="secondary foot">That separation is deliberate: because the building blocks are independent, you decide who owns each one.</p>
 </section>
 
 <!-- ========== PART 2: OPEN SOURCE ========== -->
 <section class="divider">
   <div class="doto num">02</div>
   <h1>Fully open source</h1>
-  <p class="secondary">No lock-in, autonomy, portability. And the honest trade-offs.</p>
+  <p class="secondary">Autonomy, portability, and the trade-offs that come with them.</p>
 </section>
 
 <section>
@@ -332,37 +332,37 @@
   <table>
     <thead><tr><th>Capability</th><th>Component</th><th class="num">Version</th><th>License</th><th>Swappable for</th></tr></thead>
     <tbody>
-      <tr><td>Table format</td><td>Apache Iceberg (PyIceberg)</td><td class="num">spec v2 and v3 · 0.12</td><td class="mono">Apache-2.0</td><td>It is the standard. Engines come and go.</td></tr>
+      <tr><td>Table format</td><td>Apache Iceberg (PyIceberg)</td><td class="num">spec v2 and v3 · 0.12</td><td class="mono">Apache-2.0</td><td>The standard itself, engines come and go.</td></tr>
       <tr><td>Catalog and permissions</td><td>Apache Polaris</td><td class="num">1.7.0</td><td class="mono">Apache-2.0</td><td>Lakekeeper, Nessie, Gravitino, Unity Catalog OSS, AWS Glue</td></tr>
       <tr><td>Identity (OIDC)</td><td>Keycloak</td><td class="num">26.7.3</td><td class="mono">Apache-2.0</td><td>Entra ID, Okta, any OIDC provider</td></tr>
       <tr><td>Object storage (S3 API)</td><td>RustFS</td><td class="num">1.0.0</td><td class="mono">Apache-2.0</td><td>AWS S3, MinIO, Ceph, Cloudflare R2, on-prem</td></tr>
       <tr><td>Catalog metadata store</td><td>PostgreSQL</td><td class="num">18</td><td class="mono">PostgreSQL</td><td>Managed Postgres anywhere</td></tr>
       <tr><td>Notebooks</td><td>marimo</td><td class="num">0.24.2</td><td class="mono">Apache-2.0</td><td>Jupyter, VS Code, any Python client</td></tr>
       <tr><td>Query engine</td><td>DuckDB with the iceberg extension, reads and writes</td><td class="num">1.5.5</td><td class="mono">MIT</td><td>Trino, Spark, Flink, Polars, ClickHouse</td></tr>
-      <tr><td>Portals and API</td><td>FastAPI, Python 3.14</td><td class="num">0.141</td><td class="mono">MIT</td><td>Ours. Thin by design.</td></tr>
+      <tr><td>Portals and API</td><td>FastAPI, Python 3.14</td><td class="num">0.141</td><td class="mono">MIT</td><td>Built here, deliberately thin.</td></tr>
     </tbody>
   </table>
-  <div class="caption foot">The platform itself is Apache-2.0. An independent project, not an Apache Software Foundation project.</div>
+  <div class="caption foot">The platform itself is Apache-2.0 and is an independent project, not an Apache Software Foundation project.</div>
 </section>
 
 <section>
   <div class="label">02 · Open source</div>
-  <h2>No lock-in: what that means in practice</h2>
+  <h2>What avoiding lock-in means in practice</h2>
   <div class="cols-3">
     <div class="group">
       <div class="label">Data</div>
-      <p>Parquet files in a bucket you control. Copy the bucket, point another catalog at it, done. No export job, no egress negotiation.</p>
+      <p>The data is Parquet in a bucket you control. Moving means copying the bucket and pointing another catalog at it, without an export job or a negotiation about egress.</p>
     </div>
     <div class="group">
       <div class="label">Catalog</div>
-      <p>Iceberg REST is an open API. Polaris today, another REST catalog tomorrow. Table metadata already lives next to the data.</p>
+      <p>Iceberg REST is an open API, so Polaris today can be another REST catalog tomorrow. The table metadata already lives next to the data.</p>
     </div>
     <div class="group">
       <div class="label">Engines</div>
-      <p>DuckDB for a laptop, Trino for a cluster, Snowflake if a team wants it. All read the same table. No second copy.</p>
+      <p>Whether a team runs local analysis with DuckDB, distributed queries on Trino, or Snowflake where that is justified, every engine points at the same dataset without duplication.</p>
     </div>
   </div>
-  <p class="lede foot">Lock-in is not one big decision. It is the sum of small defaults. Open formats make every default reversible.</p>
+  <p class="lede foot">Vendor lock-in rarely happens overnight; it creeps in through the default choices. Open formats keep the platform flexible and save us a costly migration later.</p>
 </section>
 
 <section>
@@ -372,19 +372,19 @@
     <div>
       <div class="label tight">Autonomy</div>
       <ul>
-        <li>Runs on a laptop, a VM, Kubernetes or a cloud account. Same Compose definition.</li>
-        <li>One command installer for Linux, macOS and Windows. No vendor account, no trial clock.</li>
-        <li>You decide where data lives and which network it ever touches.</li>
-        <li>Costs are compute and storage you already pay for.</li>
+        <li>It runs on a laptop, a VM, Kubernetes or a cloud account, from the same Compose definition.</li>
+        <li>A one command installer for Linux, macOS and Windows, without a vendor account or a trial clock.</li>
+        <li>You decide where the data lives and which network it ever touches.</li>
+        <li>The cost is compute and storage you already pay for.</li>
       </ul>
     </div>
     <div>
       <div class="label tight">Portability</div>
       <ul>
         <li>Storage: anything with an S3 API.</li>
-        <li>Identity: any OIDC provider. Users and roles stay yours.</li>
+        <li>Identity: any OIDC provider, with users and roles staying yours.</li>
         <li>Catalog: any Iceberg REST implementation.</li>
-        <li>Compute: whichever engine fits the job, per team, per workload.</li>
+        <li>Compute: whichever engine fits the job, per team and per workload.</li>
       </ul>
     </div>
   </div>
@@ -396,20 +396,20 @@
   <h2>PS: the honest part</h2>
   <div class="cols-asym">
     <ul>
-      <li><strong>Operations are yours.</strong> Upgrades, backups of Postgres and buckets, monitoring, HTTPS, secrets.</li>
-      <li><strong>Table maintenance is yours.</strong> Compaction, snapshot expiration, orphan file cleanup need a schedule.</li>
-      <li><strong>Security boundaries are explicit.</strong> This build is a local development platform: in-memory sessions, a trusted Docker host. Read the security model before running it anywhere else.</li>
-      <li><strong>Fewer vendors, more decisions.</strong> A feature for architecture, a real cost for a small team.</li>
+      <li><strong>Operations are your responsibility:</strong> upgrades, backups of Postgres and the buckets, monitoring, HTTPS and secrets.</li>
+      <li><strong>Table maintenance is yours as well.</strong> Compaction, snapshot expiration and orphan file cleanup need a schedule.</li>
+      <li><strong>Security boundaries are explicit.</strong> This build is a local development platform with in-memory sessions on a trusted Docker host, so read the security model before running it anywhere else.</li>
+      <li><strong>Fewer vendors means tighter control over the architecture</strong>, but we have to be realistic: it also pushes more integration decisions onto a small team.</li>
     </ul>
   </div>
-  <p class="secondary foot">Open source does not mean free of work. What you gain in ownership you also gain in responsibility.</p>
+  <p class="secondary foot">Open source does not mean free of work. The ownership you gain comes with the responsibility that goes with it.</p>
 </section>
 
 <!-- ========== PART 3: DEMO ========== -->
 <section class="divider">
   <div class="doto num">03</div>
   <h1>The platform</h1>
-  <p class="secondary">Teams, databases, notebooks, data shares. One identity, your own permissions everywhere.</p>
+  <p class="secondary">Teams, databases, notebooks and data shares, on one identity and your own permissions throughout.</p>
 </section>
 
 <section>
@@ -452,20 +452,20 @@
   <h2>The capability model</h2>
   <div class="cols">
     <ul>
-      <li><strong>Team</strong> owns databases. Stable ID, unique name, a description.</li>
-      <li><strong>User</strong> signs in with Keycloak, belongs to one or more teams, has a role per team: read, read and write, admin.</li>
-      <li><strong>Database</strong> is an Iceberg catalog in Polaris plus a dedicated S3 bucket. Namespaces, tables and views live inside.</li>
-      <li><strong>Environment</strong> per database: development, acceptance, production.</li>
-      <li><strong>Data share</strong> gives an external party read access to selected tables and views of one database, with its own credential.</li>
+      <li>A <strong>team</strong> owns databases and has a stable ID, a unique name and a description.</li>
+      <li>A <strong>user</strong> signs in with Keycloak, belongs to one or more teams and has a role per team: read, read and write, or admin.</li>
+      <li>A <strong>database</strong> is an Iceberg catalog in Polaris plus a dedicated S3 bucket, holding namespaces, tables and views.</li>
+      <li>Every database has an <strong>environment</strong>: development, acceptance or production.</li>
+      <li>A <strong>data share</strong> gives an external party read access to selected tables and views of one database, with its own credential.</li>
     </ul>
     <ul>
       <li>Effective access is the union of the user's teams, each at its own role. Moving a database re-syncs grants and bucket policies.</li>
-      <li>No second application database. Polaris <em>is</em> the source of truth for teams, users and catalogs.</li>
-      <li>Portal admin is a Keycloak role. Database admin does not grant portal admin.</li>
-      <li>Self-service for teams, governance in one place: team administrators share data themselves, the platform administrator sees every share.</li>
+      <li>There is no second application database: Polaris is the source of truth for teams, users and catalogs.</li>
+      <li>Portal administration is a Keycloak role; administering a database does not grant it.</li>
+      <li>Self-service and governance sit together: teams share data themselves, while the platform administrator sees every share.</li>
     </ul>
   </div>
-  <p class="lede foot">Ownership is explicit: a team owns a database, a database owns a bucket. That is the whole governance model.</p>
+  <p class="lede foot">Ownership is explicit: a team owns a database and a database owns a bucket. That is the governance model.</p>
 </section>
 
 <section>
@@ -504,7 +504,7 @@
       </tbody></table>
     </div>
   </div>
-  <p class="secondary foot"><span class="dot"></span>No private backdoor for the UI: every button is a fetch to one of these routes, and the OpenAPI schema is generated from the same code. One level down it is open APIs again: Iceberg REST on Polaris, S3 on RustFS, OIDC on Keycloak.</p>
+  <p class="secondary foot"><span class="dot"></span>There is no private backdoor for the UI: every button is a fetch to one of these routes, and the OpenAPI schema is generated from the same code. One level down it is open APIs again: Iceberg REST on Polaris, S3 on RustFS and OIDC on Keycloak.</p>
   <aside class="notes">Both portals are static pages that only call their own FastAPI app. Everything in the demo that follows is one of these routes. Swagger UI sits behind the admin sign-in at :3000/docs; mutations need a session and the X-Portal-Request header.</aside>
 </section>
 
@@ -592,7 +592,7 @@
   <div class="head"><span class="label">Demo · Notebook 01</span><h2>Write to Iceberg: PyIceberg, DuckDB, or your own engine</h2></div>
   <div class="fig"><img class="shot" src="screenshots/10-notebook-01-created.png" alt="marimo notebook with the Create example table button"></div>
   <div class="caption foot">Example 01 writes with PyIceberg · DuckDB's iceberg extension, Spark and Trino write the same table · 26,880 rows behind an explicit button</div>
-  <aside class="notes">The notebook runs in its own container with only this user's credentials. No platform secrets, no Docker socket. Writing needs the writer role, enforced by Polaris, not by the UI. The engine is a choice: PyIceberg here because it is small and explicit, DuckDB or Spark for bigger loads.</aside>
+  <aside class="notes">The notebook runs in its own container with only this user's credentials, without platform secrets or access to the Docker socket. Writing requires the writer role, which Polaris enforces rather than the UI. The engine is a choice: PyIceberg here because it is small and explicit, DuckDB or Spark for bigger loads.</aside>
 </section>
 
 <section class="shot-slide">
@@ -624,7 +624,7 @@
 
 <section>
   <div class="label">Demo · Same table, three engines</div>
-  <h2>That is the Iceberg promise in one demo</h2>
+  <h2>The same table, written and read by three engines</h2>
   <div class="cols-3">
     <div class="group">
       <div class="label">01 · PyIceberg</div>
@@ -632,14 +632,14 @@
     </div>
     <div class="group">
       <div class="label">02 · DuckDB via PyIceberg</div>
-      <p>Scan to Arrow, then SQL in marimo. Good for small, interactive work.</p>
+      <p>Scan to Arrow and run SQL in marimo, which works well for small, interactive analysis.</p>
     </div>
     <div class="group">
       <div class="label">03 · DuckDB native</div>
-      <p>The engine reads the table files directly. Swap in Trino or Spark and nothing about the data changes.</p>
+      <p>The engine reads the table files directly, and swapping in Trino or Spark changes nothing about the data.</p>
     </div>
   </div>
-  <p class="lede foot">One copy of the data. The engine is a choice per workload, not a platform decision.</p>
+  <p class="lede foot">There is one copy of the data, which makes the engine a choice per workload instead of a platform-wide commitment.</p>
 </section>
 
 <section>
@@ -660,11 +660,11 @@
 <span class="k">UPDATE</span> … <span class="k">SET</span> firmware = <span class="s">'v2.0'</span> <span class="k">WHERE</span> device_id = <span class="s">'SENSOR-001'</span>;
 <span class="k">DELETE FROM</span> … <span class="k">WHERE</span> payload.kind::<span class="n">VARCHAR</span> = <span class="s">'fault'</span>;</code></pre>
     <ul>
-      <li><strong>VARIANT</strong> holds a different structure per event, no fixed schema.</li>
+      <li><strong>VARIANT</strong> holds a different structure per event, without a fixed schema.</li>
       <li><strong>TIMESTAMP_NS</strong> and <strong>GEOMETRY</strong> are native column types.</li>
-      <li><strong>Column defaults.</strong> Adding <code>firmware</code> rewrites none of the 480 rows.</li>
-      <li><strong>Deletion vectors.</strong> Updates and deletes mark row positions in a small Puffin file.</li>
-      <li><strong>Row lineage.</strong> Every row keeps a stable ID and the commit that last changed it.</li>
+      <li><strong>Column defaults</strong> mean that adding <code>firmware</code> rewrites none of the 480 rows.</li>
+      <li><strong>Deletion vectors</strong> let updates and deletes mark row positions in a small Puffin file.</li>
+      <li><strong>Row lineage</strong> keeps a stable ID per row, together with the commit that last changed it.</li>
     </ul>
   </div>
   <div class="caption foot">Plain SQL through the Polaris REST catalog, with the user's own permissions · GEOGRAPHY and UNKNOWN are not in DuckDB yet · PyIceberg does not read these v3 types yet</div>
@@ -707,7 +707,7 @@
 </section>
 
 <section class="shot-slide">
-  <div class="head"><span class="label">Demo · Iceberg v3</span><h2>A delete is one small file</h2></div>
+  <div class="head"><span class="label">Demo · Iceberg v3</span><h2>A delete adds one small file instead of rewriting data</h2></div>
   <div class="fig"><img class="shot" src="screenshots/31-rustfs-v3-puffin.png" alt="RustFS console listing the Parquet data files and Puffin deletion vectors of the v3 table"></div>
   <div class="caption foot">RustFS · iceberg_v3/sensor_events/data · Parquet data files stay untouched · each update or delete adds a Puffin deletion vector of a few hundred bytes</div>
 </section>
@@ -763,29 +763,29 @@
   <div class="cols-3">
     <div class="group">
       <div class="label">01 · Team administrator</div>
-      <p>Picks tables and views of one database in the user portal and names the recipient. No platform administrator in the loop.</p>
+      <p>A team administrator picks tables and views of one database in the user portal and names the recipient, without a platform administrator in the loop.</p>
     </div>
     <div class="group">
       <div class="label">02 · Polaris</div>
-      <p>One principal per share, with one read grant per selected table or view. Nothing on the namespace, nothing on the catalog.</p>
+      <p>Access is granted per object: one dedicated principal per share, with an explicit read grant for each selected table or view, rather than blanket permissions on the namespace or the catalog.</p>
     </div>
     <div class="group">
       <div class="label">03 · External party</div>
-      <p>Any Iceberg REST client, its own client ID and secret, and read-only storage credentials scoped to the shared table.</p>
+      <p>The recipient uses any Iceberg REST client with its own client ID and secret, and receives read-only storage credentials scoped to the shared table.</p>
     </div>
   </div>
-  <p class="lede foot">One copy of the data. The recipient reads the same files, with a credential the team can replace, expire or revoke.</p>
-  <aside class="notes">This is the open-standard answer to vendor data sharing: the contract is Iceberg REST plus S3, so the recipient brings an engine of choice. Ownership stays with the team that owns the database; every administrator of that team manages the same shares.</aside>
+  <p class="lede foot">The recipient reads the same files with a credential the team can replace, expire or revoke, so there is still only one copy of the data.</p>
+  <aside class="notes">This is the open-standard answer to vendor data sharing: the contract is Iceberg REST plus S3, so the recipient can bring an engine of choice. Ownership stays with the team that owns the database, and every administrator of that team manages the same shares.</aside>
 </section>
 
 <section>
   <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Data sharing</span><h2>Pick the tables, get a credential</h2></div>
+    <div class="head"><span class="label">Demo · Data sharing</span><h2>Select the tables and hand over one credential</h2></div>
     <div class="fig two">
       <img class="shot" src="screenshots/32-user-share-form.png" alt="User portal form for a data share with a recipient, an expiry and a namespace tree with a selected table">
-      <img class="shot" src="screenshots/33-user-share-credential.png" alt="User portal credential panel for a data share, captured before the copy-only DuckDB update">
+      <img class="shot" src="screenshots/33-user-share-credential.png" alt="User portal credential panel for a data share">
     </div>
-    <div class="caption foot two"><span>mila administers grid-planning · one table for the municipality, with an expiry</span><span>Credentials shown once · now with Copy DuckDB snippet (capture shows earlier UI)</span></div>
+    <div class="caption foot two"><span>mila administers grid-planning · one table for the municipality, with an expiry</span><span>Credentials shown once · copy the credential or a ready DuckDB snippet</span></div>
     <div class="hint">↓ full screen</div>
   </section>
   <section class="full" data-background-image="screenshots/32-user-share-form.png" data-background-size="contain" data-background-color="#000000">
@@ -799,7 +799,7 @@
 
 <section>
   <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Data sharing</span><h2>The team manages it, the platform sees it</h2></div>
+    <div class="head"><span class="label">Demo · Data sharing</span><h2>Teams manage their own shares, the platform keeps oversight</h2></div>
     <div class="fig two">
       <img class="shot" src="screenshots/34-user-share-list.png" alt="User portal list of data shares with edit, secret and revoke actions">
       <img class="shot" src="screenshots/35-admin-shares.png" alt="Admin portal page listing every data share with its database, team, tables and expiry">
@@ -840,11 +840,11 @@ catalog.list_namespaces()       <span class="c"># Forbidden</span>
 catalog.list_tables(<span class="s">"synthetic"</span>)  <span class="c"># Forbidden</span>
 catalog.load_table(<span class="s">"synthetic.other"</span>)  <span class="c"># Forbidden</span></code></pre>
     <ul>
-      <li><strong>Exactly the shared objects</strong>, loaded by their full name. Polaris does not filter listings, so a share holds no list privilege at all.</li>
-      <li><strong>Storage follows the grant.</strong> Vended S3 credentials are read-only and end at the prefix of the shared table.</li>
-      <li><strong>A view is a definition</strong>, not a row or column filter. Its tables are shared with it and readable in full.</li>
-      <li><strong>Revoke is immediate</strong> for catalog tokens. Storage credentials already handed out expire on their own.</li>
-      <li>Outside one machine it needs your TLS proxy in front of Polaris and RustFS.</li>
+      <li>A share holds no list privilege, so the recipient loads <strong>only the shared objects</strong>, by full name.</li>
+      <li><strong>Storage follows the grant:</strong> vended S3 credentials are read-only and stop at the prefix of the shared table.</li>
+      <li><strong>A view is a definition</strong> rather than a filter, so the tables it reads are shared with it and readable in full.</li>
+      <li><strong>Revoking is immediate</strong> for catalog tokens; storage credentials already handed out expire on their own.</li>
+      <li>Outside one machine this needs your own TLS proxy in front of Polaris and RustFS.</li>
     </ul>
   </div>
   <div class="caption foot">Every line on this slide is asserted against Polaris and RustFS by scripts/share_smoke.py.</div>
@@ -855,14 +855,14 @@ catalog.load_table(<span class="s">"synthetic.other"</span>)  <span class="c"># 
   <h2>Security model, in one slide</h2>
   <div class="cols-asym">
     <ul>
-      <li>Keycloak issues the token. The user portal, Polaris and notebooks all use <em>that user's</em> token. No shared service account for data access.</li>
-      <li>Polaris vends short lived, table scoped S3 credentials. Notebooks never see bucket root keys.</li>
-      <li>Each notebook session runs in its own container and network: read-only root filesystem, dropped capabilities, CPU and memory limits, no Docker socket.</li>
-      <li>Revoking a membership or deleting a user stops the affected runtimes. Authorization is re-checked every 30 seconds.</li>
-      <li>A data share is a separate Polaris principal with one read grant per shared table or view. No listing, no writing, no other database. Its secret is shown once and never stored.</li>
+      <li>Keycloak issues the token, and the user portal, Polaris and the notebooks all work with <em>that user's</em> token. There is no shared service account for data access.</li>
+      <li>Polaris vends short lived, table scoped S3 credentials, so notebooks never see bucket root keys.</li>
+      <li>Each notebook session runs in its own container and network, with a read-only root filesystem, dropped capabilities, CPU and memory limits and no Docker socket.</li>
+      <li>Revoking a membership or deleting a user stops the affected runtimes, because authorization is re-checked every 30 seconds.</li>
+      <li>A data share is a separate Polaris principal with one read grant per shared table or view, so it cannot list, write, or reach another database. Its secret is shown once and never stored.</li>
     </ul>
   </div>
-  <p class="secondary foot"><span class="dot"></span>Boundaries are documented: this build is for local development. HTTPS, persistent sessions and hostile-tenant isolation are on the list, not in the box.</p>
+  <p class="secondary foot"><span class="dot"></span>The boundaries are documented: this build is meant for local development, and HTTPS, persistent sessions and hostile-tenant isolation are on the roadmap rather than part of it today.</p>
 </section>
 
 <!-- ========== WRAP UP ========== -->
@@ -877,9 +877,9 @@ catalog.load_table(<span class="s">"synthetic.other"</span>)  <span class="c"># 
   <h2>As far as I'm concerned</h2>
   <ul>
     <li><strong>Iceberg is the storage standard.</strong> Whatever engine or vendor we use, tables should land as Iceberg on object storage we own.</li>
-    <li><strong>Catalog and identity are the governance points.</strong> Permissions belong in the catalog, users in the identity provider. Not in every tool separately.</li>
-    <li><strong>Engines are replaceable.</strong> Treat them as workload decisions, not platform commitments.</li>
-    <li><strong>Self-service with ownership.</strong> Teams create, own and share their databases. The platform team owns the building blocks.</li>
+    <li><strong>Catalog and identity are the governance points.</strong> Permissions belong in the catalog and users in the identity provider, rather than in every tool separately.</li>
+    <li><strong>Engines are replaceable.</strong> My recommendation is to treat them as workload decisions and not as platform commitments.</li>
+    <li><strong>Self-service only works with clear ownership.</strong> Teams create, own and share their databases, while the platform team owns the building blocks.</li>
   </ul>
 </section>
 
@@ -887,7 +887,7 @@ catalog.load_table(<span class="s">"synthetic.other"</span>)  <span class="c"># 
   <div class="label">Thanks</div>
   <h1 class="doto">Reach out.</h1>
   <div class="meta-row">
-    <p class="lede">If you want to run this yourself, or if you see a gap I missed. Let me know, we take it from there.</p>
+    <p class="lede">Feel free to reach out if you want to run this yourself, or if you see a gap I missed. We'll take it from there.</p>
     <div class="label">Regards, Sander<br>github.com/sanderdw/iceberg-data-platform<br>Apache-2.0</div>
   </div>
 </section>
