@@ -49,6 +49,11 @@ try {
   await page.getByRole('searchbox', {name: 'Filter objects'}).fill('');
   await page.locator('.object-row').filter({hasText: 'readings'}).getByRole('button').click();
   await expect(page.getByRole('tabpanel')).toContainText(current);
+  const tableUrl = page.url();
+  await page.reload();
+  await expect(page.locator('#namespace-title')).toHaveText('readings');
+  await expect(page.getByRole('tabpanel')).toContainText(current);
+  expect(page.url()).toBe(tableUrl);
   await page.screenshot({path: 'test-results/catalog/table-dark.png', fullPage: true});
   await page.getByRole('tab', {name: 'Schema', exact: true}).click();
   await expect(page.getByRole('tabpanel')).toContainText('<script>alert(1)</script>');

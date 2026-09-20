@@ -3,7 +3,10 @@
 import os
 
 from pyiceberg.catalog import load_catalog
+from pyiceberg.catalog.rest.auth import AuthManager
 from pyiceberg.io.pyarrow import PyArrowFileIO
+
+from user_portal.notebook.credentials import access_token
 
 
 class InternalS3FileIO(PyArrowFileIO):
@@ -13,12 +16,20 @@ class InternalS3FileIO(PyArrowFileIO):
         super().__init__({**(properties or {}), "s3.endpoint": os.environ["ICEBERG_S3_ENDPOINT"]})
 
 
+class SessionAuthManager(AuthManager):
+    def auth_header(self):
+        return f"Bearer {access_token()}"
+
+
 def connect():
+    token = access_token()
     credentials = (
-        {"token": os.environ["ICEBERG_ACCESS_TOKEN"]}
-        if os.environ.get("ICEBERG_ACCESS_TOKEN") else
+        {"token": token}
+        if token else
         {"credential": f"{os.environ['ICEBERG_CLIENT_ID']}:{os.environ['ICEBERG_CLIENT_SECRET']}"}
     )
+    if os.environ.get("ICEBERG_SESSION_TOKEN_URL"):
+        credentials = {"auth": {"type": "custom", "impl": "user_portal.notebook.connection.SessionAuthManager"}}
     return load_catalog(
         os.environ["ICEBERG_DATABASE"],
         type="rest",

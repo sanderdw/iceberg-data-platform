@@ -71,3 +71,5 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .stats[hidden] { display:none; }
 
 @media(max-width:760px) { .infrastructure-heading h1 { font-size:clamp(1.8rem,9vw,3rem); } }
+
+.identity-mode { margin-bottom: 32px; }

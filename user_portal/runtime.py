@@ -116,7 +116,7 @@ class NotebookRuntime:
         network = self.docker.networks.create(f"{self.scope}-session-{id}", internal=False, labels=labels)
         container = None
         try:
-            network.connect(self.gateway)
+            network.connect(self.gateway, aliases=["workspace-gateway"])
             network.connect(self.polaris, aliases=["polaris"])
             network.connect(self.rustfs, aliases=["rustfs"])
             container = self.docker.containers.run(
@@ -155,7 +155,10 @@ class NotebookRuntime:
                     "ICEBERG_ENVIRONMENT": session.environment,
                     "ICEBERG_NAMESPACE": json.dumps(namespace),
                     "ICEBERG_TABLE": table or "",
-                    **({"ICEBERG_ACCESS_TOKEN": session.token} if session.oidc_subject else {
+                    **({
+                        "ICEBERG_ACCESS_TOKEN": session.token,
+                        "ICEBERG_SESSION_TOKEN_URL": f"http://workspace-gateway:3002/internal/notebooks/{id}/token",
+                    } if session.oidc_subject else {
                         "ICEBERG_CLIENT_ID": session.client_id,
                         "ICEBERG_CLIENT_SECRET": session.secret,
                     }),

@@ -1,15 +1,18 @@
 """Keycloak OIDC: authorization code + PKCE, server-side one-use state.
 
 Tokens never enter browser storage.
-Sessions require a new login when the access token expires.
+Refresh tokens remain server-side and renew access without interrupting the browser.
 """
 
+import asyncio
 import logging
 import os
 import secrets
 import time
+from dataclasses import dataclass, field
 from urllib.parse import urlencode, urlsplit
 
+import httpx2
 from authlib.integrations.starlette_client import OAuth
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -23,6 +26,19 @@ from .models import ServiceError
 # Sign-ins awaiting their callback; every entry expires after five minutes.
 PENDING_PER_CLIENT = 20
 PENDING_TOTAL = 1000
+SESSION_MAX_AGE = 28800
+
+
+@dataclass
+class OIDCSession:
+    claims: dict = field(repr=False)
+    access_token: str = field(repr=False)
+    refresh_token: str = field(repr=False)
+    access_until: float
+    refresh_until: float
+    expires: float
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+
 
 
 class OIDC:
@@ -71,10 +87,60 @@ class OIDC:
         ).validate(decoded.claims)
         return decoded.claims
 
+    def session(self, token, claims, lifetime):
+        now = time.monotonic()
+        refresh = token.get("refresh_token", "")
+        return OIDCSession(
+            claims, token["access_token"], refresh, now + lifetime,
+            now + max(0, token.get("refresh_expires_in", SESSION_MAX_AGE) - 5),
+            now + (SESSION_MAX_AGE if refresh else lifetime),
+        )
+
+    async def renew(self, session):
+        async with session.lock:
+            now = time.monotonic()
+            if session.expires <= now:
+                raise ServiceError(401, "Your sign-in expired. Sign in again.")
+            if session.access_until > now + 60:
+                return
+            if not session.refresh_token or session.refresh_until <= now:
+                if session.access_until > now:
+                    return
+                session.expires = 0
+                raise ServiceError(401, "Your sign-in expired. Sign in again.")
+            try:
+                token = await self.client.fetch_access_token(
+                    grant_type="refresh_token", refresh_token=session.refresh_token,
+                )
+                claims = await self.access_claims(token["access_token"])
+                if claims["sub"] != session.claims["sub"]:
+                    raise ValueError("Mismatched subject")
+                lifetime = claims["exp"] - time.time() - 5
+                if lifetime <= 0:
+                    raise ValueError("Expired token")
+            except (httpx2.TransportError, httpx2.HTTPStatusError):
+                if session.access_until > time.monotonic():
+                    return  # The current token is still valid; retry renewal on the next request.
+                raise ServiceError(503, "Sign-in service is temporarily unavailable. Please retry.") from None
+            except Exception as exc:  # noqa: BLE001 - Never expose token responses or provider errors.
+                session.expires = 0
+                session.refresh_token = ""
+                logging.getLogger(__name__).warning("OIDC renewal failed: %s", type(exc).__name__)
+                raise ServiceError(401, "Your sign-in expired. Sign in again.") from None
+            session.claims = claims
+            session.access_token = token["access_token"]
+            session.access_until = time.monotonic() + lifetime
+            session.refresh_token = token.get("refresh_token", session.refresh_token)
+            session.refresh_until = time.monotonic() + max(0, token.get("refresh_expires_in", SESSION_MAX_AGE) - 5)
+
     def install(self, app, accept):
         @app.get("/auth/login", include_in_schema=False)
         async def login(request: Request):
             now = time.monotonic()
+            target = request.query_params.get("return_to", "/")
+            parsed = urlsplit(target)
+            if parsed.scheme or parsed.netloc or parsed.path != "/" or not target.startswith("/"):
+                target = "/"
             # Behind a reverse proxy this is the visitor only if FORWARDED_ALLOW_IPS names the proxy.
             host = request.client.host if request.client else "local"
             self.pending = {k: v for k, v in self.pending.items() if v[0] > now}
@@ -88,7 +154,7 @@ class OIDC:
             transaction = secrets.token_urlsafe(32)
             request.scope["session"] = {}
             response = await self.client.authorize_redirect(request, self.origin + "/auth/callback")
-            self.pending[transaction] = (now + 300, request.session, host)
+            self.pending[transaction] = (now + 300, request.session, host, target)
             response.set_cookie(self.cookie, transaction, max_age=300, httponly=True,
                                 secure=self.secure, samesite="lax", path="/auth")
             return response
@@ -100,6 +166,7 @@ class OIDC:
                 if not transaction or transaction[0] <= time.monotonic():
                     raise ValueError("Expired transaction")
                 request.scope["session"] = transaction[1]
+                request.state.oidc_return_to = transaction[3]
                 token = await self.client.authorize_access_token(request, leeway=0)
                 identity = token["userinfo"]  # Authlib validates signature, issuer, audience and nonce.
                 claims = await self.access_claims(token["access_token"])
@@ -108,7 +175,7 @@ class OIDC:
                 lifetime = min(identity["exp"], claims["exp"]) - time.time() - 5
                 if lifetime <= 0:
                     raise ValueError("Expired token")
-                response = await accept(request, claims, token["access_token"], lifetime)
+                response = await accept(request, claims, token["access_token"], lifetime, self.session(token, claims, lifetime))
             except Exception as exc:  # noqa: BLE001 - Provider failures must never disclose tokens.
                 logging.getLogger(__name__).warning("OIDC sign-in failed: %s", type(exc).__name__)
                 if isinstance(exc, ServiceError):
@@ -124,5 +191,5 @@ class OIDC:
             return response
 
     @staticmethod
-    def redirect():
-        return RedirectResponse("/", status_code=303)
+    def redirect(target="/"):
+        return RedirectResponse(target, status_code=303)

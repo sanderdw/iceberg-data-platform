@@ -45,7 +45,7 @@ function identityModal(existingId = null, database = null, mode = 'new') {
   if (existingId) mode = 'link';
   const user = state.data.users.find(u => u.id === existingId);
   const selected = state.data.databases.find(d => d.id === database)?.team;
-  const chooser = existingId ? '' : `<div class="modal-actions"><button class="button ${mode === 'new' ? 'primary' : ''}" id="identity-new">Create Keycloak account</button><button class="button ${mode === 'link' ? 'primary' : ''}" id="identity-link">Link existing account</button></div>`;
+  const chooser = existingId ? '' : `<div class="modal-actions identity-mode"><button class="button ${mode === 'new' ? 'primary' : ''}" id="identity-new">Create Keycloak account</button><button class="button ${mode === 'link' ? 'primary' : ''}" id="identity-link">Link existing account</button></div>`;
   const accountFields = mode === 'new'
     ? '<div class="form-row"><label>First name<input name="first_name" required maxlength="100" autocomplete="off"></label><label>Last name<input name="last_name" required maxlength="100" autocomplete="off"></label></div><label>Email<input name="email" type="email" required maxlength="254" autocomplete="off"></label>'
     : '<label>Existing Keycloak username<input id="identity-search" maxlength="254" autocomplete="off"></label><button class="button" id="find-identity" type="button">Find account</button><label>Account to link<select name="subject" id="identity-account" required><option value="">Search and select an account</option></select></label><p class="subtle">Select the exact account. Its password and access to other applications stay unchanged.</p>';

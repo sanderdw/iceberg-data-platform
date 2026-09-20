@@ -25,6 +25,7 @@ class UserSession:
     environment: Environment = "development"
     oidc_subject: str = ""
     oidc_issuer: str = ""
+    oidc_session: object | None = field(default=None, repr=False)
 
 
 class UserDirectory:
@@ -83,7 +84,7 @@ class UserDirectory:
     def profile(self, session):
         # Re-read metadata so deletion, team removal and moves affect active sessions.
         try:
-            principal = self.metadata.require(f"/principals/{enc(session.user_id)}")
+            principal = self.metadata.require_user(f"/principals/{enc(session.user_id)}")
         except ServiceError as exc:
             if exc.status == 404:
                 raise ServiceError(401, "Your user no longer exists. Sign in again.") from exc
@@ -126,6 +127,24 @@ class UserDirectory:
             raise ServiceError(403, "This database is unavailable within your active team and environment.")
         return result
 
+    def share_database(self, session, database):
+        """The database and caller, only for a current administrator of the owning team.
+
+        Shares are written with the platform identity, so this check is the whole
+        authorization. It is re-read from Polaris on every request, never cached.
+        """
+        profile = self.profile(session)
+        result = self.database(session, database, profile)
+        role = next(t["role"] for t in profile["teams"] if t["id"] == result["team"])
+        if role not in ("admin", "bucket-admin"):
+            raise ServiceError(403, "Only team administrators can manage data shares.")
+        return result, profile["user"]
+
+    def share(self, session, id):
+        principal = self.metadata.require_share(id)
+        self.share_database(session, principal["properties"]["portal.database"])
+        return principal
+
     def request(self, session, path):
         if session.token_until <= time.monotonic():
             if session.oidc_subject:
@@ -151,7 +170,7 @@ class UserDirectory:
         name = mapping.get("principal_name")
         if not isinstance(name, str) or not name.startswith("portal-"):
             raise ServiceError(403, "Your identity is not linked to a platform user.")
-        principal = self.metadata.require(f"/principals/{enc(name)}")
+        principal = self.metadata.require_user(f"/principals/{enc(name)}")
         # Polaris's management API does not expose numeric entity IDs. Zero
         # requests lookup by the immutable portal principal name, not username.
         if mapping.get("principal_id") != 0:

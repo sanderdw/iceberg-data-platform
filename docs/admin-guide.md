@@ -4,7 +4,7 @@ For Keycloak account creation, linking, password resets and access revocation, u
 [identity management guide](keycloak.md). Human accounts use Keycloak. Polaris client credentials apply to service accounts.
 
 
-Iceberg Platform runs the administration portal, Apache Polaris, PostgreSQL 18, pgAdmin and RustFS in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and shared team marimo notebooks.
+Iceberg Platform runs the administration portal, Keycloak, Apache Polaris, PostgreSQL 18, pgAdmin, RustFS and monitoring in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and shared team marimo notebooks.
 
 Python **3.14.7**, FastAPI **0.141.1** and uv **0.12.13** are pinned in the project manifests and Dockerfiles. Node is needed only for browser tests.
 
@@ -16,7 +16,7 @@ Install Docker Compose and [uv](https://docs.astral.sh/uv/getting-started/instal
 uv python install
 uv sync --locked
 uv run python -m scripts.setup
-docker compose up -d --build
+docker compose up -d --build --wait
 ```
 
 Open http://localhost:3000 and sign in through Keycloak with `PLATFORM_ADMIN_USERNAME` and the initial `PLATFORM_ADMIN_PASSWORD` from `.env`. Setup preserves existing configuration and never prints credentials.
@@ -27,19 +27,23 @@ Open http://localhost:3000 and sign in through Keycloak with `PLATFORM_ADMIN_USE
 | FastAPI documentation | http://localhost:3000/docs | Sign in to the admin portal first |
 | OpenAPI schema | http://localhost:3000/openapi.json | Admin portal session |
 | RustFS console | http://localhost:9001 | Bucket administrator S3 credentials or local root credentials |
-| Iceberg REST API | http://localhost:8181/api/catalog | OAuth2 client ID and secret |
+| Iceberg REST API | http://localhost:8181/api/catalog | Keycloak bearer token; client credentials for services and shares |
 | pgAdmin | http://localhost:5050 | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD` |
 
-Published ports bind to `127.0.0.1`. PostgreSQL is internal only. Set `PORT` to change the portal port. Swagger UI loads assets from jsDelivr; the OpenAPI schema remains available without the CDN.
+Published ports bind to `127.0.0.1`. PostgreSQL is internal only. Set `PORT` before initial setup to change the portal port; later changes also require matching [Keycloak origins and redirects](keycloak.md#configuration). Swagger UI loads assets from jsDelivr; the OpenAPI schema remains available without the CDN.
 
 For development with automatic reload:
 
 ```bash
-docker compose up -d postgres rustfs polaris
+docker compose up -d --build --wait
+docker compose stop portal
 uv run python -m server --reload
 ```
 
-The Python entry point reads `.env`; existing environment variables take precedence. Use `PORT=3001 uv run python -m server` when the Docker portal already occupies port 3000.
+The Python entry point reads `.env`; existing environment variables take precedence.
+Stopping the container frees the configured port and preserves the existing Keycloak
+redirect URL. After stopping the local process, run `docker compose up -d --wait portal`
+to restore the container. See [development instructions](../README.md#development-and-tests).
 
 ### PostgreSQL and pgAdmin
 
@@ -67,7 +71,8 @@ origins and TLS before using them. See [Keycloak configuration](keycloak.md#conf
 6. **Change roles** in the same Edit access dialog, per team. Changing the role for one team leaves the user's access to other teams untouched. A data role does not grant portal administration.
 7. **Move a database** under Databases → Move. Members of the new team receive access with their role in that team. Previous members lose access unless they also belong to the new team; a member of both teams switches to their role in the new team. The bucket, data, database name and connection details stay the same.
 8. **Delete a database** under Databases → Delete. After confirmation, the operation removes catalog grants, namespaces, tables, views, objects, object versions, multipart uploads and the dedicated bucket. Users and teams remain. If cleanup fails, use **Resume deletion** to finish it.
-9. **Delete a team** after moving or deleting its databases. The API refuses deletion if a user would lose their last team. Assign that user to another team or delete the user first. Users with multiple teams lose only the deleted membership.
+9. **Review data shares** on the Data shares page. Team administrators create and edit them in the user portal; here you see every share with its database, team, shared tables and views, expiry and creator, and you can revoke one. A database with shares cannot be moved until they are revoked, and deleting a database revokes them.
+10. **Delete a team** after moving or deleting its databases. The API refuses deletion if a user would lose their last team. Assign that user to another team or delete the user first. Users with multiple teams lose only the deleted membership.
 
 Both portals use Keycloak. Human users are linked explicitly to Polaris principals; notebooks receive their Keycloak access token. Portal administrators require the Keycloak `platform-admin` client role. A database is an Iceberg catalog; engines such as Spark or Trino execute queries.
 
@@ -81,6 +86,19 @@ Human accounts access storage through credentials vended by Polaris. Direct S3 a
 provisioning is not part of the Keycloak user workflow. A team without databases grants
 no data access. See [identity management](keycloak.md#manage-users-in-the-administration-portal)
 for linking, password reset, and access revocation.
+
+Navigation and search/filter values are kept in the URL, so browser refresh and Back/Forward return to the same page. Database, user, team and data-share lists refresh every 30 seconds while visible and when the tab regains focus. Open dialogs and focused form fields are preserved. Infrastructure keeps its existing 15-second polling; catalog tree expansion stays under your control.
+
+## Share data with an external party
+
+A team's Administrator (or Database + bucket administrator) shares selected tables and views of one database in the user portal: select **Data shares** in the top menu and choose **New data share** under the database. No portal administrator is involved. The result is a client ID and secret for the recipient, shown once, with a runnable DuckDB Python script.
+
+- The recipient reads exactly the selected objects and cannot list anything. Send the full names along with the credential. Use the generated DuckDB script to query a shared table by its full name. Catalog listing operations are not permitted.
+- A view shares only its definition. Add every table it reads; the recipient can read those tables in full. To hide rows or columns, publish the result as its own table and share that.
+- **New secret** replaces a lost or leaked secret and ends the old one at once. **Revoke** ends access immediately. An optional expiry revokes the share at the end of the chosen UTC day.
+- After a table is dropped and recreated, or renamed, the share list says what is no longer granted or still granted under a new name. Edit and save the share to bring the grants back in line.
+
+Recipients outside this machine need addresses they can reach. Put Polaris and RustFS behind your own TLS reverse proxy and set `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` in `.env` to those addresses **before creating the databases you intend to share**: Polaris records the storage endpoint in each catalog when it is created and hands that endpoint to every client. Expose only the Iceberg REST catalog path (`/api/catalog`) of Polaris, never `/api/management`, and only the S3 API of RustFS. The platform does not provide this proxy. Read [the security model](../SECURITY.md) first.
 
 ## Administrator catalog browser
 
@@ -99,27 +117,12 @@ from user_portal.notebook.connection import connect
 catalog = connect()
 ```
 
-For external automation, a separately provisioned Polaris service identity can use
-client credentials. Use its catalog ID as the warehouse. For example:
+An external party connects with the client credentials of a [data share](#share-data-with-an-external-party).
+The catalog ID is the warehouse. The user portal fills in a DuckDB script when the share is created.
 
-```python
-from pyiceberg.catalog import load_catalog
+Save the script as `read_share_duckdb.py` and run `uv run read_share_duckdb.py`. It declares `duckdb` as its dependency, installs and loads `httpfs` and `iceberg`, creates an in-memory OAuth secret, and attaches the shared catalog with vended storage credentials. Comments list every shared table and view by its full Iceberg name. The final query selects the first shared table by its full name and prints it with `.show()`; it does not query every object or execute views. View execution requires support from the recipient's engine for the view's SQL dialect and catalog integration.
 
-catalog = load_catalog(
-    "analytics",
-    type="rest",
-    uri="http://localhost:8181/api/catalog",
-    warehouse="<catalog-id>",
-    credential="<client-id>:<client-secret>",
-    scope="PRINCIPAL_ROLE:ALL",
-    **{
-        "oauth2-server-uri": "http://localhost:8181/api/catalog/v1/oauth/tokens",
-        "header.X-Iceberg-Access-Delegation": "vended-credentials",
-    },
-)
-```
-
-The service identity must have the required grants for each selected catalog. Human portal passwords are not Polaris client secrets.
+The generated script contains the issued client ID, client secret, token endpoint, scope, catalog ID, and catalog endpoint. **Copy DuckDB snippet** copies the complete script. The code is not displayed in the panel. Creating a share or replacing its secret makes the script available through the copy button; store it securely before closing the credential panel. Human portal passwords are not Polaris client secrets.
 
 ## Persistence and operational behavior
 
@@ -127,7 +130,7 @@ See [architecture](architecture.md) for component boundaries. Teams are marked P
 
 Only resources marked `portal.managed-by=iceberg-portal-v2` belong to this resource model. A fresh setup has no default teams or users. `docker compose down -v` deletes PostgreSQL, pgAdmin and RustFS data and resets the local environment.
 
-Run one Uvicorn worker. A lock serializes administration changes, such as creating a user while deleting a team. Sessions are process-local and expire after eight hours or a restart. Multiple replicas require shared sessions and coordination.
+Run one Uvicorn worker. A lock serializes administration changes, such as creating a user while deleting a team. Sessions are process-local and last at most eight hours, ending sooner on restart or when Keycloak refuses renewal. Access tokens renew automatically during a valid session. Multiple replicas require shared sessions and coordination.
 
 Creation and moves use compensating actions when Polaris or RustFS fails. Failed compensation is reported explicitly. Database deletion is irreversible and stores a persistent deletion marker so cleanup can resume. Existing clients may retain temporary S3 credentials or cached metadata until their validity expires.
 
@@ -175,6 +178,7 @@ a scan. Filesystem usage can include other data sharing RustFS's backing filesys
 | GET / POST | `/api/databases` | List / create databases |
 | PATCH / DELETE | `/api/databases/{id}` | Move with `{"team":"team-id"}` / delete including data |
 | GET | `/api/databases/{id}/connection` | Iceberg connection details |
+| DELETE | `/api/shares/{id}` | Revoke a data share; shares are listed in `/api/overview` and created in the user portal |
 | GET / POST | `/api/users` | List / create users |
 | PATCH / DELETE | `/api/users/{id}` | Replace memberships and per-team roles with `{"memberships":[{"team":"team-id","role":"writer"}]}`; returns the user and, on first S3 promotion, one-time `bucketCredentials` / revoke access |
 
@@ -186,6 +190,7 @@ Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, in
 npm run verify
 uv run python -m scripts.smoke
 uv run --all-groups python -m scripts.data_smoke
+uv run --all-groups python -m scripts.share_smoke
 UV_NO_SYNC=1 npm run test:e2e
 ```
 

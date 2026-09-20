@@ -111,7 +111,7 @@ class UserManagement:
         principals = provider.management("/principals")["principals"]
         result = []
         for principal in principals:
-            if not provider.managed(principal):
+            if not provider.is_user(principal):
                 continue
             props = principal["properties"]
             linked = bool(props.get("portal.oidc-subject"))
@@ -124,7 +124,7 @@ class UserManagement:
 
     @staticmethod
     def principal(provider, id):
-        principal = provider.require("/principals/" + enc(id))
+        principal = provider.require_user("/principals/" + enc(id))
         if not provider.managed(principal):
             raise ServiceError(404, "This is not a platform user.")
         return principal

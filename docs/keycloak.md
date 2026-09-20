@@ -19,8 +19,12 @@ uv sync --locked --all-groups
 uv run python -m scripts.setup
 docker compose up -d --build --wait
 docker compose -f compose.users.yaml --profile images build
-docker compose -f compose.users.yaml up -d --build --wait users
+docker compose -f compose.users.yaml up -d --wait users
 ```
+
+The profile build includes both the user portal and notebook image, so the following
+`up` command does not need `--build`. See [Run from source](../README.md#run-from-source)
+for rebuilding after source changes.
 
 Setup generates `.env` and the initial realm configuration. Repeating setup is safe
 and does not rotate credentials for a running installation.
@@ -56,6 +60,8 @@ does not change an existing realm.
 
 Direct source runs use the same generated `.env`: `uv run python -m server` and
 `uv run --group users python -m user_portal`. Missing Keycloak configuration fails startup.
+Stop the corresponding Compose service (`portal` or `users`) first to free its port;
+see [development instructions](../README.md#development-and-tests).
 
 ### Docker-only installation bundles
 
@@ -104,7 +110,7 @@ For advanced account administration, open http://localhost:8080/admin, sign in a
 `admin`, select **iceberg** in the realm selector, then open **Users**. Platform accounts are in this realm, not in `master`. Portal-administrator assignments remain
 an explicit Keycloak action: the `iceberg-admin` client role `platform-admin`.
 Revoke refuses accounts with that role; remove it in Keycloak first. Existing admin
-sessions retain authority until expiry, so this does not implement immediate admin
+sessions recheck the administrator role when renewing their access token; this does not implement immediate admin
 session revocation. If Keycloak is unavailable, administrator-role verification can
 prevent revocation from starting; retry when it recovers.
 
@@ -126,6 +132,12 @@ sequenceDiagram
     P->>C: Check explicit user mapping and data token
     P->>B: Opaque HttpOnly session cookie
     P->>N: Start runtime with user access token
+    N->>P: Request current token with runtime credential
+    opt Access token close to expiry
+        P->>K: Refresh token exchange (server side)
+        P->>P: Revalidate identity and required roles
+    end
+    P->>N: Current user access token only
     N->>C: PyIceberg / DuckDB with user bearer token
     C->>N: Authorized metadata and scoped storage credentials
 ```
@@ -147,7 +159,8 @@ sequenceDiagram
   principal in Polaris. It does not grant all platform privileges. Membership and role
   edits continue to use the existing administration portal and Polaris grants.
 - Polaris runs in **mixed** mode. The gateway's internal service identity still handles
-  administrative directory queries; user catalog requests and notebook runtimes use
+  administrative directory queries and manages data shares for team administrators;
+  user catalog requests and notebook runtimes use
   that user's Keycloak access token. No platform credential or refresh token is sent
   to a notebook. PyIceberg, native DuckDB and previews all support this token path.
 - The user gateway reaches Polaris through a persistent Compose-network alias,
@@ -184,10 +197,16 @@ administrator password. Passwords and tokens are never printed.
 
 ## Deployment boundaries
 
-- Tokens last 15 minutes. Both portal sessions end slightly earlier; users sign in again
-  and reopen notebooks. The gateway stops expired runtimes on its 30-second sweep.
-  Refresh tokens are discarded. Evaluate a server-side refresh/token-delivery design
-  for longer notebook sessions.
+- Access tokens last 15 minutes. Both portals retain refresh tokens only in server memory
+  and renew access before expiry, so an active session does not require another sign-in
+  every 15 minutes. Sessions last at most eight hours and also end when Keycloak refuses
+  renewal. Each renewal validates the access token's signature, issuer, audience and
+  subject; administrator roles are checked again before access is allowed.
+- Active notebook sessions renew during the gateway's 30-second sweep. Notebook helpers
+  obtain the current user's access token from a runtime-authenticated gateway endpoint;
+  refresh tokens never leave the gateway. Existing PyIceberg catalogs use fresh tokens
+  for REST requests. Reconnect a native DuckDB attachment to renew its cached access
+  token and table storage credentials; doing so does not require restarting the notebook.
 - Sign out first invalidates that portal session and stops its notebooks, then redirects
   to Keycloak's logout confirmation. There is no back-channel logout: an already-issued
   session in the other portal, a copied access token, or previously vended S3 credentials
@@ -200,7 +219,8 @@ administrator password. Passwords and tokens are never printed.
 - An incomplete new account may remain disabled in Keycloak after revocation. Review
   such abandoned accounts in Keycloak; the portal preserves accounts by design.
 - Existing Polaris client-secret authentication remains available in mixed mode.
-  OIDC-enabled portals themselves reject password/client-secret login. A future
+  Data shares rely on it: a share is a Polaris principal with its own client secret and
+  is not a Keycloak account. OIDC-enabled portals themselves reject password/client-secret login. A future
   external-only deployment needs a separate machine-identity migration.
 - Keycloak uses `start-dev` and its local development database. Production decisions
   include HTTPS, persistent PostgreSQL for Keycloak, backups, MFA, key rotation,

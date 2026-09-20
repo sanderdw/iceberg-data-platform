@@ -59,6 +59,9 @@ def test_oidc_runtime_receives_only_user_access_token(runtime):
     runtime.start(member, "db1", [], None)
     env = runtime.docker.containers.run.call_args.kwargs["environment"]
     assert env["ICEBERG_ACCESS_TOKEN"] == "token"
+    assert env["ICEBERG_SESSION_TOKEN_URL"].startswith("http://workspace-gateway:3002/internal/notebooks/")
+    assert env["ICEBERG_SESSION_TOKEN_URL"].endswith("/token")
+    assert all("REFRESH" not in key for key in env)
     assert "ICEBERG_CLIENT_SECRET" not in env
     assert "ICEBERG_CLIENT_ID" not in env
 

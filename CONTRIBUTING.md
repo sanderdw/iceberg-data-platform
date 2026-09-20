@@ -15,14 +15,16 @@ npm run verify
 npm run check:release
 ```
 
-For backend development, start the data services and run FastAPI with reload:
+For backend development, start the platform, including Keycloak provisioning, then
+stop the administration container before running FastAPI locally on the same port:
 
 ```bash
-docker compose up -d postgres rustfs polaris
+docker compose up -d --build --wait
+docker compose stop portal
 uv run python -m server --reload
 ```
 
-See [the README](README.md) for the standalone user stack and [architecture](docs/architecture.md) for authorization boundaries.
+See [development instructions](README.md#development-and-tests) for restoring the container and local monitoring, [Run from source](README.md#run-from-source) for the standalone user stack, and [architecture](docs/architecture.md) for authorization boundaries.
 
 ## Changes and validation
 
@@ -31,8 +33,12 @@ Keep pull requests focused on a concrete problem. Describe the behavior before a
 ```bash
 npm run verify
 uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
-# With both Compose stacks running and Chromium installed:
+# Browser fixtures; no running stack needed:
 npx playwright install chromium
+npm run test:catalog
+npm run test:shares-ui
+npm run test:navigation-ui
+# With both Compose stacks running:
 npm run test:e2e
 npm run test:examples
 ```
