@@ -6,7 +6,7 @@ For Keycloak account creation, linking, password resets and access revocation, u
 
 Iceberg Platform runs the administration portal, Keycloak, Apache Polaris, PostgreSQL 18, pgAdmin, RustFS and monitoring in the `iceberg-platform` Compose project. The separate [`iceberg-workspaces` stack](../user_portal/README.md) provides user sign-in and shared team marimo notebooks.
 
-Python **3.14.7**, FastAPI **0.141.1** and uv **0.12.13** are pinned in the project manifests and Dockerfiles. Node is needed only for browser tests.
+Python **3.14.7**, FastAPI **0.141.1** and uv **0.12.17** are pinned in the project manifests and Dockerfiles. Node is needed only for browser tests.
 
 ## Start the platform
 
@@ -51,7 +51,7 @@ PostgreSQL uses `postgres:18-alpine`. Its `postgres18-data` volume is mounted at
 
 Polaris 1.7.0 documents the [PostgreSQL JDBC metastore](https://polaris.apache.org/releases/1.7.0/metastores/relational-jdbc/), without an explicit PostgreSQL 18 compatibility matrix. This stack was verified with PostgreSQL 18.6: fresh Polaris bootstrap, `scripts.smoke` and `scripts.data_smoke` passed, covering catalog metadata, permissions and Iceberg reads/writes. Rerun these checks after changing either service version.
 
-pgAdmin 9.17 runs at http://localhost:5050 and stores its settings in `pgadmin-data`. Setup generates a separate `PGADMIN_PASSWORD` in `.env`. Set `PGADMIN_EMAIL`, `PGADMIN_PASSWORD` and `PGADMIN_PORT` to customize the initial account and port. If omitted, the email defaults to `admin@example.com` and the password falls back to `PORTAL_PASSWORD`. The account settings apply when pgAdmin first initializes its volume; later password changes should be made in pgAdmin.
+pgAdmin 9.18 runs at http://localhost:5050 and stores its settings in `pgadmin-data`. Setup generates a separate `PGADMIN_PASSWORD` in `.env`. Set `PGADMIN_EMAIL`, `PGADMIN_PASSWORD` and `PGADMIN_PORT` to customize the initial account and port. If omitted, the email defaults to `admin@example.com` and the password falls back to `PORTAL_PASSWORD`. The account settings apply when pgAdmin first initializes its volume; later password changes should be made in pgAdmin.
 
 After signing in, expand **Iceberg Platform → Polaris metadata** and enter `POSTGRES_PASSWORD` from `.env`. The predefined connection uses host `postgres`, port `5432`, database `polaris` and username `polaris`. PostgreSQL remains accessible only on the Docker network. pgAdmin administers Polaris's metadata database; use the notebooks to query Iceberg table data.
 

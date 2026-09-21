@@ -26,6 +26,7 @@ from .models import (
 )
 from .polaris import PolarisProvider
 from .storage import RustFSStorage
+from .validation import validation_message
 
 PUBLIC = Path(__file__).resolve().parent.parent / "public"
 FILES = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg",
@@ -55,7 +56,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         if owned:
             provider.close()
 
-    app = FastAPI(title="Iceberg Workspace API", version="0.4.0", lifespan=lifespan, redoc_url=None)
+    app = FastAPI(title="Iceberg Workspace API", version="0.4.1", lifespan=lifespan, redoc_url=None)
     sessions, attempts = {}, {}
     # This local control plane intentionally runs one worker. Serializing reads and
     # mutations also prevents orphan memberships during concurrent team deletion.
@@ -92,11 +93,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
-        fields = sorted({str(e["loc"][-1]) for e in exc.errors()})
-        message = "Check the input: " + ", ".join(fields) + "."
-        if {"memberships", "team"} & set(fields):
-            message += " Select at least one existing team, without duplicates."
-        return JSONResponse({"error": message}, status_code=422)
+        return JSONResponse({"error": validation_message(exc.errors(), request.url.path)}, status_code=422)
 
     @app.middleware("http")
     async def security(request: Request, call_next):

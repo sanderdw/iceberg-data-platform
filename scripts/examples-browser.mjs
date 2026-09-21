@@ -14,8 +14,9 @@ try {
   page.on('requestfailed', request => console.error('Request failed:', request.method(), new URL(request.url()).pathname, request.failure()?.errorText));
   page.on('response', response => { if (response.status() >= 400) console.error('HTTP error:', response.status(), new URL(response.url()).pathname); });
   await page.goto(data.baseURL);
-  await page.locator('#databases button').filter({hasText: data.databaseName}).click();
-  await page.locator('#example-write').click();
+  await page.locator('#workspace-nav').getByRole('button', {name: 'Notebooks', exact: true}).click();
+  await page.locator('#notebook-databases button').filter({hasText: data.databaseName}).click();
+  await page.locator('#notebook-file').selectOption({label: '01 · Neighborhood data with PyIceberg'});
   // Reuse the runtime provisioned before Chromium launched, keeping Docker's
   // network topology stable while the editor's module graph loads.
   await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', data.notebook.examples[0].url);

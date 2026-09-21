@@ -51,7 +51,7 @@ function renderCatalogListing(detail, contents, rows) {
 async function inspectObject(db, ns, kind, name) {
   clearNotice(); const version = ++browseVersion;
   database = db; namespace = [...ns]; selectedObject = {kind, name}; saveRoute();
-  $('#browser').hidden = false; $('#examples').hidden = true;
+  $('#browser').hidden = false;
   $('#namespace-title').textContent = name;
   $('#objects').replaceChildren(element('p', 'Loading details…', 'catalog-empty'));
   const query = new URLSearchParams({database: db, kind, name}); ns.forEach(part => query.append('namespace', part));

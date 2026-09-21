@@ -7,7 +7,7 @@ from typing import Literal
 
 import httpx
 from fastapi import Query
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from server.models import Input, Membership, ServiceError, UserInput
 from server.polaris import enc
@@ -27,6 +27,11 @@ class CreateIdentity(IdentityInput):
     email: str = Field(min_length=3, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
+
+    @field_validator("first_name", "last_name", "email", mode="before")
+    @classmethod
+    def trim_profile_fields(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class LinkIdentity(IdentityInput):

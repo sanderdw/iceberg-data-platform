@@ -154,7 +154,9 @@ try {
   const contents = await (await member.request.get(`${env.USER_ORIGIN}/api/contents?database=${database.id}`)).json();
   const seeded = ['synthetic', 'iceberg_v3'].every(name => contents.namespaces.some(ns => ns[0] === name));
   if (!seeded || need(10, 11, 12, 13, 14, 25, 26, 27, 28)) {
-    await workspace.locator('#example-write').click();
+    await workspace.locator('#workspace-nav').getByRole('button', {name: 'Notebooks', exact: true}).click();
+    await workspace.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
+    await workspace.locator('#notebook-file').selectOption({label: '01 · Neighborhood data with PyIceberg'});
     let frame = workspace.frameLocator('#frame-host iframe');
     await frame.locator('.cm-content').first().waitFor({timeout: 180000});
     // With the row count, so the f-string in the cell's own code does not match.

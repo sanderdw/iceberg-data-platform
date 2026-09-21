@@ -31,6 +31,8 @@ The user portal follows the same Nothing-inspired design as the administration p
 
 ## Work with your team data
 
+Open **Team overview** to see the active team’s description, your role, members and their team roles, databases in the selected environment, and your active notebook count. Links lead to Catalog, Notebooks and Data shares. All team members can view this overview; the member list contains only the active team and refreshes with the workspace. Team membership and role changes remain in the administration portal.
+
 The top menu, selected database and namespace, and active team/environment are recorded in the URL. Reloading or using browser Back/Forward restores that location. Workspace lists, catalog listings and data shares refresh every 30 seconds while visible and when you return to the tab. Refresh preserves share forms, credential panels, catalog filters and open notebook frames. Table details and previews retain their explicit refresh controls.
 
 Keycloak access renews automatically while the portal or a notebook is in use, for up to eight hours and subject to the Keycloak session limits. Saved team files survive session expiry. Existing native DuckDB attachments cache credentials; reconnect them to retrieve a fresh token without restarting marimo.
@@ -63,11 +65,14 @@ subprocess.run(
 
 Installed packages are available to notebook imports from `/tmp/packages`. They are private to the running container and disappear when it stops; reinstall them when reopening a workspace. Package downloads, caches and installs share the runtime's 256 MiB `/tmp` limit. For large packages or dependencies needed on every start, add them to the `notebook` uv dependency group and rebuild the notebook image.
 
-The base notebook image includes Altair for charts, Polars for dataframes, `nbformat` for Jupyter export, and `nbconvert[webpdf]` with Chromium and its system dependencies for PDF export.
+The notebook image includes Altair for charts, Polars for dataframes and
+`nbformat` for Jupyter export. Notebook execution and HTML/Jupyter exports work
+without a bundled browser. PDF, thumbnail and screenshot exports are not included.
+Browser testing remains a development tool.
 
 ## Share data with an external party
 
-Use the top menu to switch between **Catalog**, **Notebooks**, and **Data shares**. Switching sections keeps your running notebook open. Team and environment selectors apply to all three sections.
+Use the top menu to switch between **Team overview**, **Catalog**, **Notebooks**, and **Data shares**. Switching sections keeps your running notebook open. Team and environment selectors apply to all four sections.
 
 **Data shares** lists shares by database for the active team and environment. Readers and writers can view these shares; management buttons are greyed out with an explanation that team administrator privileges are required. With the Administrator or Database + bucket administration role, choose **New data share** under a database, name the share and its recipient, tick the tables and views, and optionally set an expiry. The client ID and client secret appear once. Use **Copy DuckDB snippet** to copy a runnable Python script; the code is not displayed in the panel. Send these to the recipient over a secure channel.
 
@@ -146,6 +151,7 @@ uv run --all-groups pytest
 # Browser fixtures need Chromium, but no running stack:
 npm ci
 npx playwright install chromium
+npm run test:team-ui
 npm run test:catalog
 npm run test:shares-ui
 npm run test:navigation-ui

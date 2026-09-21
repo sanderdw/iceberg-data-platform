@@ -5,6 +5,7 @@ const roleNames = {reader: 'Read', writer: 'Read & write', admin: 'Administrator
 let state, database = null, namespace = [], activeNotebook = null, browseVersion = 0;
 let workspacePage = 'catalog', sharesContext = null;
 let restoringRoute = false, refreshingWorkspace = false, pendingActions = 0;
+let teamMembersVersion = 0;
 function saveRoute(replace = false) {
   if (!state || restoringRoute) return;
   const params = new URLSearchParams({team: state.activeTeam, environment: state.activeEnvironment});
@@ -40,11 +41,13 @@ async function restoreRoute() {
 }
 window.addEventListener('hashchange', () => restoreRoute().catch(error => notice(error.message, true)));
 const workspacePages = {
+  team: ['Team overview', 'Your team, its members, and the workspace available in this environment.'],
   catalog: ['Catalog', 'Explore your team catalogs and inspect Iceberg tables and views.'],
   notebooks: ['Notebooks', 'Analyze your team data with shared Python and SQL notebooks in marimo.'],
   shares: ['Data shares', 'Review data shared with external parties across your team’s databases in this environment.'],
 };
 function showPage(page, updateRoute = true) {
+  if (page !== workspacePage) clearNotice();
   workspacePage = page;
   for (const name of Object.keys(workspacePages)) $(`#${name}-page`).hidden = name !== page;
   document.querySelectorAll('#workspace-nav button').forEach(button => {
@@ -53,11 +56,13 @@ function showPage(page, updateRoute = true) {
   });
   $('#page-title').textContent = workspacePages[page][0];
   $('#page-description').textContent = workspacePages[page][1];
+  if (page === 'team' && state) { renderTeamOverview(); loadTeamMembers(); }
   if (page === 'shares') renderTeamShares();
   placeNotice();
   if (updateRoute) saveRoute();
 }
 document.querySelectorAll('#workspace-nav button').forEach(button => button.addEventListener('click', () => showPage(button.dataset.page)));
+document.querySelectorAll('[data-workspace-page]').forEach(button => button.addEventListener('click', () => showPage(button.dataset.workspacePage)));
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
 function placeNotice() { const target = !$('#login-screen').hidden ? $('#login-status') : workspacePage === 'notebooks' && !$('#editor').hidden ? $('#editor-status') : $('#workspace-status'); target.append($('#notice')); }
 function clearNotice() { $('#notice').hidden = true; $('#notice').textContent = ''; }
@@ -89,12 +94,59 @@ function renderState() {
   if (!state.databases.length) $('#databases').append(element('p', 'This team has no databases in this environment yet.', 'hint'));
   $('#notebooks').replaceChildren(...state.notebooks.map(n => { const b = element('button', `${state.databases.find(d => d.id === n.database)?.name || n.database} · ${envNames[n.environment]} ↗`, 'quiet'); b.addEventListener('click', () => showNotebook(n)); return b; }));
   if (!state.notebooks.length) $('#notebooks').append(element('p', 'Open a database in marimo to get started.', 'hint'));
-  $('#notebook-databases').replaceChildren(...state.databases.map(db => action(`${db.name} ↗`, () => openNotebook(db.id, []))));
+  $('#notebook-databases').replaceChildren(...state.databases.map(db => action(`${db.name} ↗`, () => openNotebook(db.id))));
   if (!state.databases.length) $('#notebook-databases').append(element('p', 'This team has no databases in this environment yet.', 'hint'));
   const context = JSON.stringify([state.activeTeam, state.activeEnvironment, state.activeRole, state.databases.map(db => db.id)]);
   if (sharesContext !== context) { sharesContext = context; $('#team-shares').replaceChildren(); if (workspacePage === 'shares') renderTeamShares(); }
+  if (workspacePage === 'team') {
+    renderTeamOverview();
+    if ($('#team-members').dataset.context !== teamMembersContext()) loadTeamMembers();
+  }
 }
-function clearBrowser() { clearNotice(); database = null; namespace = []; selectedObject = null; browseVersion++; $('#database-label').textContent = 'CATALOG'; $('#namespace-title').textContent = 'Select a database'; $('#breadcrumbs').replaceChildren(); $('#open-notebook').hidden = true; $('#examples').hidden = true; $('#objects').replaceChildren(element('p', 'Select a database from the catalog.', 'empty')); }
+function teamMembersContext() { return JSON.stringify([state.user.id, state.activeTeam, state.activeEnvironment]); }
+function renderTeamOverview() {
+  const team = state.teams.find(t => t.id === state.activeTeam);
+  $('#team-name').textContent = team.name;
+  $('#team-description').textContent = team.description || '';
+  $('#team-description').hidden = !team.description;
+  $('#team-summary').replaceChildren(facts([
+    ['Your role', roleNames[team.role] || team.role],
+    ['Environment', envNames[state.activeEnvironment]],
+    ['Databases', state.databases.length],
+    ['Your active notebooks', state.notebooks.length],
+  ]));
+  $('#team-databases-description').textContent = `Available in ${envNames[state.activeEnvironment]}.`;
+  $('#team-databases').replaceChildren(...state.databases.map(db => {
+    const row = element('div', undefined, 'object-row'), label = element('div', undefined, 'object-label');
+    label.append(element('strong', db.name));
+    row.append(symbol('database'), label, action('Browse →', () => browse(db.id, [])));
+    return row;
+  }));
+  if (!state.databases.length) $('#team-databases').append(element('p', 'This team has no databases in this environment yet.', 'catalog-empty'));
+}
+async function loadTeamMembers() {
+  const host = $('#team-members'), context = teamMembersContext(), version = ++teamMembersVersion;
+  if (host.dataset.context !== context) {
+    host.replaceChildren(element('p', 'Loading team members…', 'catalog-empty'));
+    host.dataset.context = context;
+    delete host.dataset.members;
+  }
+  const current = () => state && context === teamMembersContext() && version === teamMembersVersion && workspacePage === 'team';
+  try {
+    const result = await api('/team');
+    if (!current() || result.team !== state.activeTeam) return;
+    const serialized = JSON.stringify(result.members);
+    if (host.dataset.members === serialized) return;
+    host.replaceChildren(result.members.length ? dataGrid(['Member', 'Team role'], result.members.map(member => [
+      `${member.name}${member.id === state.user.id ? ' (you)' : ''}`, roleNames[member.role] || member.role,
+    ]), 'Team members') : element('p', 'No team members to display.', 'catalog-empty'));
+    host.dataset.members = serialized;
+  } catch (error) {
+    if (current()) { delete host.dataset.members; host.replaceChildren(element('p', error.message, 'catalog-empty')); }
+  }
+}
+$('#refresh-team').addEventListener('click', event => busy(event.currentTarget, async () => { await loadState(); await loadTeamMembers(); }));
+function clearBrowser() { clearNotice(); database = null; namespace = []; selectedObject = null; browseVersion++; $('#database-label').textContent = 'CATALOG'; $('#namespace-title').textContent = 'Select a database'; $('#breadcrumbs').replaceChildren(); $('#objects').replaceChildren(element('p', 'Select a database from the catalog.', 'empty')); }
 async function loadState(background = false) {
   const previous = state, next = await api('/workspace');
   if (background && (pendingActions || state !== previous)) return;
@@ -117,7 +169,7 @@ async function browse(db, ns, background = false) {
     return;
   }
   showPage('catalog', false); clearNotice(); selectedObject = null; const version = ++browseVersion; database = db; namespace = [...ns]; saveRoute(); $('#browser').hidden = false; renderState();
-  $('#database-label').textContent = state.databases.find(d => d.id === db)?.name || db; $('#namespace-title').textContent = ns.length ? ns.at(-1) : 'Namespaces'; $('#open-notebook').hidden = false; $('#examples').hidden = false;
+  $('#database-label').textContent = state.databases.find(d => d.id === db)?.name || db; $('#namespace-title').textContent = ns.length ? ns.at(-1) : 'Namespaces';
   const crumbs = [[], ...ns.map((_, i) => ns.slice(0, i + 1))];
   $('#breadcrumbs').replaceChildren(...crumbs.flatMap((parts, i) => { const b = element('button', parts.at(-1) || state.databases.find(d => d.id === db)?.name || db); b.addEventListener('click', () => browse(db, parts)); return i ? [element('span', '/'), b] : [b]; }));
   $('#objects').replaceChildren(element('p', '[ LOADING... ]', 'empty'));
@@ -137,13 +189,12 @@ function renderListing(db, ns, detail, result) {
     $('#objects').dataset.listing = JSON.stringify([detail, result]);
 }
 function showNotebook(notebook, targetUrl = notebook.url) { if (activeNotebook?.id !== notebook.id || activeNotebook?.selectedUrl !== targetUrl) { const frame = element('iframe'); frame.title = `marimo · ${notebook.database}`; frame.src = targetUrl; frame.allow = 'clipboard-read; clipboard-write'; $('#frame-host').replaceChildren(frame); } activeNotebook = {...notebook, selectedUrl: targetUrl}; $('#notebook-file').replaceChildren(...[{title: 'Shared files', url: notebook.filesUrl}, {title: 'Starter notebook', url: notebook.url}, ...(notebook.examples || [])].map(n => { const option = element('option', n.title); option.value = n.url; return option; })); $('#notebook-file').value = targetUrl; $('#editor-title').textContent = `${state.databases.find(d => d.id === notebook.database)?.name || notebook.database} · ${envNames[notebook.environment]}`; $('#editor-external').href = targetUrl; $('#browser').hidden = false; $('#editor').hidden = false; $('#notebook-empty').hidden = true; showPage('notebooks'); }
-async function openNotebook(db, ns, table, exampleIndex) { const existing = state.notebooks.find(n => n.database === db); if (existing) { showNotebook(existing, exampleIndex === undefined ? existing.url : existing.examples?.[exampleIndex]?.url); if (exampleIndex === undefined) notice('Your existing notebook for this database has resumed. Select the table you want to work with there.'); return; } notice('Opening your team’s shared workspace…'); const notebook = await api('/notebooks', 'POST', {database: db, namespace: ns, table: table || null}); await loadState(); showNotebook(notebook, exampleIndex === undefined ? notebook.url : notebook.examples?.[exampleIndex]?.url); notice('Marimo is ready. Saved files are shared with your team in this environment.'); }
+async function openNotebook(db) { const existing = state.notebooks.find(n => n.database === db); if (existing) { showNotebook(existing); notice('Your existing notebook for this database has resumed. Select the table you want to work with there.'); return; } notice('Opening your team’s shared workspace…'); const notebook = await api('/notebooks', 'POST', {database: db, namespace: [], table: null}); await loadState(); showNotebook(notebook); notice('Marimo is ready. Saved files are shared with your team in this environment.'); }
 $('#login').addEventListener('submit', e => { e.preventDefault(); const form = e.currentTarget; busy(form.querySelector('button'), async () => { const data = Object.fromEntries(new FormData(form)); await api('/session', 'POST', data); form.reset(); clearBrowser(); await loadState(); await restoreRoute(); }); });
 $('#logout').addEventListener('click', e => busy(e.currentTarget, async () => { const result = await api('/session', 'DELETE'); if (result.logoutUrl) { location.assign(result.logoutUrl); return; } loginScreen(); }));
 $('#team').addEventListener('change', e => busy(e.currentTarget, async () => { try { const next = await api('/team', 'PATCH', {team: e.target.value}); resetEditor(); clearBrowser(); state = next; renderState(); saveRoute(); } catch (error) { $('#team').value = state.activeTeam; throw error; } }));
 $('#environment').addEventListener('change', e => busy(e.currentTarget, async () => { try { const next = await api('/environment', 'PATCH', {environment: e.target.value}); resetEditor(); clearBrowser(); state = next; renderState(); saveRoute(); } catch (error) { $('#environment').value = state.activeEnvironment; throw error; } }));
 $('#refresh').addEventListener('click', e => busy(e.currentTarget, async () => { await loadState(); if (selectedObject) await inspectObject(database, namespace, selectedObject.kind, selectedObject.name); else if (database) await browse(database, namespace); }));
-$('#open-notebook').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, selectedObject?.kind === 'table' ? selectedObject.name : null)));
 $('#back').addEventListener('click', () => showPage('catalog'));
 $('#close-notebook').addEventListener('click', e => busy(e.currentTarget, async () => { await api(`/notebooks/${activeNotebook.id}`, 'DELETE'); resetEditor(); await loadState(); notice('Notebook stopped. Your saved work is preserved.'); }));
 (async () => { try { const session = await api('/session'); loginUrl = session.loginUrl; if (session.authenticated) { await loadState(); await restoreRoute(); } else loginScreen(); } catch (error) { loginScreen(); notice(error.message, true); } })();
@@ -153,7 +204,8 @@ async function refreshWorkspace() {
   try {
     await loadState(true);
     if (!state || pendingActions || restoringRoute || document.activeElement?.matches('input, select, textarea')) return;
-    if (workspacePage === 'shares') await refreshTeamShares();
+    if (workspacePage === 'team') await loadTeamMembers();
+    else if (workspacePage === 'shares') await refreshTeamShares();
     else if (workspacePage === 'catalog' && database && !selectedObject) await browse(database, namespace, true);
   } catch (error) { notice(error.message, true); }
   finally { refreshingWorkspace = false; }
@@ -162,9 +214,4 @@ setInterval(refreshWorkspace, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshWorkspace(); });
 window.addEventListener('focus', refreshWorkspace);
 
-$('#example-write').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 0)));
-$('#example-analyse').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 1)));
-$('#example-native').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 2)));
-$('#example-v3-write').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 3)));
-$('#example-v3-read').addEventListener('click', e => busy(e.currentTarget, () => openNotebook(database, namespace, null, 4)));
 $('#notebook-file').addEventListener('change', e => showNotebook(activeNotebook, e.target.value));

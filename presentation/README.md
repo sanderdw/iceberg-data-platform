@@ -8,6 +8,8 @@ reveal.js deck about the platform, with screenshots captured from a running loca
 
 Slides with a single screenshot show it as large as the stage allows. Slides with two screenshots have vertical slides below them (arrow down or swipe) that show each capture full screen; the `↓ full screen` hint at the top right marks those slides. Captions always sit at the bottom of the slide.
 
+The Iceberg introduction starts with a regular PostgreSQL table, then follows the references from the catalog to the rows and explains how a new batch becomes visible. The storage screenshots are optional vertical slides below the file walkthrough and JSON example; follow the `↓ see the files` and `↓ see the real file` hints. Speaker notes include technical details and sources, using the [Polaris 1.7.0 documentation](https://polaris.apache.org/releases/1.7.0/) for Polaris behavior.
+
 Open `index.html` directly in a browser, or serve the folder:
 
 ```bash

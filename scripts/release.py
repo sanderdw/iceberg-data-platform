@@ -45,7 +45,7 @@ ROOT_FILES = (
 SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", ".github")
 BINARY_SUFFIXES = {".png", ".ttf"}
 SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml"} | BINARY_SUFFIXES
-IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache"}
+IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv"}
 LOCAL_FILES = {"docs/conversation.md", "docs/dbaas-reference-architecture.drawio"}
 # Tracked in git and published by the GitHub Pages workflow, but not part of the source release.
 TRACKED_UNRELEASED = ("presentation/",)
@@ -83,8 +83,13 @@ def check(root=ROOT):
     project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
     package = json.loads((root / "package.json").read_text())
     package_lock = json.loads((root / "package-lock.json").read_text())
-    if project["version"] != package["version"] or package["version"] != package_lock["version"]:
+    python_lock = tomllib.loads((root / "uv.lock").read_text())
+    locked_project = next((p for p in python_lock["package"] if p["name"] == project["name"]), {})
+    if len({project["version"], package["version"], package_lock["version"],
+            package_lock["packages"][""]["version"]}) != 1:
         raise ValueError("Release versions differ between Python, npm and the npm lockfile")
+    if locked_project.get("version") != project["version"]:
+        raise ValueError("Release version differs from the project version in uv.lock")
     if f'version="{project["version"]}"' not in (root / "server/app.py").read_text():
         raise ValueError("The API version in server/app.py differs from the project version")
     if project.get("license") != "Apache-2.0" or package.get("license") != "Apache-2.0":

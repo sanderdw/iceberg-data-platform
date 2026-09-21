@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-platform-portal"
-version = "0.4.0"
+version = "0.4.1"
 description = "Team-based Apache Iceberg administration and shared team marimo workspaces"
 readme = "README.md"
 license = "Apache-2.0"
@@ -8,29 +8,28 @@ license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
   "fastapi==0.141.1",
-  "uvicorn[standard]>=0.52.4",
+  "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
-  "boto3>=1.43.93",
+  "boto3>=1.43.98",
   "python-dotenv>=1.2.3",
-  "psycopg[binary]>=3.2,<4",
+  "psycopg[binary]>=3.3.6,<4",
 ]
 
 [dependency-groups]
-oidc = ["Authlib==1.8.0", "httpx2>=2.12.0"]
-dev = [{include-group = "users"}, {include-group = "oidc"}, "pytest>=9.1.1", "ruff>=0.16.7", "httpx2>=2.12.0"]
-data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "pandas>=3.0.5", "ipykernel>=7.3.0", "matplotlib>=3.10.0"]
+oidc = ["Authlib==1.8.0", "httpx2>=2.13.0"]
+dev = [{include-group = "users"}, {include-group = "oidc"}, "pytest>=9.1.1", "ruff>=0.16.8", "httpx2>=2.13.0"]
+data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "pandas>=3.0.6", "ipykernel>=7.3.0", "matplotlib>=3.11.2"]
 users = [
     "docker==7.2.0",
     "duckdb==1.5.5",
 ]
 notebook = [
-    "altair>=6.2.2",
+    "altair>=6.3.0",
     "duckdb==1.5.5",
     "marimo[sql]==0.24.2",
-    "matplotlib>=3.10.0",
-    "nbconvert[webpdf]>=7.17.1",
+    "matplotlib>=3.11.2",
     "nbformat>=5.11.1",
-    "pandas>=3.0.5",
+    "pandas>=3.0.6",
     "polars>=1.44.2",
     "pyiceberg[duckdb,pyarrow]>=0.12.0",
 ]
