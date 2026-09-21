@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 — 2026-09-21
+
+- Reports and dashboards in the user portal: visual queries, an advanced SQL copy editor, six visualization types, saved definitions and dashboard filters. Queries read live Iceberg snapshots with each viewer's permissions and generate dbt Charts on the backend, without building reporting tables or pipelines. Definitions are shared within the active team/environment; result caching stays private to each session.
+- Reporting adds a separately locked Python 3.13 worker image and a persistent `reports-data` SQLite volume. Build/pull the reporting image when upgrading the user gateway and back up this volume alongside notebook files. First-release SQL is restricted to the selected table as `source`; multi-table queries and interactive chart drill-through are deferred.
+- The user portal top menu adds **Reports** between **Notebooks** and **Data shares**, and the Team overview links to it. **Create report** on a catalog table starts a report from that table.
+- Upgrade from 0.4.1: no data migration is required. Build or pull the reporting image with the user gateway; the `reports-data` volume is created on first start.
+
 ## 0.4.1 — 2026-09-21
 
 - The notebook runtime uses one browser-free image with normal execution and HTML/Jupyter exports. PDF, thumbnail and screenshot exports and the optional browser image have been removed.
@@ -12,10 +19,8 @@
 
 ## 0.4.0 — 2026-09-20
 
-- Reports and dashboards in the user portal: visual queries, an advanced SQL copy editor, six visualization types, saved definitions and dashboard filters. Queries read live Iceberg snapshots with each viewer's permissions and generate dbt Charts on the backend, without building reporting tables or pipelines. Definitions are shared within the active team/environment; result caching stays private to each session.
-- Reporting adds a separately locked Python 3.13 worker image and a persistent `reports-data` SQLite volume. Build/pull the reporting image when upgrading the user gateway and back up this volume alongside notebook files. First-release SQL is restricted to the selected table as `source`; multi-table queries and interactive chart drill-through are deferred.
 - Data shares: a team's Administrator shares selected tables and views of a database with an external party from the user portal, without a portal administrator. Each share has its own Polaris client ID and secret, shown once with **Copy DuckDB snippet**, an optional expiry, **New secret** and **Revoke**. The copied Python script runs with `uv`, lists every shared table and view in comments, and queries the first table; the UI does not display the code. The recipient reads exactly the selected objects and cannot list, write or reach any other table or database; vended storage credentials are read-only and confined to the shared table. A view shares only its definition, so its tables must be shared with it.
-- The user portal has a consistent top menu for **Catalog**, **Notebooks**, **Reports** and **Data shares**. Readers and writers can see shares for their active team and environment, with disabled management buttons explaining the required administrator role.
+- The user portal has a consistent top menu for **Catalog**, **Notebooks** and **Data shares**. Readers and writers can see shares for their active team and environment, with disabled management buttons explaining the required administrator role.
 - Both portals preserve navigation in the URL across reloads and Back/Forward. Lists refresh every 30 seconds while visible and on returning to the tab, preserving forms and open notebooks. User creation has more space below the account-mode buttons.
 - Keycloak access tokens renew automatically within an eight-hour portal session and Keycloak's session limits. Notebook helpers retrieve the current user token from the gateway without receiving refresh tokens; existing DuckDB attachments need reconnecting to refresh cached credentials. Sign-in returns to the requested portal location.
 - The administration portal lists every data share on a new **Data shares** page and can revoke it. Deleting a database revokes its shares.
