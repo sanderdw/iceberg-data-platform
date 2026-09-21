@@ -72,7 +72,7 @@ Browser testing remains a development tool.
 
 ## Share data with an external party
 
-Use the top menu to switch between **Catalog**, **Notebooks**, and **Data shares**. Switching sections keeps your running notebook open. Team and environment selectors apply to all three sections.
+Use the top menu to switch between **Team overview**, **Catalog**, **Notebooks**, and **Data shares**. Switching sections keeps your running notebook open. Team and environment selectors apply to all four sections.
 
 **Data shares** lists shares by database for the active team and environment. Readers and writers can view these shares; management buttons are greyed out with an explanation that team administrator privileges are required. With the Administrator or Database + bucket administration role, choose **New data share** under a database, name the share and its recipient, tick the tables and views, and optionally set an expiry. The client ID and client secret appear once. Use **Copy DuckDB snippet** to copy a runnable Python script; the code is not displayed in the panel. Send these to the recipient over a secure channel.
 
@@ -151,6 +151,7 @@ uv run --all-groups pytest
 # Browser fixtures need Chromium, but no running stack:
 npm ci
 npx playwright install chromium
+npm run test:team-ui
 npm run test:catalog
 npm run test:shares-ui
 npm run test:navigation-ui

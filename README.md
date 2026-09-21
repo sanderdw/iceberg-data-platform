@@ -9,7 +9,7 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 
 - **Administration portal:** create and manage teams, assign users to one or more teams with a role per team, create databases, move databases between teams, and delete databases with their stored data.
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
-- **Separate user portal:** sign in with Keycloak and use a consistent top menu for Catalog, Notebooks and Data shares within your active team and environment. Navigation survives browser refresh; lists update automatically.
+- **Separate user portal:** sign in with Keycloak and use a consistent top menu for Team overview, Catalog, Notebooks and Data shares within your active team and environment. Navigation survives browser refresh; lists update automatically.
 - **User catalog details:** inspect table schemas, snapshots, branches/tags, partitioning, sort orders and view SQL; preview up to 100 rows at a selected snapshot with your own data permissions.
 - **Data shares:** team administrators give an external party read access to selected tables and views, with a dedicated credential and a copyable DuckDB script. They can renew, expire or revoke access themselves. Readers and writers can view their team's shares with management controls disabled. Platform administrators see every share and can revoke it.
 - **Shared team workspaces:** one shared filespace per team and environment, with isolated execution using each user's data permissions.
@@ -154,11 +154,12 @@ redirect configuration. Infrastructure monitoring requires access to the interna
 collector; see [monitoring configuration](docs/admin-guide.md#api). After stopping
 the local process, restore the container with `docker compose up -d --wait portal`.
 
-Browser checks for catalog browsing, shares, form validation and navigation use fixtures and do not
+Browser checks for Team overview, catalog browsing, shares, form validation and navigation use fixtures and do not
 need a running stack:
 
 ```bash
 npx playwright install chromium
+npm run test:team-ui
 npm run test:catalog
 npm run test:shares-ui
 npm run test:forms-ui
