@@ -598,6 +598,19 @@ def test_share_requests_are_validated_and_csrf_protected(users):
     assert c.post("/api/shares", json=share_body(db), headers={**JSON, "Origin": "http://evil.test"}).status_code == 403
     view_only = c.post("/api/shares", json={**share_body(db), "objects": share_body(db)["objects"][1:]}, headers=JSON)
     assert (view_only.status_code, view_only.json()["error"]) == (422, "Select the tables a shared view reads.")
+    invalid_name = c.post("/api/shares", json=share_body(db, name="Sensor Events", expiresAt=None), headers=JSON)
+    assert (invalid_name.status_code, invalid_name.json()["error"]) == (
+        422, "Share name must use 3–48 lowercase letters, digits, hyphens or underscores, starting with a letter."
+    )
+    for values, message in (
+        ({"recipient": "x" * 121}, "Recipient must be at most 120 characters."),
+        ({"description": "x" * 281}, "Description must be at most 280 characters."),
+        ({"objects": []}, "Select between 1 and 50 tables and views, including at least one table."),
+        ({"expiresAt": "not-a-date"}, "Choose a valid future expiry with a time zone, or leave it empty."),
+    ):
+        response = c.post("/api/shares", json=share_body(db, **values), headers=JSON)
+        assert (response.status_code, response.json()["error"]) == (422, message)
+    assert users.provider.list_shares() == []
     for body in (
         share_body("../etc"),
         share_body(db, expiresAt="2020-01-01T00:00:00Z"),

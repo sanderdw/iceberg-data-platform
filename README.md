@@ -154,15 +154,18 @@ redirect configuration. Infrastructure monitoring requires access to the interna
 collector; see [monitoring configuration](docs/admin-guide.md#api). After stopping
 the local process, restore the container with `docker compose up -d --wait portal`.
 
-Browser checks for catalog browsing, shares and navigation use fixtures and do not
+Browser checks for catalog browsing, shares, form validation and navigation use fixtures and do not
 need a running stack:
 
 ```bash
 npx playwright install chromium
 npm run test:catalog
 npm run test:shares-ui
+npm run test:forms-ui
 npm run test:navigation-ui
 ```
+
+See the [form validation audit](docs/form-validation.md) for field rules and coverage.
 
 With the two projects running, [create optional test fixtures](docs/keycloak.md#verification-and-optional-demo-data), then run:
 

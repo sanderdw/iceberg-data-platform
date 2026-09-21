@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 const database = {id: 'db-' + 'a'.repeat(32), name: 'Energy', team: 'analytics', environment: 'development'};
 const recipient = '<img src=x onerror=alert(1)> Partner BV';
-let role = 'reader', shares = [], calls = [], notebooks = [], environment = 'development';
+let role = 'reader', shares = [], calls = [], notebooks = [], environment = 'development', objectLimit = 50;
 const workspace = () => ({user: {name: 'Team member'}, teams: [{id: 'analytics', name: 'Energy analytics', role}], databases: environment === 'development' ? [database] : [], activeTeam: 'analytics', activeRole: role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], notebooks});
 const issued = (share, secret) => ({share, credentials: {clientId: share.clientId, clientSecret: secret}, connection: {type: 'iceberg-rest', uri: 'https://catalog.example/api/catalog', warehouse: database.id, oauth2ServerUri: 'https://catalog.example/api/catalog/v1/oauth/tokens', scope: 'PRINCIPAL_ROLE:ALL', accessDelegation: 'vended-credentials', s3Endpoint: 'https://s3.example', credential: `${share.clientId}:${secret}`, identifiers: share.objects.map(o => ({kind: o.kind, identifier: [...o.namespace, o.name].join('.')}))}});
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
@@ -14,6 +14,7 @@ try {
   // The fixture origin is not a secure context, so the page has no clipboard of its own.
   await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {value: {writeText: async text => { window.copied = text; }}}));
   const errors = []; page.on('pageerror', error => errors.push(error.message)); page.on('dialog', dialog => { errors.push('dialog: ' + dialog.message()); dialog.dismiss(); });
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await page.route('http://shares.test/**', async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
     let body, status = 200;
@@ -26,7 +27,7 @@ try {
     else if (path === '/notebook-fixture') return route.fulfill({contentType: 'text/html', body: '<p>Notebook fixture</p>'});
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'readings', namespace: ['analytics']}], views: [{name: 'daily_energy', namespace: ['analytics']}]} : {namespaces: [['analytics']], tables: [], views: []};
     else if (path === '/api/details') body = {kind: 'database', database, catalogUri: 'https://catalog.example/api/catalog'};
-    else if (path === '/api/shares' && method === 'GET') body = {shares, limits: {shares: 20, objects: 50}};
+    else if (path === '/api/shares' && method === 'GET') body = {shares, limits: {shares: 20, objects: objectLimit}};
     else if (path.startsWith('/api/shares')) {
       if (request.headers()['x-portal-request'] !== '1') throw new Error('Mutation without the CSRF header');
       const input = request.postDataJSON(); calls.push({method, path, input});
@@ -99,6 +100,29 @@ try {
   if (calls.length) throw new Error('A view-only share reached the API');
   await page.getByLabel('readings').check();
   await expect(page.locator('.share-selection')).toContainText('SELECTED · 2');
+  await page.getByLabel('Share name').fill('Sensor Events');
+  await page.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
+  expect(await page.getByLabel('Share name').evaluate(input => input.validity.patternMismatch)).toBe(true);
+  if (calls.length) throw new Error('An invalid share name reached the API');
+  await expect(page.locator('.share-form')).toContainText('starting with a letter');
+  for (const name of ['sensor-events', 'sensor_events', 'partner']) {
+    await page.getByLabel('Share name').fill(name);
+    expect(await page.getByLabel('Share name').evaluate(input => input.checkValidity())).toBe(true);
+  }
+  const expiryInput = page.getByLabel('Expires at the end of this UTC day (optional)');
+  for (const date of ['', new Date().toISOString().slice(0, 10), '2031-05-01']) {
+    await expiryInput.fill(date);
+    expect(await expiryInput.evaluate(input => input.checkValidity())).toBe(true);
+  }
+  await expiryInput.fill('2020-01-01');
+  expect(await expiryInput.evaluate(input => input.validity.rangeUnderflow)).toBe(true);
+  await expiryInput.fill('');
+  for (const [label, max] of [['Recipient', 120], ['Description', 280]]) {
+    const input = page.getByLabel(label), original = await input.inputValue();
+    await input.fill(''); await input.focus(); await page.keyboard.insertText('x'.repeat(max + 1));
+    expect((await input.inputValue()).length).toBe(max);
+    await input.fill(original);
+  }
   await page.screenshot({path: 'test-results/shares/form-dark.png', fullPage: true});
   await page.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
 
@@ -217,6 +241,16 @@ print(json.dumps(outputs))
   await grid.getByRole('button', {name: 'Revoke', exact: true}).click();
   await grid.getByRole('button', {name: 'Revoke partner now', exact: true}).click();
   await expect(page.locator('.shares')).toContainText('Nothing in this database is shared.');
+  objectLimit = 1;
+  await page.getByRole('button', {name: 'Refresh data shares', exact: true}).click();
+  await page.getByRole('button', {name: 'New data share', exact: true}).click();
+  await page.getByLabel('Share name').fill('too-many');
+  await page.locator('.share-tree summary').filter({hasText: 'analytics'}).click();
+  await page.getByLabel('readings').check(); await page.getByLabel('daily_energy').check();
+  const previousCalls = calls.length;
+  await page.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
+  await expect(page.locator('#notice')).toContainText('Select no more than 1 tables and views.');
+  expect(calls.length).toBe(previousCalls);
   if (errors.length) throw new Error(errors.join('\n'));
   console.log('PASS: workspace navigation, reader/writer share visibility with disabled admin controls, view warning and table requirement, one-time credential and snippet, escaping, drift hints, edit, new secret, confirmed revoke, light/mobile layouts');
 } finally { await browser.close(); }

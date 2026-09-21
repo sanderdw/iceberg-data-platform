@@ -22,6 +22,7 @@
     "test:users": "USER_BROWSER_TEST=1 uv run --all-groups python -m scripts.users_smoke",
     "test:catalog": "node scripts/catalog-browser.mjs",
     "test:shares-ui": "node scripts/shares-browser.mjs",
+    "test:forms-ui": "node scripts/forms-browser.mjs",
     "test:navigation-ui": "node scripts/navigation-browser.mjs",
     "test:examples": "USER_EXAMPLE_TEST=1 USER_BROWSER_TEST=1 uv run --all-groups python -m scripts.users_smoke",
     "check:release": "uv run --all-groups python -m scripts.release",
