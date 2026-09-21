@@ -111,6 +111,19 @@ class UserDirectory:
             "databases": databases,
         }
 
+    def team_members(self, session):
+        profile = self.profile(session)
+        team = next((t for t in profile["teams"] if t["id"] == session.team), None)
+        if not team:
+            raise ServiceError(403, "You are not a member of this team.")
+        members = [
+            {"id": user["id"], "name": user["name"], "role": membership["role"]}
+            for user in self.metadata.list_users()
+            for membership in user["memberships"]
+            if membership["team"] == team["id"]
+        ]
+        return {"team": team["id"], "members": sorted(members, key=lambda member: member["name"].casefold())}
+
     def database(self, session, database, profile=None):
         profile = profile or self.profile(session)
         result = next(

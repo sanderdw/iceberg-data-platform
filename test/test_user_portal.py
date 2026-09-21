@@ -300,6 +300,32 @@ def test_existing_name_secret_and_admin_cookie_is_not_user_session(users):
     assert c.get("/api/state").status_code == 404
 
 
+@pytest.mark.parametrize("role", ["reader", "writer", "admin", "bucket-admin"])
+def test_team_overview_members_are_scoped_and_have_no_credentials(users, role):
+    c, p = users.client, users.provider
+    assert c.get("/api/team").status_code == 401
+    p.update_memberships(users.account["id"], {users.teams[0]: role, users.teams[1]: "writer"})
+    bob = p.create_user(UserInput(name="bob", memberships=members(users.teams[:2], {
+        users.teams[0]: "admin", users.teams[1]: "reader",
+    })))["user"]
+    p.create_user(UserInput(name="outsider", memberships=members([users.teams[2]])))
+    login(c)
+    result = c.get("/api/team").json()
+    assert result == {"team": users.teams[0], "members": [
+        {"id": users.account["id"], "name": "alice", "role": role},
+        {"id": bob["id"], "name": "bob", "role": "admin"},
+    ]}
+    c.patch("/api/team", json={"team": users.teams[1]}, headers=HEADERS)
+    assert c.get("/api/team").json() == {"team": users.teams[1], "members": [
+        {"id": users.account["id"], "name": "alice", "role": "writer"},
+        {"id": bob["id"], "name": "bob", "role": "reader"},
+    ]}
+    p.update_memberships(bob["id"], {users.teams[0]: "admin"})
+    assert len(c.get("/api/team").json()["members"]) == 1
+    p.update_memberships(users.account["id"], {users.teams[0]: role})
+    assert c.get("/api/team").status_code == 403
+
+
 def test_team_switch_and_database_access(users):
     c = users.client
     login(c)

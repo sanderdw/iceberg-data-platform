@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-platform-portal"
-version = "0.4.0"
+version = "0.4.1"
 description = "Team-based Apache Iceberg administration and shared team marimo workspaces"
 readme = "README.md"
 license = "Apache-2.0"
@@ -28,7 +28,6 @@ notebook = [
     "duckdb==1.5.5",
     "marimo[sql]==0.24.2",
     "matplotlib>=3.10.0",
-    "nbconvert[webpdf]>=7.17.1",
     "nbformat>=5.11.1",
     "pandas>=3.0.5",
     "polars>=1.44.2",

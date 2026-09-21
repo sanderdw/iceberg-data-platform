@@ -37,6 +37,7 @@ uv run --all-groups marimo check user_portal/notebook/template.py user_portal/no
 npx playwright install chromium
 npm run test:catalog
 npm run test:shares-ui
+npm run test:forms-ui
 npm run test:navigation-ui
 # With both Compose stacks running:
 npm run test:e2e

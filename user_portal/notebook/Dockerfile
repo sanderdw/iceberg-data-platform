@@ -6,10 +6,6 @@ COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md ./
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --group notebook
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
-RUN /app/.venv/bin/python -m playwright install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/*
-ENV PLAYWRIGHT_BROWSERS_PATH=/tmp/playwright
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
 COPY user_portal/duckdb_extensions.py ./user_portal/
 RUN /app/.venv/bin/python user_portal/duckdb_extensions.py

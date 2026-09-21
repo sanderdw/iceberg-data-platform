@@ -338,6 +338,10 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             session.team = data.team
         return workspace_state(session)
 
+    @app.get("/api/team")
+    def team_overview(request: Request):
+        return directory.team_members(request.state.session)
+
     @app.patch("/api/environment")
     def switch_environment(data: EnvironmentInput, request: Request):
         session = request.state.session

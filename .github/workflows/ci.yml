@@ -83,6 +83,7 @@ jobs:
       - run: UV_NO_SYNC=1 npm run test:e2e
       - run: npm run test:catalog
       - run: npm run test:shares-ui
+      - run: npm run test:forms-ui
       - run: npm run test:navigation-ui
       - run: uv run --all-groups python -m scripts.catalog_smoke
       - run: uv run --all-groups python -m scripts.smoke
@@ -104,6 +105,21 @@ jobs:
             docker compose -f compose.users.yaml down --remove-orphans
             docker compose down --remove-orphans --volumes
           fi
+  notebook-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build notebook image
+        run: docker build -f user_portal/notebook/Dockerfile -t notebook-check .
+      - name: Check startup and exports without network access
+        run: |
+          docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,size=256m,mode=1777 --tmpfs /work:rw,size=64m,uid=10001,gid=10001 \
+            -e HOME=/tmp/home --entrypoint /app/.venv/bin/python notebook-check - \
+            < scripts/notebook-image-smoke.py
   keycloak:
     runs-on: ubuntu-24.04
     timeout-minutes: 35

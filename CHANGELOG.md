@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1 — 2026-09-21
+
+- The notebook runtime uses one browser-free image with normal execution and HTML/Jupyter exports. PDF, thumbnail and screenshot exports and the optional browser image have been removed.
+- Fix the share-name browser regex so invalid names such as `Sensor Events` are rejected before submission. Both portals explain the naming rules and return useful field-specific API errors without echoing submitted values.
+- Align account email and personal-name validation with the API. Reject whitespace-only names before provisioning, trim surrounding profile-field spaces, and preserve case, accents and internal spaces.
+- Allow shares to expire at the end of the current UTC day. Explain and enforce object-selection limits, and complete team-selection and legacy login length checks.
+- Add a browser audit for portal forms to CI, covering invalid input, limits, account linking and browser console errors. Document the field-by-field validation rules.
+- Exclude nested local Python environments from source archives and Docker builds, and verify the project version in the Python lockfile during release checks.
+- Upgrade from 0.4.0: no data migration is required. Share names still use lowercase letters, digits, hyphens or underscores, starting with a letter.
+
 ## 0.4.0 — 2026-09-20
 
 - Data shares: a team's Administrator shares selected tables and views of a database with an external party from the user portal, without a portal administrator. Each share has its own Polaris client ID and secret, shown once with **Copy DuckDB snippet**, an optional expiry, **New secret** and **Revoke**. The copied Python script runs with `uv`, lists every shared table and view in comments, and queries the first table; the UI does not display the code. The recipient reads exactly the selected objects and cannot list, write or reach any other table or database; vended storage credentials are read-only and confined to the shared table. A view shares only its definition, so its tables must be shared with it.

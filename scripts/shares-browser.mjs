@@ -64,6 +64,14 @@ try {
   await expect(page.locator('#notebook-databases')).toContainText('Energy');
   await page.locator('#notebook-databases button').click();
   await expect(page.locator('#editor')).toBeVisible();
+  await expect(page.locator('#notice')).toContainText('Marimo is ready.');
+  await page.locator('#notebook-databases button').click();
+  await expect(page.locator('#notice')).toContainText('Your existing notebook for this database has resumed.');
+  await page.getByRole('button', {name: 'Data shares', exact: true}).click();
+  await expect(page.locator('#shares-page')).toBeVisible();
+  await expect(page.locator('#notice')).toBeHidden();
+  await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
+  await expect(page.locator('#notice')).toBeHidden();
   await page.locator('#frame-host iframe').evaluate(frame => { frame.dataset.preserved = 'yes'; });
   await page.getByRole('navigation', {name: 'Workspace', exact: true}).getByRole('button', {name: 'Catalog', exact: true}).click();
   await expect(page.locator('.catalog-summary')).toContainText('Energy analytics');

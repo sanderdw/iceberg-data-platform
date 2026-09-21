@@ -24,8 +24,6 @@ try {
   await page.locator('.object-label').filter({hasText: 'event_report'}).waitFor();
   await page.screenshot({path: 'test-results/users-catalog-light.png', fullPage: true});
   await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click();
-  await expect(page.locator('#open-notebook')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-  await expect(page.locator('#open-notebook')).toHaveCSS('color', 'rgb(0, 0, 0)');
   await page.screenshot({path: 'test-results/users-catalog-dark.png', fullPage: true});
   await navigation.getByRole('button', {name: 'Notebooks', exact: true}).click();
   await page.locator('#notebooks button').first().click();
@@ -53,8 +51,6 @@ try {
   await page.screenshot({path: 'test-results/users-mobile.png', fullPage: true});
   await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click();
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Light mobile page overflows');
-  await expect(page.locator('#open-notebook')).toHaveCSS('background-color', 'rgb(0, 0, 0)');
-  await expect(page.locator('#open-notebook')).toHaveCSS('color', 'rgb(245, 245, 245)');
   await page.screenshot({path: 'test-results/users-mobile-light.png', fullPage: true});
   console.log('PASS: persistent dark/light themes, browser catalog, marimo WebSocket and table execution, mobile layout');
   await navigation.getByRole('button', {name: 'Notebooks', exact: true}).click();

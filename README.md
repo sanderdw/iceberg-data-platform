@@ -41,7 +41,7 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 The installer creates `~/iceberg-data-platform`, prepares `.env`, pulls application
 images and starts both projects. These commands always install the newest stable
-release from `main`; replace `latest/download` with `download/v0.4.0` to install
+release from `main`; replace `latest/download` with `download/v0.4.1` to install
 exactly that version. See the [installation guide](docs/install.md) for configuration
 and updates.
 
@@ -92,7 +92,7 @@ docker compose -f compose.users.yaml up -d --wait users
 
 Setup generates random development credentials in `.env`, sets restrictive file permissions, and preserves an existing `.env`. Do not commit or share this file.
 
-After source changes, rerun the three Docker commands above to rebuild and apply them. The `images` profile includes the notebook image in the build; notebooks start on demand when opened in the user portal. Save your notebook work before recreating the user portal: its sessions and running notebooks stop, while saved team files remain.
+After source changes, rerun the three Docker commands above to rebuild and apply them. The `images` profile includes the notebook image in the build; notebooks start on demand when opened in the user portal. Save your notebook work before recreating the user portal: its sessions and running notebooks stop, while saved team files remain. The notebook image is browser-free and supports HTML/Jupyter exports. PDF, thumbnail and screenshot exports are not included.
 
 For changes only to the user portal, use `docker compose -f compose.users.yaml up -d --build --wait users`. This rebuilds and restarts the user portal without rebuilding the notebook image. After changing notebook code or dependencies, use the full build sequence above and reopen your notebooks.
 
