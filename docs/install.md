@@ -25,6 +25,9 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 The installer downloads and verifies the release bundle, creates `.env` with random credentials, pulls the images, and starts both Compose stacks. Notebook and reporting images are pulled too, ready for on-demand use. No source checkout, Python, uv, Node.js or local image builds are required.
 
+The notebook image is browser-free and supports notebook execution and HTML/Jupyter
+exports. PDF, thumbnail and screenshot exports are not included.
+
 Configuration is stored in `~/iceberg-data-platform` on Linux/macOS and `$HOME\iceberg-data-platform` on Windows. The Compose files pin the portal, monitoring service, user portal, notebook runtime and reporting runtime to the installed release. Third-party data services retain their tested version tags. Report definitions persist in the workspace project's `reports-data` volume; back it up alongside shared notebook volumes. Stop the user gateway before copying this SQLite volume so its database and any WAL/SHM files stay consistent.
 
 After installation:
@@ -42,11 +45,11 @@ also serves installers pinned to itself: its bundle, Compose files and applicati
 images all carry that version. Replace `latest/download` with `download/vX.Y.Z`:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.4.0/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.4.1/install.sh | sh
 ```
 
 ```powershell
-irm https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.4.0/install.ps1 | iex
+irm https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.4.1/install.ps1 | iex
 ```
 
 ## Test a branch

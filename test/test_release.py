@@ -2,7 +2,9 @@
 
 import hashlib
 import json
+import os
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -35,9 +37,10 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
     (release_tree / ".env").write_text("LOCAL_PASSWORD=" + secrets.token_hex(24))
     (release_tree / ".venv").mkdir()
     (release_tree / ".venv" / "private.txt").write_text("private data")
-    nested_venv = release_tree / "user_portal" / "reporting" / ".venv"
-    nested_venv.mkdir()
-    (nested_venv / "private.txt").write_text("private reporting data")
+    nested_environment = release_tree / "user_portal" / "reporting" / ".venv"
+    nested_environment.mkdir(parents=True)
+    (nested_environment / ".lock").write_text("local environment lock")
+    (nested_environment / "private.py").write_text("private local environment content")
     (release_tree / "docs" / "conversation.md").write_text("Private local development conversation")
     first = build(release_tree)
     digest = hashlib.sha256(first.read_bytes()).hexdigest()
@@ -154,6 +157,9 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
         assert model["name"] == expected
         resolved.append(model)
     platform_model, workspace_model = resolved
+    assert workspace_model["services"]["users"]["environment"]["NOTEBOOK_IMAGE"] == (
+        f"ghcr.io/sanderdw/iceberg-data-platform-notebook:{image_tag}"
+    )
     assert platform_model["networks"]["default"]["name"] == workspace_model["networks"]["catalog"]["name"]
     assert platform_model["volumes"]["keycloak-data"]["name"] == "iceberg-platform_keycloak-data"
 
@@ -198,3 +204,43 @@ def test_api_version_must_match_the_project_version(release_tree):
     app.write_text(app.read_text().replace('version="', 'version="0.0.', 1))
     with pytest.raises(ValueError, match="API version"):
         check(release_tree)
+
+
+def test_python_lockfile_project_version_must_match(release_tree):
+    lock = release_tree / "uv.lock"
+    lock.write_text(lock.read_text().replace('name = "iceberg-platform-portal"\nversion = "',
+                                            'name = "iceberg-platform-portal"\nversion = "0.0.', 1))
+    with pytest.raises(ValueError, match="uv.lock"):
+        check(release_tree)
+
+
+def test_npm_lockfile_root_package_version_must_match(release_tree):
+    lock = release_tree / "package-lock.json"
+    data = json.loads(lock.read_text())
+    data["packages"][""]["version"] = "0.0.0"
+    lock.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="npm lockfile"):
+        check(release_tree)
+
+
+def test_user_image_copies_all_modules_needed_to_import_the_gateway(tmp_path):
+    # Reproduce the local COPY instructions without building an image or using the source checkout on sys.path.
+    for line in (ROOT / "user_portal" / "Dockerfile").read_text().splitlines():
+        if not line.startswith("COPY ") or line.startswith("COPY --from="):
+            continue
+        *sources, destination = shlex.split(line)[1:]
+        target = tmp_path / destination
+        target.mkdir(parents=True, exist_ok=True)
+        for source in sources:
+            path = ROOT / source
+            if path.is_dir():
+                shutil.copytree(path, target, dirs_exist_ok=True)
+            else:
+                shutil.copyfile(path, target / path.name)
+    subprocess.run([sys.executable, "-c", """
+from pathlib import Path
+from user_portal import app
+from server import validation
+assert Path(app.__file__).is_relative_to(Path.cwd())
+assert Path(validation.__file__).is_relative_to(Path.cwd())
+"""], cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(tmp_path), "PYTHONDONTWRITEBYTECODE": "1"}, check=True)

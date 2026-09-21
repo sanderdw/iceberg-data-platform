@@ -24,6 +24,7 @@ from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 from server.models import ENVIRONMENTS, Environment, ServiceError, ShareInput, ShareUpdate
 from server.polaris import MAX_SHARES
+from server.validation import validation_message
 
 from .directory import UserDirectory
 from .preview import run_preview
@@ -225,12 +226,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
-        # Only messages from our own validators are shown; everything else stays generic.
-        message = next(
-            (str(e["ctx"]["error"]) for e in exc.errors() if e["type"] == "value_error" and "error" in e.get("ctx", {})),
-            "Check the input.",
-        )
-        return JSONResponse({"error": message}, status_code=422)
+        return JSONResponse({"error": validation_message(exc.errors(), request.url.path)}, status_code=422)
 
     @app.middleware("http")
     async def security(request, call_next):
@@ -349,6 +345,10 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             stop_session(session.id)
             session.team = data.team
         return workspace_state(session)
+
+    @app.get("/api/team")
+    def team_overview(request: Request):
+        return directory.team_members(request.state.session)
 
     @app.patch("/api/environment")
     def switch_environment(data: EnvironmentInput, request: Request):

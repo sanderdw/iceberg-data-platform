@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.12.13 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.17 AS uv
 FROM python:3.14.7-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
@@ -10,7 +10,7 @@ RUN uv sync --locked --no-dev --group users --group oidc
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
 COPY user_portal/duckdb_extensions.py ./user_portal/
 RUN /app/.venv/bin/python user_portal/duckdb_extensions.py
-COPY server/__init__.py server/models.py server/polaris.py server/oidc.py server/entrypoints.py ./server/
+COPY server/__init__.py server/models.py server/polaris.py server/oidc.py server/entrypoints.py server/validation.py ./server/
 COPY user_portal/__init__.py user_portal/app.py user_portal/directory.py user_portal/runtime.py user_portal/__main__.py ./user_portal/
 COPY user_portal/catalog.py user_portal/preview.py ./user_portal/
 COPY user_portal/reporting/__init__.py user_portal/reporting/api.py user_portal/reporting/definitions.py user_portal/reporting/store.py user_portal/reporting/runtime.py ./user_portal/reporting/

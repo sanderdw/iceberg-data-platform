@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1 — 2026-09-21
+
+- The notebook runtime uses one browser-free image with normal execution and HTML/Jupyter exports. PDF, thumbnail and screenshot exports and the optional browser image have been removed.
+- Fix the share-name browser regex so invalid names such as `Sensor Events` are rejected before submission. Both portals explain the naming rules and return useful field-specific API errors without echoing submitted values.
+- Align account email and personal-name validation with the API. Reject whitespace-only names before provisioning, trim surrounding profile-field spaces, and preserve case, accents and internal spaces.
+- Allow shares to expire at the end of the current UTC day. Explain and enforce object-selection limits, and complete team-selection and legacy login length checks.
+- Add a browser audit for portal forms to CI, covering invalid input, limits, account linking and browser console errors. Document the field-by-field validation rules.
+- Exclude nested local Python environments from source archives and Docker builds, and verify the project version in the Python lockfile during release checks.
+- Upgrade from 0.4.0: no data migration is required. Share names still use lowercase letters, digits, hyphens or underscores, starting with a letter.
+
 ## 0.4.0 — 2026-09-20
 
 - Reports and dashboards in the user portal: visual queries, an advanced SQL copy editor, six visualization types, saved definitions and dashboard filters. Queries read live Iceberg snapshots with each viewer's permissions and generate dbt Charts on the backend, without building reporting tables or pipelines. Definitions are shared within the active team/environment; result caching stays private to each session.

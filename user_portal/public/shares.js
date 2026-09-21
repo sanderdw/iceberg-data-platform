@@ -101,11 +101,13 @@ function objectPicker(db, selected, onChange) {
 
 function shareForm(host, db, share) {
   const form = element('form', undefined, 'share-form'), selected = new Map((share?.objects || []).map(o => [objectKey(o), {kind: o.kind, namespace: o.namespace, name: o.name}]));
-  const name = textInput(share?.name, 48, true); name.pattern = '[a-z][a-z0-9_-]{2,47}'; name.disabled = Boolean(share); name.title = 'Lowercase letters, digits, - and _; 3 to 48 characters.';
+  const maxObjects = JSON.parse(host.dataset.shares).limits.objects;
+  const name = textInput(share?.name, 48, true); name.pattern = '[a-z][a-z0-9_\\-]{2,47}'; name.disabled = Boolean(share); name.title = 'Use 3–48 lowercase letters, digits, hyphens or underscores, starting with a letter.';
+  const nameField = field('Share name', name), nameHelp = element('small', name.title, 'hint');
+  nameHelp.id = `share-name-help-${db.id}`; name.setAttribute('aria-describedby', nameHelp.id); nameField.append(nameHelp);
   const recipient = textInput(share?.recipient, 120), description = textInput(share?.description, 280);
   const expiry = element('input'); expiry.type = 'date'; expiry.value = share?.expiresAt ? share.expiresAt.slice(0, 10) : '';
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  expiry.min = expiry.value && expiry.value < tomorrow ? expiry.value : tomorrow;
+  expiry.min = new Date().toISOString().slice(0, 10);
   const chosen = element('div', undefined, 'share-selection'), warning = element('p', VIEW_WARNING, 'share-warning'); warning.setAttribute('role', 'note');
   const save = element('button', share ? 'Save share' : 'Create share and show credential'); save.type = 'submit';
   function refresh() {
@@ -117,15 +119,16 @@ function shareForm(host, db, share) {
     }));
     warning.hidden = !objects.some(o => o.kind === 'view');
   }
-  const picker = element('fieldset'); picker.append(element('legend', 'Tables and views'), element('p', 'The recipient can read exactly these objects and cannot list anything else. Share tables and views by their full name.', 'hint'), objectPicker(db, selected, refresh), chosen, warning);
+  const picker = element('fieldset'); picker.append(element('legend', 'Tables and views'), element('p', `Select up to ${maxObjects} objects, including at least one table. The recipient can read exactly these objects and cannot list anything else. Share tables and views by their full name.`, 'hint'), objectPicker(db, selected, refresh), chosen, warning);
   const cancel = element('button', 'Cancel', 'quiet'); cancel.type = 'button'; cancel.addEventListener('click', () => loadShares(host, db));
   const buttons = element('div', undefined, 'share-actions'); buttons.append(save, cancel);
-  form.append(element('h3', share ? `Edit ${share.name}` : 'New data share'), field('Share name', name), field('Recipient', recipient), field('Description', description), field('Expires at the end of this UTC day (optional)', expiry), picker, buttons);
+  form.append(element('h3', share ? `Edit ${share.name}` : 'New data share'), nameField, field('Recipient', recipient), field('Description', description), field('Expires at the end of this UTC day (optional)', expiry), picker, buttons);
   form.addEventListener('submit', event => {
     event.preventDefault();
     busy(save, async () => {
       const objects = [...selected.values()];
       if (!objects.length) throw new Error('Select at least one table.');
+      if (objects.length > maxObjects) throw new Error(`Select no more than ${maxObjects} tables and views.`);
       if (!objects.some(o => o.kind === 'table')) throw new Error('Select the tables a shared view reads.');
       const body = {recipient: recipient.value.trim(), description: description.value.trim(), objects, expiresAt: expiry.value ? `${expiry.value}T23:59:59Z` : null};
       if (share) { await api(`/shares/${share.id}`, 'PATCH', body); notice('Share saved.'); await loadShares(host, db); }

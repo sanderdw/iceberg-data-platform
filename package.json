@@ -1,6 +1,6 @@
 {
   "name": "iceberg-platform-portal",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -20,8 +20,10 @@
     "users:start": "docker compose -f compose.users.yaml up -d users",
     "users:stop": "docker compose -f compose.users.yaml down",
     "test:users": "USER_BROWSER_TEST=1 uv run --all-groups python -m scripts.users_smoke",
+    "test:team-ui": "node scripts/team-browser.mjs",
     "test:catalog": "node scripts/catalog-browser.mjs",
     "test:shares-ui": "node scripts/shares-browser.mjs",
+    "test:forms-ui": "node scripts/forms-browser.mjs",
     "test:navigation-ui": "node scripts/navigation-browser.mjs",
     "test:examples": "USER_EXAMPLE_TEST=1 USER_BROWSER_TEST=1 uv run --all-groups python -m scripts.users_smoke",
     "check:release": "uv run --all-groups python -m scripts.release",

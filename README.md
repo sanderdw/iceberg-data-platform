@@ -9,7 +9,7 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 
 - **Administration portal:** create and manage teams, assign users to one or more teams with a role per team, create databases, move databases between teams, and delete databases with their stored data.
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
-- **Separate user portal:** sign in with Keycloak and use a consistent top menu for Catalog, Notebooks, Reports and Data shares within your active team and environment. Navigation survives browser refresh; lists update automatically.
+- **Separate user portal:** sign in with Keycloak and use a consistent top menu for Team overview, Catalog, Notebooks, Reports and Data shares within your active team and environment. Navigation survives browser refresh; lists update automatically.
 - **Reports and dashboards:** build visual queries or SQL reports over live Iceberg tables and save dashboards for your team/environment. Each viewer uses their own data permissions. DuckDB reads snapshots on demand and dbt Charts renders charts on the backend; no transformation pipeline or reporting table is created. See [reporting workflows and limits](user_portal/README.md#reports-and-dashboards).
 - **User catalog details:** inspect table schemas, snapshots, branches/tags, partitioning, sort orders and view SQL; preview up to 100 rows at a selected snapshot with your own data permissions.
 - **Data shares:** team administrators give an external party read access to selected tables and views, with a dedicated credential and a copyable DuckDB script. They can renew, expire or revoke access themselves. Readers and writers can view their team's shares with management controls disabled. Platform administrators see every share and can revoke it.
@@ -42,7 +42,7 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 The installer creates `~/iceberg-data-platform`, prepares `.env`, pulls application
 images and starts both projects. These commands always install the newest stable
-release from `main`; replace `latest/download` with `download/v0.4.0` to install
+release from `main`; replace `latest/download` with `download/v0.4.1` to install
 exactly that version. See the [installation guide](docs/install.md) for configuration
 and updates.
 
@@ -93,7 +93,7 @@ docker compose -f compose.users.yaml up -d --wait users
 
 Setup generates random development credentials in `.env`, sets restrictive file permissions, and preserves an existing `.env`. Do not commit or share this file.
 
-After source changes, rerun the three Docker commands above to rebuild and apply them. The `images` profile includes notebook and reporting images; their containers start on demand. Save your notebook work before recreating the user portal: its sessions and running notebooks stop, while saved team files and report definitions remain.
+After source changes, rerun the three Docker commands above to rebuild and apply them. The `images` profile includes notebook and reporting images; their containers start on demand. Save your notebook work before recreating the user portal: its sessions and running notebooks stop, while saved team files and report definitions remain. The notebook image is browser-free and supports HTML/Jupyter exports. PDF, thumbnail and screenshot exports are not included.
 
 For changes only to the user portal, use `docker compose -f compose.users.yaml up -d --build --wait users`. This rebuilds and restarts the user portal without rebuilding the notebook image. After changing notebook code or dependencies, use the full build sequence above and reopen your notebooks.
 
@@ -131,7 +131,7 @@ requires HTTPS and matching issuer/redirect configuration; see
 
 ## Development and tests
 
-The toolchain uses Python **3.14.7**, FastAPI **0.141.1**, marimo **0.24.2** and uv **0.12.13**. Python dependencies are locked in `uv.lock`; browser tooling is locked in `package-lock.json`.
+The toolchain uses Python **3.14.7**, FastAPI **0.141.1**, marimo **0.24.2** and uv **0.12.17**. Python dependencies are locked in `uv.lock`; browser tooling is locked in `package-lock.json`.
 
 ```bash
 uv sync --locked --all-groups
@@ -155,15 +155,19 @@ redirect configuration. Infrastructure monitoring requires access to the interna
 collector; see [monitoring configuration](docs/admin-guide.md#api). After stopping
 the local process, restore the container with `docker compose up -d --wait portal`.
 
-Browser checks for catalog browsing, shares and navigation use fixtures and do not
+Browser checks for Team overview, catalog browsing, shares, form validation and navigation use fixtures and do not
 need a running stack:
 
 ```bash
 npx playwright install chromium
+npm run test:team-ui
 npm run test:catalog
 npm run test:shares-ui
+npm run test:forms-ui
 npm run test:navigation-ui
 ```
+
+See the [form validation audit](docs/form-validation.md) for field rules and coverage.
 
 With the two projects running, [create optional test fixtures](docs/keycloak.md#verification-and-optional-demo-data), then run:
 

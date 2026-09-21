@@ -23,7 +23,7 @@ class Input(BaseModel):
 
 
 class Login(Input):
-    password: str = Field(max_length=1024)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class TeamInput(Input):
