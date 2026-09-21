@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-20
 
 - Reports and dashboards in the user portal: visual queries, an advanced SQL copy editor, six visualization types, saved definitions and dashboard filters. Queries read live Iceberg snapshots with each viewer's permissions and generate dbt Charts on the backend, without building reporting tables or pipelines. Definitions are shared within the active team/environment; result caching stays private to each session.
 - Reporting adds a separately locked Python 3.13 worker image and a persistent `reports-data` SQLite volume. Build/pull the reporting image when upgrading the user gateway and back up this volume alongside notebook files. First-release SQL is restricted to the selected table as `source`; multi-table queries and interactive chart drill-through are deferred.

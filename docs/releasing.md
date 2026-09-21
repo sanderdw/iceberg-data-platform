@@ -1,6 +1,6 @@
 # Publishing a release
 
-The current version is **0.3.1**. The `Release` workflow publishes three versioned container packages and source/installation archives when a matching `vX.Y.Z` tag on `main` is pushed. Branches publish their own previews. Local tooling only prepares artifacts.
+The current version is **0.4.0**. The `Release` workflow publishes three versioned container packages and source/installation archives when a matching `vX.Y.Z` tag on `main` is pushed. Branches publish their own previews. Local tooling only prepares artifacts.
 
 ## Versions and channels
 
@@ -105,11 +105,11 @@ Scan the extracted archive with Gitleaks before uploading. CI does this automati
 3. Tag that commit on `main` and push the tag:
 
    ```bash
-   git tag -a v0.3.1 -m "Release 0.3.1"
-   git push origin v0.3.1
+   git tag -a v0.4.0 -m "Release 0.4.0"
+   git push origin v0.4.0
    ```
 
-The workflow rejects a tag that does not match the project version or is not on `main`, runs verification and a source secret scan, then builds each image on native AMD64 and ARM64 runners. It publishes `ghcr.io/sanderdw/iceberg-data-platform-{portal,users,notebook}` with exact version tags (for example `0.3.1`), architecture tags and a `latest` alias. Only after every image builds does it publish the multi-platform tags and GitHub release with installation/source archives and `SHA256SUMS`. The release is marked Latest only when it is the highest version, so a fix on an older line never takes over the installation command. The workflow then downloads `/releases/latest/download/install.sh` and `install.ps1` and fails unless they are pinned to the new version.
+The workflow rejects a tag that does not match the project version or is not on `main`, runs verification and a source secret scan, then builds each image on native AMD64 and ARM64 runners. It publishes `ghcr.io/sanderdw/iceberg-data-platform-{portal,users,notebook}` with exact version tags (for example `0.4.0`), architecture tags and a `latest` alias. Only after every image builds does it publish the multi-platform tags and GitHub release with installation/source archives and `SHA256SUMS`. The release is marked Latest only when it is the highest version, so a fix on an older line never takes over the installation command. The workflow then downloads `/releases/latest/download/install.sh` and `install.ps1` and fails unless they are pinned to the new version.
 
 The Docker-only bundle is generated from the source Compose definitions, removes all build contexts, keeps bind mounts relative, and pins all application images, including the notebook image used by the user portal, to the released version. It includes setup and pgAdmin configuration without local credentials. The two Compose files preserve the platform/workspace split, with Keycloak in the platform project. The `install.sh` and `install.ps1` release assets download the matching bundle, verify its checksum, generate `.env`, pull images and start both stacks. Their stable URLs are `/releases/latest/download/install.sh` and `/releases/latest/download/install.ps1`; `/releases/download/vX.Y.Z/` serves the same installers for one exact version. The unpinned `install.sh` and `install.ps1` in the source tree are templates that follow `latest`; the build pins them.
 
