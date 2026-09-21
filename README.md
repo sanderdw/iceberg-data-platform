@@ -130,7 +130,7 @@ requires HTTPS and matching issuer/redirect configuration; see
 
 ## Development and tests
 
-The toolchain uses Python **3.14.7**, FastAPI **0.141.1**, marimo **0.24.2** and uv **0.12.13**. Python dependencies are locked in `uv.lock`; browser tooling is locked in `package-lock.json`.
+The toolchain uses Python **3.14.7**, FastAPI **0.141.1**, marimo **0.24.2** and uv **0.12.17**. Python dependencies are locked in `uv.lock`; browser tooling is locked in `package-lock.json`.
 
 ```bash
 uv sync --locked --all-groups

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Iceberg Data Platform</title>
   <meta name="description" content="An open lakehouse you actually own: Apache Iceberg, Apache Polaris, Keycloak and marimo, all open source.">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/black.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/6.0.2/reveal.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/6.0.2/theme/black.min.css">
   <style>
     /* Fonts: Doto (display), Space Grotesk (body), Space Mono (labels, data). Bundled from public/fonts, OFL licensed. */
     @font-face { font-family: "Doto"; src: url("fonts/doto.ttf") format("truetype"); font-weight: 400 700; font-display: swap; }
@@ -334,7 +334,7 @@
     <tbody>
       <tr><td>Table format</td><td>Apache Iceberg (PyIceberg)</td><td class="num">spec v2 and v3 · 0.12</td><td class="mono">Apache-2.0</td><td>The standard itself, engines come and go.</td></tr>
       <tr><td>Catalog and permissions</td><td>Apache Polaris</td><td class="num">1.7.0</td><td class="mono">Apache-2.0</td><td>Lakekeeper, Nessie, Gravitino, Unity Catalog OSS, AWS Glue</td></tr>
-      <tr><td>Identity (OIDC)</td><td>Keycloak</td><td class="num">26.7.3</td><td class="mono">Apache-2.0</td><td>Entra ID, Okta, any OIDC provider</td></tr>
+      <tr><td>Identity (OIDC)</td><td>Keycloak</td><td class="num">26.7.4</td><td class="mono">Apache-2.0</td><td>Entra ID, Okta, any OIDC provider</td></tr>
       <tr><td>Object storage (S3 API)</td><td>RustFS</td><td class="num">1.0.0</td><td class="mono">Apache-2.0</td><td>AWS S3, MinIO, Ceph, Cloudflare R2, on-prem</td></tr>
       <tr><td>Catalog metadata store</td><td>PostgreSQL</td><td class="num">18</td><td class="mono">PostgreSQL</td><td>Managed Postgres anywhere</td></tr>
       <tr><td>Notebooks</td><td>marimo</td><td class="num">0.24.2</td><td class="mono">Apache-2.0</td><td>Jupyter, VS Code, any Python client</td></tr>
@@ -895,8 +895,8 @@ catalog.load_table(<span class="s">"synthetic.other"</span>)  <span class="c"># 
 </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/notes/notes.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/6.0.2/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/6.0.2/plugin/notes.min.js"></script>
 <script>
   Reveal.initialize({
     width: 1600,
