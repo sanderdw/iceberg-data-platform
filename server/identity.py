@@ -296,12 +296,16 @@ class UserManagement:
             raise ServiceError(503, "Data access is revoked. Keycloak cleanup is incomplete; choose Revoke again to retry.") from None
         provider.remove("/principals/" + enc(id))
 
+    def accounts(self, username):
+        """Human Keycloak accounts with exactly this username, as shown when linking."""
+        return [{"id": a["id"], "username": a["username"], "email": a.get("email", ""),
+                 "enabled": a.get("enabled", False), "linked": bool(self.kc.binding(a))}
+                for a in self.kc.find(username) if not a.get("serviceAccountClientId")]
+
     def install(self, app, provider):
         @app.get("/api/identity/accounts")
         def accounts(username: str = Query(min_length=1, max_length=254)):
-            return [{"id": a["id"], "username": a["username"], "email": a.get("email", ""),
-                     "enabled": a.get("enabled", False), "linked": bool(self.kc.binding(a))}
-                    for a in self.kc.find(username) if not a.get("serviceAccountClientId")]
+            return self.accounts(username)
 
         @app.post("/api/identity/users", status_code=201)
         def create(data: CreateIdentity):

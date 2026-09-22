@@ -64,19 +64,23 @@ Supported environments are `development`, `acceptance` and `production`. A displ
 
 Moving a database changes its owning team and updates access. Its catalog ID, environment, bucket and stored table files remain the same.
 
+Team administrators can create, rename and delete their own databases in the active team and environment. Renaming updates `portal.name` while preserving the catalog ID and bucket. Deletion is immediate in every environment, revokes data shares, removes stored data and can be resumed if interrupted. Platform administrators retain cross-team move and recovery controls.
+
 For example, a user with role `writer` in `analytics` and `reader` in `operations` receives write access to ready catalogs owned by `analytics` and read access to those owned by `operations`, across all three environments. Moving a catalog from `operations` to `analytics` raises that user's access to it from read to write. An `events` catalog in `analytics/development` and an `events` catalog in `analytics/production` have separate IDs and buckets.
 
 ## Data shares
 
-A data share gives an external party read access to selected tables and views of one database. It is a machine identity, not a user: it has no memberships, never appears in user listings and cannot sign in to either portal.
+A data share gives another team, an external party, or both read access to selected tables and views of one database. Its metadata principal is a machine identity, not a user: it has no memberships, never appears in user listings and cannot sign in to either portal.
 
-Each share has a stable `share-<uuid>` ID that names three Polaris records: the principal whose client ID and secret the recipient uses, its principal role, and a catalog role inside the shared database. That catalog role holds exactly one grant per selected object: `TABLE_READ_DATA` on a table, `VIEW_READ_PROPERTIES` on a view. It holds nothing on the namespace or the catalog. Polaris does not filter listings per object, so the recipient cannot list namespaces, tables or views at all and loads the shared objects by their full names. Storage credentials are vended by Polaris per table, read-only and confined to that table's location.
+`portal.external` controls external access (absent means `true` for existing shares); `portal.recipient-team` optionally identifies another team. Team-only shares never activate or return their external credential. Sharing destinations are fixed at creation. The share catalog role is granted to each recipient member’s personal principal role, including future members, and removed on membership removal or share revocation. Their other independent grants remain in force.
+
+Each share has a stable `share-<uuid>` ID that names three Polaris records: the principal whose client ID and secret the recipient uses, its principal role, and a catalog role inside the shared database. That catalog role holds exactly one grant per selected object: `TABLE_READ_DATA` on a table, `VIEW_READ_PROPERTIES` on a view. It holds nothing on the namespace or the catalog. Polaris does not filter listings per object, so external clients load shared objects by their full names. For internal shares, the portal builds catalog listings from the saved selection intersected with current grants, without granting namespace or catalog listing privileges. Shared databases appear in the recipient team’s matching environment and can open notebooks in that team’s filespace even when it owns no databases. Object details and previews still load with the signed-in user’s token. Storage credentials are vended by Polaris per table, read-only and confined to that table's location.
 
 `portal.objects` is the selection as the team administrator saved it: a JSON list of `{kind, namespace, name}`, at most 50 per share and 20 shares per database. Polaris binds grants to the table or view itself, not to its name. A renamed object therefore stays shared under its new name, and an object that was dropped and recreated is no longer shared. The portal compares the saved selection with the grants Polaris really holds and shows the difference; saving the selection again revokes what is no longer selected and then grants what is missing.
 
 A view is only a definition. The recipient's engine reads the underlying tables with the same credential, so the tables a view reads must be part of the share, and the recipient can read those tables in full. A view in a share is a convenience, never a row or column filter. A share without a table is refused.
 
-A share belongs to its database, and through it to the owning team; the team is not stored on the share. Every current Administrator or Database + bucket administrator of that team can manage it, including after the person who created it lost that role. A shared database cannot be moved to another team until its shares are revoked, so new owners never inherit external access. Deleting a database revokes its shares first.
+A share belongs to its database, and through it to the owning team; the owning team is not stored on the share. Every current Administrator or Database + bucket administrator of that team can manage it, including after the person who created it lost that role. A shared database cannot be moved to another team until its shares are revoked, so new owners never inherit outgoing shares. Deleting a database revokes its shares first.
 
 Moves persist a `portal.moving` marker and a new `portal.share-epoch` before checking
 for shares. Share creation publishes its inactive principal, then rechecks the catalog's
@@ -84,7 +88,7 @@ owner, move marker and epoch before activating the credential. This prevents con
 requests in the two portals from creating external access across a team move. A crash
 during a move can leave its marker blocking new shares; retry the move to complete it.
 
-Readers and writers can list shares for databases in their active team and environment.
+Readers and writers can list outgoing shares for databases owned by their active team and environment, and incoming shares addressed to their active team. Recipients cannot manage or reshare the source database through these routes.
 The user portal disables management buttons for these roles; the API enforces the same
 administrator requirement for every mutation. Listing a share does not reveal its secret.
 

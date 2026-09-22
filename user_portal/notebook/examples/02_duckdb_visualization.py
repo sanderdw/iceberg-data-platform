@@ -1,7 +1,17 @@
 import marimo
 
 __generated_with = "0.24.2"
-app = marimo.App(width="medium", app_title="02 · Visualize with DuckDB", sql_output="pandas")
+app = marimo.App(
+    width="medium",
+    app_title="02 · Visualize with DuckDB",
+    sql_output="pandas",
+)
+
+
+@app.cell
+def _():
+    STREET = "All streets"  # Change this to a street name to filter the hourly chart.
+    return (STREET,)
 
 
 @app.cell
@@ -13,18 +23,27 @@ def _():
     from pyiceberg.exceptions import ForbiddenError, NoSuchTableError
 
     from user_portal.notebook.connection import connect
+    from user_portal.notebook.display import plain_table
 
-    return ForbiddenError, NoSuchTableError, connect, mo, os, plt
+    return (
+        ForbiddenError,
+        NoSuchTableError,
+        connect,
+        mo,
+        os,
+        plain_table,
+        plt,
+    )
 
 
 @app.cell(hide_code=True)
 def _(mo, os):
     mo.md(f"""
     # Visualize with DuckDB
-    **Example 2 of 5 · database `{os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])}`**
+    **Example 2 of 7 · database `{os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])}`**
 
     PyIceberg reads `synthetic.neighborhood_electricity` with your own user permissions.
-    Then **DuckDB** analyzes the data in marimo's SQL cells. The charts react to your street selection.
+    Then **DuckDB** analyzes the data in marimo's SQL cells. Set `STREET` in the first cell to filter the hourly chart.
     No additional connection or secrets are needed.
 
     Run the cells with **▶**. Create the table with example 1 first, or use your team's existing
@@ -32,16 +51,8 @@ def _(mo, os):
     """)
 
 
-@app.cell(hide_code=True)
-def _(mo):
-    reload_data = mo.ui.run_button(label="Reload Iceberg data")
-    mo.vstack([reload_data])
-    return (reload_data,)
-
-
 @app.cell
-def _(ForbiddenError, NoSuchTableError, connect, mo, reload_data):
-    _reload = reload_data.value
+def _(ForbiddenError, NoSuchTableError, connect, mo):
     try:
         _catalog = connect()
         _table = _catalog.load_table(("synthetic", "neighborhood_electricity"))
@@ -73,7 +84,7 @@ def _(ForbiddenError, NoSuchTableError, connect, mo, reload_data):
         mo.stop(
             True,
             mo.callout(
-                "The example table does not exist yet. Open 01 · Neighborhood data with PyIceberg, create the table, then click Reload Iceberg data here.",
+                "The example table does not exist yet. Open 01 · Neighborhood data with PyIceberg, create the table, then rerun this notebook.",
                 kind="info",
             ),
         )
@@ -90,21 +101,15 @@ def _(ForbiddenError, NoSuchTableError, connect, mo, reload_data):
 
 
 @app.cell(hide_code=True)
-def _(energy_frame, mo):
-    street_choice = mo.ui.dropdown(
-        options=["All streets", *sorted(energy_frame["street"].unique())],
-        value="All streets",
-        label="Street",
-    )
-    mo.vstack([mo.md("## Explore the neighborhood"), street_choice])
-    return (street_choice,)
+def _(mo):
+    mo.md("""
+    ## Explore the neighborhood
+    """)
 
 
 @app.cell
-def _(energy_frame, street_choice):
-    filtered_energy = energy_frame.loc[
-        (street_choice.value == "All streets") | (energy_frame["street"] == street_choice.value)
-    ]
+def _(STREET, energy_frame):
+    filtered_energy = energy_frame.loc[(STREET == "All streets") | (energy_frame["street"] == STREET)]
     return (filtered_energy,)
 
 
@@ -156,7 +161,7 @@ def _(hourly_energy, mo):
 
 
 @app.cell(hide_code=True)
-def _(hourly_energy, mo, plt, street_choice):
+def _(STREET, hourly_energy, mo, plt):
     with plt.style.context("dark_background"):
         _figure, _axes = plt.subplots(figsize=(11, 4), layout="constrained")
         _axes.plot(
@@ -166,7 +171,7 @@ def _(hourly_energy, mo, plt, street_choice):
             hourly_energy["hour"], hourly_energy["generation_kwh"], color="#64c8dd", label="Solar generation"
         )
         _axes.set(
-            title=f"Consumption and solar generation · {street_choice.value}",
+            title=f"Consumption and solar generation · {STREET}",
             xlabel="Time · Europe/Amsterdam",
             ylabel="kWh per hour",
         )
@@ -176,11 +181,10 @@ def _(hourly_energy, mo, plt, street_choice):
         hourly_plot = mo.as_html(_figure)
         plt.close(_figure)
     mo.vstack([hourly_plot])
-    return (hourly_plot,)
 
 
 @app.cell(hide_code=True)
-def _(mo, plt, street_totals):
+def _(mo, plain_table, plt, street_totals):
     with plt.style.context("dark_background"):
         _figure, _axes = plt.subplots(figsize=(11, 4), layout="constrained")
         _positions = range(len(street_totals))
@@ -203,7 +207,7 @@ def _(mo, plt, street_totals):
         _axes.legend()
         street_plot = mo.as_html(_figure)
         plt.close(_figure)
-    mo.vstack([street_plot, mo.ui.table(street_totals.round(2), selection=None, label="Totals by street")])
+    mo.vstack([street_plot, plain_table(street_totals.round(2), label="Totals by street")])
 
 
 @app.cell(hide_code=True)
@@ -211,8 +215,8 @@ def _(mo):
     mo.md("""
     ### Explore further
     Edit the SQL cells: group by day, compare homes or calculate self-consumption.
-    The street filter recalculates the hourly query and its chart without reading from Iceberg again.
-    **Reload Iceberg data** fetches a fresh snapshot when another notebook has changed the table.
+    Change `STREET` in the first cell to focus on one street.
+    Rerun the data-loading cell to fetch a fresh snapshot after another notebook changes the table.
 
     SQL runs locally on the loaded data; no DuckDB extensions or internet downloads are needed.
     """)

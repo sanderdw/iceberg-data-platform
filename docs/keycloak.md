@@ -155,6 +155,16 @@ sequenceDiagram
   `polaris.principal_id = 0` selects Polaris's name lookup because its management API
   does not expose numeric entity IDs. The gateway additionally checks the exact
   Keycloak issuer and subject stored on that principal, including on subsequent requests.
+- MCP clients such as Claude Code use the public `iceberg-mcp` client: authorization code
+  with PKCE S256, no client secret, one fixed loopback redirect on `MCP_CALLBACK_PORT`, the
+  same Polaris claim mappers and no roles. Both portals act as OAuth resource servers for
+  their `/mcp` endpoint (RFC 9728 metadata at `/.well-known/oauth-protected-resource`):
+  they validate the token like a portal sign-in and additionally require `azp` to be
+  `iceberg-mcp`, so portal tokens are refused there. The administration endpoint also
+  requires the `iceberg-admin/platform-admin` role, which the `roles` default scope of
+  `iceberg-mcp` places in `resource_access`; removing that scope locks administrators out
+  of it. Setup adds the client to new realms and `keycloak-bootstrap` adds or updates it in
+  existing ones.
 - `polaris.roles = ["PRINCIPAL_ROLE:ALL"]` activates only roles already granted to that
   principal in Polaris. It does not grant all platform privileges. Membership and role
   edits continue to use the existing administration portal and Polaris grants.
@@ -212,6 +222,16 @@ administrator password. Passwords and tokens are never printed.
   session in the other portal, a copied access token, or previously vended S3 credentials
   can remain valid until their respective expiry. Disabling a Keycloak account or
   removing its administrator role likewise does not immediately invalidate issued JWTs.
+- MCP clients hold their own refresh tokens on the developer's machine and renew access
+  tokens themselves; the gateway stores nothing for them and authorizes every call against
+  Polaris. Keep Keycloak token exchange disabled so no other client can obtain tokens with
+  `azp = iceberg-mcp`. The redirect URI is fixed to `http://localhost:<MCP_CALLBACK_PORT>/callback`.
+  `iceberg-mcp` offers the optional `offline_access` scope because MCP clients request it:
+  their refresh token is then an offline token that outlives the browser SSO session and
+  expires after the realm's offline session idle time (30 days by default). Revoke one in
+  Keycloak under the user's **Sessions** (offline), or disable the account. An administrator
+  whose role is removed keeps administration MCP access until the current access token
+  expires, at most 15 minutes, because each call reads the role from the signed token.
 - Sessions and login transactions are in memory and require one replica per portal.
   Restarting the user portal stops its runtimes; saved team files persist.
 - The human-account workflows do not offer direct S3/bucket-admin credentials.

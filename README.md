@@ -7,13 +7,14 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 
 ## What it does
 
-- **Administration portal:** create and manage teams, assign users to one or more teams with a role per team, create databases, move databases between teams, and delete databases with their stored data.
+- **Administration portal:** create and manage teams, assign users to one or more teams with a role per team, oversee databases, and move databases between teams.
 - **Administrator catalog explorer:** browse all Polaris catalogs, nested namespaces, tables and views. Database-admin roles do not grant portal-admin access.
-- **Separate user portal:** sign in with Keycloak and use a consistent top menu for Team overview, Catalog, Notebooks and Data shares within your active team and environment. Navigation survives browser refresh; lists update automatically.
+- **Separate user portal:** sign in with Keycloak and use a consistent top menu for Team overview, Catalog, Notebooks and Data shares within your active team and environment. Team administrators create, rename and delete their team's databases from Team overview. Navigation survives browser refresh; lists update automatically.
 - **User catalog details:** inspect table schemas, snapshots, branches/tags, partitioning, sort orders and view SQL; preview up to 100 rows at a selected snapshot with your own data permissions.
-- **Data shares:** team administrators give an external party read access to selected tables and views, with a dedicated credential and a copyable DuckDB script. They can renew, expire or revoke access themselves. Readers and writers can view their team's shares with management controls disabled. Platform administrators see every share and can revoke it.
+- **Data shares:** team administrators share selected tables and views with another team, external recipients, or both. Team recipients use their own accounts and see read-only shared databases in Catalog and Notebooks, even without databases of their own. External recipients get a dedicated credential and a copyable DuckDB script. They can renew, expire or revoke access themselves. Readers and writers can view their team's shares with management controls disabled. Platform administrators see every share and can revoke it.
 - **Shared team workspaces:** one shared filespace per team and environment, with isolated execution using each user's data permissions.
-- **Five included examples:** create 26,880 synthetic energy measurements with PyIceberg, visualize them with DuckDB, attach Polaris directly for native DuckDB queries on Iceberg, and write and read an Iceberg v3 table (variant, nanosecond timestamps, geometry, default values, row lineage, deletion vectors) with DuckDB.
+- **MCP servers for AI agents:** Claude Code and other Model Context Protocol clients sign in through Keycloak. On the user portal they browse your databases, namespaces, tables, views, schemas, snapshots and bounded row previews with your own data permissions; team administrators can also create, rename and delete their databases. On the administration portal, platform administrators manage teams, databases, users and data shares. See [connecting an MCP client](user_portal/README.md#connect-an-mcp-client) and [administration tools](docs/admin-guide.md#connect-an-mcp-client).
+- **Seven included examples:** create 26,880 synthetic energy measurements with PyIceberg, visualize them with DuckDB, attach Polaris directly for native DuckDB queries on Iceberg, and write and read an Iceberg v3 table (variant, nanosecond timestamps, geometry, default values, row lineage, deletion vectors) with DuckDB. Two further native DuckDB notebooks publish and query an AI-ready flights product: 12,000 synthetic flight instances with Apache Ossie semantics, supporting tables and executable quality checks.
 
 The platform uses two Compose projects: **iceberg-platform** for the admin portal,
 Keycloak and data services, and **iceberg-workspaces** for the user portal and notebooks.
@@ -41,7 +42,7 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 The installer creates `~/iceberg-data-platform`, prepares `.env`, pulls application
 images and starts both projects. These commands always install the newest stable
-release from `main`; replace `latest/download` with `download/v0.4.1` to install
+release from `main`; replace `latest/download` with `download/v0.5.0` to install
 exactly that version. See the [installation guide](docs/install.md) for configuration
 and updates.
 
@@ -99,12 +100,14 @@ For changes only to the user portal, use `docker compose -f compose.users.yaml u
 | Service                  | URL                               | Login                                                     |
 | ------------------------ | --------------------------------- | --------------------------------------------------------- |
 | Administration portal    | http://localhost:3000             | `platform-admin` + initial `PLATFORM_ADMIN_PASSWORD`       |
+| FastAPI Endpoints        | http://localhost:3000/docs        | `platform-admin` + initial `PLATFORM_ADMIN_PASSWORD`       |
 | Keycloak console         | http://localhost:8080/admin        | `admin` + `KEYCLOAK_ADMIN_PASSWORD`                         |
 | User portal              | http://localhost:3002             | Keycloak account created or linked by an administrator                  |
+| FastAPI Endpoints        | http://localhost:3002/docs        | Keycloak account created or linked by an administrator                  |
 | Polaris Iceberg REST API | http://localhost:8181/api/catalog | Keycloak bearer token (native credentials for services)    |
 | RustFS console           | http://localhost:9001             | Issued bucket-admin credentials or local root credentials |
 | pgAdmin                  | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD` from `.env`            |
-| FastAPI Endpoints        | http://localhost:3000/docs        | `platform-admin` + initial `PLATFORM_ADMIN_PASSWORD`       |
+
 
 All default host ports bind to `127.0.0.1`. PostgreSQL is internal only. The portal's authenticated API documentation is available at `/docs` on port 3000.
 
@@ -115,10 +118,11 @@ pgAdmin includes a **Polaris metadata** server connection. Enter `POSTGRES_PASSW
 1. Open the administration portal, sign in with Keycloak as `platform-admin` and change the temporary password.
 2. Create a team, create a database under that team, then create a user with membership of that team. Choose **Read & write** (writer) for that team to run the examples that write data.
 3. Copy the temporary password shown once. Open the user portal on port 3002, sign in through Keycloak, and change that password.
-4. Select a team and database. Choose **01 · Neighborhood data with PyIceberg**, run the cells with ▶ and click **Create example table**.
+4. Select a team and database. Choose **01 · Neighborhood data with PyIceberg**, run the cells from top to bottom.
 5. Use the notebook selector to open **02 · Visualize with DuckDB**. Run its cells and change the street filter to explore energy consumption and solar production.
-6. Open **03 · Native DuckDB on Iceberg** and click **Connect / refresh credentials** to query the Iceberg table directly, inspect snapshots and run SQL aggregations.
+6. Open **03 · Native DuckDB on Iceberg** and run its cells to query the Iceberg table directly, inspect snapshots and run SQL aggregations.
 7. Open **04 · Write Iceberg v3 with DuckDB** and run all cells to create an Iceberg v3 table with variant, nanosecond timestamp and geometry columns. Then open **05 · Read Iceberg v3 with DuckDB** to query those types, row lineage, deletion vectors and an earlier snapshot. Both run from top to bottom without input.
+8. Open **06 · Write an AI-ready flights product** to publish 12,000 synthetic flights and five supporting tables. Then open **07 · Read an AI-ready flights product** to explore semantic joins, metric definitions and quality evidence. The Ossie ontology `flights.yaml` and demo contract `flights.product.yaml` are stored beside the notebooks.
 
 The first example skips a table that already contains rows. Readers can use the second example once a writer has created the dataset. Saved notebooks are shared per team and environment (Development, Acceptance or Production), across databases. Switching context or logging out stops only your execution; save your work first. Adding starter examples never overwrites existing team files.
 
@@ -182,15 +186,15 @@ Tests cover authorization, team membership, compensating actions, resumable dele
 
 ## Documentation
 
-- [Keycloak identity and access management](docs/keycloak.md) — setup, existing-instance upgrades, user lifecycle, data access and session limits.
+- [Keycloak identity and access management](docs/keycloak.md), setup, existing-instance upgrades, user lifecycle, data access and session limits.
 - [Users, teams, memberships, roles and database definitions](docs/CONTEXT.md)
 - [Architecture and repository layout](docs/architecture.md)
 - [Administration guide](docs/admin-guide.md)
-- [User portal and notebooks](user_portal/README.md)
+- [User portal and notebooks](user_portal/README.md), including [MCP clients](user_portal/README.md#connect-an-mcp-client)
 - [Contributing](CONTRIBUTING.md)
 - [Security and deployment boundaries](SECURITY.md)
 - [Publishing a release](docs/releasing.md)
-- [Presentation](https://sanderdw.github.io/iceberg-data-platform/) — reveal.js deck about the platform; its source lives in `presentation/`, which is not part of source releases
+- [Presentation](https://sanderdw.github.io/iceberg-data-platform/), reveal.js deck about the platform; its source lives in `presentation/`, which is not part of source releases
 - [Changelog](CHANGELOG.md)
 
 ## License

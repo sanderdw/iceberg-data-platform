@@ -5,10 +5,18 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from server.models import Environment, ServiceError
+from server.models import DatabaseInput, Environment, ServiceError
 from server.polaris import PolarisProvider, enc
+from server.storage import RustFSStorage
 
 from .catalog import object_details, properties
+
+
+def validate_namespace(parts):
+    if len(parts) > 100 or any(
+        not p or len(p) > 256 or p in (".", "..") or "\x1f" in p or "\0" in p for p in parts
+    ):
+        raise ServiceError(422, "Invalid namespace.")
 
 
 @dataclass
@@ -31,13 +39,13 @@ class UserSession:
 class UserDirectory:
     def __init__(self, env):
         # This client stays in the trusted gateway, never in a notebook runtime.
-        self.metadata = PolarisProvider(env, None)
+        self.metadata = PolarisProvider(env, RustFSStorage(env))
         self.http = httpx.Client(timeout=15)
         self.url = env.get("POLARIS_URL", "http://polaris:8181").rstrip("/")
         self.s3_endpoint = env.get("USER_S3_ENDPOINT", "http://rustfs:9000")
 
     def close(self):
-        self.metadata.http.close()
+        self.metadata.close()
         self.http.close()
 
     def authenticate(self, client_id, secret):
@@ -100,16 +108,74 @@ class UserDirectory:
         teams = [{**t, "role": roles[t["id"]]} for t in self.metadata.list_teams() if t["id"] in roles]
         if not teams:
             raise ServiceError(403, "You no longer have any available teams.")
+        all_databases = self.metadata.list_databases()
         databases = [
             d
-            for d in self.metadata.list_databases()
-            if d["team"] in {t["id"] for t in teams} and d["status"] == "ready"
+            for d in all_databases
+            if d["team"] in {t["id"] for t in teams}
+        ]
+        received = {}
+        if session.team in roles:
+            for share in self.metadata.list_shares(drift=True):
+                if share.get("recipientTeam") != session.team:
+                    continue
+                received.setdefault(share["database"], []).extend(
+                    o for o in share["objects"] if o.get("granted")
+                )
+        shared_databases = [
+            {**d, "shared": True, "sharedWithTeam": session.team,
+             "sharedObjects": list({(o["kind"], tuple(o["namespace"]), o["name"]): o
+                                    for o in received[d["id"]]}.values())}
+            for d in all_databases
+            if d["id"] in received and d["team"] != session.team and d["status"] == "ready"
         ]
         return {
+            "sharedDatabases": shared_databases,
             "user": {"id": user["id"], "name": user["name"]},
             "teams": teams,
-            "databases": databases,
+            "databases": [d for d in databases if d["status"] == "ready"],
+            "deletingDatabases": [d for d in databases if d["status"] == "deleting"],
         }
+
+    def manage_team(self, session):
+        profile = self.profile(session)
+        team = next((t for t in profile["teams"] if t["id"] == session.team), None)
+        if not team or team["role"] not in ("admin", "bucket-admin"):
+            raise ServiceError(403, "Only team administrators can manage databases.")
+        return team
+
+    def manage_database(self, session, id, *, allow_deleting=False):
+        team = self.manage_team(session)
+        catalog = self.metadata.require(f"/catalogs/{enc(id)}")
+        if not self.metadata.managed(catalog):
+            raise ServiceError(404, "Database not found.")
+        database = self.metadata.database(catalog)
+        if database["team"] != team["id"] or database["environment"] != session.environment:
+            raise ServiceError(403, "This database is unavailable within your active team and environment.")
+        if database["status"] == "deleting" and not allow_deleting:
+            raise ServiceError(409, "This database is being deleted.")
+        return database
+
+    def create_database(self, session, name, description=""):
+        self.manage_team(session)
+        return self.metadata.create_database(DatabaseInput(
+            name=name, description=description, team=session.team, environment=session.environment,
+        ))
+
+    def rename_database(self, session, id, name):
+        self.manage_database(session, id)
+        return self.metadata.rename_database(
+            id, name, expected_team=session.team, expected_environment=session.environment,
+        )
+
+    def delete_database(self, session, id, confirm_name):
+        database = self.manage_database(session, id, allow_deleting=True)
+        if confirm_name != database["name"]:
+            raise ServiceError(422, "Type the database name exactly to confirm deletion.")
+        self.metadata.delete_database(
+            id, expected_team=session.team, expected_environment=session.environment,
+        )
+        return {"deleted": True, "database": id, "name": database["name"], "environment": database["environment"]}
 
     def team_members(self, session):
         profile = self.profile(session)
@@ -129,9 +195,9 @@ class UserDirectory:
         result = next(
             (
                 d
-                for d in profile["databases"]
+                for d in [*profile["databases"], *profile.get("sharedDatabases", [])]
                 if d["id"] == database
-                and d["team"] == session.team
+                and (d["team"] == session.team or d.get("sharedWithTeam") == session.team)
                 and d["environment"] == session.environment
             ),
             None,
@@ -148,6 +214,8 @@ class UserDirectory:
         """
         profile = self.profile(session)
         result = self.database(session, database, profile)
+        if result.get("shared"):
+            raise ServiceError(403, "Only the owning team can manage this data share.")
         role = next(t["role"] for t in profile["teams"] if t["id"] == result["team"])
         if role not in ("admin", "bucket-admin"):
             raise ServiceError(403, "Only team administrators can manage data shares.")
@@ -215,7 +283,20 @@ class UserDirectory:
             seen.add(token)
 
     def contents(self, session, database, namespace):
-        self.database(session, database)
+        info = self.database(session, database)
+        if info.get("shared"):
+            objects = info["sharedObjects"]
+            children = sorted({tuple(o["namespace"][:len(namespace) + 1]) for o in objects
+                               if o["namespace"][:len(namespace)] == namespace
+                               and len(o["namespace"]) > len(namespace)})
+            return {
+                "database": database, "namespace": namespace,
+                "namespaces": [list(parts) for parts in children],
+                **{kind + "s": sorted(
+                    [{"name": o["name"], "namespace": o["namespace"]} for o in objects
+                     if o["kind"] == kind and o["namespace"] == namespace], key=lambda o: o["name"]
+                ) for kind in ("table", "view")},
+            }
         prefix = f"/api/catalog/v1/{enc(database)}"
         encoded = enc("\x1f".join(namespace))
         children = self.pages(
@@ -244,6 +325,15 @@ class UserDirectory:
                 "database": database_info,
                 "catalogUri": self.metadata.public_url + "/api/catalog",
             }
+        if database_info.get("shared"):
+            objects = database_info["sharedObjects"]
+            if kind == "namespace":
+                if not any(o["namespace"][:len(namespace)] == namespace for o in objects):
+                    raise ServiceError(404, "Namespace not shared with this team.")
+                return {"kind": kind, "namespace": namespace, "properties": {}}
+            if not any(o["kind"] == kind and o["namespace"] == namespace and o["name"] == name
+                       for o in objects):
+                raise ServiceError(403, "This object is not shared with your active team.")
         path = f"/api/catalog/v1/{enc(database)}/namespaces/{enc(chr(31).join(namespace))}"
         if kind == "namespace":
             loaded = self.request(session, path)

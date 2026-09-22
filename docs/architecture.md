@@ -6,12 +6,16 @@ flowchart LR
     Admin --> PgAdmin[pgAdmin :5050]
     PgAdmin --> Postgres
     User[User browser] --> UserAPI[FastAPI user gateway :3002]
+    Agent[MCP client, e.g. Claude Code] -->|Bearer token to /mcp| UserAPI
+    Agent -->|Bearer token with platform-admin role to /mcp| AdminAPI
+    Agent -->|OAuth code + PKCE| Keycloak
     AdminAPI -->|OIDC and account lifecycle| Keycloak[Keycloak IAM]
     UserAPI -->|OIDC| Keycloak
     Polaris -->|Validate signed user tokens| Keycloak
     AdminAPI --> Polaris[Apache Polaris]
     AdminAPI --> Storage[RustFS S3 and IAM]
     UserAPI --> Polaris
+    UserAPI -->|Database lifecycle| Storage
     UserAPI --> Docker[Trusted Docker daemon]
     Docker --> Notebook[Session marimo container]
     UserAPI -->|Authenticated HTTP and WebSocket proxy| Notebook
@@ -37,6 +41,15 @@ The installed portals always use Keycloak authentication.
 Both portals keep OIDC grants in process memory and renew access tokens before expiry,
 revalidating identity and required roles. Sessions last at most eight hours and also
 depend on Keycloak's session limits. Refresh tokens never reach browsers or notebooks.
+Both portals also serve a Model Context Protocol endpoint at `/mcp` as OAuth resource
+servers, sharing `server/mcp_auth.py`: MCP clients obtain Keycloak tokens through the
+public `iceberg-mcp` client, each request carries its own bearer token, and neither
+portal keeps a session for them. The user gateway's tools resolve the linked Polaris
+principal, teams and databases on every call and reuse the catalog and preview code of
+the portal with that user's token. Its database management tools recheck the caller's
+team administrator role and ownership before using the trusted gateway. The administration portal's tools require the
+`platform-admin` role from the token and run the administration API's operations under
+its mutation lock.
 Notebook connection helpers retrieve the owner's current access token from an internal
 gateway endpoint authenticated with that runtime's credential. PyIceberg retrieves it
 for each REST request; existing DuckDB attachments must reconnect to replace cached
@@ -44,13 +57,13 @@ credentials. Successful renewal keeps the notebook running.
 
 Teams are marked Polaris principal-role records. Users are Polaris principals with stable team IDs, a role per team, an individual principal role and, per database, the grant that matches their role in the owning team. Databases are Iceberg REST catalogs backed by dedicated RustFS buckets. There is no second application metadata database.
 
-The admin identity manages metadata and grants. The user gateway uses that identity to resolve the directory and to create, edit and revoke [data shares](CONTEXT.md#data-shares) for team administrators, whose role it re-reads from Polaris on every such request. Catalog browsing uses the user's OAuth token. Notebook containers receive the user's own credentials. A user may belong to several teams; the active team and environment control the UI and workspace context, while the credentials retain the union of the user's team grants, each at the role held in that team.
+The admin identity manages metadata and grants. The user gateway uses that identity to resolve the directory, manage [data shares](CONTEXT.md#data-shares), and create, rename and delete databases for team administrators, whose role it re-reads from Polaris on every such request. Database creation and deletion use RustFS administration credentials in the trusted gateway. Catalog browsing uses the user's OAuth token. Notebook containers receive the user's own credentials. A user may belong to several teams; the active team and environment control the UI and workspace context, while the credentials retain the union of the user's team grants, each at the role held in that team.
 
 ## Notebook lifecycle
 
 A workspace has one shared volume per team/environment, keyed by the stable team ID and environment. Environments are Development, Acceptance and Production. All team members and databases in an environment share the same files. On first use the gateway creates the volume; on each runtime start, missing starter files are added without replacing existing files. Marimo serves the directory for browsing shared notebooks and examples.
 
-Database display names are unique within a team and environment. Each database has an opaque, stable catalog ID used in REST paths and connection settings, so `db1` can exist in both Development and Production. Moves preserve the catalog ID and bucket, and reject name conflicts at the destination. Files stay with their team/environment when a database moves; no notebook migration is performed.
+Database display names are unique within a team and environment. Each database has an opaque, stable catalog ID used in REST paths and connection settings, so `db1` can exist in both Development and Production. Renames preserve the catalog ID, bucket and connection settings. Moves preserve the catalog ID and bucket, and reject name conflicts at the destination. Files stay with their team/environment when a database moves; no notebook migration is performed.
 
 Each session/database execution receives its own container and Docker bridge network containing the runtime, gateway, Polaris and RustFS, with outbound internet access for package installs and external services. Runtime ports are not published. Additional Python packages install into `/tmp/packages`, which is on the runtime's Python import path and is discarded when the container stops. HTTP and WebSocket requests must belong to the authenticated session, active team and environment. Portal cookies and caller Authorization headers are stripped before forwarding to marimo.
 

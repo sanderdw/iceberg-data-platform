@@ -28,6 +28,11 @@ def test_keycloak_setup_is_repeatable_and_does_not_seed_demo_data(config_root):
     assert "UPDATE_PASSWORD" in document["users"][0]["requiredActions"]
     assert values["PLATFORM_ADMIN_PASSWORD"] not in json.dumps(document)
     assert document["clients"][0]["redirectUris"] == ["http://localhost:3000/auth/callback"]
+    mcp = next(c for c in document["clients"] if c["clientId"] == "iceberg-mcp")
+    assert mcp["publicClient"] and "secret" not in mcp and not mcp["directAccessGrantsEnabled"]
+    assert mcp["redirectUris"] == ["http://localhost:3010/callback"]
+    assert mcp["optionalClientScopes"] == ["offline_access"]
+    assert [m["name"] for m in mcp["protocolMappers"]] == [m["name"] for m in document["clients"][0]["protocolMappers"]]
     assert not any(key.startswith("DEMO_") for key in values)
     setup(config_root)
     assert config.read_bytes() == original

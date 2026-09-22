@@ -13,6 +13,15 @@ docker compose -f compose.users.yaml up -d --wait users
 
 Open http://localhost:3002. Sign in with the Keycloak account created or linked by your administrator. Port 3000 is the separate administration portal.
 
+Signed-in users can open [API documentation](http://localhost:3002/docs) and use **Try it out**.
+The API uses your portal session and enforces your existing team permissions. The selected
+team and environment scope operations; use `PATCH /api/team` and `PATCH /api/environment`
+to change them. The OpenAPI schema is available at `/openapi.json` after sign-in.
+HTTP clients must send the session cookie; writes also require `X-Portal-Request: 1`
+and `Content-Type: application/json` (send `{}` for operations without a body).
+With Keycloak enabled, sign in through `/auth/login`; `POST /api/session` is only for
+the local username/client-secret login mode. Swagger supplies the write headers automatically.
+
 The Compose project is `iceberg-workspaces`; the data and administration project is `iceberg-platform`. The workspace gateway can stop and restart independently. It connects directly to Polaris and RustFS and does not require the administration portal API.
 
 ### Phone access
@@ -32,6 +41,8 @@ The user portal follows the same Nothing-inspired design as the administration p
 ## Work with your team data
 
 Open **Team overview** to see the active team’s description, your role, members and their team roles, databases in the selected environment, and your active notebook count. Links lead to Catalog, Notebooks and Data shares. All team members can view this overview; the member list contains only the active team and refreshes with the workspace. Team membership and role changes remain in the administration portal.
+
+Team Administrators and Database + bucket administrators can create, rename and delete databases in their active team and environment from **Team overview**. A new database gets its own Iceberg catalog and RustFS bucket; existing members receive access according to their team roles. Renaming changes only the display name: the catalog ID, bucket and connection settings remain stable. Names must be unique within a team and environment. Deleting a database immediately removes its tables, views, files, bucket and data shares, including in Production. Type its exact name to confirm. If cleanup fails, use **Resume deletion** in Team overview. Saved notebook files belong to the team and environment and remain available. Moving a database to another team remains a platform administrator action.
 
 The top menu, selected database and namespace, and active team/environment are recorded in the URL. Reloading or using browser Back/Forward restores that location. Workspace lists, catalog listings and data shares refresh every 30 seconds while visible and when you return to the tab. Refresh preserves share forms, credential panels, catalog filters and open notebook frames. Table details and previews retain their explicit refresh controls.
 
@@ -70,11 +81,25 @@ The notebook image includes Altair for charts, Polars for dataframes and
 without a bundled browser. PDF, thumbnail and screenshot exports are not included.
 Browser testing remains a development tool.
 
+## Connect an MCP client
+
+The user portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`, so an AI agent such as Claude Code can explore your team's data with your own Keycloak identity and Polaris permissions. Register the platform with a pre-registered public Keycloak client:
+
+```bash
+claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg http://localhost:3002/mcp
+```
+
+The first tool call opens Keycloak in your browser; sign in with your platform account. The callback returns to `http://localhost:3010/callback`, which is the only redirect Keycloak accepts for this client: Keycloak allows a wildcard at the end of a redirect path but not in its port, so `--callback-port` must equal `MCP_CALLBACK_PORT` in `.env`. To use another port, change that value, run `docker compose run --build --rm keycloak-bootstrap` and register the server again with the new port. Other MCP clients need the same three settings: the `/mcp` URL, the client ID `iceberg-mcp` and a callback on that port. Claude Code is the tested client; Claude Desktop custom connectors require a public HTTPS address and are out of scope for a localhost installation.
+
+Catalog tools mirror the portal's read operations: `list_databases` (your teams, roles and databases), `list_namespaces`, `list_tables`, `describe_table`, `describe_view` and `preview_rows` (up to 100 rendered rows). They use your own Polaris grants, do not run SQL and cannot change catalog contents. `list_databases` includes databases whose deletion can be resumed. Other tools take its opaque database ID because display names repeat across environments.
+
+If you are currently an Administrator or Database + bucket administrator of a team, the MCP server also offers `create_database`, `rename_database` and `delete_database` for that team's databases. Creation takes the team ID and environment; rename preserves the catalog ID and bucket. Deletion is marked destructive for agents, immediately removes data in every environment and requires `confirm_name` to match the current display name, including when resuming an interrupted deletion. The server rechecks your Keycloak identity link, team role and database ownership on each call. Access tokens last 15 minutes and are refreshed by the MCP client, which keeps an offline refresh token on your machine; it stays valid for 30 days of inactivity or until an administrator revokes it in Keycloak. Portal session cookies do not authorize `/mcp`, and MCP tokens do not open the portal. Platform administrators can register the administration portal's endpoint as a second server; see [the administration guide](../docs/admin-guide.md#connect-an-mcp-client).
+
 ## Share data with an external party
 
 Use the top menu to switch between **Team overview**, **Catalog**, **Notebooks**, and **Data shares**. Switching sections keeps your running notebook open. Team and environment selectors apply to all four sections.
 
-**Data shares** lists shares by database for the active team and environment. Readers and writers can view these shares; management buttons are greyed out with an explanation that team administrator privileges are required. With the Administrator or Database + bucket administration role, choose **New data share** under a database, name the share and its recipient, tick the tables and views, and optionally set an expiry. The client ID and client secret appear once. Use **Copy DuckDB snippet** to copy a runnable Python script; the code is not displayed in the panel. Send these to the recipient over a secure channel.
+**Data shares** lists shares by database for the active team and environment. Readers and writers can view these shares; management buttons are greyed out with an explanation that team administrator privileges are required. With the Administrator or Database + bucket administration role, choose **New data share** under a database, name the share, choose **Another team**, **Externally**, or both, tick the tables and views, and optionally set an expiry. For team sharing, select a recipient team. Its current and future members receive read access through their existing accounts; removing a member removes this access. Received shares appear under **Shared with this team** and as read-only shared databases in **Catalog** and **Notebooks** in the matching environment. A recipient team does not need its own database to open a notebook. Catalog browsing shows only selected shared objects; notebooks use the recipient team’s filespace and the signed-in user’s permissions. Revoking or expiring the last share removes the database from that team’s workspace. Team sharing grants no write or bucket administration access. Sharing destinations are fixed at creation; revoke and recreate a share to change them. For external sharing, the client ID and client secret appear once. Use **Copy DuckDB snippet** to copy a runnable Python script; the code is not displayed in the panel. Send these to the recipient over a secure channel.
 
 The recipient can read exactly what you selected and cannot list anything else, so the snippet names the shared objects in full. A view shares only its definition: add every table it reads, and remember the recipient can read those tables completely. **Edit** changes the selection or expiry, **New secret** replaces a lost secret and ends the old one, **Revoke** ends access immediately. Every administrator of the team manages the same shares. See [the resource model](../docs/CONTEXT.md#data-shares) for the details.
 
@@ -85,25 +110,26 @@ execute views; see [client connection details](../docs/admin-guide.md#connect-an
 
 ## Bundled examples
 
-1. **01 · Neighborhood data with PyIceberg** creates `synthetic.neighborhood_electricity` with 40 homes, seven days and 26,880 quarter-hour readings. The deterministic model includes consumption, solar generation, grid draw, grid export and fictional addresses. Run the cells and click **Create example table**. A populated table is skipped; existing rows are never overwritten or duplicated. Writing requires a writer role or higher in the active team.
-2. **02 · Visualize with DuckDB** reads that Iceberg table using your credentials, then runs SQL on the loaded dataframe. The street selector reactively updates the hourly aggregation, statistics and chart. A second chart compares grid draw and export by street. Readers can use this notebook once a writer has created the table. **Reload Iceberg data** fetches changes made by another notebook.
-3. **03 · Native DuckDB on Iceberg** attaches Polaris directly with DuckDB's `iceberg` extension. Choose a table and click **Connect / refresh credentials**, then inspect tables, columns, the first 100 rows, row counts, snapshots and energy totals using SQL cells. It defaults to the table selected in the portal or `synthetic.neighborhood_electricity`. The attachment is read-only and readers can use it.
+1. **01 · Neighborhood data with PyIceberg** creates `synthetic.neighborhood_electricity` with 40 homes, seven days and 26,880 quarter-hour readings. The deterministic model includes consumption, solar generation, grid draw, grid export and fictional addresses. Run the cells from top to bottom. A populated table is skipped; existing rows are never overwritten or duplicated. Writing requires a writer role or higher in the active team.
+2. **02 · Visualize with DuckDB** reads that Iceberg table using your credentials, then runs SQL on the loaded dataframe. Set `STREET` in the first cell to filter the hourly aggregation, statistics and chart. A second chart compares grid draw and export by street. Readers can use this notebook once a writer has created the table. Rerun the data-loading cell to fetch changes made by another notebook.
+3. **03 · Native DuckDB on Iceberg** attaches Polaris directly with DuckDB's `iceberg` extension. Set `NAMESPACE` and `TABLE` in the settings cell, then run the notebook to inspect tables, columns, the first 100 rows, row counts, snapshots and energy totals using SQL cells. It defaults to the table selected in the portal or `synthetic.neighborhood_electricity`. The attachment is read-only and readers can use it.
 4. **04 · Write Iceberg v3 with DuckDB** creates the Iceberg format-version 3 table `iceberg_v3.sensor_events` with DuckDB and writes 480 fictional sensor events. It uses what v3 adds: a `VARIANT` payload, a nanosecond `TIMESTAMP_NS`, a `GEOMETRY` location, a column added with a default value, and an update and delete recorded as binary deletion vectors. It has no controls: it runs from top to bottom and recreates its own table on every run, so the result is always the same. It marks that table with a table property and stops rather than replace a table of the same name that it did not create. Writing requires a writer role or higher in the active team.
 5. **05 · Read Iceberg v3 with DuckDB** queries that table: fields inside the variant, nanosecond precision, geometry, the default value, row lineage (`_row_id`, `_last_updated_sequence_number`), the Puffin deletion vectors and time travel to the first snapshot. It runs from top to bottom without input and readers can use it once a writer has run example 4.
+6. **06 · Write an AI-ready flights product** uses native DuckDB SQL to generate and publish 12,000 synthetic flight instances, 8 airports, 3 carriers, 120 aircraft, 56 routes and 16 runways in `ai_flights`. The unchanged Apache Ossie `flights.yaml` supplies all six dataset mappings; `flights.product.yaml` adds demo policies, metric SQL and 11 executable quality checks. Both YAML files are beside the notebooks. Timestamps represent UTC, distances are miles and delays are minutes. Canceled flights have missing actual observations. The default covers January 1–30, 2026. Writing requires a writer role. The notebook checks every target table's ownership before replacing its own tables; reruns do not append duplicates. Each table is a separate commit, so finish publication before reading and rerun after interruption.
+7. **07 · Read an AI-ready flights product** reads those Iceberg tables directly using DuckDB and a read-only attachment. It verifies semantic-file hashes against table properties, reruns the quality checks, follows the ontology from flight routes to departure airports, charts delays, compares carrier punctuality and demonstrates denominator and join-cardinality mistakes. It needs no AI API or external download. The SQL generator implements this specific Ossie example; it is not an Ossie runtime or general ontology compiler. The extra product contract is local to this demonstration, not an Ossie specification extension.
 
-Energy is measured in kWh per quarter-hour; hourly queries sum the intervals. Iceberg stores UTC timestamps, while charts display local time in Europe/Amsterdam. All addresses are fictional and the dataset is a demonstration, not a calibrated energy model. Example 2 reads up to 100,000 rows into a dataframe; add selective Iceberg filters for larger datasets. Example 3 runs scans and aggregations directly in DuckDB, returning only query results to marimo.
 
 The Iceberg v3 examples cover the v3 types and capabilities that DuckDB 1.5.5 writes natively. `GEOGRAPHY` and `UNKNOWN` are planned for DuckDB 2.0, and DuckDB has no nanosecond timestamp with time zone (`timestamptz_ns`), so the examples leave those out. The portal's table preview reads with DuckDB and shows these tables. The starter notebook reads the selected table with PyIceberg, which cannot read `variant` or `geometry` columns yet, and shows a notice for such tables; use example 5 or your own DuckDB cells there.
 
 The native example follows [DuckDB's Iceberg REST catalog workflow](https://duckdb.org/docs/lts/core_extensions/iceberg/iceberg_rest_catalogs): in-memory secrets and `ATTACH ... (TYPE iceberg)`. Its connection helper obtains table-scoped storage credentials from Polaris using the signed-in user's identity and sets the internal RustFS endpoint. Automatic credential vending on the attachment is disabled to prevent Polaris's host-facing S3 address from replacing that internal endpoint. Reconnect to renew expiring credentials, see a fresh snapshot or query a different table. `connect_duckdb(..., read_only=False, missing_ok=True)` attaches writable for a table that does not exist yet; after `CREATE TABLE`, `refresh_table_credentials` vends storage credentials for the new table, so creating and inserting are separate statements. The read-only attachment is a convenience: Polaris enforces the user's role either way. HTTPX retrieves credentials and catalog configuration; DuckDB reads Iceberg metadata and Parquet without PyIceberg or a dataframe staging step. The notebook image bundles `httpfs` and `iceberg` for pinned DuckDB 1.5.5 under `/opt/duckdb/extensions`, so runtime internet access is unnecessary.
 
-Examples 1 to 3 use focused cells with explicit dependencies, local intermediate variables, reusable generation logic, `mo.stop` and a `run_button` for writes. Examples 4 and 5 are deliberately linear and have no controls; each write step passes a value to the next cell so marimo runs them in order. Widget changes flow through marimo's reactive graph without `on_change` callbacks or hidden state. Native SQL cells feed the charts. Filters select rows in the dataframe without interpolating user input into SQL. See the [marimo best practices](https://docs.marimo.io/guides/best_practices/) and [SQL guide](https://docs.marimo.io/guides/working_with_data/sql/).
+All notebooks run from top to bottom with plain code settings, static tables and charts. They contain no input forms, action buttons, dropdowns or interactive output widgets. Native SQL cells still feed the results and charts; rerun the appropriate cell to reload data or renew credentials. Write notebooks run their write steps when their cells execute and retain their existing ownership and rerun safeguards.
 
-New work directories receive the examples immediately. Existing directories receive missing files on their next start; existing notebooks are never overwritten. After an image update, stop and reopen the workspace to receive new bundled files.
+New work directories receive the examples and companion YAML/attribution files immediately. Existing directories receive missing files on their next start; existing notebooks and semantic files are never overwritten. After an image update, stop and reopen the workspace to receive new bundled files. For the flights pair, edit `NAMESPACE` in both notebooks to change the destination. The SQL metrics and checks in `flights.product.yaml` are executable local notebook code: review edits as you would SQL cells. Updating either YAML changes its hash; republish with example 6 before reading with example 7. Semantic files remain in the shared workspace and are not automatically distributed through Polaris.
 
 ```bash
 uv run --all-groups marimo check user_portal/notebook/examples/*.py
-# Native DuckDB execution against temporary data, including offline extensions, reader access and the Iceberg v3 examples:
+# Native DuckDB execution against temporary data, including offline extensions, reader access, v3 and flights:
 uv run --all-groups python -m scripts.duckdb_smoke
 # With running stacks, Chromium and current images:
 npm run test:examples
@@ -114,17 +140,18 @@ The browser test runs the examples, verifies that example 1 writes only after an
 ## Execution and access
 
 - Python **3.14.7**, FastAPI **0.141.1** and marimo **0.24.2** are pinned in `uv.lock`.
-- The gateway uses the platform identity to read the user, team and database directory and to manage data shares for team administrators. Catalog requests and notebook operations use the signed-in user's identity.
-- Each editor has a private container and a separate Docker bridge network shared only with the gateway, Polaris and RustFS. The network allows outbound internet access. Runtime ports are not published.
+- The gateway uses the platform identity to read the user, team and database directory and to manage data shares and databases for team administrators. It uses RustFS administration credentials for database creation and deletion. Catalog requests and notebook operations use the signed-in user's identity.
+- Each editor has a private container and a separate Docker bridge network shared only with the gateway, Polaris and RustFS. The network allows outbound internet access. Runtime ports are not published. Native numerical thread pools are limited to two threads per library so multiple open notebook kernels fit the container’s 256-process/thread budget.
 - Runtimes use UID 10001, writable `/work` and `/tmp`, no Linux capabilities, up to two CPUs, 256 processes and 1 GiB RAM by default. Notebook code receives only its user's credentials, with no platform secret, administrator cookies or Docker socket.
 - The trusted gateway has Docker socket access to start and stop runtimes. It belongs to trusted platform administration. This shared Docker host is intended for local development and does not provide isolation for hostile tenants.
 - HTTP and WebSocket proxy requests check session ownership and database access. Neither portal's cookies are forwarded to marimo. The internal runtime token is shared only between the gateway and notebook, never with the browser; it also authenticates requests for the owner's current access token.
 - Sessions last at most eight hours, subject to Keycloak's session limits, and expire on restart or refused renewal. Authorization is checked on API and notebook requests and every 30 seconds for active sessions. User deletion, membership revocation and database moves close affected runtimes. Previously issued external data credentials remain subject to Polaris and RustFS expiry rules.
 - Run one gateway replica because sessions and runtime coordination are process-local. The default limit is eight active notebooks.
+- The MCP endpoint is a bearer-token API: it accepts only Keycloak tokens issued to the public `iceberg-mcp` client, validates their signature, issuer, audience and expiry, and maps them to the linked Polaris principal on every call. Catalog reads and previews use that user's own token, exactly like the portal. OAuth resource metadata is published at `/.well-known/oauth-protected-resource`.
 
 ## Configuration
 
-The shared `.env` supplies `POLARIS_CLIENT_ID` and `POLARIS_CLIENT_SECRET`. There is no second password file or user database. `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` are the addresses handed to data share recipients.
+The shared `.env` supplies `POLARIS_CLIENT_ID`, `POLARIS_CLIENT_SECRET`, `RUSTFS_ACCESS_KEY` and `RUSTFS_SECRET_KEY`. There is no second password file or user database. `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` are the addresses handed to data share recipients.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -136,6 +163,7 @@ The shared `.env` supplies `POLARIS_CLIENT_ID` and `POLARIS_CLIENT_SECRET`. Ther
 | `MAX_NOTEBOOKS` | `8` | Maximum simultaneous runtimes |
 | `NOTEBOOK_MEMORY` | `1g` | Runtime memory limit |
 | `USER_COOKIE_SECURE` | `false` | Set to `true` with HTTPS |
+| `MCP_CALLBACK_PORT` | `3010` | Loopback port registered in Keycloak as the OAuth callback of MCP clients |
 | `POLARIS_PUBLIC_URL` | `http://localhost:8181` | Catalog address given to data share recipients |
 | `S3_ENDPOINT` | `http://localhost:9000` | Storage address shown to data share recipients; the address Polaris actually vends is fixed per database when it is created |
 | `USER_S3_ENDPOINT` | `http://rustfs:9000` | Preview storage endpoint; set to the host-facing S3 URL when running the gateway outside Docker |
@@ -148,6 +176,8 @@ Shared team/environment volumes are named `iceberg-workspaces-work-<hash>` and l
 
 ```bash
 uv run --all-groups pytest
+# With the demo fixtures from docs/keycloak.md, exercise the MCP endpoint end to end:
+npm run test:mcp
 # Browser fixtures need Chromium, but no running stack:
 npm ci
 npx playwright install chromium
@@ -167,3 +197,6 @@ npm run test:users
 ```
 
 Integration tests create temporary teams, databases, users, Parquet data and a view. They check authorization, runtime isolation, notebook reads, saved files, team switching and sign-out. They remove only their own resources and work volumes. Screenshots are written to `test-results/users-desktop.png` and `test-results/users-mobile.png`.
+
+
+For native DuckDB connections, marimo lists catalog tables but only describes columns for tables whose scoped storage credentials are installed on that connection. This avoids requests to AWS S3 for unrelated RustFS tables during automatic dataset discovery. Use `refresh_table_credentials` with distinct secret names before querying additional tables. Rebuild the notebook image and stop/reopen an existing workspace to load helper changes.

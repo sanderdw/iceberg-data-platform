@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-platform-portal"
-version = "0.4.1"
+version = "0.5.0"
 description = "Team-based Apache Iceberg administration and shared team marimo workspaces"
 readme = "README.md"
 license = "Apache-2.0"
@@ -17,7 +17,8 @@ dependencies = [
 
 [dependency-groups]
 oidc = ["Authlib==1.8.0", "httpx2>=2.13.0"]
-dev = [{include-group = "users"}, {include-group = "oidc"}, "pytest>=9.1.1", "ruff>=0.16.8", "httpx2>=2.13.0"]
+mcp = ["mcp>=2.2.0,<3"]
+dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.16.8", "httpx2>=2.13.0"]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "pandas>=3.0.6", "ipykernel>=7.3.0", "matplotlib>=3.11.2"]
 users = [
     "docker==7.2.0",
@@ -31,6 +32,7 @@ notebook = [
     "nbformat>=5.11.1",
     "pandas>=3.0.6",
     "polars>=1.44.2",
+    "pyyaml>=6.0.3",
     "pyiceberg[duckdb,pyarrow]>=0.12.0",
 ]
 

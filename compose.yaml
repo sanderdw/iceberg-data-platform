@@ -249,6 +249,7 @@ services:
       DEMO_WRITER_PASSWORD: ${DEMO_WRITER_PASSWORD:-}
       DEMO_READER_PASSWORD: ${DEMO_READER_PASSWORD:-}
       DEMO_OUTSIDER_PASSWORD: ${DEMO_OUTSIDER_PASSWORD:-}
+      MCP_CALLBACK_PORT: ${MCP_CALLBACK_PORT:-3010}
     entrypoint:
     - /app/.venv/bin/python
     - -m

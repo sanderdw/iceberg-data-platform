@@ -5,8 +5,11 @@ from pathlib import Path
 
 def seed_workspace(work: Path):
     source = Path(__file__).parent
-    starters = {"workspace.py": source / "template.py"}
-    starters.update({p.name: p for p in (source / "examples").glob("*.py")})
+    starters = {"workspace.py": source / "template.py", "shared_workspace.py": source / "template.py"}
+    starters.update({
+        p.name: p for p in (source / "examples").iterdir()
+        if p.suffix in {".py", ".yaml", ".txt"}
+    })
     for name, original in starters.items():
         try:
             with (work / name).open("x") as target:

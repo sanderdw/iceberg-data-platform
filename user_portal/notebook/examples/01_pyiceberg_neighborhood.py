@@ -12,16 +12,17 @@ def _():
     from pyiceberg.exceptions import ForbiddenError
 
     from user_portal.notebook.connection import connect
+    from user_portal.notebook.display import plain_table
     from user_portal.notebook.synthetic import generate_energy_data
 
-    return ForbiddenError, connect, generate_energy_data, mo, os
+    return (ForbiddenError, connect, generate_energy_data, mo, os, plain_table)
 
 
 @app.cell(hide_code=True)
 def _(mo, os):
     mo.md(f"""
     # Neighborhood data with PyIceberg
-    **Example 1 of 5 · database `{os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])}`**
+    **Example 1 of 7 · database `{os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])}`**
 
     We create `synthetic.neighborhood_electricity`: **40 homes × 7 days × 96 quarter-hours = 26,880 rows**.
     The data comes from the bundled synthetic energy model. All addresses are fictional;
@@ -30,7 +31,7 @@ def _(mo, os):
     Consumption and generation are **kWh per quarter-hour**; solar capacity is **kWp**. The profiles start on
     September 1, 2026 in **Europe/Amsterdam**; Iceberg stores timestamps in UTC.
 
-    Run the notebook cells with **▶**. Preview the data, then click **Create example table**.
+    Run the notebook from top to bottom to preview, write and read the data.
     This requires write permissions. Your own database and team permissions still apply.
     """)
 
@@ -43,36 +44,27 @@ def _(generate_energy_data):
 
 
 @app.cell(hide_code=True)
-def _(energy_data, mo):
+def _(energy_data, mo, plain_table):
     mo.vstack(
         [
             mo.md("## 1. Preview the generated data"),
-            mo.ui.table(energy_data.slice(0, 12), label="Preview · first 12 quarter-hours", selection=None),
-            mo.accordion({"Arrow schema": mo.plain_text(str(energy_data.schema))}),
+            plain_table(energy_data.slice(0, 12), label="Preview · first 12 quarter-hours"),
+            mo.plain_text(str(energy_data.schema)),
         ]
     )
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    create_example = mo.ui.run_button(label="Create example table", kind="success")
-    mo.vstack(
-        [
-            mo.md("## 2. Write to Iceberg"),
-            mo.md(
-                "Populated tables are skipped. Clicking again does not duplicate the dataset or overwrite existing rows."
-            ),
-            create_example,
-        ]
-    )
-    return (create_example,)
+    mo.md("""
+    ## 2. Write to Iceberg
+    Running the next cell creates and populates the table. Populated tables are
+    skipped, so rerunning the notebook does not duplicate or overwrite rows.
+    """)
 
 
 @app.cell
-def _(ForbiddenError, connect, create_example, energy_data, energy_identifier, mo):
-    mo.stop(
-        not create_example.value, mo.md("The table is only created after you click **Create example table**.")
-    )
+def _(ForbiddenError, connect, energy_data, energy_identifier, mo):
     try:
         _catalog = connect()
         _catalog.create_namespace_if_not_exists(energy_identifier[:-1])
@@ -102,14 +94,12 @@ def _(ForbiddenError, connect, create_example, energy_data, energy_identifier, m
 
 
 @app.cell(hide_code=True)
-def _(mo, stored_table, write_message):
+def _(mo, stored_table, write_message, plain_table):
     mo.vstack(
         [
             mo.callout(write_message, kind="success"),
             mo.md("## 3. Read back the stored data"),
-            mo.ui.table(
-                stored_table.scan(limit=10).to_arrow(), label="Read test from Iceberg", selection=None
-            ),
+            plain_table(stored_table.scan(limit=10).to_arrow(), label="Read test from Iceberg"),
             mo.md(
                 "Open **02 · Visualize with DuckDB** using the notebook selector above. Refresh the catalog to see the new namespace and table in the portal."
             ),

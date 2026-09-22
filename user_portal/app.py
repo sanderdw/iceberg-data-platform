@@ -5,7 +5,7 @@ import logging
 import os
 import secrets
 import time
-from contextlib import asynccontextmanager, suppress
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -15,18 +15,29 @@ from docker.errors import DockerException
 from fastapi import FastAPI, Query, Request, WebSocket
 from fastapi import Path as PathParam
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
-from server.models import ENVIRONMENTS, Environment, ServiceError, ShareInput, ShareUpdate
+from server.mcp_auth import is_mcp_path, mount_mcp
+from server.models import (
+    ENVIRONMENTS,
+    DatabaseRename,
+    Environment,
+    Name,
+    ServiceError,
+    ShareInput,
+    ShareUpdate,
+)
 from server.polaris import MAX_SHARES
 from server.validation import validation_message
 
-from .directory import UserDirectory
+from .directory import UserDirectory, validate_namespace
+from .mcp_server import create_mcp
 from .preview import run_preview
 from .runtime import NotebookRuntime, filespace_key
 
@@ -58,17 +69,21 @@ class EnvironmentInput(BaseModel):
     environment: Environment
 
 
+class DatabaseCreateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: Name
+    description: str = Field(default="", max_length=280)
+
+
+class DatabaseDeleteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm_name: str = Field(min_length=1, max_length=48)
+
+
 class PreviewInput(NotebookInput):
     table: str = Field(min_length=1, max_length=256)
     snapshot_id: str | None = Field(default=None, pattern=r"^[0-9]{1,19}$")
     limit: int = Field(default=100, ge=1, le=100)
-
-
-def validate_namespace(parts):
-    if len(parts) > 100 or any(
-        not p or len(p) > 256 or p in (".", "..") or "\x1f" in p or "\0" in p for p in parts
-    ):
-        raise ServiceError(422, "Invalid namespace.")
 
 
 def same_origin(origin, url):
@@ -115,6 +130,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             runtime.stop_session(session.id)
             session.team = profile["teams"][0]["id"]
         team_databases = [d for d in profile["databases"] if d["team"] == session.team]
+        team_databases += profile.get("sharedDatabases", [])
         available = [d for d in team_databases if d["environment"] == session.environment]
         for workspace in list(runtime.workspaces.values()):
             if workspace.session_id == session.id and workspace.database not in {d["id"] for d in available}:
@@ -122,6 +138,10 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         return {
             **profile,
             "databases": available,
+            "deletingDatabases": [
+                d for d in profile["deletingDatabases"]
+                if d["team"] == session.team and d["environment"] == session.environment
+            ],
             "activeTeam": session.team,
             "activeRole": next(t["role"] for t in profile["teams"] if t["id"] == session.team),
             "activeEnvironment": session.environment,
@@ -172,10 +192,16 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                         except DockerException:
                             LOG.error("Orphan notebook cleanup failed")
 
+    mcp_running = None
+
     @asynccontextmanager
     async def lifespan(app):
         await run_in_threadpool(runtime.recover)
-        async with httpx.AsyncClient(timeout=60, trust_env=False) as proxy_client:
+        async with AsyncExitStack() as stack:
+            if mcp_running:
+                # A sub-application's lifespan never runs; the MCP transport is started here.
+                await stack.enter_async_context(mcp_running())
+            proxy_client = await stack.enter_async_context(httpx.AsyncClient(timeout=60, trust_env=False))
             app.state.proxy_client = proxy_client
             task = asyncio.create_task(sweep())
             try:
@@ -190,8 +216,46 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     directory.close()
 
     app = FastAPI(
-        title="Iceberg User Workspace", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
+        title="Iceberg User Workspace", version="0.5.0", docs_url=None, redoc_url=None, lifespan=lifespan,
+        description=(
+            "Sign in to the user portal first, then open /docs to call these APIs with your session. "
+            "Your team roles and selected team/environment apply to every operation. "
+            "Writes require X-Portal-Request: 1 and Content-Type: application/json. "
+            "Try it out supplies these headers automatically."
+        ),
     )
+
+    def user_openapi():
+        if app.openapi_schema is None:
+            schema = get_openapi(title=app.title, version=app.version,
+                                 description=app.description, routes=app.routes)
+            schema.setdefault("components", {}).setdefault("securitySchemes", {})["UserSession"] = {
+                "type": "apiKey", "in": "cookie", "name": session_cookie,
+                "description": "Sign in through the user portal. The browser sends the session cookie automatically.",
+            }
+            for path, operations in schema["paths"].items():
+                for method, operation in operations.items():
+                    if path not in ("/api/session", "/api/health"):
+                        operation["security"] = [{"UserSession": []}]
+                    if method not in ("get", "head"):
+                        operation.setdefault("parameters", []).append({
+                            "name": "X-Portal-Request", "in": "header", "required": True,
+                            "schema": {"type": "string", "enum": ["1"], "default": "1"},
+                        })
+            app.openapi_schema = schema
+        return app.openapi_schema
+
+    app.openapi = user_openapi
+
+    @app.get("/docs", include_in_schema=False, response_class=HTMLResponse)
+    def api_docs():
+        return """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Iceberg User Workspace · API</title><link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js" defer></script>
+<script src="/docs.js" defer></script></head>
+<body><div id="swagger-ui"></div></body></html>"""
 
     if oidc:
         async def accept_oidc(request, claims, token, lifetime, grant):
@@ -224,38 +288,11 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
     async def security(request, call_next):
         path = request.url.path
         try:
-            protected = path.startswith("/workspaces/") or (
-                path.startswith("/api/") and path not in ("/api/session", "/api/health")
-            )
-            if protected:
-                request.state.session = session_for(request.cookies)
-            if request.method not in ("GET", "HEAD"):
-                origin = request.headers.get("origin")
-                if path.startswith("/api/"):
-                    if (
-                        request.headers.get("x-portal-request") != "1"
-                        or request.headers.get("content-type", "").split(";")[0] != "application/json"
-                        or (origin and not same_origin(origin, request.url))
-                    ):
-                        raise ServiceError(403, "Invalid request origin.")
-                    body = bytearray()
-                    async for chunk in request.stream():
-                        body.extend(chunk)
-                        if len(body) > 8192:
-                            raise ServiceError(413, "Request is too large.")
-                    request._body = bytes(body)
-                elif path.startswith("/workspaces/") and not same_origin(origin, request.url):
-                    raise ServiceError(403, "Invalid request origin.")
-            if path.startswith("/api/") and path not in ("/api/health", "/api/preview"):
-                async with lock:
-                    if protected:
-                        await renew_session(session_for(request.cookies))
-                    response = await call_next(request)
-            else:
-                if protected:
-                    async with lock:
-                        await renew_session(session_for(request.cookies))
+            if is_mcp_path(path):
+                # Bearer-token API for MCP clients: no cookies, CSRF checks, body cap or session lock.
                 response = await call_next(request)
+            else:
+                response = await guarded(request, call_next, path)
         except ServiceError as exc:
             response = JSONResponse({"error": str(exc)}, status_code=exc.status)
         except Exception as exc:
@@ -268,13 +305,58 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                 "Referrer-Policy": "no-referrer",
             }
         )
-        if not path.startswith("/workspaces/"):
+        if path == "/docs":
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; "
+                "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+            )
+        elif not path.startswith("/workspaces/"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
             )
         else:
             response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
         return response
+
+    async def guarded(request, call_next, path):
+        protected = path.startswith("/workspaces/") or (
+            path.startswith("/api/") and path not in ("/api/session", "/api/health")
+        ) or path in ("/docs", "/openapi.json")
+        if protected:
+            request.state.session = session_for(request.cookies)
+        if request.method not in ("GET", "HEAD"):
+            origin = request.headers.get("origin")
+            if path.startswith("/api/"):
+                if (
+                    request.headers.get("x-portal-request") != "1"
+                    or request.headers.get("content-type", "").split(";")[0] != "application/json"
+                    or (origin and not same_origin(origin, request.url))
+                ):
+                    raise ServiceError(403, "Invalid request origin.")
+                body = bytearray()
+                async for chunk in request.stream():
+                    body.extend(chunk)
+                    if len(body) > 8192:
+                        raise ServiceError(413, "Request is too large.")
+                request._body = bytes(body)
+            elif path.startswith("/workspaces/") and not same_origin(origin, request.url):
+                raise ServiceError(403, "Invalid request origin.")
+        if path.startswith("/api/") and path not in ("/api/health", "/api/preview"):
+            async with lock:
+                if protected:
+                    await renew_session(session_for(request.cookies))
+                response = await call_next(request)
+        else:
+            if protected:
+                async with lock:
+                    await renew_session(session_for(request.cookies))
+            response = await call_next(request)
+        return response
+
+    if oidc:
+        mcp = create_mcp(directory, oidc, lock=lock, previews=previews)
+        mcp_running = mount_mcp(app, mcp, oidc, "Iceberg Workspaces")
 
     @app.get("/api/health")
     def health():
@@ -341,6 +423,20 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
     @app.get("/api/team")
     def team_overview(request: Request):
         return directory.team_members(request.state.session)
+
+    @app.post("/api/databases", status_code=201)
+    def create_database(data: DatabaseCreateInput, request: Request):
+        return directory.create_database(request.state.session, data.name, data.description)
+
+    database_id = Annotated[str, PathParam(pattern=r"^db-[a-f0-9]{32}$")]
+
+    @app.patch("/api/databases/{id}")
+    def rename_database(id: database_id, data: DatabaseRename, request: Request):
+        return directory.rename_database(request.state.session, id, data.name)
+
+    @app.delete("/api/databases/{id}")
+    def delete_database(id: database_id, data: DatabaseDeleteInput, request: Request):
+        return directory.delete_database(request.state.session, id, data.confirm_name)
 
     @app.patch("/api/environment")
     def switch_environment(data: EnvironmentInput, request: Request):
@@ -417,7 +513,8 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             if data.table and data.table not in {t["name"] for t in content["tables"]}:
                 raise ServiceError(404, "Table not found in this namespace.")
         return runtime.start(
-            session, data.database, data.namespace, data.table, database_name=database["name"]
+            session, data.database, data.namespace, data.table, database_name=database["name"],
+            **({"shared_objects": database["sharedObjects"]} if database.get("shared") else {}),
         ).public()
 
     @app.delete("/api/notebooks/{id}")
@@ -470,7 +567,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         result["origin"] = workspace.upstream
         return result
 
-    @app.api_route("/workspaces/{id}/{path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
+    @app.api_route("/workspaces/{id}/{path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
     async def notebook_proxy(id: str, path: str, request: Request):
         async with lock:
             workspace = await run_in_threadpool(authorize_workspace, id, request.state.session)
@@ -559,9 +656,30 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
 
     share_id = Annotated[str, PathParam(pattern=r"^share-[a-f0-9]{32}$")]
 
+    @app.get("/api/share-teams")
+    def share_teams(request: Request):
+        directory.manage_team(request.state.session)
+        return [{"id": t["id"], "name": t["name"]} for t in directory.metadata.list_teams()
+                if t["id"] != request.state.session.team]
+
+    @app.get("/api/received-shares")
+    def received_shares(request: Request):
+        session = request.state.session
+        profile = directory.profile(session)
+        if session.team not in {t["id"] for t in profile["teams"]}:
+            raise ServiceError(403, "You are not a member of this team.")
+        databases = {d["id"]: d for d in directory.metadata.list_databases()
+                     if d["environment"] == session.environment and d["status"] == "ready"}
+        return [{"id": s["id"], "name": s["name"], "description": s["description"],
+                 "database": s["database"], "databaseName": databases[s["database"]]["name"],
+                 "objects": s["objects"], "expiresAt": s["expiresAt"]}
+                for s in directory.metadata.list_shares(drift=True)
+                if s.get("recipientTeam") == session.team and s["database"] in databases]
+
     @app.get("/api/shares")
     def shares(request: Request, database: Annotated[str, Query(pattern=r"^db-[a-f0-9]{32}$")]):
-        directory.database(request.state.session, database)
+        if directory.database(request.state.session, database).get("shared"):
+            raise ServiceError(403, "Only the owning team can list outgoing shares.")
         return {
             "shares": directory.metadata.list_shares(database, drift=True),
             "limits": {"shares": MAX_SHARES, "objects": 50},
@@ -591,6 +709,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
     files = {
         "": "index.html",
         "app.js": "app.js",
+        "docs.js": "docs.js",
         "catalog.js": "catalog.js",
         "shares.js": "shares.js",
         "style.css": "style.css",
@@ -600,7 +719,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         {f"fonts/{font}.ttf": f"fonts/{font}.ttf" for font in ("doto", "space-grotesk", "space-mono")}
     )
 
-    @app.get("/{path:path}")
+    @app.get("/{path:path}", include_in_schema=False)
     def static(path: str):
         if path not in files:
             raise ServiceError(404, "Not found.")

@@ -4,7 +4,7 @@ import logging
 import os
 import secrets
 import time
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlsplit
@@ -15,9 +15,12 @@ from fastapi import Path as PathParam
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 
+from .mcp_admin import create_admin_mcp
+from .mcp_auth import is_mcp_path, mount_mcp
 from .models import (
     DatabaseInput,
     DatabaseMove,
+    DatabaseRename,
     Login,
     Memberships,
     ServiceError,
@@ -48,15 +51,23 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
             raise RuntimeError("Unknown PROVIDER.")
         provider = PolarisProvider(os.environ, RustFSStorage(os.environ))
 
+    mcp_running = None
+
     @asynccontextmanager
     async def lifespan(app):
-        yield
-        if user_management:
-            user_management.close()
-        if owned:
-            provider.close()
+        async with AsyncExitStack() as stack:
+            if mcp_running:
+                # A sub-application's lifespan never runs; the MCP transport is started here.
+                await stack.enter_async_context(mcp_running())
+            try:
+                yield
+            finally:
+                if user_management:
+                    user_management.close()
+                if owned:
+                    provider.close()
 
-    app = FastAPI(title="Iceberg Workspace API", version="0.4.1", lifespan=lifespan, redoc_url=None)
+    app = FastAPI(title="Iceberg Workspace API", version="0.5.0", lifespan=lifespan, redoc_url=None)
     sessions, attempts = {}, {}
     # This local control plane intentionally runs one worker. Serializing reads and
     # mutations also prevents orphan memberships during concurrent team deletion.
@@ -108,44 +119,11 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         current = sessions.get(session_id)
         request.state.authenticated = bool(current) if oidc else (current or 0) > now
         try:
-            if path.startswith("/api/") and request.method not in ("GET", "HEAD"):
-                origin = request.headers.get("origin")
-                if (
-                    request.headers.get("x-portal-request") != "1"
-                    or request.headers.get("content-type", "").split(";")[0] != "application/json"
-                    or (origin and urlsplit(origin).netloc != request.headers.get("host"))
-                ):
-                    raise ServiceError(403, "Invalid request origin.")
-                body = bytearray()
-                async for chunk in request.stream():
-                    body.extend(chunk)
-                    if len(body) > 8192:
-                        raise ServiceError(413, "Request is too large.")
-                request._body = bytes(body)
-            protected = (
-                path.startswith("/api/") and path not in ("/api/session", "/api/health")
-            ) or path in ("/docs", "/openapi.json", "/docs/oauth2-redirect")
-            if oidc and current and (protected or (path == "/api/session" and request.method == "GET")):
-                try:
-                    await oidc.renew(current)
-                    roles = current.claims.get("resource_access", {}).get(oidc.client_id, {}).get("roles", [])
-                    if "platform-admin" not in roles:
-                        raise ServiceError(401, "Administrator access ended. Sign in again.")
-                    if sessions.get(session_id) is not current:
-                        raise ServiceError(401, "Sign in to continue.")
-                except ServiceError as exc:
-                    if exc.status == 401:
-                        sessions.pop(session_id, None)
-                        request.state.authenticated = False
-                    if exc.status != 401 or protected:
-                        raise
-            if protected and not request.state.authenticated:
-                raise ServiceError(401, "Sign in to continue.")
-            if protected and path != "/api/infrastructure":
-                async with mutation_lock:
-                    response = await call_next(request)
-            else:
+            if is_mcp_path(path):
+                # Bearer-token API for MCP clients: no cookies, CSRF checks, body cap or session lock.
                 response = await call_next(request)
+            else:
+                response = await guarded(request, call_next, path, session_id, current)
         except ServiceError as exc:
             response = JSONResponse({"error": str(exc)}, status_code=exc.status)
         except Exception as exc:
@@ -167,6 +145,45 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
                 "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
             )
         return response
+
+    async def guarded(request, call_next, path, session_id, current):
+        if path.startswith("/api/") and request.method not in ("GET", "HEAD"):
+            origin = request.headers.get("origin")
+            if (
+                request.headers.get("x-portal-request") != "1"
+                or request.headers.get("content-type", "").split(";")[0] != "application/json"
+                or (origin and urlsplit(origin).netloc != request.headers.get("host"))
+            ):
+                raise ServiceError(403, "Invalid request origin.")
+            body = bytearray()
+            async for chunk in request.stream():
+                body.extend(chunk)
+                if len(body) > 8192:
+                    raise ServiceError(413, "Request is too large.")
+            request._body = bytes(body)
+        protected = (
+            path.startswith("/api/") and path not in ("/api/session", "/api/health")
+        ) or path in ("/docs", "/openapi.json", "/docs/oauth2-redirect")
+        if oidc and current and (protected or (path == "/api/session" and request.method == "GET")):
+            try:
+                await oidc.renew(current)
+                roles = current.claims.get("resource_access", {}).get(oidc.client_id, {}).get("roles", [])
+                if "platform-admin" not in roles:
+                    raise ServiceError(401, "Administrator access ended. Sign in again.")
+                if sessions.get(session_id) is not current:
+                    raise ServiceError(401, "Sign in to continue.")
+            except ServiceError as exc:
+                if exc.status == 401:
+                    sessions.pop(session_id, None)
+                    request.state.authenticated = False
+                if exc.status != 401 or protected:
+                    raise
+        if protected and not request.state.authenticated:
+            raise ServiceError(401, "Sign in to continue.")
+        if protected and path != "/api/infrastructure":
+            async with mutation_lock:
+                return await call_next(request)
+        return await call_next(request)
 
     @app.get("/api/health")
     def health():
@@ -289,6 +306,10 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
     def move_database(id: str, data: DatabaseMove):
         return provider.move_database(id, data.team)
 
+    @app.patch("/api/databases/{id}/name")
+    def rename_database(id: str, data: DatabaseRename):
+        return provider.rename_database(id, data.name)
+
     @app.delete("/api/databases/{id}")
     def delete_database(id: str):
         provider.delete_database(id)
@@ -310,6 +331,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
 
     @app.patch("/api/users/{id}")
     def update_user(id: str, data: Memberships):
+        # The MCP update_user_access tool calls this function directly; keep its signature.
         principal = require_editable_user(id)
         if user_management:
             # A linked legacy account keeps the bucket administration it already holds.
@@ -335,6 +357,11 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
 
     if user_management:
         user_management.install(app, provider)
+
+    if oidc:
+        mcp = create_admin_mcp(provider, oidc, lock=mutation_lock, user_management=user_management,
+                               overview=overview, users=list_users, update_user=update_user)
+        mcp_running = mount_mcp(app, mcp, oidc, "Iceberg Workspace Administration")
 
     @app.get("/{path:path}", include_in_schema=False)
     def static(path: str):

@@ -64,13 +64,13 @@ origins and TLS before using them. See [Keycloak configuration](keycloak.md#conf
 ## Teams, databases and users
 
 1. **Create teams** on the Teams page. Teams exist independently of databases and users. Editing a name or description preserves the stable team ID.
-2. **Create a database** and select an existing team and Development, Acceptance or Production. Names are unique within that team and environment; `db1` can exist in both Development and Production. Each database gets its own catalog and RustFS bucket. Existing team members receive access immediately, with the role they hold in that team.
+2. **Create a database** in Team overview of the user portal as a team Administrator, selecting the active team and Development, Acceptance or Production. Platform administrators can also create one here. Names are unique within that team and environment; `db1` can exist in both Development and Production. Each database gets its own catalog and RustFS bucket. Existing team members receive access immediately, with the role they hold in that team. Team administrators can rename a database in Team overview; platform administrators can use Databases → Rename. Neither changes its catalog ID, bucket or connection settings.
 3. **Create a user**, select one or more teams and choose a role for each team. Every user must belong to at least one existing team. A role applies to all current and future databases of that team only, so one person can be Administrator in one team and Read in another.
 4. **Copy the temporary password** shown once for a new Keycloak account. The user must change it at first sign-in. Existing linked accounts keep their own passwords.
 5. **Edit memberships** under Users → Edit access. Check or clear teams; Polaris grants or removes access according to the selected teams.
 6. **Change roles** in the same Edit access dialog, per team. Changing the role for one team leaves the user's access to other teams untouched. A data role does not grant portal administration.
 7. **Move a database** under Databases → Move. Members of the new team receive access with their role in that team. Previous members lose access unless they also belong to the new team; a member of both teams switches to their role in the new team. The bucket, data, database name and connection details stay the same.
-8. **Delete a database** under Databases → Delete. After confirmation, the operation removes catalog grants, namespaces, tables, views, objects, object versions, multipart uploads and the dedicated bucket. Users and teams remain. If cleanup fails, use **Resume deletion** to finish it.
+8. **Delete a database** from Team overview as a team Administrator, or under Databases → Delete here as a platform administrator. Type its exact name to confirm in the user portal. Deletion is immediate in every environment and removes catalog grants, namespaces, tables, views, objects, object versions, multipart uploads, data shares and the dedicated bucket. Users, teams and shared notebook files remain. If cleanup fails, use **Resume deletion** to finish it.
 9. **Review data shares** on the Data shares page. Team administrators create and edit them in the user portal; here you see every share with its database, team, shared tables and views, expiry and creator, and you can revoke one. A database with shares cannot be moved until they are revoked, and deleting a database revokes them.
 10. **Delete a team** after moving or deleting its databases. The API refuses deletion if a user would lose their last team. Assign that user to another team or delete the user first. Users with multiple teams lose only the deleted membership.
 
@@ -88,6 +88,17 @@ no data access. See [identity management](keycloak.md#manage-users-in-the-admini
 for linking, password reset, and access revocation.
 
 Navigation and search/filter values are kept in the URL, so browser refresh and Back/Forward return to the same page. Database, user, team and data-share lists refresh every 30 seconds while visible and when the tab regains focus. Open dialogs and focused form fields are preserved. Infrastructure keeps its existing 15-second polling; catalog tree expansion stays under your control.
+
+## Share data with another team
+
+In the user portal, choose **Data shares → New data share → Another team** and select
+the recipient team. Leave **Externally** selected to share both ways, or clear it for
+team-only access. Select the tables and views and optionally an expiry. The receiving
+team sees the database in **Catalog** and **Notebooks** in the same environment;
+readers can open notebooks even if that team owns no databases. Files belong to the
+recipient team's workspace. Membership changes add or remove internal read access.
+Only the owning team can manage the source database and outgoing shares. To change
+sharing destinations, revoke the share and create a new one.
 
 ## Share data with an external party
 
@@ -107,6 +118,22 @@ The **Catalog** page lets the signed-in portal administrator browse all Polaris 
 Both `/api/admin/explorer/` routes require the portal administrator session. A database user with an Administrator role does not receive portal administrator access. Polaris bearer tokens are not accepted as portal sessions. Signing out immediately revokes API access.
 
 The browser receives only names, object kinds and namespace paths. It does not expose table data, view SQL, arbitrary metadata properties or credentials. While listing, the server temporarily grants itself listing privileges through a unique catalog role attached to `service_admin`, then removes that role even if the request fails. Existing team permissions and catalog roles are preserved. Failed cleanup produces an explicit error.
+
+## Connect an MCP client
+
+The administration portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`, so an AI agent such as Claude Code can administer the platform with your Keycloak sign-in. It uses the same public Keycloak client and callback port as the [user portal's endpoint](../user_portal/README.md#connect-an-mcp-client); register it as a second server:
+
+```bash
+claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-admin http://localhost:3000/mcp
+```
+
+Every tool requires the Keycloak `platform-admin` role; other signed-in users see the tool names but every call is refused. The tools are the operations of the administration API, run under the same lock:
+
+- **Read:** `get_overview`, `list_teams`, `list_databases`, `get_database_connection`, `browse_catalog` (names only, like the catalog browser), `list_users`, `find_accounts`, `list_shares`.
+- **Create and edit:** `create_team`, `update_team`, `create_database`, `rename_database`, `move_database`, `create_user`, `link_user`, `update_user_access`, `retry_user_setup`.
+- **Destructive, marked as such for the agent:** `delete_team`, `delete_database`, `delete_user` (revokes platform access; the Keycloak account remains) and `revoke_share`. `delete_database` only proceeds when `confirm_name` equals the database's display name, and can be called again to resume an interrupted deletion.
+
+`create_user` creates the Keycloak account and returns the one-time temporary password in the tool result, exactly as the portal shows it once. That result passes through the agent's transcript: treat that transcript as confidential, hand the password to the person over a secure channel, and reset it in the portal if in doubt. Tools take the stable ids from the list tools, never display names. See [Keycloak](keycloak.md#authentication-and-data-access) for how the tokens are validated.
 
 ## Connect an Iceberg client
 
@@ -177,10 +204,13 @@ a scan. Filesystem usage can include other data sharing RustFS's backing filesys
 | PATCH / DELETE | `/api/teams/{id}` | Edit / delete a team |
 | GET / POST | `/api/databases` | List / create databases |
 | PATCH / DELETE | `/api/databases/{id}` | Move with `{"team":"team-id"}` / delete including data |
+| PATCH | `/api/databases/{id}/name` | Rename with `{"name":"new-name"}` while preserving catalog ID and bucket |
 | GET | `/api/databases/{id}/connection` | Iceberg connection details |
 | DELETE | `/api/shares/{id}` | Revoke a data share; shares are listed in `/api/overview` and created in the user portal |
 | GET / POST | `/api/users` | List / create users |
 | PATCH / DELETE | `/api/users/{id}` | Replace memberships and per-team roles with `{"memberships":[{"team":"team-id","role":"writer"}]}`; returns the user and, on first S3 promotion, one-time `bucketCredentials` / revoke access |
+
+Both portals additionally serve `POST /mcp` (Model Context Protocol over streamable HTTP, Keycloak bearer token) and `GET /.well-known/oauth-protected-resource[/mcp]`; see [connecting an MCP client](#connect-an-mcp-client) for platform administration and the [user portal](../user_portal/README.md#connect-an-mcp-client) for team data and database management.
 
 Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, including DELETE without a body. Administration requires an authenticated portal session. Use stable team IDs from `/api/teams`. Validation errors return 422, missing teams 404 and dependency conflicts 409. Errors contain `error`; provider error bodies and secrets are never forwarded.
 

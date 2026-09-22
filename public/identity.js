@@ -3,7 +3,7 @@ let keycloakUsers = false;
 
 function identityGuide() {
   const steps = [
-    ['Create a team and database', 'Teams own databases. Choose the team when creating a database.'],
+    ['Create a team, then a database', 'Teams own databases. Team administrators can create databases in the user portal; platform administrators can create them here.'],
     ['Create or link a user', 'On Users, create a Keycloak account or select an existing account to link. Choose teams and a data role per team. Share new accounts’ temporary passwords securely.'],
     ['Sign in and open a notebook', 'Open the user portal and choose Sign in with Keycloak. New users must change their temporary password. Their notebooks use their own database permissions.'],
     ['Manage access', 'Use Edit access to change teams and the role in each team. Revoke removes platform access and preserves the Keycloak account. Use Retry setup if account creation was interrupted.'],

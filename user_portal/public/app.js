@@ -6,6 +6,7 @@ let state, database = null, namespace = [], activeNotebook = null, browseVersion
 let workspacePage = 'catalog', sharesContext = null;
 let restoringRoute = false, refreshingWorkspace = false, pendingActions = 0;
 let teamMembersVersion = 0;
+let databaseFormContext = null;
 function saveRoute(replace = false) {
   if (!state || restoringRoute) return;
   const params = new URLSearchParams({team: state.activeTeam, environment: state.activeEnvironment});
@@ -42,9 +43,10 @@ async function restoreRoute() {
 window.addEventListener('hashchange', () => restoreRoute().catch(error => notice(error.message, true)));
 const workspacePages = {
   team: ['Team overview', 'Your team, its members, and the workspace available in this environment.'],
+  databases: ['Databases', 'Your databases, organized by team and environment.'],
   catalog: ['Catalog', 'Explore your team catalogs and inspect Iceberg tables and views.'],
   notebooks: ['Notebooks', 'Analyze your team data with shared Python and SQL notebooks in marimo.'],
-  shares: ['Data shares', 'Review data shared with external parties across your team’s databases in this environment.'],
+  shares: ['Data shares', 'Share data with other teams and external parties, and review data shared with your team.'],
 };
 function showPage(page, updateRoute = true) {
   if (page !== workspacePage) clearNotice();
@@ -57,6 +59,7 @@ function showPage(page, updateRoute = true) {
   $('#page-title').textContent = workspacePages[page][0];
   $('#page-description').textContent = workspacePages[page][1];
   if (page === 'team' && state) { renderTeamOverview(); loadTeamMembers(); }
+  if (page === 'databases' && state) renderDatabases();
   if (page === 'shares') renderTeamShares();
   placeNotice();
   if (updateRoute) saveRoute();
@@ -83,21 +86,30 @@ function symbol(kind) {
   return e;
 }
 function resetEditor() { $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
-function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; sharesContext = null; $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
+function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
 async function api(path, method = 'GET', body) { const response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); const result = await response.json(); if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
 function renderState() {
   $('#login-screen').hidden = true; $('#identity').hidden = false; $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; $('#workspace-nav').hidden = false; placeNotice();
   $('#team').replaceChildren(...state.teams.map(t => { const option = element('option', `${t.name} · ${roleNames[t.role] || t.role}`); option.value = t.id; return option; })); $('#team').value = state.activeTeam;
   $('#environment').replaceChildren(...state.environments.map(env => { const option = element('option', envNames[env]); option.value = env; return option; })); $('#environment').value = state.activeEnvironment;
-  $('#databases').replaceChildren(...state.databases.map(d => { const b = element('button', undefined, `db${database === d.id ? ' selected' : ''}`); const label = element('span', d.name); label.append(element('small', envNames[d.environment])); b.append(symbol('database'), label); b.setAttribute('aria-pressed', String(database === d.id)); b.addEventListener('click', () => browse(d.id, [])); return b; }));
+  $('#databases').replaceChildren(...state.databases.map(d => { const b = element('button', undefined, `db${database === d.id ? ' selected' : ''}`); const label = element('span', d.name); label.append(element('small', `${envNames[d.environment]}${d.shared ? ' · Shared · Read-only' : ''}`)); b.append(symbol('database'), label); b.setAttribute('aria-pressed', String(database === d.id)); b.addEventListener('click', () => browse(d.id, [])); return b; }));
+  if (database) {
+    const selected = state.databases.find(d => d.id === database);
+    if (selected) {
+      $('#database-label').textContent = selected.name;
+      const firstCrumb = $('#breadcrumbs button'); if (firstCrumb) firstCrumb.textContent = selected.name;
+    }
+  }
   if (!state.databases.length) $('#databases').append(element('p', 'This team has no databases in this environment yet.', 'hint'));
   $('#notebooks').replaceChildren(...state.notebooks.map(n => { const b = element('button', `${state.databases.find(d => d.id === n.database)?.name || n.database} · ${envNames[n.environment]} ↗`, 'quiet'); b.addEventListener('click', () => showNotebook(n)); return b; }));
+  if (activeNotebook) $('#editor-title').textContent = `${state.databases.find(d => d.id === activeNotebook.database)?.name || activeNotebook.database} · ${envNames[activeNotebook.environment]}`;
   if (!state.notebooks.length) $('#notebooks').append(element('p', 'Open a database in marimo to get started.', 'hint'));
-  $('#notebook-databases').replaceChildren(...state.databases.map(db => action(`${db.name} ↗`, () => openNotebook(db.id))));
+  $('#notebook-databases').replaceChildren(...state.databases.map(db => action(`${db.name}${db.shared ? ' · Shared · Read-only' : ''} ↗`, () => openNotebook(db.id))));
   if (!state.databases.length) $('#notebook-databases').append(element('p', 'This team has no databases in this environment yet.', 'hint'));
   const context = JSON.stringify([state.activeTeam, state.activeEnvironment, state.activeRole, state.databases.map(db => db.id)]);
   if (sharesContext !== context) { sharesContext = context; $('#team-shares').replaceChildren(); if (workspacePage === 'shares') renderTeamShares(); }
+  renderDatabases();
   if (workspacePage === 'team') {
     renderTeamOverview();
     if ($('#team-members').dataset.context !== teamMembersContext()) loadTeamMembers();
@@ -116,14 +128,91 @@ function renderTeamOverview() {
     ['Your active notebooks', state.notebooks.length],
   ]));
   $('#team-databases-description').textContent = `Available in ${envNames[state.activeEnvironment]}.`;
-  $('#team-databases').replaceChildren(...state.databases.map(db => {
+  const databaseRows = state.databases.map(db => {
     const row = element('div', undefined, 'object-row'), label = element('div', undefined, 'object-label');
     label.append(element('strong', db.name));
-    row.append(symbol('database'), label, action('Browse →', () => browse(db.id, [])));
+    const actions = element('div', undefined, 'database-actions');
+    actions.append(action('Browse →', () => browse(db.id, [])));
+    row.append(symbol('database'), label, actions);
     return row;
-  }));
-  if (!state.databases.length) $('#team-databases').append(element('p', 'This team has no databases in this environment yet.', 'catalog-empty'));
+  });
+  $('#team-databases').replaceChildren(...databaseRows);
+  if (!databaseRows.length) $('#team-databases').append(element('p', 'This team has no databases in this environment yet.', 'catalog-empty'));
 }
+function renderDatabases() {
+  const team = state.teams.find(t => t.id === state.activeTeam);
+  const canManage = ['admin', 'bucket-admin'].includes(team.role);
+  const context = JSON.stringify([team.id, state.activeEnvironment, team.role]);
+  if (databaseFormContext !== context || !canManage) { databaseFormContext = context; $('#database-form').replaceChildren(); }
+  $('#new-database').hidden = !canManage;
+  $('#database-permissions').textContent = canManage
+    ? `Manage databases for ${team.name} in ${envNames[state.activeEnvironment]}.`
+    : 'Only team administrators can create, rename, or delete databases.';
+  const rows = state.databases.map(db => {
+    const label = element('div');
+    label.append(element('strong', db.name));
+    if (db.description) label.append(element('small', db.description));
+    const actions = element('div', undefined, 'database-actions');
+    actions.append(action('Browse →', () => browse(db.id, [])));
+    if (canManage && !db.shared) actions.append(action('Rename', () => databaseForm('rename', db)), action('Delete', () => databaseForm('delete', db)));
+    if (db.shared) label.append(element('small', 'Shared with this team · Read-only'));
+    return [label, db.shared ? 'Shared by another team' : team.name, envNames[db.environment], actions];
+  });
+  if (canManage) state.deletingDatabases.forEach(db => {
+    const label = element('div');
+    label.append(element('strong', db.name), element('small', 'Deletion incomplete'));
+    rows.push([label, team.name, envNames[db.environment], action('Resume deletion', () => databaseForm('delete', db))]);
+  });
+  $('#managed-databases').replaceChildren(rows.length
+    ? dataGrid(['Database', 'Team', 'Environment', 'Actions'], rows, 'Team databases')
+    : element('p', 'This team has no databases in this environment yet.', 'catalog-empty'));
+}
+$('#refresh-databases').addEventListener('click', event => busy(event.currentTarget, () => loadState()));
+function databaseForm(kind, db = null) {
+  const host = $('#database-form'), form = element('form', undefined, 'database-form');
+  const title = kind === 'create' ? 'Create database' : kind === 'rename' ? `Rename ${db.name}` : `Delete ${db.name}`;
+  const name = element('input'); name.maxLength = 48; name.required = true;
+  const buttons = element('div', undefined, 'database-actions');
+  const submit = element('button', kind === 'create' ? 'Create database' : kind === 'rename' ? 'Save name' : 'Delete database permanently'); submit.type = 'submit';
+  const cancel = element('button', 'Cancel', 'quiet'); cancel.type = 'button'; cancel.addEventListener('click', () => host.replaceChildren());
+  buttons.append(submit, cancel);
+  form.append(element('h3', title));
+  if (kind === 'delete') {
+    form.append(element('p', 'This permanently deletes every namespace, table, view, stored file, the dedicated bucket, and all data shares. This also applies in Production. Saved team notebook files remain.', 'database-warning'));
+    form.append(element('p', `Type ${db.name} to confirm.`, 'hint'));
+    form.append(field('Database name', name));
+  } else {
+    name.value = db?.name || ''; name.pattern = '[a-z][a-z0-9_\\-]{2,47}';
+    form.append(field('Database name', name));
+    form.append(element('p', 'Use 3–48 lowercase letters, digits, hyphens or underscores, starting with a letter.', 'hint'));
+    if (kind === 'create') {
+      const description = element('input'); description.maxLength = 280;
+      form.append(field('Description (optional)', description));
+      form.dataset.description = 'true';
+    }
+  }
+  form.append(buttons);
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    busy(submit, async () => {
+      if (kind === 'delete' && name.value !== db.name) throw new Error('Type the database name exactly to confirm deletion.');
+      if (kind === 'create') {
+        const description = form.querySelectorAll('input')[1].value.trim();
+        await api('/databases', 'POST', {name: name.value, description});
+      } else if (kind === 'rename') await api(`/databases/${db.id}`, 'PATCH', {name: name.value});
+      else {
+        try { await api(`/databases/${db.id}`, 'DELETE', {confirm_name: name.value}); }
+        catch (error) { await loadState(); throw error; }
+      }
+      host.replaceChildren();
+      await loadState();
+      notice(kind === 'create' ? 'Database created.' : kind === 'rename' ? 'Database renamed.' : 'Database and stored data deleted.');
+    });
+  });
+  host.replaceChildren(form);
+  name.focus();
+}
+$('#new-database').addEventListener('click', () => databaseForm('create'));
 async function loadTeamMembers() {
   const host = $('#team-members'), context = teamMembersContext(), version = ++teamMembersVersion;
   if (host.dataset.context !== context) {

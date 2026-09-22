@@ -79,8 +79,18 @@ def test_writable_connection_to_a_new_table_waits_for_credentials(connection_set
     native.refresh_table_credentials(connection, ("iceberg_v3",), "sensor_events")
     assert requests[-1].headers["X-Iceberg-Access-Delegation"] == "vended-credentials"
     sql = connection.execute.call_args.args[0]
-    assert "CREATE OR REPLACE SECRET table_storage" in sql
+    assert 'CREATE OR REPLACE SECRET "table_storage"' in sql
     assert "ENDPOINT 'rustfs:9000'" in sql and "SCOPE 's3://bucket/table/'" in sql
+
+
+def test_multi_table_queries_keep_distinct_scoped_storage_secrets(connection_setup):
+    connection, _ = connection_setup
+    native.refresh_table_credentials(connection, ("ai_flights",), "flights", secret_name="flights_flights")
+    native.refresh_table_credentials(connection, ("ai_flights",), "routes", secret_name="flights_routes")
+    sql = [call.args[0] for call in connection.execute.call_args_list]
+    assert 'SECRET "flights_flights"' in sql[0]
+    assert 'SECRET "flights_routes"' in sql[1]
+    assert all("SCOPE 's3://bucket/table/'" in statement for statement in sql)
 
 
 @pytest.mark.parametrize("options", [{}, {"read_only": False}, {"missing_ok": True}])
@@ -164,3 +174,40 @@ def test_example_replaces_only_the_table_it_created(exists, owner, dropped):
             'SELECT value FROM iceberg_table_properties("lakehouse"."iceberg_v3.nested"."sensor_events") WHERE key = ?',
             [native.EXAMPLE_PROPERTY],
         )
+
+
+def test_marimo_discovery_does_not_describe_uncredentialed_catalog_tables(connection_setup, monkeypatch):
+    pytest.importorskip("marimo")
+    from marimo._data import get_datasets
+
+    connection, _ = connection_setup
+    native.connect_duckdb(["ai_flights"], "flights")
+    queried = []
+
+    def execute(conn, query):
+        queried.append(query)
+        return [("id", "VARCHAR", "YES", None, None, None)]
+
+    monkeypatch.setattr(get_datasets, "execute_duckdb_query", execute)
+    assert get_datasets.get_table_columns(connection, '"lakehouse"."synthetic"."assets"') == []
+    assert not queried
+    assert get_datasets.get_table_columns(connection, '"lakehouse"."ai_flights"."flights"')
+    assert get_datasets.get_table_columns(connection, '"temp"."main"."FLIGHT"')
+    native.refresh_table_credentials(connection, ["ai_flights"], "routes", secret_name="routes")
+    assert get_datasets.get_table_columns(connection, '"lakehouse"."ai_flights"."routes"')
+    native.refresh_table_credentials(connection, ["ai_flights"], "airports")
+    # Replacing the default secret removes the discovery permission it backed.
+    assert get_datasets.get_table_columns(connection, '"lakehouse"."ai_flights"."flights"') == []
+    assert get_datasets.get_table_columns(connection, '"lakehouse"."ai_flights"."airports"')
+    assert all('"synthetic"' not in query for query in queried)
+
+
+def test_marimo_discovery_for_unmanaged_connections_is_unchanged(monkeypatch):
+    pytest.importorskip("marimo")
+    from marimo._data import get_datasets
+
+    execute = Mock(return_value=[("id", "INTEGER", "YES", None, None, None)])
+    monkeypatch.setattr(get_datasets, "execute_duckdb_query", execute)
+    with native.duckdb.connect() as connection:
+        assert get_datasets.get_table_columns(connection, '"lakehouse"."other"."events"')
+        execute.assert_called_once()

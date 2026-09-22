@@ -193,8 +193,9 @@ def test_release_channel_rejects_other_tags_and_unusable_branch_names(ref, versi
         release_channel(ref, version, "123", "1")
 
 
-def test_api_version_must_match_the_project_version(release_tree):
-    app = release_tree / "server" / "app.py"
+@pytest.mark.parametrize("api_path", ["server/app.py", "user_portal/app.py"])
+def test_api_version_must_match_the_project_version(release_tree, api_path):
+    app = release_tree / api_path
     app.write_text(app.read_text().replace('version="', 'version="0.0.', 1))
     with pytest.raises(ValueError, match="API version"):
         check(release_tree)

@@ -146,6 +146,16 @@ def test_move_failure_restores_original_owner_and_access(portal):
     assert old["id"] != new["id"]
 
 
+def test_platform_administrator_can_rename_database(portal):
+    owner = team(portal)
+    db = database(portal, owner)
+    renamed = portal.patch(f"/databases/{db['id']}/name", {"name": "updated_analytics"})
+    assert renamed.status_code == 200
+    assert (renamed.json()["id"], renamed.json()["bucket"]) == (db["id"], db["bucket"])
+    assert portal.client.get("/api/databases").json()[0]["name"] == "updated_analytics"
+    assert portal.patch(f"/databases/{db['id']}/name", {"name": "Bad Name"}).status_code == 422
+
+
 def test_delete_database_can_resume_and_keeps_users(portal):
     p = portal
     owner = team(p)

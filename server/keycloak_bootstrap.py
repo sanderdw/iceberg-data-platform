@@ -5,6 +5,8 @@ import os
 
 import httpx
 
+# The installer ships scripts/setup.py on its own, so the client definition lives there.
+from scripts.setup import MCP_CLIENT_ID, mcp_client
 from server.models import DatabaseInput, TeamInput, UserInput
 from server.polaris import PolarisProvider, enc
 from server.storage import RustFSStorage
@@ -44,6 +46,32 @@ def main():
                 response = kc.get(prefix + "/clients", params={"clientId": "iceberg-provisioner"})
                 response.raise_for_status()
                 client_id = response.json()[0]["id"]
+            # MCP clients sign in through a public PKCE client; existing realms skip the
+            # import, so make sure it exists with the current callback port and mappers.
+            mcp_config = mcp_client(os.environ.get("MCP_CALLBACK_PORT", "3010"))
+            mappers = mcp_config.pop("protocolMappers")
+            response = kc.get(prefix + "/clients", params={"clientId": MCP_CLIENT_ID})
+            response.raise_for_status()
+            if response.json():
+                mcp_id = response.json()[0]["id"]
+                # An update ignores protocolMappers; they are reconciled by name below.
+                kc.put(prefix + "/clients/" + mcp_id, json=mcp_config).raise_for_status()
+            else:
+                kc.post(prefix + "/clients", json={**mcp_config, "protocolMappers": mappers}).raise_for_status()
+                response = kc.get(prefix + "/clients", params={"clientId": MCP_CLIENT_ID})
+                response.raise_for_status()
+                mcp_id = response.json()[0]["id"]
+            response = kc.get(prefix + "/clients/" + mcp_id + "/protocol-mappers/models")
+            response.raise_for_status()
+            present = {m["name"] for m in response.json()}
+            for m in mappers:
+                if m["name"] not in present:
+                    kc.post(prefix + "/clients/" + mcp_id + "/protocol-mappers/models", json=m).raise_for_status()
+            response = kc.get(prefix + "/client-scopes")
+            response.raise_for_status()
+            scopes = {scope["name"]: scope["id"] for scope in response.json()}
+            for name in mcp_config["optionalClientScopes"]:
+                kc.put(prefix + "/clients/" + mcp_id + "/optional-client-scopes/" + scopes[name]).raise_for_status()
             response = kc.get(prefix + "/clients/" + client_id + "/service-account-user")
             response.raise_for_status()
             service_user = response.json()["id"]
@@ -61,7 +89,7 @@ def main():
             response = kc.get(prefix + "/clients")
             response.raise_for_status()
             for client in response.json():
-                if client["clientId"] in ("iceberg-admin", "iceberg-users"):
+                if client["clientId"] in ("iceberg-admin", "iceberg-users", MCP_CLIENT_ID):
                     kc.put(prefix + "/clients/" + client["id"] + "/default-client-scopes/" + basic).raise_for_status()
             response = kc.get(prefix + "/users/profile")
             response.raise_for_status()

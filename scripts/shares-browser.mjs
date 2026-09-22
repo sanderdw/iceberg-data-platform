@@ -5,8 +5,9 @@ import { execFileSync } from 'node:child_process';
 
 const database = {id: 'db-' + 'a'.repeat(32), name: 'Energy', team: 'analytics', environment: 'development'};
 const recipient = '<img src=x onerror=alert(1)> Partner BV';
+let sharedOnly = false;
 let role = 'reader', shares = [], calls = [], notebooks = [], environment = 'development', objectLimit = 50;
-const workspace = () => ({user: {name: 'Team member'}, teams: [{id: 'analytics', name: 'Energy analytics', role}], databases: environment === 'development' ? [database] : [], activeTeam: 'analytics', activeRole: role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], notebooks});
+const workspace = () => ({user: {name: 'Team member'}, teams: [{id: 'analytics', name: 'Energy analytics', role}], databases: environment === 'development' ? [{...database, ...(sharedOnly ? {shared: true, sharedWithTeam: 'analytics', team: 'owner-team'} : {})}] : [], activeTeam: 'analytics', activeRole: role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], notebooks});
 const issued = (share, secret) => ({share, credentials: {clientId: share.clientId, clientSecret: secret}, connection: {type: 'iceberg-rest', uri: 'https://catalog.example/api/catalog', warehouse: database.id, oauth2ServerUri: 'https://catalog.example/api/catalog/v1/oauth/tokens', scope: 'PRINCIPAL_ROLE:ALL', accessDelegation: 'vended-credentials', s3Endpoint: 'https://s3.example', credential: `${share.clientId}:${secret}`, identifiers: share.objects.map(o => ({kind: o.kind, identifier: [...o.namespace, o.name].join('.')}))}});
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 try {
@@ -27,13 +28,15 @@ try {
     else if (path === '/notebook-fixture') return route.fulfill({contentType: 'text/html', body: '<p>Notebook fixture</p>'});
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'readings', namespace: ['analytics']}], views: [{name: 'daily_energy', namespace: ['analytics']}]} : {namespaces: [['analytics']], tables: [], views: []};
     else if (path === '/api/details') body = {kind: 'database', database, catalogUri: 'https://catalog.example/api/catalog'};
+    else if (path === '/api/share-teams') body = [{id: 'team-' + 'c'.repeat(32), name: 'Research'}];
+    else if (path === '/api/received-shares') body = [];
     else if (path === '/api/shares' && method === 'GET') body = {shares, limits: {shares: 20, objects: objectLimit}};
     else if (path.startsWith('/api/shares')) {
       if (request.headers()['x-portal-request'] !== '1') throw new Error('Mutation without the CSRF header');
       const input = request.postDataJSON(); calls.push({method, path, input});
       if (method === 'POST' && path === '/api/shares') {
         const share = {id: 'share-' + 'b'.repeat(32), clientId: 'client-1', status: 'active', createdAt: 1789506000000, createdBy: 'Team admin', ...input, objects: input.objects.map(o => ({...o, granted: o.kind === 'table'})), extraGrants: [{kind: 'table', namespace: ['analytics'], name: 'renamed', privilege: 'TABLE_READ_DATA'}]};
-        shares = [share]; body = issued(share, 'first-secret'); status = 201;
+        shares = [share]; body = input.external === false ? {share} : issued(share, 'first-secret'); status = 201;
       } else if (method === 'POST') body = issued(shares[0], 'second-secret');
       else if (method === 'PATCH') { shares = [{...shares[0], ...input, objects: input.objects.map(o => ({...o, granted: true})), extraGrants: []}]; body = {share: shares[0]}; }
       else { shares = []; body = {deleted: true}; }
@@ -96,9 +99,9 @@ try {
   await expect(page.locator('.shares')).toContainText('Nothing in this database is shared.');
   await page.getByRole('button', {name: 'New data share', exact: true}).click();
   await page.getByLabel('Share name').fill('partner');
-  await page.getByLabel('Recipient').fill(recipient);
+  await page.getByLabel('Recipient', {exact: true}).fill(recipient);
   await page.evaluate(() => { document.activeElement.blur(); return refreshWorkspace(); });
-  await expect(page.getByLabel('Recipient')).toHaveValue(recipient);
+  await expect(page.getByLabel('Recipient', {exact: true})).toHaveValue(recipient);
   await page.locator('.share-tree summary').filter({hasText: 'analytics'}).click();
   await expect(page.locator('.share-warning')).toBeHidden();
   await page.getByLabel('daily_energy').check();
@@ -126,7 +129,7 @@ try {
   expect(await expiryInput.evaluate(input => input.validity.rangeUnderflow)).toBe(true);
   await expiryInput.fill('');
   for (const [label, max] of [['Recipient', 120], ['Description', 280]]) {
-    const input = page.getByLabel(label), original = await input.inputValue();
+    const input = page.getByLabel(label, {exact: true}), original = await input.inputValue();
     await input.fill(''); await input.focus(); await page.keyboard.insertText('x'.repeat(max + 1));
     expect((await input.inputValue()).length).toBe(max);
     await input.fill(original);
@@ -215,7 +218,7 @@ print(json.dumps(outputs))
   await page.getByRole('button', {name: 'Refresh data shares', exact: true}).click();
   await expect(page.locator('#share-permissions')).toBeHidden();
   await grid.getByRole('button', {name: 'Edit', exact: true}).click();
-  await page.getByLabel('Recipient').fill('Updated on expiry day');
+  await page.getByLabel('Recipient', {exact: true}).fill('Updated on expiry day');
   await page.getByRole('button', {name: 'Save share', exact: true}).click();
   await expect(grid).toContainText('Updated on expiry day');
   expect(calls.at(-1).input.expiresAt).toBe(`${today}T23:59:59Z`);
@@ -259,6 +262,39 @@ print(json.dumps(outputs))
   await page.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
   await expect(page.locator('#notice')).toContainText('Select no more than 1 tables and views.');
   expect(calls.length).toBe(previousCalls);
+  await page.getByRole('button', {name: 'Cancel', exact: true}).click();
+  await page.getByRole('button', {name: 'New data share', exact: true}).click();
+  await page.getByLabel('Share name').fill('team-only');
+  await page.getByLabel('Another team', {exact: true}).check();
+  await page.getByLabel('Recipient team', {exact: true}).selectOption('team-' + 'c'.repeat(32));
+  await page.getByLabel('Externally', {exact: true}).uncheck();
+  await page.locator('.share-tree summary').filter({hasText: 'analytics'}).click();
+  await page.getByLabel('readings').check();
+  await page.getByRole('button', {name: 'Create share', exact: true}).click();
+  await expect(page.locator('.shares')).toContainText('team-only');
+  await expect(page.getByRole('button', {name: 'New secret', exact: true})).toHaveCount(0);
+  expect(calls.at(-1).input.external).toBe(false);
+  expect(calls.at(-1).input.recipientTeam).toBe('team-' + 'c'.repeat(32));
+  await page.getByRole('button', {name: 'New data share', exact: true}).click();
+  await page.getByLabel('Share name').fill('team-and-external');
+  await page.getByLabel('Another team', {exact: true}).check();
+  await page.getByLabel('Recipient team', {exact: true}).selectOption('team-' + 'c'.repeat(32));
+  await page.locator('.share-tree summary').filter({hasText: 'analytics'}).click();
+  await page.getByLabel('readings').check();
+  await page.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
+  await expect(page.locator('.share-issued')).toBeVisible();
+  expect(calls.at(-1).input.external).toBe(true);
+  expect(calls.at(-1).input.recipientTeam).toBe('team-' + 'c'.repeat(32));
+  sharedOnly = true; role = 'reader';
+  await page.reload();
+  await page.getByRole('button', {name: 'Catalog', exact: true}).click();
+  await expect(page.locator('#databases')).toContainText('Shared · Read-only');
+  await page.locator('#databases button').click();
+  await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
+  await page.locator('#notebook-databases button').click();
+  await expect(page.locator('#editor')).toBeVisible();
+  await page.getByRole('button', {name: 'Data shares', exact: true}).click();
+  await expect(page.getByRole('button', {name: 'New data share', exact: true})).toHaveCount(0);
   if (errors.length) throw new Error(errors.join('\n'));
   console.log('PASS: workspace navigation, reader/writer share visibility with disabled admin controls, view warning and table requirement, one-time credential and snippet, escaping, drift hints, edit, new secret, confirmed revoke, light/mobile layouts');
 } finally { await browser.close(); }

@@ -256,6 +256,12 @@ header { justify-content: flex-start; gap: 40px; }
 .team-overview-grid > section { min-width: 0; }
 .team-overview-grid .hint { margin-bottom: 24px; }
 .team-workspace-links { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--border); }
+.database-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.database-actions button { padding-inline: 12px; }
+.database-form { display: grid; gap: 16px; padding: 24px; margin: 16px 0; border: 1px solid var(--border-visible); background: var(--surface); }
+.database-form h3 { margin: 0; }
+.database-form .hint { margin: 0; }
+.database-warning { padding: 16px; border-left: 2px solid var(--accent); }
 .database-shares { min-width: 0; border-top: 1px solid var(--border); padding: 32px 0; }
 #share-permissions { margin-bottom: 24px; }
 .shares button:disabled { background: var(--surface-raised); border-color: var(--border-visible); color: var(--text-disabled); opacity: 1; }
@@ -266,6 +272,7 @@ header { justify-content: flex-start; gap: 40px; }
 @media (max-width: 700px) {
   .team-overview-grid { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .team-workspace-links { flex-direction: column; align-items: stretch; }
+  .database-actions { justify-content: flex-start; }
   #workspace-nav { gap: 20px; overflow-x: auto; }
   #workspace-nav .nav-item { flex-shrink: 0; gap: 4px; font-size: .65rem; }
   .database-shares { padding: 24px 0; }

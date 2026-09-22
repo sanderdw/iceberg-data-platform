@@ -88,13 +88,12 @@ async function seed(admin) {
 }
 
 // Runs every cell of the notebook that is open in the editor and waits for its last result.
-async function runNotebook(page, label, done, click) {
+async function runNotebook(page, label, done) {
   await page.locator('#notebook-file').selectOption({label});
   const frame = page.frameLocator('#frame-host iframe');
   await frame.locator('.cm-content').first().waitFor({timeout: 120000});
   await frame.locator('.cm-content').first().click();
   await page.keyboard.press('Control+Shift+r');
-  if (click) await frame.getByRole('button', {name: click, exact: true}).click({timeout: 120000});
   await frame.getByText(done).first().waitFor({timeout: 180000});
   // Text of a markdown cell shows up long before the queries below it have finished.
   await expect(frame.locator('[data-status="queued"], [data-status="running"]')).toHaveCount(0, {timeout: 180000});
@@ -160,7 +159,7 @@ try {
     let frame = workspace.frameLocator('#frame-host iframe');
     await frame.locator('.cm-content').first().waitFor({timeout: 180000});
     // With the row count, so the f-string in the cell's own code does not match.
-    frame = await runNotebook(workspace, '01 · Neighborhood data with PyIceberg', /(Created and populated:|Table already contains) [\d,]+ rows/, 'Create example table');
+    frame = await runNotebook(workspace, '01 · Neighborhood data with PyIceberg', /(Created and populated:|Table already contains) [\d,]+ rows/);
     await toHeading(frame, '2. Write to Iceberg');
     await shot(workspace, '10-notebook-01-created');
 
@@ -171,7 +170,7 @@ try {
     await frame.locator('img[src^="data:image"]').evaluateAll(images => images.find(i => i.naturalWidth >= 800).scrollIntoView({block: 'center'}));
     await shot(workspace, '11-notebook-02-duckdb-chart');
 
-    frame = await runNotebook(workspace, '03 · Native DuckDB on Iceberg', 'Example Solar Street', 'Connect / refresh credentials');
+    frame = await runNotebook(workspace, '03 · Native DuckDB on Iceberg', 'Example Solar Street');
     await toCell(frame, 'DESCRIBE selected_iceberg_table');
     await shot(workspace, '12-notebook-03-attach');
     await toCell(frame, 'iceberg_snapshots');

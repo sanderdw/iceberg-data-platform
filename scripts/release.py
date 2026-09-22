@@ -90,8 +90,9 @@ def check(root=ROOT):
         raise ValueError("Release versions differ between Python, npm and the npm lockfile")
     if locked_project.get("version") != project["version"]:
         raise ValueError("Release version differs from the project version in uv.lock")
-    if f'version="{project["version"]}"' not in (root / "server/app.py").read_text():
-        raise ValueError("The API version in server/app.py differs from the project version")
+    for api_path in ("server/app.py", "user_portal/app.py"):
+        if f'version="{project["version"]}"' not in (root / api_path).read_text():
+            raise ValueError(f"The API version in {api_path} differs from the project version")
     if project.get("license") != "Apache-2.0" or package.get("license") != "Apache-2.0":
         raise ValueError("Expected Apache-2.0 project metadata")
     local_secrets = []

@@ -7,7 +7,7 @@ test('central teams, memberships, move and deletion through FastAPI', async ({ p
   page.on('pageerror', error => errors.push(error.message));
   const suffix = Date.now().toString(36);
   const first = `browser-first-${suffix}`, second = `browser-second-${suffix}`;
-  const renamed = `browser-renamed-${suffix}`, database = `browser_${suffix}`, username = `browser-user-${suffix}`;
+  const renamed = `browser-renamed-${suffix}`, database = `browser_${suffix}`, renamedDatabase = `browser_new_${suffix}`, username = `browser-user-${suffix}`;
   const request = context.request;
   try {
     await page.goto('/');
@@ -94,6 +94,12 @@ test('central teams, memberships, move and deletion through FastAPI', async ({ p
 
     await page.getByRole('button', { name: 'Databases', exact: false }).first().click();
     await page.getByRole('textbox', { name: 'Search' }).fill(database);
+    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await page.getByLabel('Database name').fill(renamedDatabase);
+    await page.getByRole('dialog').getByRole('button', { name: 'Save name' }).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await page.getByRole('textbox', { name: 'Search' }).fill(renamedDatabase);
+    await expect(page.locator('tbody tr')).toContainText(renamedDatabase);
     await page.getByRole('button', { name: 'Move', exact: true }).click();
     await page.getByRole('combobox', { name: 'Team', exact: true }).selectOption({ label: second });
     await page.getByRole('dialog').getByRole('button', { name: 'Move' }).click();
@@ -103,7 +109,7 @@ test('central teams, memberships, move and deletion through FastAPI', async ({ p
     await expect(page.getByRole('dialog')).toContainText('permanently deleted');
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
     await expect(page.getByRole('dialog')).not.toBeVisible();
-    await expect(page.locator('tbody tr').filter({ hasText: database })).toHaveCount(0);
+    await expect(page.locator('tbody tr').filter({ hasText: renamedDatabase })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Teams', exact: true }).click();
     const secondRow = page.locator('tbody tr').filter({ hasText: second });
@@ -130,7 +136,7 @@ test('central teams, memberships, move and deletion through FastAPI', async ({ p
     await request.post('/api/session', { headers, data: { password: process.env.PORTAL_PASSWORD } });
     const overview = await (await request.get('/api/overview')).json();
     for (const u of overview.users.filter(u => u.name === username)) await request.delete(`/api/users/${u.id}`, { headers });
-    for (const d of overview.databases.filter(d => d.name === database)) await request.delete(`/api/databases/${d.id}`, { headers });
+    for (const d of overview.databases.filter(d => [database, renamedDatabase].includes(d.name))) await request.delete(`/api/databases/${d.id}`, { headers });
     for (const t of overview.teams.filter(t => [first, second, renamed].includes(t.name))) await request.delete(`/api/teams/${t.id}`, { headers });
   }
 });

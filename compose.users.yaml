@@ -20,6 +20,11 @@ services:
       # Addresses a data share recipient connects to, as handed out with a new share.
       POLARIS_PUBLIC_URL: ${POLARIS_PUBLIC_URL:-http://localhost:8181}
       S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:9000}
+      S3_INTERNAL_ENDPOINT: http://rustfs:9000
+      S3_ADMIN_ENDPOINT: http://rustfs:9000
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
       POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}
       POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET}
       POLARIS_CONTAINER: iceberg-platform-polaris-1

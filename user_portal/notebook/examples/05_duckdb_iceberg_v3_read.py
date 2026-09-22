@@ -8,18 +8,19 @@ app = marimo.App(width="medium", app_title="05 · Read Iceberg v3 with DuckDB", 
 def _():
     import marimo as mo
 
+    from user_portal.notebook.display import plain_table
     from user_portal.notebook.duckdb_connection import connect_duckdb, table_reference
 
     NAMESPACE = ["iceberg_v3"]
     TABLE = "sensor_events"
-    return NAMESPACE, TABLE, connect_duckdb, mo, table_reference
+    return (NAMESPACE, TABLE, connect_duckdb, mo, table_reference, plain_table)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     # Read Iceberg v3 with DuckDB
-    **Example 5 of 5**
+    **Example 5 of 7**
 
     Query the Iceberg **format-version 3** table from example 4 directly with DuckDB
     SQL. Each section shows one thing v3 adds. Run **04 · Write Iceberg v3 with
@@ -38,14 +39,16 @@ def _(NAMESPACE, TABLE, connect_duckdb, table_reference):
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
-    columns = mo.sql(f"DESCRIBE {selected_table}", engine=lakehouse)
+def _(lakehouse, mo, selected_table, plain_table):
+    columns = mo.sql(f"DESCRIBE {selected_table}", engine=lakehouse, output=False)
+    plain_table(columns)
     return (columns,)
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
-    row_count = mo.sql(f"SELECT count(*) AS rows FROM {selected_table}", engine=lakehouse)
+def _(lakehouse, mo, selected_table, plain_table):
+    row_count = mo.sql(f"SELECT count(*) AS rows FROM {selected_table}", engine=lakehouse, output=False)
+    plain_table(row_count)
     return (row_count,)
 
 
@@ -60,7 +63,7 @@ def _(mo):
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
+def _(lakehouse, mo, selected_table, plain_table):
     kinds = mo.sql(
         f"""
         SELECT payload.kind::VARCHAR AS kind,
@@ -73,12 +76,14 @@ def _(lakehouse, mo, selected_table):
         ORDER BY events DESC
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(kinds)
     return (kinds,)
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
+def _(lakehouse, mo, selected_table, plain_table):
     payloads = mo.sql(
         f"""
         SELECT event_id, device_id, variant_typeof(payload) AS shape, payload
@@ -87,7 +92,9 @@ def _(lakehouse, mo, selected_table):
         LIMIT 8
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(payloads)
     return (payloads,)
 
 
@@ -101,7 +108,7 @@ def _(mo):
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
+def _(lakehouse, mo, selected_table, plain_table):
     precision = mo.sql(
         f"""
         SELECT count(*) AS events,
@@ -110,12 +117,14 @@ def _(lakehouse, mo, selected_table):
         FROM {selected_table}
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(precision)
     return (precision,)
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
+def _(lakehouse, mo, selected_table, plain_table):
     bursts = mo.sql(
         f"""
         SELECT device_id, strftime(measured_at, '%H:%M:%S.%n') AS measured_at_ns,
@@ -127,7 +136,9 @@ def _(lakehouse, mo, selected_table):
         LIMIT 8
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(bursts)
     return (bursts,)
 
 
@@ -141,7 +152,7 @@ def _(mo):
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
+def _(lakehouse, mo, selected_table, plain_table):
     locations = mo.sql(
         f"""
         SELECT site, location::VARCHAR AS location, count(DISTINCT device_id) AS sensors
@@ -150,7 +161,9 @@ def _(lakehouse, mo, selected_table):
         ORDER BY site, location
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(locations)
     return (locations,)
 
 
@@ -165,7 +178,7 @@ def _(mo):
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
+def _(lakehouse, mo, selected_table, plain_table):
     firmware = mo.sql(
         f"""
         SELECT firmware, count(*) AS events
@@ -174,7 +187,9 @@ def _(lakehouse, mo, selected_table):
         ORDER BY firmware
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(firmware)
     return (firmware,)
 
 
@@ -189,7 +204,7 @@ def _(mo):
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
+def _(lakehouse, mo, selected_table, plain_table):
     lineage = mo.sql(
         f"""
         SELECT _last_updated_sequence_number AS last_updated_in_commit,
@@ -203,7 +218,9 @@ def _(lakehouse, mo, selected_table):
         ORDER BY last_updated_in_commit
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(lineage)
     return (lineage,)
 
 
@@ -217,7 +234,7 @@ def _(mo):
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
+def _(lakehouse, mo, selected_table, plain_table):
     files = mo.sql(
         f"""
         SELECT manifest_content, content, file_format, record_count,
@@ -226,7 +243,9 @@ def _(lakehouse, mo, selected_table):
         ORDER BY manifest_content, record_count DESC
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(files)
     return (files,)
 
 
@@ -240,16 +259,18 @@ def _(mo):
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
+def _(lakehouse, mo, selected_table, plain_table):
     snapshots = mo.sql(
         f"SELECT sequence_number, snapshot_id, timestamp_ms FROM iceberg_snapshots({selected_table})",
         engine=lakehouse,
+        output=False,
     )
+    plain_table(snapshots)
     return (snapshots,)
 
 
 @app.cell
-def _(lakehouse, mo, selected_table, snapshots):
+def _(lakehouse, mo, selected_table, snapshots, plain_table):
     _first = int(snapshots.sort_values("sequence_number")["snapshot_id"].iloc[0])
     first_snapshot = mo.sql(
         f"""
@@ -259,7 +280,9 @@ def _(lakehouse, mo, selected_table, snapshots):
         ORDER BY events DESC
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(first_snapshot)
     return (first_snapshot,)
 
 

@@ -1,6 +1,6 @@
 # Publishing a release
 
-The current version is **0.4.1**. The `Release` workflow publishes three versioned container packages and source/installation archives when a matching `vX.Y.Z` tag on `main` is pushed. Branches publish their own previews. Local tooling only prepares artifacts.
+The current version is **0.5.0**. The `Release` workflow publishes three versioned container packages and source/installation archives when a matching `vX.Y.Z` tag on `main` is pushed. Branches publish their own previews. Local tooling only prepares artifacts.
 
 ## Versions and channels
 
@@ -9,7 +9,7 @@ The current version is **0.4.1**. The `Release` workflow publishes three version
 | Stable | `vX.Y.Z` tag on `main` | `vX.Y.Z`, marked Latest when it is the highest version | `:X.Y.Z` and `:latest` | `/releases/latest/download/install.sh` or `/releases/download/vX.Y.Z/install.sh` |
 | Branch preview | push to a listed branch, or **Run workflow** on any branch | prerelease `SLUG-RUN_ID-ATTEMPT` plus the rolling `SLUG-preview` | `:SLUG-RUN_ID-ATTEMPT` | `/releases/download/SLUG-preview/install.sh` |
 
-The project version lives in `pyproject.toml`, `package.json`, `package-lock.json`, `uv.lock` and the API title in `server/app.py`; `check:release` rejects any difference. Every published installer is pinned to its own release and image tag, so `/releases/latest/download/install.sh` is simply the installer of the newest stable release. Previews are prereleases, which GitHub never serves as Latest, and they never write `:latest` image tags. The workflow checks after each preview that the Latest release is unchanged and still downloads, and after each stable release that the latest command serves it.
+The project version lives in `pyproject.toml`, `package.json`, `package-lock.json`, `uv.lock` and the API versions in `server/app.py` and `user_portal/app.py`; `check:release` rejects any difference. Every published installer is pinned to its own release and image tag, so `/releases/latest/download/install.sh` is simply the installer of the newest stable release. Previews are prereleases, which GitHub never serves as Latest, and they never write `:latest` image tags. The workflow checks after each preview that the Latest release is unchanged and still downloads, and after each stable release that the latest command serves it.
 
 ## Publish a branch for testers
 
@@ -91,7 +91,7 @@ npm audit
 ## Build the reviewable release files
 
 ```bash
-uv run python -m scripts.release --build --install --release-tag v0.4.1 --image-tag 0.4.1
+uv run python -m scripts.release --build --install --release-tag v0.5.0 --image-tag 0.5.0
 ```
 
 The resulting `dist/` contains a deterministic source `.tar.gz`, `SHA256SUMS`, and `source-manifest.txt`. The archive includes the applications, Dockerfiles, lockfiles, tests, documentation, example notebooks, shared font files and their licenses. It excludes `.env`, environments, caches, personal data, notebook outputs, credentials, historical material and `dist/` itself. It can be built again from an extracted archive without needing Git.
@@ -100,16 +100,16 @@ Scan the extracted archive with Gitleaks before uploading. CI does this automati
 
 ## Publication
 
-1. Update the version in `pyproject.toml`, `package.json`, both version fields in `package-lock.json`, `uv.lock` (`uv lock`) and `server/app.py`. Update the changelog and installation examples.
+1. Update the version in `pyproject.toml`, `package.json`, both version fields in `package-lock.json`, `uv.lock` (`uv lock`) and both API versions in `server/app.py` and `user_portal/app.py`. Update the changelog and installation examples.
 2. Run the checks above, merge the reviewed commit into `main` and wait for hosted CI to pass.
 3. Tag that commit on `main` and push the tag:
 
    ```bash
-   git tag -a v0.4.1 -m "Release 0.4.1"
-   git push origin v0.4.1
+   git tag -a v0.5.0 -m "Release 0.5.0"
+   git push origin v0.5.0
    ```
 
-The workflow rejects a tag that does not match the project version or is not on `main`, runs verification and a source secret scan, then builds each image on native AMD64 and ARM64 runners. It publishes `ghcr.io/sanderdw/iceberg-data-platform-{portal,users,notebook}` with exact version tags (for example `0.4.1`), architecture tags and a `latest` alias. Only after every image builds does it publish the multi-platform tags and GitHub release with installation/source archives and `SHA256SUMS`. The release is marked Latest only when it is the highest version, so a fix on an older line never takes over the installation command. The workflow then downloads `/releases/latest/download/install.sh` and `install.ps1` and fails unless they are pinned to the new version.
+The workflow rejects a tag that does not match the project version or is not on `main`, runs verification and a source secret scan, then builds each image on native AMD64 and ARM64 runners. It publishes `ghcr.io/sanderdw/iceberg-data-platform-{portal,users,notebook}` with exact version tags (for example `0.5.0`), architecture tags and a `latest` alias. Only after every image builds does it publish the multi-platform tags and GitHub release with installation/source archives and `SHA256SUMS`. The release is marked Latest only when it is the highest version, so a fix on an older line never takes over the installation command. The workflow then downloads `/releases/latest/download/install.sh` and `install.ps1` and fails unless they are pinned to the new version.
 
 The notebook image omits browser-export dependencies and supports HTML/Jupyter exports. CI tests startup and exports offline with a read-only root filesystem. The image is published for AMD64 and ARM64.
 

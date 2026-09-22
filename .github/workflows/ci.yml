@@ -117,7 +117,7 @@ jobs:
         run: docker build -f user_portal/notebook/Dockerfile -t notebook-check .
       - name: Check startup and exports without network access
         run: |
-          docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+          docker run --rm -i --network none --read-only --memory 1g --cpus 2 --pids-limit 256 --cap-drop ALL --security-opt no-new-privileges \
             --tmpfs /tmp:rw,size=256m,mode=1777 --tmpfs /work:rw,size=64m,uid=10001,gid=10001 \
             -e HOME=/tmp/home --entrypoint /app/.venv/bin/python notebook-check - \
             < scripts/notebook-image-smoke.py
@@ -146,6 +146,8 @@ jobs:
       - run: node scripts/keycloak-onboarding-smoke.mjs
       - run: docker compose run --build --rm keycloak-bootstrap --demo
       - run: npm run test:keycloak
+      - run: uv run --all-groups python -m scripts.mcp_smoke
+      - run: uv run --all-groups python -m scripts.mcp_admin_smoke
       - name: Clean this runner's Keycloak stack
         if: always()
         run: |
