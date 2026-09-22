@@ -105,7 +105,9 @@ class UserDirectory:
             raise ServiceError(403, "Your identity is no longer linked to this user.")
         user = self.metadata.user(principal)
         roles = {m["team"]: m["role"] for m in user["memberships"]}
-        teams = [{**t, "role": roles[t["id"]]} for t in self.metadata.list_teams() if t["id"] in roles]
+        all_teams = self.metadata.list_teams()
+        team_names = {t["id"]: t["name"] for t in all_teams}
+        teams = [{**t, "role": roles[t["id"]]} for t in all_teams if t["id"] in roles]
         if not teams:
             raise ServiceError(403, "You no longer have any available teams.")
         all_databases = self.metadata.list_databases()
@@ -124,6 +126,7 @@ class UserDirectory:
                 )
         shared_databases = [
             {**d, "shared": True, "sharedWithTeam": session.team,
+             "ownerTeamName": team_names.get(d["team"], d["team"]),
              "sharedObjects": list({(o["kind"], tuple(o["namespace"]), o["name"]): o
                                     for o in received[d["id"]]}.values())}
             for d in all_databases

@@ -774,6 +774,8 @@ def test_internal_shares_are_visible_only_to_recipient_team_and_environment(user
     received = c.get('/api/received-shares').json()
     assert [s['id'] for s in received] == [id]
     assert received[0]['database'] == db
+    assert received[0]['ownerTeam'] == first
+    assert received[0]['ownerTeamName'] == next(t['name'] for t in users.provider.list_teams() if t['id'] == first)
     assert 'clientId' not in received[0]
     assert c.delete(f'/api/shares/{id}', headers=JSON).status_code == 403
     c.patch('/api/environment', json={'environment': 'production'}, headers=JSON)
@@ -801,6 +803,11 @@ def test_shared_catalog_and_notebooks_without_owned_databases(users):
     assert workspace['databases'][0]['id'] == db
     assert workspace['databases'][0]['shared'] is True
     assert workspace['databases'][0]['team'] == owner
+    owner_team = next(t for t in provider.list_teams() if t['id'] == owner)
+    assert workspace['databases'][0]['ownerTeamName'] == owner_team['name']
+    assert owner not in {t['id'] for t in workspace['teams']}
+    detail = c.get('/api/details', params={'database': db, 'kind': 'database'}).json()
+    assert detail['database']['ownerTeamName'] == owner_team['name']
     assert len(workspace['filespaces']) == 1
     root = c.get('/api/contents', params={'database': db}).json()
     assert root['namespaces'] == [['analytics']]

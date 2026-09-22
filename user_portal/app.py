@@ -670,8 +670,11 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             raise ServiceError(403, "You are not a member of this team.")
         databases = {d["id"]: d for d in directory.metadata.list_databases()
                      if d["environment"] == session.environment and d["status"] == "ready"}
+        team_names = {t["id"]: t["name"] for t in directory.metadata.list_teams()}
         return [{"id": s["id"], "name": s["name"], "description": s["description"],
                  "database": s["database"], "databaseName": databases[s["database"]]["name"],
+                 "ownerTeam": databases[s["database"]]["team"],
+                 "ownerTeamName": team_names.get(databases[s["database"]]["team"], databases[s["database"]]["team"]),
                  "objects": s["objects"], "expiresAt": s["expiresAt"]}
                 for s in directory.metadata.list_shares(drift=True)
                 if s.get("recipientTeam") == session.team and s["database"] in databases]

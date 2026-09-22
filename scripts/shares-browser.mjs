@@ -5,9 +5,10 @@ import { execFileSync } from 'node:child_process';
 
 const database = {id: 'db-' + 'a'.repeat(32), name: 'Energy', team: 'analytics', environment: 'development'};
 const recipient = '<img src=x onerror=alert(1)> Partner BV';
-let sharedOnly = false;
+const ownerTeamName = '<img src=x onerror=alert(1)> Source team';
+let sharedOnly = false, includeOwned = false;
 let role = 'reader', shares = [], calls = [], notebooks = [], environment = 'development', objectLimit = 50;
-const workspace = () => ({user: {name: 'Team member'}, teams: [{id: 'analytics', name: 'Energy analytics', role}], databases: environment === 'development' ? [{...database, ...(sharedOnly ? {shared: true, sharedWithTeam: 'analytics', team: 'owner-team'} : {})}] : [], activeTeam: 'analytics', activeRole: role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], notebooks});
+const workspace = () => ({user: {name: 'Team member'}, teams: [{id: 'analytics', name: 'Energy analytics', role}], databases: environment === 'development' ? [{...database, ...(sharedOnly ? {shared: true, sharedWithTeam: 'analytics', team: 'owner-team', ownerTeamName} : {})}, ...(includeOwned ? [{...database, id: 'owned-db'}] : [])] : [], activeTeam: 'analytics', activeRole: role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], deletingDatabases: [], notebooks});
 const issued = (share, secret) => ({share, credentials: {clientId: share.clientId, clientSecret: secret}, connection: {type: 'iceberg-rest', uri: 'https://catalog.example/api/catalog', warehouse: database.id, oauth2ServerUri: 'https://catalog.example/api/catalog/v1/oauth/tokens', scope: 'PRINCIPAL_ROLE:ALL', accessDelegation: 'vended-credentials', s3Endpoint: 'https://s3.example', credential: `${share.clientId}:${secret}`, identifiers: share.objects.map(o => ({kind: o.kind, identifier: [...o.namespace, o.name].join('.')}))}});
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 try {
@@ -27,9 +28,10 @@ try {
     } else if (path === '/api/notebooks/notebook-1' && method === 'DELETE') { notebooks = []; body = {deleted: true}; }
     else if (path === '/notebook-fixture') return route.fulfill({contentType: 'text/html', body: '<p>Notebook fixture</p>'});
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'readings', namespace: ['analytics']}], views: [{name: 'daily_energy', namespace: ['analytics']}]} : {namespaces: [['analytics']], tables: [], views: []};
-    else if (path === '/api/details') body = {kind: 'database', database, catalogUri: 'https://catalog.example/api/catalog'};
+    else if (path === '/api/details') body = {kind: url.searchParams.get('kind'), database: workspace().databases.find(db => db.id === url.searchParams.get('database')), catalogUri: 'https://catalog.example/api/catalog'};
+    else if (path === '/api/team') body = {team: 'analytics', members: []};
     else if (path === '/api/share-teams') body = [{id: 'team-' + 'c'.repeat(32), name: 'Research'}];
-    else if (path === '/api/received-shares') body = [];
+    else if (path === '/api/received-shares') body = sharedOnly ? [{name: 'Shared energy', database: database.id, databaseName: database.name, ownerTeamName, objects: [], expiresAt: null}] : [];
     else if (path === '/api/shares' && method === 'GET') body = {shares, limits: {shares: 20, objects: objectLimit}};
     else if (path.startsWith('/api/shares')) {
       if (request.headers()['x-portal-request'] !== '1') throw new Error('Mutation without the CSRF header');
@@ -285,16 +287,60 @@ print(json.dumps(outputs))
   await expect(page.locator('.share-issued')).toBeVisible();
   expect(calls.at(-1).input.external).toBe(true);
   expect(calls.at(-1).input.recipientTeam).toBe('team-' + 'c'.repeat(32));
-  sharedOnly = true; role = 'reader';
+  sharedOnly = true; includeOwned = true; role = 'admin';
   await page.reload();
+  await page.getByRole('button', {name: 'Team overview', exact: true}).click();
+  await expect(page.locator('#team-summary')).toContainText('Team databases1');
+  await expect(page.locator('#team-summary')).toContainText('Shared databases1');
+  await expect(page.locator('#team-databases .shared-databases')).toContainText(ownerTeamName);
+  await expect(page.locator('#team-databases img')).toHaveCount(0);
+  await page.getByRole('button', {name: 'Databases', exact: true}).click();
+  await expect(page.locator('#managed-databases')).not.toContainText(ownerTeamName);
+  await expect(page.locator('#received-databases')).toContainText(ownerTeamName);
+  await expect(page.locator('#received-databases .shared-badge')).toHaveText('Shared · Read-only');
+  await expect(page.locator('#received-databases').getByRole('button', {name: /Rename|Delete/})).toHaveCount(0);
+  await expect(page.locator('#managed-databases').getByRole('button', {name: 'Rename'})).toHaveCount(1);
   await page.getByRole('button', {name: 'Catalog', exact: true}).click();
-  await expect(page.locator('#databases')).toContainText('Shared · Read-only');
-  await page.locator('#databases button').click();
+  await expect(page.locator('#databases .database-group')).toHaveCount(2);
+  await page.locator('#databases .shared-databases button').click();
+  await expect(page.locator('#catalog-database-context')).toContainText(ownerTeamName);
+  await expect(page.locator('.catalog-summary')).toContainText(ownerTeamName);
+  await page.locator('#objects').getByRole('button', {name: 'Open →'}).click();
+  await expect(page.locator('#catalog-database-context')).toContainText('Shared · Read-only');
+  await page.locator('#databases .database-group:not(.shared-databases) button').click();
+  await expect(page.locator('#catalog-database-context')).toBeHidden();
+  includeOwned = false; role = 'reader';
+  await page.getByRole('button', {name: 'Team overview', exact: true}).click();
+  await page.getByRole('button', {name: 'Refresh team', exact: true}).click();
+  await expect(page.locator('#team-summary')).toContainText('Team databases0');
+  await expect(page.locator('#team-summary')).toContainText('Shared databases1');
+  await page.getByRole('button', {name: 'Databases', exact: true}).click();
+  await expect(page.locator('#managed-databases')).toContainText('no databases');
+  await expect(page.locator('#received-databases')).toContainText(ownerTeamName);
   await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
+  await expect(page.locator('#notebook-databases .shared-databases')).toContainText(ownerTeamName);
   await page.locator('#notebook-databases button').click();
   await expect(page.locator('#editor')).toBeVisible();
+  await expect(page.locator('#editor-database-context')).toContainText(ownerTeamName);
+  await expect(page.locator('#notebooks .shared-databases')).toContainText('Shared · Read-only');
+  await page.reload();
+  await expect(page.locator('#editor-database-context')).toContainText(ownerTeamName);
+  await expect(page.locator('#notebooks img')).toHaveCount(0);
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({width, height: 1000});
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(theme => applyTheme(theme), theme);
+      for (const name of ['team', 'databases', 'catalog', 'notebooks']) {
+        await page.locator(`#workspace-nav [data-page=${name}]`).click();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+        await page.screenshot({path: `test-results/shares/shared-${name}-${theme}-${width}.png`, fullPage: true});
+      }
+    }
+  }
   await page.getByRole('button', {name: 'Data shares', exact: true}).click();
+  await expect(page.getByRole('region', {name: 'Received data shares'})).toContainText(ownerTeamName);
+  await expect(page.locator('#team-shares img')).toHaveCount(0);
   await expect(page.getByRole('button', {name: 'New data share', exact: true})).toHaveCount(0);
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS: workspace navigation, reader/writer share visibility with disabled admin controls, view warning and table requirement, one-time credential and snippet, escaping, drift hints, edit, new secret, confirmed revoke, light/mobile layouts');
+  console.log('PASS: workspace navigation, share lifecycle, credentials, escaping, ownership across overview/databases/catalog/notebooks, duplicate database names, shared-only teams, read-only controls, route restoration, dark/light/mobile layouts');
 } finally { await browser.close(); }

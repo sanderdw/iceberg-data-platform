@@ -29,7 +29,7 @@ async function loadReceivedShares(host) {
     const shares = await api('/received-shares');
     if (!host.isConnected) return;
     host.replaceChildren(element('h3', 'Shared with this team'), element('p', 'These databases are available in Catalog and Notebooks. Shared objects are read-only.', 'hint'));
-    host.append(shares.length ? dataGrid(['Share / database', 'Catalog ID', 'Tables and views', 'Expires'], shares.map(s => [s.name + ' / ' + s.databaseName, s.database, s.objects.map(o => objectPath(o) + (o.granted ? '' : ' (unavailable)')).join(', '), s.expiresAt || 'Never']), 'Received data shares') : element('p', 'No data shares received in this environment.', 'catalog-empty'));
+    host.append(shares.length ? dataGrid(['Share / database', 'Owner team', 'Catalog ID', 'Tables and views', 'Expires'], shares.map(s => [s.name + ' / ' + s.databaseName, s.ownerTeamName || s.ownerTeam, s.database, s.objects.map(o => objectPath(o) + (o.granted ? '' : ' (unavailable)')).join(', '), s.expiresAt || 'Never']), 'Received data shares') : element('p', 'No data shares received in this environment.', 'catalog-empty'));
   } catch (error) { host.replaceChildren(element('p', error.message, 'catalog-empty')); }
 }
 

@@ -164,8 +164,7 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
   .team-label { width: 100%; }
   .workbench { display: block; }
   .catalog { margin-bottom: 48px; }
-  #databases { display: flex; gap: 24px; overflow-x: auto; padding: 4px; margin: -4px; }
-  #databases button.db { min-width: 160px; max-width: 256px; flex-shrink: 0; }
+  #databases { padding: 4px; margin: -4px; }
   .saved { margin-top: 32px; }
   .saved button { width: auto; margin-right: 16px; }
   .object-row { gap: 12px; }
@@ -263,6 +262,18 @@ header { justify-content: flex-start; gap: 40px; }
 .database-form .hint { margin: 0; }
 .database-warning { padding: 16px; border-left: 2px solid var(--accent); }
 .database-shares { min-width: 0; border-top: 1px solid var(--border); padding: 32px 0; }
+.database-group { min-width: 0; }
+.database-group + .database-group { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border-visible); }
+.database-group-title { margin-bottom: 12px; color: var(--text-secondary); font: var(--small)/1.6 var(--mono); }
+.database-label { display: block; min-width: 0; overflow-wrap: anywhere; text-transform: none; letter-spacing: 0; }
+.database-label small { display: block; margin-top: 6px; color: var(--text-secondary); font: var(--small)/1.6 var(--mono); text-transform: none; letter-spacing: 0; }
+.shared-badge { display: inline-block; width: fit-content; padding: 3px 8px; border: 1px solid var(--border-visible); border-radius: 4px; background: var(--surface-raised); color: var(--text-primary); font: var(--small)/1.6 var(--mono); text-transform: none; letter-spacing: 0; }
+.database-label .shared-badge { display: block; margin-top: 8px; }
+.database-context { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 16px; margin-bottom: 16px; border-left: 2px solid var(--text-secondary); background: var(--surface); font-size: .875rem; overflow-wrap: anywhere; }
+.received-databases { margin-top: 40px; padding-top: 32px; border-top: 1px solid var(--border-visible); }
+.received-databases > .hint { margin-top: 12px; }
+.saved .database-group { margin-top: 20px; }
+.saved .database-group button { margin-top: 0; }
 #share-permissions { margin-bottom: 24px; }
 .shares button:disabled { background: var(--surface-raised); border-color: var(--border-visible); color: var(--text-disabled); opacity: 1; }
 @media (max-width: 1100px) {
