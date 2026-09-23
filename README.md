@@ -29,7 +29,7 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/dow
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping.
+The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to open the platform to your network and to set up a demo company.
 
 ### Run from source
 
@@ -54,7 +54,7 @@ Rerun the three Docker commands after source changes. Save your notebook work fi
 | User portal              | http://localhost:3002             | Keycloak account created or linked by an administrator |
 | API documentation        | `/docs` on either portal          | Portal session                                          |
 | Keycloak console         | http://localhost:8080/admin       | `admin` + `KEYCLOAK_ADMIN_PASSWORD`                      |
-| Polaris Iceberg REST API | http://localhost:8181/api/catalog | Keycloak bearer token or client credentials             |
+| Polaris Iceberg REST API | http://localhost:8181/api/catalog | Keycloak bearer token ([connect from your computer](user_portal/README.md#connect-from-your-computer)) or client credentials |
 | RustFS console           | http://localhost:9001             | Bucket-admin or local root credentials                  |
 | pgAdmin                  | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD`                     |
 

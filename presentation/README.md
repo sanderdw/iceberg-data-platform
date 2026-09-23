@@ -2,9 +2,9 @@
 
 reveal.js deck about the platform, with screenshots captured from a fresh local stack on 2026-09-23.
 
-- `index.html` — the deck. Styled after the [Nothing design skill](https://github.com/dominikmartn/nothing-design-skill): OLED black, Doto for hero moments, Space Grotesk body, Space Mono labels, no shadows or gradients. reveal.js 5.1 loads from cdnjs, so an internet connection is needed the first time.
-- `fonts/` — Doto, Space Grotesk and Space Mono with their OFL licenses, copied from `public/fonts/` so the deck matches the portals and renders offline.
-- `screenshots/` — PNG captures of the admin portal, the user portal (databases, catalog, data shares for another team and an external party, the receiving team's view), the workspace API docs, marimo notebooks writing with PyIceberg, reading natively with DuckDB and building an AI-ready flights product, RustFS console and Keycloak, all 4000×2500 PNG: a 2000×1250 CSS pixel viewport at a 2× device pixel ratio. The access dialog uses 1600×1000 at 2.5× so it fills more of the same image.
+- `index.html`, the deck. Styled after the [Nothing design skill](https://github.com/dominikmartn/nothing-design-skill): OLED black, Doto for hero moments, Space Grotesk body, Space Mono labels, no shadows or gradients. reveal.js 5.1 loads from cdnjs, so an internet connection is needed the first time.
+- `fonts/`, Doto, Space Grotesk and Space Mono with their OFL licenses, copied from `public/fonts/` so the deck matches the portals and renders offline.
+- `screenshots/`, PNG captures of the admin portal, the user portal (databases, catalog, data shares for another team and an external party, the receiving team's view), the workspace API docs, marimo notebooks writing with PyIceberg, reading natively with DuckDB and building an AI-ready flights product, RustFS console and Keycloak, all 4000×2500 PNG: a 2000×1250 CSS pixel viewport at a 2× device pixel ratio. The access dialog uses 1600×1000 at 2.5× so it fills more of the same image.
 
 Slides with a single screenshot show it as large as the stage allows. Slides with two screenshots have vertical slides below them (arrow down or swipe) that show each capture full screen; the `↓ full screen` hint at the top right marks those slides. Captions always sit at the bottom of the slide.
 

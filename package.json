@@ -1,6 +1,6 @@
 {
   "name": "iceberg-platform-portal",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,13 +11,14 @@
     "start": "uv run python -m server",
     "setup": "uv run python -m scripts.setup",
     "test": "uv run pytest",
-    "verify": "uv run --all-groups pytest && uv run --all-groups ruff check server user_portal test scripts/*.py && node --check public/app.js && node --check public/identity.js && node --check public/infrastructure.js && node --check user_portal/public/app.js && node --check user_portal/public/docs.js && node --check user_portal/public/catalog.js && node --check user_portal/public/shares.js && node --check scripts/keycloak-smoke.mjs && node --check scripts/keycloak-lifecycle-smoke.mjs && node --check scripts/keycloak-onboarding-smoke.mjs && node --check scripts/presentation-screenshots.mjs",
+    "verify": "uv run --all-groups pytest && uv run --all-groups ruff check server user_portal test scripts/*.py .agents && node --check public/app.js && node --check public/identity.js && node --check public/infrastructure.js && node --check public/docs.js && node --check public/guide.js && node --check user_portal/public/app.js && node --check user_portal/public/docs.js && node --check user_portal/public/catalog.js && node --check user_portal/public/shares.js && node --check user_portal/public/guide.js && node --check scripts/keycloak-smoke.mjs && node --check scripts/keycloak-lifecycle-smoke.mjs && node --check scripts/keycloak-onboarding-smoke.mjs && node --check scripts/presentation-screenshots.mjs",
     "test:e2e": "playwright test",
     "test:stack": "uv run python -m scripts.smoke",
     "test:data": "uv run --group data python -m scripts.data_smoke",
     "test:shares": "uv run --all-groups python -m scripts.share_smoke",
     "test:mcp": "uv run --all-groups python -m scripts.mcp_smoke",
     "test:mcp-admin": "uv run --all-groups python -m scripts.mcp_admin_smoke",
+    "test:connect": "uv run --all-groups python -m scripts.connect_smoke",
     "users:build": "docker compose -f compose.users.yaml --profile images build",
     "users:start": "docker compose -f compose.users.yaml up -d users",
     "users:stop": "docker compose -f compose.users.yaml down",

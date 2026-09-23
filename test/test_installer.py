@@ -34,6 +34,9 @@ def installer_env(tmp_path, request):
             "pgadmin/servers.json": b"{}",
             ".env.example": b"PORTAL_PASSWORD=replace-with-generated-password\n",
             "scripts/setup.py": (ROOT / "scripts/setup.py").read_bytes(),
+            "iceberg_connect.py": b"# helper\n",
+            ".agents/skills/lan-access/SKILL.md": b"---\nname: lan-access\n---\n",
+            ".agents/skills/demo-company/SKILL.md": b"---\nname: demo-company\n---\n",
         }.items():
             info = tarfile.TarInfo("iceberg-data-platform-0.2.1-install/" + name)
             info.size = len(data)
@@ -124,18 +127,53 @@ if args[0] == 'run':
     return run, env
 
 
+def assert_next_steps(output, target):
+    # The installation folder holds the helper and the commands to start and stop both stacks.
+    assert (target / "iceberg_connect.py").read_bytes() == b"# helper\n"
+    assert "docker compose -f compose.users.yaml down" in output
+    assert "docker compose -f compose.users.yaml up -d --wait users" in output
+    assert "uv run iceberg_connect.py login" in output
+    assert f'"{target}"' in output
+    assert "http://localhost:3000/#guide" in output
+    assert "User portal:    http://localhost:3002/#guide\n" in output
+    # The installer points to the bundled agent skills and copies the dot-directory.
+    assert (target / ".agents/skills/demo-company/SKILL.md").is_file()
+    # Windows temporary folders sit under HOME, so the folder may be shown with ~.
+    assert "/.agents/skills:\n" in output
+    assert "lan-access    Open the portals to other devices on your network (HTTPS)" in output
+    assert "demo-company  Set up an Energy, Webshop or Retail demo company for a class" in output
+    assert "Agent skills for Codex, GitHub Copilot, Claude Code and other coding agents, in " in output
+    assert " and ask it to use one of these skills.\n" in output
+    assert output.rstrip().endswith("Claude Code reads .claude/skills only: ask it to follow .agents/skills/<name>/SKILL.md.")
+
+
 def test_shell_install_and_rerun_preserve_configuration(shell_installer):
     run, env = shell_installer
     result = run()
     assert result.returncode == 0, result.stdout + result.stderr
     assert_started(env)
     target = Path(env["ICEBERG_INSTALL_DIR"])
+    assert_next_steps(result.stdout, target)
     original = (target / ".env").read_bytes()
     assert (target / ".env").stat().st_mode & 0o777 == 0o600
     (target / "compose.yaml").write_text("previous config")
     assert run().returncode == 0
     assert (target / ".env").read_bytes() == original
     assert (target / "compose.yaml.bak").read_text() == "previous config"
+
+
+def test_shell_shows_a_home_installation_with_tilde(shell_installer, tmp_path):
+    run, env = shell_installer
+    env["HOME"] = str(tmp_path)
+    env["ICEBERG_INSTALL_DIR"] = str(tmp_path / "iceberg-data-platform")
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "iceberg-data-platform" / "iceberg_connect.py").is_file()
+    assert "Configuration: ~/iceberg-data-platform\n" in result.stdout
+    # Unquoted, so the shell expands ~.
+    assert "Stop:  cd ~/iceberg-data-platform && " in result.stdout
+    assert "coding agents, in ~/iceberg-data-platform/.agents/skills:\n" in result.stdout
+    assert str(tmp_path) not in result.stdout.split("is ready.")[1]
 
 
 def test_shell_checksum_failure_does_not_install(shell_installer):
@@ -202,6 +240,7 @@ def test_powershell_install_and_rerun_preserve_configuration(powershell_installe
     assert result.returncode == 0, result.stdout + result.stderr
     assert_started(env)
     target = Path(env["ICEBERG_INSTALL_DIR"])
+    assert_next_steps(result.stdout, target)
     original = (target / ".env").read_bytes()
     (target / "compose.yaml").write_text("previous config")
     result = run()

@@ -2,6 +2,8 @@
 
 The administration portal at http://localhost:3000 manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role. For start-up commands and the service list, see the [README](../README.md#quick-start).
 
+You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). The portal's **Getting started** page has instructions and examples for each, using this installation's address.
+
 ## Teams, databases and users
 
 1. **Create a team** on the Teams page. Renaming a team keeps its stable ID.
@@ -50,11 +52,36 @@ At http://localhost:5050, expand **Iceberg Platform → Polaris metadata** and e
 
 ## Connect an MCP client
 
-The portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp` for platform administrators:
+The portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp` for platform administrators. Register it in your coding agent. Replace `http://localhost:3000` with your `PORTAL_ORIGIN` if you changed it.
 
-```bash
-claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-admin http://localhost:3000/mcp
+| Agent | Register the server | Sign in |
+|---|---|---|
+| Codex (CLI and IDE extension) | `~/.codex/config.toml`, see below | `codex mcp login iceberg-admin` |
+| GitHub Copilot in VS Code | `.vscode/mcp.json`: `{"servers": {"iceberg-admin": {"type": "http", "url": "http://localhost:3000/mcp", "oauth": {"clientId": "iceberg-mcp"}}}}` | Start the server from `mcp.json` |
+| GitHub Copilot CLI | `~/.copilot/mcp-config.json`, under `mcpServers`: `"iceberg-admin": {"type": "http", "url": "http://localhost:3000/mcp", "tools": ["*"], "oauthClientId": "iceberg-mcp", "oauthPublicClient": true}` | On first use. If asked for a client ID, enter `iceberg-mcp` |
+| Claude Code | `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-admin http://localhost:3000/mcp` | On the first tool call |
+
+Codex configuration:
+
+```toml
+[mcp_servers.iceberg-admin]
+url = "http://localhost:3000/mcp"
+scopes = ["openid", "profile", "offline_access"]
+
+[mcp_servers.iceberg-admin.oauth]
+client_id = "iceberg-mcp"
 ```
+
+Keep the `scopes` line. Without it, Codex asks Keycloak for every scope it advertises, and the sign-in fails with `invalid_scope` ([openai/codex#35253](https://github.com/openai/codex/issues/35253)).
+
+If GitHub Copilot reports that the server is "blocked by policy", your organization has turned off third-party MCP servers for Copilot. A GitHub organization owner must allow them.
+
+Any other MCP client needs:
+- the URL (streamable HTTP)
+- OAuth with the public client ID `iceberg-mcp`, with no client secret and no dynamic client registration
+- the scopes `openid`, `profile` and `offline_access`
+
+Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. Sign in with your platform administrator account.
 
 Every call requires the `platform-admin` role. The tools are the administration API's operations:
 
@@ -62,11 +89,16 @@ Every call requires the `platform-admin` role. The tools are the administration 
 - **Change:** `create_team`, `update_team`, `create_database`, `rename_database`, `move_database`, `create_user`, `link_user`, `update_user_access`, `retry_user_setup`
 - **Destructive:** `delete_team`, `delete_database` (requires `confirm_name`), `delete_user`, `revoke_share`
 
-`create_user` returns the one-time password in the agent's transcript. Treat that transcript as confidential, and reset the password if in doubt. See the [user portal](../user_portal/README.md#connect-an-mcp-client) for the callback port.
+`create_user` returns the one-time password in the agent's transcript. Treat that transcript as confidential, and reset the password if in doubt. Users connect to the [user portal's endpoint](../user_portal/README.md#connect-an-mcp-client) in the same way.
 
 ## API
 
-Interactive documentation is at http://localhost:3000/docs after sign-in.
+Interactive documentation is at http://localhost:3000/docs after sign-in. **Try it out** uses your session and adds the write headers. From a script, send the `portal_session` cookie from your browser:
+
+```bash
+curl -b 'portal_session=<cookie>' -H 'Content-Type: application/json' -H 'X-Portal-Request: 1' \
+  -d '{"name": "marketing"}' http://localhost:3000/api/teams
+```
 
 | Method | Path | Action |
 | --- | --- | --- |

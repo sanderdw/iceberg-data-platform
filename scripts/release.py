@@ -42,7 +42,11 @@ ROOT_FILES = (
     "pyproject.toml",
     "uv.lock",
 )
-SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", ".github")
+SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", ".github", ".agents")
+# Agent skills ship in the installation bundle at the same paths.
+SKILLS_DIR = ".agents/skills"
+# Extensionless files accepted in source directories.
+PLAIN_NAMES = {"Dockerfile", "Caddyfile"}
 BINARY_SUFFIXES = {".png", ".ttf"}
 SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml"} | BINARY_SUFFIXES
 IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv"}
@@ -64,7 +68,7 @@ def release_files(root=ROOT):
             if path.is_symlink():
                 raise ValueError(f"Symlinks are not allowed in public source: {relative}")
             if path.is_file():
-                if path.name != "Dockerfile" and path.suffix not in SUFFIXES:
+                if path.name not in PLAIN_NAMES and path.suffix not in SUFFIXES:
                     raise ValueError(f"Unexpected file in source directory: {relative}")
                 files.append(path)
     for path in files:
@@ -195,7 +199,7 @@ def installer_source(root, filename, release_tag="latest", image_tag="latest"):
 
 def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="latest"):
     """Render portable Compose files and matching stable or pinned installers."""
-    version, _ = check(root)
+    version, files = check(root)
     output = output or root / "dist"
     output.mkdir(parents=True, exist_ok=True)
     registry = "ghcr.io/sanderdw/iceberg-data-platform"
@@ -225,6 +229,13 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
     for filename in (".env.example", "scripts/setup.py", "pgadmin/servers.json", "compose.lan.yaml",
                      "compose.users.lan.yaml", "LICENSE", "NOTICE", "docs/install.md", "docs/keycloak.md"):
         contents[filename] = (root / filename).read_bytes()
+    # Connect your own tools; its defaults match a local installation.
+    contents["iceberg_connect.py"] = (root / "user_portal/client/iceberg_connect.py").read_bytes()
+    # Getting-started skills for coding agents, opened in the installation directory.
+    for path in files:
+        relative = path.relative_to(root).as_posix()
+        if relative.startswith(SKILLS_DIR + "/"):
+            contents[relative] = path.read_bytes()
     name = f"iceberg-data-platform-{version}-install"
     archive = output / f"{name}.tar.gz"
     with (

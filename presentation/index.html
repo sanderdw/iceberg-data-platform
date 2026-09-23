@@ -241,7 +241,7 @@
     </tbody>
   </table>
   <p class="secondary foot">PostgreSQL brings these jobs together. With Iceberg, you choose the components separately.</p>
-  <aside class="notes">Compare responsibilities, not identical internals. PostgreSQL also stores data in files; applications normally access those files through its server. For an Iceberg query, the engine asks Polaris for the table metadata and access, then reads table files directly from storage. Polaris can read and write Iceberg metadata during catalog operations, but query rows do not flow through it. Even when Polaris uses PostgreSQL as its backing store, that database holds catalog records and permissions; the Iceberg schema and snapshot history live in object storage. Sources: <a href="https://www.postgresql.org/docs/current/tutorial-arch.html">PostgreSQL architecture</a>, <a href="https://www.postgresql.org/docs/current/catalogs.html">PostgreSQL system catalogs</a>, <a href="https://polaris.apache.org/releases/1.7.0/entities/">Polaris 1.7.0 entities</a>, <a href="https://polaris.apache.org/releases/1.7.0/vended-credentials/">Polaris 1.7.0 vended credentials</a>, <a href="https://polaris.apache.org/releases/1.7.0/metastores/relational-jdbc/">Polaris 1.7.0 JDBC metastore</a>. Background reading: <a href="https://community.cloudera.com/t5/Developer-Blogs/The-Architecture-of-Apache-Polaris-Under-the-Hood/ba-p/414066">The Architecture of Apache Polaris — Under the Hood</a>.</aside>
+  <aside class="notes">Compare responsibilities, not identical internals. PostgreSQL also stores data in files; applications normally access those files through its server. For an Iceberg query, the engine asks Polaris for the table metadata and access, then reads table files directly from storage. Polaris can read and write Iceberg metadata during catalog operations, but query rows do not flow through it. Even when Polaris uses PostgreSQL as its backing store, that database holds catalog records and permissions; the Iceberg schema and snapshot history live in object storage. Sources: <a href="https://www.postgresql.org/docs/current/tutorial-arch.html">PostgreSQL architecture</a>, <a href="https://www.postgresql.org/docs/current/catalogs.html">PostgreSQL system catalogs</a>, <a href="https://polaris.apache.org/releases/1.7.0/entities/">Polaris 1.7.0 entities</a>, <a href="https://polaris.apache.org/releases/1.7.0/vended-credentials/">Polaris 1.7.0 vended credentials</a>, <a href="https://polaris.apache.org/releases/1.7.0/metastores/relational-jdbc/">Polaris 1.7.0 JDBC metastore</a>. Background reading: <a href="https://community.cloudera.com/t5/Developer-Blogs/The-Architecture-of-Apache-Polaris-Under-the-Hood/ba-p/414066">The Architecture of Apache Polaris, Under the Hood</a>.</aside>
 </section>
 
 <section>
@@ -895,7 +895,7 @@ catalog.load_table(<span class="s">"synthetic.other"</span>)  <span class="c"># 
     <div>
       <pre style="font-size:0.6em"><code data-noescape>claude mcp add --transport http \
   --client-id iceberg-mcp --callback-port 3010 \
-  iceberg http://localhost:3002/mcp</code></pre>
+  iceberg-user http://localhost:3002/mcp</code></pre>
       <table class="api" style="margin-top:32px;font-size:0.62em"><tbody>
         <tr><td class="mono">list_databases</td><td>Your teams, your role in each, owned and shared databases</td></tr>
         <tr><td class="mono">list_namespaces · list_tables</td><td>Browse what your grants allow</td></tr>

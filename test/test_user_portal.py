@@ -227,6 +227,7 @@ def test_catalog_details_use_user_identity_and_project_metadata(users):
     assert view["versions"][0]["representations"] == [{"dialect": "spark", "sql": "SELECT * FROM events"}]
     assert "snapshots" not in view
     assert c.get("/catalog.js").status_code == 200
+    assert c.get("/guide.js").status_code == 200
 
 
 def test_catalog_denies_other_team_environment_and_provider_forbidden(users, monkeypatch):

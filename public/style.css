@@ -73,3 +73,27 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 @media(max-width:760px) { .infrastructure-heading h1 { font-size:clamp(1.8rem,9vw,3rem); } }
 
 .identity-mode { margin-bottom: 32px; }
+
+/* Getting started: three ways in */
+.guide-lead { font-size:var(--medium); max-width:640px; margin-bottom:48px; }
+.guide-index { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:32px; margin-bottom:24px; }
+.guide-index button { display:grid; gap:8px; align-content:start; text-align:left; padding:20px 0; border-top:1px solid var(--line); min-height:44px; }
+.guide-index span { font:var(--small) var(--mono); letter-spacing:.06em; color:var(--secondary); }
+.guide-index strong { font-size:var(--medium); color:var(--display); }
+.guide-index small { font-size:var(--small); line-height:1.6; color:var(--secondary); }
+.guide-index button:hover span, .guide-index button:hover small { color:var(--primary); }
+.guide-track { padding-top:72px; scroll-margin-top:24px; }
+.guide-track>h3 { font:500 var(--medium) var(--body); color:var(--display); margin:16px 0 8px; }
+.guide-track>p { font-size:var(--medium); max-width:640px; margin-bottom:32px; }
+.guide-step>div { flex:1; min-width:0; }
+.guide-start { margin-top:24px; }
+.guide-code { margin-top:24px; }
+.guide-code-bar { display:flex; align-items:center; justify-content:space-between; gap:16px; font:var(--small) var(--mono); letter-spacing:.06em; color:var(--secondary); }
+.guide-code-bar .text-button { color:var(--secondary); }
+.guide-code-bar .text-button:before { content:'['; padding-right:4px; }
+.guide-code-bar .text-button:after { content:']'; padding-left:4px; }
+.guide-code-bar .text-button:hover { color:var(--display); }
+.guide-code pre { margin:8px 0 0; user-select:text; }
+.guide-prompts { list-style:none; margin:24px 0 0; padding:0; display:grid; gap:16px; }
+.guide-prompts li { padding-left:20px; border-left:1px solid var(--line); line-height:1.65; color:var(--primary); }
+@media(max-width:760px) { .guide-index { grid-template-columns:1fr; gap:0; } .guide-track { padding-top:48px; } }

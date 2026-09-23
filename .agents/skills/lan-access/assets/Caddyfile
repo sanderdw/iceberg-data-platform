@@ -1,0 +1,22 @@
+# HTTPS reverse proxy for LAN access. Caddy issues certificates from its own local CA.
+{
+	auto_https disable_redirects
+	skip_install_trust
+	# Clients connecting to a bare IP send no SNI; without this the TLS handshake fails.
+	default_sni {$LAN_IP}
+}
+
+https://{$LAN_IP}:3000 {
+	tls internal
+	reverse_proxy portal:3000
+}
+
+https://{$LAN_IP}:3002 {
+	tls internal
+	reverse_proxy users:3002
+}
+
+https://{$LAN_IP}:8080 {
+	tls internal
+	reverse_proxy keycloak:8080
+}

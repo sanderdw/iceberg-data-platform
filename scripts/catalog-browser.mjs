@@ -43,6 +43,13 @@ try {
   await page.goto('http://catalog.test');
   await page.locator('#databases button').click();
   await expect(page.locator('.catalog-summary')).toContainText('Energy analytics');
+  await page.getByText('Connect from your computer', {exact: true}).click();
+  const connect = page.locator('.connect-panel');
+  await expect(connect.getByRole('link', {name: 'Download iceberg_connect.py'})).toHaveAttribute('href', '/iceberg_connect.py');
+  await expect(connect.locator('pre')).toHaveCount(3);
+  await expect(connect.locator('pre').nth(1)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb warehouse-dev)');
+  await page.screenshot({path: 'test-results/catalog/connect-dark.png', fullPage: true});
+  await page.getByText('Connect from your computer', {exact: true}).click();
   await page.getByRole('button', {name: 'Open →', exact: true}).click();
   await page.getByRole('searchbox', {name: 'Filter objects'}).fill('no match');
   await expect(page.getByText('No matching objects.', {exact: true})).toBeVisible();

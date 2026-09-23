@@ -6,7 +6,7 @@ const teams = [
   {id: 'analytics', name: 'Energy analytics', description: 'Understand energy use together.', role: 'reader'},
   {id: 'research', name: 'Research', description: '', role: 'writer'},
 ];
-let team = 'analytics', environment = 'development', failMembers = false, delayedMembers = null;
+let team = 'analytics', environment = 'development', failMembers = false, delayedMembers = null, keycloak = false;
 const members = {
   analytics: [{id: 'alice', name: 'alice', role: 'reader'}, {id: 'bob', name: '<img src=x onerror=alert(1)>', role: 'admin'}],
   research: [{id: 'alice', name: 'alice', role: 'writer'}],
@@ -21,7 +21,7 @@ try {
   page.on('dialog', dialog => { errors.push(dialog.message()); dialog.dismiss(); });
   await page.route('http://team.test/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
-    if (path === '/api/session') return route.fulfill({json: {authenticated: true}});
+    if (path === '/api/session') return route.fulfill({json: {authenticated: true, ...(keycloak ? {loginUrl: '/auth/login'} : {})}});
     if (path === '/api/workspace') return route.fulfill({json: workspace()});
     if (path === '/api/team' && request.method() === 'PATCH') { team = request.postDataJSON().team; return route.fulfill({json: workspace()}); }
     if (path === '/api/environment') { environment = request.postDataJSON().environment; return route.fulfill({json: workspace()}); }
@@ -85,6 +85,31 @@ try {
     await expect(page.locator(`#${name}-page`)).toBeVisible();
     await page.locator('#workspace-nav [data-page=team]').click();
   }
+  await page.getByRole('button', {name: 'Getting started →', exact: true}).click();
+  await expect(page.locator('#guide-page')).toBeVisible();
+  await expect(page.locator('#guide-computer')).toContainText('Enable Keycloak sign-in');
+  await expect(page.locator('#guide-agent pre')).toHaveCount(0);
+  keycloak = true;
+  await page.reload();
+  await expect(page.locator('#guide-nav')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#guide-computer a[href="/iceberg_connect.py"]')).toBeVisible();
+  await expect(page.locator('#guide-computer pre').nth(2)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb energy-dev)');
+  // One recipe per coding agent: Codex, GitHub Copilot in VS Code and Claude Code.
+  await expect(page.locator('#guide-agent pre')).toHaveCount(3);
+  await expect(page.locator('#guide-agent pre').nth(0)).toHaveText('[mcp_servers.iceberg-user]\nurl = "http://team.test/mcp"\nscopes = ["openid", "profile", "offline_access"]\n\n[mcp_servers.iceberg-user.oauth]\nclient_id = "iceberg-mcp"');
+  await expect(page.locator('#guide-agent pre').nth(1)).toContainText('"clientId": "iceberg-mcp"');
+  await expect(page.locator('#guide-agent pre').nth(2)).toHaveText('claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-user http://team.test/mcp');
+  await expect(page.locator('#guide-agent .guide-prompts li')).toHaveCount(2);
+  await page.getByLabel('Environment', {exact: true}).selectOption('production');
+  await expect(page.locator('#guide-computer pre').nth(2)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb <database>)');
+  await page.getByLabel('Environment', {exact: true}).selectOption('development');
+  await expect(page.locator('#guide-computer pre').nth(2)).toContainText('energy-dev');
+  await page.locator('.guide-index button').nth(2).click();
+  await expect(page.locator('#guide-agent')).toBeInViewport();
+  await page.screenshot({path: 'test-results/team/guide-dark.png', fullPage: true});
+  await page.locator('#guide-portal').getByRole('button', {name: 'Open the catalog', exact: true}).click();
+  await expect(page.locator('#catalog-page')).toBeVisible();
+  await page.locator('#workspace-nav [data-page=team]').click();
   members.analytics[1] = {id: 'bob', name: 'bob', role: 'writer'};
   await page.evaluate(() => refreshWorkspace());
   await expect(page.locator('#team-members')).toContainText('bob');
@@ -123,6 +148,11 @@ try {
   await expect(page.locator('#team-members')).toContainText('bob');
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({path: 'test-results/team/overview-mobile.png', fullPage: true});
+  await page.locator('#guide-nav').click();
+  await expect(page.locator('#guide-agent')).toContainText('iceberg-user');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await page.screenshot({path: 'test-results/team/guide-mobile-light.png', fullPage: true});
+  await page.locator('#workspace-nav [data-page=team]').click();
   teams[0].role = 'admin';
   await page.getByRole('button', {name: 'Refresh team', exact: true}).click();
   await expect(page.locator('#team-page').getByRole('button', {name: 'Rename'})).toHaveCount(0);
@@ -158,5 +188,5 @@ try {
   await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click();
   await page.screenshot({path: 'test-results/team/databases-dark.png', fullPage: true});
   expect(errors).toEqual([]);
-  console.log('PASS: team summary, scoped members, safe text, context switching, stale responses, refresh/recovery, workspace links, route restoration, database lifecycle, dark/light/mobile layouts');
+  console.log('PASS: team summary, scoped members, safe text, context switching, stale responses, refresh/recovery, workspace links, route restoration, getting started guide, database lifecycle, dark/light/mobile layouts');
 } finally { await browser.close(); }
