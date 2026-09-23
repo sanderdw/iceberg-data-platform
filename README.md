@@ -1,4 +1,4 @@
-# Iceberg Data Platform
+Iceberg Data Platform
 
 A local platform for managing team access to Apache Iceberg and exploring data in shared team marimo notebooks. It combines admin and user portals with Keycloak, Apache Polaris, PostgreSQL and RustFS.
 
@@ -48,17 +48,24 @@ Rerun the three Docker commands after source changes. Save your notebook work fi
 
 ### Services
 
-| Service                  | URL                               | Login                                                   |
-| ------------------------ | --------------------------------- | ------------------------------------------------------- |
-| Administration portal    | http://localhost:3000             | `platform-admin` + initial `PLATFORM_ADMIN_PASSWORD`     |
-| User portal              | http://localhost:3002             | Keycloak account created or linked by an administrator |
-| API documentation        | `/docs` on either portal          | Portal session                                          |
-| Keycloak console         | http://localhost:8080/admin       | `admin` + `KEYCLOAK_ADMIN_PASSWORD`                      |
-| Polaris Iceberg REST API | http://localhost:8181/api/catalog | Keycloak bearer token ([connect from your computer](user_portal/README.md#connect-from-your-computer)) or client credentials |
-| RustFS console           | http://localhost:9001             | Bucket-admin or local root credentials                  |
-| pgAdmin                  | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD`                     |
+
+| Service                   | URL                               | Login                                                                                                                        |
+| ------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Administration portal     | http://localhost:3000             | `platform-admin` + initial `PLATFORM_ADMIN_PASSWORD`                                                                         |
+| User portal               | http://localhost:3002             | Keycloak account created or linked by an administrator                                                                       |
+| API documentation         | `/docs` on either portal          | Portal session                                                                                                               |
+| User MCP server           | http://localhost:3002/mcp         | Keycloak sign-in through the`iceberg-mcp` client, your own permissions                                                       |
+| Administration MCP server | http://localhost:3000/mcp         | Keycloak sign-in through the`iceberg-mcp` client, `platform-admin` role                                                      |
+| Keycloak console          | http://localhost:8080/admin       | `admin` + `KEYCLOAK_ADMIN_PASSWORD`                                                                                          |
+| Polaris Iceberg REST API  | http://localhost:8181/api/catalog | Keycloak bearer token ([connect from your computer](user_portal/README.md#connect-from-your-computer)) or client credentials |
+| RustFS console            | http://localhost:9001             | Bucket-admin or local root credentials                                                                                       |
+| pgAdmin                   | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD`                                                                                         |
 
 Credentials are in `.env`. All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [Keycloak configuration](docs/keycloak.md#configuration).
+
+### Connect an AI agent
+
+Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`. On the first tool call the agent opens Keycloak in your browser. Port 3010 must equal `MCP_CALLBACK_PORT` in `.env`. For Codex, GitHub Copilot, other clients and the tool lists, see [the user MCP server](user_portal/README.md#connect-an-mcp-client) and [the administration MCP server](docs/admin-guide.md#connect-an-mcp-client).
 
 ### First steps
 
