@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.app import create_app
-from server.models import ServiceError
+from server.models import DatabaseInput, ServiceError, TeamInput
 from server.polaris import provision
 from test.conftest import HEADERS, PASSWORD, MemoryPolaris, members
 
@@ -213,6 +213,64 @@ def test_concurrent_delete_and_create_never_orphans_a_user(portal):
     overview = portal.client.get("/api/overview").json()
     available = {t["id"] for t in overview["teams"]}
     assert all(u["teams"] and set(u["teams"]) <= available for u in overview["users"])
+
+
+def interleave(monkeypatch, provider, action):
+    """Run `action`, as the other portal process, just after the next check lists catalogs."""
+    original, pending = provider.list_databases, [action]
+
+    def racing():
+        seen = original()
+        if pending:
+            pending.pop()()
+        return seen
+
+    monkeypatch.setattr(provider, "list_databases", racing)
+
+
+@pytest.fixture
+def owned():
+    provider = MemoryPolaris()
+    return provider, provider.save_team(TeamInput(name="data-team"))["id"]
+
+
+def test_racing_renames_across_portals_keep_names_unique(owned, monkeypatch):
+    p, owner = owned
+    first, second = (p.create_database(DatabaseInput(name=n, team=owner))["id"] for n in ("first", "second"))
+    interleave(monkeypatch, p, lambda: p.rename_database(first, "shared_name"))
+    with pytest.raises(ServiceError) as exc:
+        p.rename_database(second, "shared_name")
+    assert exc.value.status == 409
+    assert sorted(d["name"] for d in p.list_databases()) == ["second", "shared_name"]
+
+
+def test_racing_creates_across_portals_keep_names_unique(owned, monkeypatch):
+    p, owner = owned
+    interleave(monkeypatch, p, lambda: p.create_database(DatabaseInput(name="analytics", team=owner)))
+    with pytest.raises(ServiceError) as exc:
+        p.create_database(DatabaseInput(name="analytics", team=owner))
+    assert exc.value.status == 409
+    assert [d["name"] for d in p.list_databases()] == ["analytics"]
+
+
+def test_team_deletion_during_create_leaves_no_orphan_catalog(owned, monkeypatch):
+    p, owner = owned
+    interleave(monkeypatch, p, lambda: p.delete_team(owner))
+    with pytest.raises(ServiceError) as exc:
+        p.create_database(DatabaseInput(name="analytics", team=owner))
+    assert exc.value.status == 409
+    assert p.list_teams() == [] and p.resources["catalogs"] == {}
+
+
+def test_create_during_team_deletion_keeps_the_team(owned, monkeypatch):
+    p, owner = owned
+    interleave(monkeypatch, p, lambda: p.create_database(DatabaseInput(name="analytics", team=owner)))
+    with pytest.raises(ServiceError) as exc:
+        p.delete_team(owner)
+    assert exc.value.status == 409
+    assert [t["id"] for t in p.list_teams()] == [owner]
+    assert [d["team"] for d in p.list_databases()] == [owner]
+    assert "portal.deleting" not in p.resources["principal-roles"][owner]["properties"]
 
 
 def test_database_names_are_scoped_to_team_and_environment(portal):

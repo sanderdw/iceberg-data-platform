@@ -15,6 +15,8 @@ from starlette.concurrency import run_in_threadpool
 from .models import ServiceError
 
 MCP_CLIENT_ID = "iceberg-mcp"
+# Room for the largest valid tool call, a 100-part namespace of escaped names, and no more.
+MCP_MAX_BODY = 256 * 1024
 LOG = logging.getLogger(__name__)
 
 
@@ -91,6 +93,23 @@ def mcp_server(name, oidc, *, title, instructions):
     )
 
 
+async def bounded_body(scope, receive, limit):
+    """The whole request body, or None once it exceeds `limit` bytes."""
+    length = dict(scope["headers"]).get(b"content-length", b"")
+    if length.isdigit() and int(length) > limit:
+        return None
+    body = bytearray()
+    while True:
+        message = await receive()
+        if message["type"] != "http.request":
+            return bytes(body)
+        body.extend(message.get("body", b""))
+        if len(body) > limit:
+            return None
+        if not message.get("more_body"):
+            return bytes(body)
+
+
 class MCPEndpoint:
     """ASGI endpoint for /mcp that forwards to the transport built by the current lifespan."""
 
@@ -102,7 +121,22 @@ class MCPEndpoint:
             response = JSONResponse({"error": "The MCP transport is not running."}, status_code=503)
             await response(scope, receive, send)
             return
-        await self.app(scope, receive, send)
+        # The gateways' body cap does not cover this route, and the transport parses the
+        # whole JSON body before any tool argument is validated.
+        body = await bounded_body(scope, receive, MCP_MAX_BODY)
+        if body is None:
+            await JSONResponse({"error": "Request is too large."}, status_code=413)(scope, receive, send)
+            return
+        replayed = False
+
+        async def replay():
+            nonlocal replayed
+            if replayed:
+                return await receive()
+            replayed = True
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        await self.app(scope, replay, send)
 
 
 def mount_mcp(app, mcp, oidc, resource_name):

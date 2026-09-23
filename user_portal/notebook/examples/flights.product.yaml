@@ -37,7 +37,7 @@ null_policy: >-
   not zero-delay flights. Diverted flights have actual landing times but no modeled
   alternate airport. Exclude diverted flights when measuring arrival punctuality
   at the planned destination.
-cancelation_codes:
+cancellation_codes:
   A: Carrier
   B: Weather
   C: National air system

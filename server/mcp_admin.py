@@ -200,7 +200,7 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def revoke_share(share: ShareId) -> dict[str, Any]:
-        """End an external party's access immediately."""
+        """End all access through this share immediately: the recipient team's and any external credential."""
         await query(provider.delete_share, share)
         return {"revoked": True, "share": share}
 

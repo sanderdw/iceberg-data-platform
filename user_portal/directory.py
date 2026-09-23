@@ -125,9 +125,12 @@ class UserDirectory:
                 if share.get("recipientTeam") not in recipients:
                     continue
                 # Team-share grants sit on each member's own role, so shares received by
-                # several of the user's teams combine.
+                # several of the user's teams combine. A renamed object keeps its grant
+                # under its new name, which Polaris reports as an extra grant.
                 received.setdefault(share["database"], []).extend(
-                    o for o in share["objects"] if o.get("granted")
+                    [o for o in share["objects"] if o.get("granted")]
+                    + [{"kind": g["kind"], "namespace": g["namespace"], "name": g["name"], "granted": True}
+                       for g in share.get("extraGrants", []) if g["kind"] in ("table", "view") and g["name"]]
                 )
                 recipient[share["database"]] = min(
                     recipient.get(share["database"], share["recipientTeam"]), share["recipientTeam"],

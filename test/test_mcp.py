@@ -18,7 +18,7 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.server.auth.middleware.auth_context import auth_context_var
 from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
 
-from server.mcp_auth import KeycloakVerifier, protected_resource
+from server.mcp_auth import MCP_MAX_BODY, KeycloakVerifier, protected_resource
 from server.models import DatabaseInput, TeamInput, UserInput
 from test.conftest import MemoryPolaris, members
 from test.test_oidc import ISSUER, issuer  # noqa: F401 - fixture
@@ -139,6 +139,20 @@ def test_metadata_routes_and_bearer_challenge(stack):
             assert f'resource_metadata="{ORIGIN}/.well-known/oauth-protected-resource/mcp"' in response.headers["www-authenticate"]
             assert "eyJ" not in response.text
         assert c.get("/missing").status_code == 404  # The static catch-all still follows the MCP routes.
+
+
+def test_mcp_request_body_is_bounded(stack):
+    headers = {"Authorization": "Bearer " + stack.token, "Content-Type": "application/json"}
+    with TestClient(stack.app) as c:
+        declared = c.post("/mcp", content=b" " * (MCP_MAX_BODY + 1), headers=headers)
+        assert declared.status_code == 413 and declared.json() == {"error": "Request is too large."}
+        # Without Content-Length the body is counted as it streams in.
+        streamed = c.post("/mcp", content=iter([b" " * MCP_MAX_BODY, b" "]), headers=headers)
+        assert streamed.status_code == 413
+        # A body within the limit reaches the transport unchanged.
+        listed = c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                        headers={**headers, "Accept": "application/json, text/event-stream"})
+        assert listed.status_code == 200 and listed.json()["result"]["tools"]
 
 
 def test_metadata_absent_without_keycloak():
@@ -312,6 +326,19 @@ def test_shared_databases_are_listed_and_read_only(stack):
         refused = call(stack, stack.token, name, arguments)
         assert refused.is_error and "read-only" in text(refused), (name, text(refused))
     assert database in stack.provider.resources["catalogs"]
+
+
+def test_renamed_shared_object_stays_visible_under_its_new_name(stack):
+    from test.test_shares import CREATOR, share_input
+
+    team, database = stack.teams[0], stack.databases[1]
+    events = {"kind": "table", "namespace": ["analytics"], "name": "events"}
+    share = stack.provider.create_share(share_input(database, objects=[events], recipientTeam=team), CREATOR)
+    # Polaris keeps the grant on the renamed entity, so the recipient can still read it.
+    stack.provider.catalog_roles[database][share["share"]["id"]][0]["tableName"] = "events_v2"
+    result = call(stack, stack.token, "list_tables", {"database": database, "namespace": ["analytics"]})
+    assert not result.is_error, text(result)
+    assert result.structured_content["tables"] == [{"name": "events_v2", "namespace": ["analytics"]}]
 
 
 def test_streamable_http_round_trip_authenticates_each_request(stack):

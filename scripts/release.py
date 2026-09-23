@@ -47,6 +47,8 @@ BINARY_SUFFIXES = {".png", ".ttf"}
 SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml"} | BINARY_SUFFIXES
 IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv"}
 LOCAL_FILES = {"docs/conversation.md", "docs/dbaas-reference-architecture.drawio"}
+# Git-ignored personal notes; never scanned or released.
+LOCAL_DIRS = ("docs/local_only/",)
 # Tracked in git and published by the GitHub Pages workflow, but not part of the source release.
 TRACKED_UNRELEASED = ("presentation/",)
 
@@ -56,7 +58,8 @@ def release_files(root=ROOT):
     for directory in SOURCE_DIRS:
         for path in (root / directory).rglob("*"):
             relative = path.relative_to(root)
-            if relative.as_posix() in LOCAL_FILES or any(part in IGNORED for part in relative.parts):
+            if (relative.as_posix() in LOCAL_FILES or relative.as_posix().startswith(LOCAL_DIRS)
+                    or any(part in IGNORED for part in relative.parts)):
                 continue
             if path.is_symlink():
                 raise ValueError(f"Symlinks are not allowed in public source: {relative}")

@@ -120,7 +120,8 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         request.state.authenticated = bool(current) if oidc else (current or 0) > now
         try:
             if is_mcp_path(path):
-                # Bearer-token API for MCP clients: no cookies, CSRF checks, body cap or session lock.
+                # Bearer-token API for MCP clients: no cookies, CSRF checks or session lock. The
+                # endpoint enforces its own body cap.
                 response = await call_next(request)
             else:
                 response = await guarded(request, call_next, path, session_id, current)

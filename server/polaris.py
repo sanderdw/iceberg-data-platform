@@ -1,7 +1,9 @@
 """Polaris adapter. Teams and memberships persist in Polaris/PostgreSQL.
 
-Mutations are serialized by the API. Reversible multi-provider changes compensate
-in reverse order. Deletion keeps its catalog as a durable retry marker until last.
+Mutations are serialized per portal process. Across both portals, database names and
+team deletion are fenced by versioned writes to the team role (`fence_team`).
+Reversible multi-provider changes compensate in reverse order. Deletion keeps its
+catalog as a durable retry marker until last.
 """
 
 import json
@@ -233,6 +235,37 @@ class PolarisProvider:
             key=lambda t: t["name"],
         )
 
+    def fence_team(self, id, *, deleting=False):
+        """The team's role, read before a check that other processes could invalidate.
+
+        Both portals write catalogs under separate locks. A writer reads this role before
+        checking database names or emptiness, commits its change, then publishes with
+        `commit_team`. That versioned write succeeds for only one of two racing writers.
+        """
+        try:
+            role = self.management(f"/principal-roles/{enc(id)}")
+        except ServiceError as exc:
+            if exc.status == 404:
+                raise ServiceError(404, "A selected team no longer exists.") from None
+            raise
+        if not self.managed(role) or role["properties"].get("portal.kind") != "team":
+            raise ServiceError(404, "A selected team no longer exists.")
+        if role["properties"].get("portal.deleting") == "true" and not deleting:
+            raise ServiceError(409, "This team is being deleted.")
+        return role
+
+    def commit_team(self, role, **properties):
+        try:
+            self.update_properties(
+                f"/principal-roles/{enc(role['name'])}",
+                {**role["properties"], "portal.revision": uuid4().hex, **properties},
+                expected_version=role["entityVersion"],
+            )
+        except ServiceError as exc:
+            if exc.status in (404, 409):
+                raise ServiceError(409, "This team changed at the same time. Nothing was saved; try again.") from None
+            raise
+
     def require_teams(self, ids):
         if not ids or len(ids) != len(set(ids)):
             raise ServiceError(400, "A user must belong to at least one team; teams must be unique.")
@@ -263,13 +296,16 @@ class PolarisProvider:
         return self.team(result)
 
     def delete_team(self, id):
-        self.require_teams([id])
+        role = self.fence_team(id, deleting=True)
         if any(d["team"] == id for d in self.list_databases()):
             raise ServiceError(409, "Move or delete this team's databases first.")
         users = [u for u in self.list_users() if id in u["teams"]]
         if any(len(u["teams"]) == 1 for u in users):
             raise ServiceError(409, "This is a user's last team. Assign that user to another team first.")
         with provision() as undo:
+            # Fences a database created by the user portal after the check above.
+            self.commit_team(role, **{"portal.deleting": "true"})
+            undo.append(lambda: self.update_properties(f"/principal-roles/{enc(id)}", role["properties"]))
             for user in users:
                 roles = {m["team"]: m["role"] for m in user["memberships"]}
                 self.update_memberships(user["id"], {t: r for t, r in roles.items() if t != id})
@@ -447,7 +483,7 @@ class PolarisProvider:
                 undo.append(lambda b=base, r=role: self.management(b, "PUT", {"catalogRole": {"name": r}}))
 
     def create_database(self, data):
-        self.require_teams([data.team])
+        team = self.fence_team(data.team)
         if any(
             d["name"] == data.name and d["team"] == data.team and d["environment"] == data.environment
             for d in self.list_databases()
@@ -486,6 +522,9 @@ class PolarisProvider:
                 },
             )
             undo.append(lambda: self.remove(path))
+            # The catalog is visible now: a racing create, rename or team deletion that
+            # checked before it existed also read the team first, so one commit fails.
+            self.commit_team(team)
             for role, privileges in ROLES.items():
                 role_path = f"{path}/catalog-roles/{role}"
                 self.management(f"{path}/catalog-roles", "POST", {"catalogRole": {"name": role}})
@@ -503,7 +542,7 @@ class PolarisProvider:
             return self.database(self.management(path))
 
     def move_database(self, id, team):
-        self.require_teams([team])
+        destination = self.fence_team(team)
         path = f"/catalogs/{enc(id)}"
         catalog = self.require(path)
         old = catalog["properties"]["portal.team"]
@@ -539,6 +578,8 @@ class PolarisProvider:
             self.storage.tag_bucket(bucket, id, team)
             undo.append(lambda: self.storage.tag_bucket(bucket, id, old))
             result = self.update_properties(path, {**properties, "portal.team": team})
+            # The name now counts in the destination team; the first undo restores the old team.
+            self.commit_team(destination)
             return self.database(result)
 
     def rename_database(self, id, name, *, expected_team=None, expected_environment=None):
@@ -557,6 +598,7 @@ class PolarisProvider:
             raise ServiceError(409, "This database is being moved. Try again after the move completes.")
         if name == properties["portal.name"]:
             return self.database(catalog)
+        team = self.fence_team(properties["portal.team"])
         if any(
             d["id"] != id and d["name"] == name
             and d["team"] == properties["portal.team"]
@@ -564,9 +606,14 @@ class PolarisProvider:
             for d in self.list_databases()
         ):
             raise ServiceError(409, "This database name already exists in this team and environment.")
-        return self.database(self.update_properties(
-            path, {**properties, "portal.name": name}, expected_version=catalog["entityVersion"],
-        ))
+        with provision() as undo:
+            result = self.update_properties(
+                path, {**properties, "portal.name": name}, expected_version=catalog["entityVersion"],
+            )
+            # Versioned, so a revert never clears a deletion marker written since.
+            undo.append(lambda: self.update_properties(path, properties, expected_version=result["entityVersion"]))
+            self.commit_team(team)
+            return self.database(result)
 
     def create_user(self, data, *, identity_properties=None, activate=True):
         roles = data.roles
