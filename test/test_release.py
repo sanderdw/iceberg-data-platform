@@ -42,6 +42,10 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
     (nested_environment / ".lock").write_text("local environment lock")
     (nested_environment / "private.py").write_text("private local environment content")
     (release_tree / "docs" / "conversation.md").write_text("Private local development conversation")
+    local_only = release_tree / "docs" / "local_only"
+    local_only.mkdir()
+    (local_only / "LAN.md").write_text("Private notes for 192.168" + ".1.20 in /home" + "/someone/")
+    (local_only / "diagram.drawio").write_text("<mxfile/>")
     first = build(release_tree)
     digest = hashlib.sha256(first.read_bytes()).hexdigest()
     second = build(release_tree)
@@ -57,6 +61,7 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
         assert archive.extractfile(screenshot).read() == (release_tree / "docs" / "portal.png").read_bytes()
         assert not any(name.endswith("/.env") or "/.venv/" in name or "/dist/" in name for name in members)
         assert not any(name.endswith("/docs/conversation.md") for name in members)
+        assert not any("/docs/local_only/" in name for name in members)
 
 
 @pytest.mark.parametrize("env_file", [".env", ".env.private"])
@@ -193,8 +198,9 @@ def test_release_channel_rejects_other_tags_and_unusable_branch_names(ref, versi
         release_channel(ref, version, "123", "1")
 
 
-def test_api_version_must_match_the_project_version(release_tree):
-    app = release_tree / "server" / "app.py"
+@pytest.mark.parametrize("api_path", ["server/app.py", "user_portal/app.py"])
+def test_api_version_must_match_the_project_version(release_tree, api_path):
+    app = release_tree / api_path
     app.write_text(app.read_text().replace('version="', 'version="0.0.', 1))
     with pytest.raises(ValueError, match="API version"):
         check(release_tree)

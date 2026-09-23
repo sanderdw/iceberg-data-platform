@@ -12,7 +12,48 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 
+def check_native_threads():
+    # Exercise real native pools, not just environment settings. Multiple notebooks
+    # share one runtime PID budget; host-sized pools previously exhausted it.
+    source = """
+import json
+from pathlib import Path
+import numpy as np
+import pyarrow as pa
+import duckdb
+from user_portal.notebook.flights import generate_flights, load_semantics, quality_report, require_quality
+np.ones((32, 32)) @ np.ones((32, 32))
+pa.table({'value': [1, 2, 3]}).to_pandas()
+model, contract, _ = load_semantics('/app/user_portal/notebook/examples')
+with duckdb.connect(config={'threads': 2, 'memory_limit': '128MB'}) as connection:
+    generate_flights(connection, model)
+    require_quality(quality_report(connection, contract))
+    assert connection.execute('SELECT count(*) FROM FLIGHT').fetchone() == (12000,)
+    threads = int(next(line.split()[1] for line in Path('/proc/self/status').read_text().splitlines()
+                       if line.startswith('Threads:')))
+    assert threads <= 16, f'Native pools use {threads} threads per kernel'
+print(json.dumps({'threads': threads}))
+"""
+    processes = []
+    try:
+        for _ in range(4):
+            processes.append(subprocess.Popen(
+                [sys.executable, '-c', source], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            ))
+        for process in processes:
+            stdout, stderr = process.communicate(timeout=90)
+            assert process.returncode == 0, f'Flights kernel exited {process.returncode}: {stderr}'
+            assert json.loads(stdout)['threads'] <= 16
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+    print('PASS: four concurrent flights kernels generate 12,000 rows with bounded native thread pools')
+
+
 def main():
+    check_native_threads()
     assert importlib.util.find_spec("playwright") is None
     assert importlib.util.find_spec("nbconvert") is None
     assert not Path("/opt/playwright").exists()

@@ -10,27 +10,55 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+MCP_CLIENT_ID = "iceberg-mcp"
+
+
 def mapper(name, kind, config):
     return {"name": name, "protocol": "openid-connect", "protocolMapper": kind, "config": config}
+
+
+def polaris_mappers():
+    """Access-token claims that let Polaris accept a Keycloak user token."""
+    mappers = [mapper("polaris-audience", "oidc-audience-mapper", {
+        "included.custom.audience": "polaris", "access.token.claim": "true", "id.token.claim": "false",
+    })]
+    for attribute, claim, kind in [("polaris_id", "principal_id", "long"),
+                                   ("polaris_name", "principal_name", "String")]:
+        mappers.append(mapper(attribute, "oidc-usermodel-attribute-mapper", {
+            "user.attribute": attribute, "claim.name": "polaris." + claim,
+            "jsonType.label": kind, "access.token.claim": "true", "id.token.claim": "false",
+        }))
+    mappers.append(mapper("polaris-roles", "oidc-hardcoded-claim-mapper", {
+        "claim.name": "polaris.roles", "claim.value": '["PRINCIPAL_ROLE:ALL"]',
+        "jsonType.label": "JSON", "access.token.claim": "true", "id.token.claim": "false",
+    }))
+    return mappers
+
+
+def mcp_client(callback_port):
+    """Public client for MCP clients such as Claude Code: PKCE and one fixed loopback redirect.
+
+    Keycloak allows a wildcard only at the end of a redirect path, never in its port,
+    so MCP clients must listen on this port for the OAuth callback. The bootstrap
+    service reuses this definition to upgrade existing realms.
+    """
+    return {
+        "clientId": MCP_CLIENT_ID, "name": "MCP clients", "enabled": True, "protocol": "openid-connect",
+        "publicClient": True, "standardFlowEnabled": True, "implicitFlowEnabled": False,
+        "directAccessGrantsEnabled": False, "serviceAccountsEnabled": False,
+        "redirectUris": [f"http://localhost:{int(callback_port)}/callback"],
+        "webOrigins": [],
+        "attributes": {"pkce.code.challenge.method": "S256"},
+        "defaultClientScopes": ["basic", "profile", "roles"],
+        # MCP clients request offline_access for a refresh token that outlives the browser SSO session.
+        "optionalClientScopes": ["offline_access"], "protocolMappers": polaris_mappers(),
+    }
 
 
 def realm(env):
     clients = []
     for name, origin, secret in [("iceberg-admin", env["PORTAL_ORIGIN"], "PORTAL"),
                                  ("iceberg-users", env["USER_ORIGIN"], "USERS")]:
-        mappers = [mapper("polaris-audience", "oidc-audience-mapper", {
-            "included.custom.audience": "polaris", "access.token.claim": "true", "id.token.claim": "false",
-        })]
-        for attribute, claim, kind in [("polaris_id", "principal_id", "long"),
-                                       ("polaris_name", "principal_name", "String")]:
-            mappers.append(mapper(attribute, "oidc-usermodel-attribute-mapper", {
-                "user.attribute": attribute, "claim.name": "polaris." + claim,
-                "jsonType.label": kind, "access.token.claim": "true", "id.token.claim": "false",
-            }))
-        mappers.append(mapper("polaris-roles", "oidc-hardcoded-claim-mapper", {
-            "claim.name": "polaris.roles", "claim.value": '["PRINCIPAL_ROLE:ALL"]',
-            "jsonType.label": "JSON", "access.token.claim": "true", "id.token.claim": "false",
-        }))
         clients.append({
             "clientId": name, "enabled": True, "protocol": "openid-connect", "publicClient": False,
             "secret": "${OIDC_" + secret + "_SECRET}", "standardFlowEnabled": True,
@@ -39,8 +67,9 @@ def realm(env):
             "webOrigins": [origin],
             "attributes": {"pkce.code.challenge.method": "S256",
                            "post.logout.redirect.uris": origin + "/"},
-            "defaultClientScopes": ["basic", "profile", "roles"], "protocolMappers": mappers,
+            "defaultClientScopes": ["basic", "profile", "roles"], "protocolMappers": polaris_mappers(),
         })
+    clients.append(mcp_client(env["MCP_CALLBACK_PORT"]))
     users = [{
         "username": env["PLATFORM_ADMIN_USERNAME"], "enabled": True,
         "firstName": "Platform", "lastName": "Administrator",
@@ -90,6 +119,7 @@ def setup(root=ROOT, demo=False):
         "PORTAL_ORIGIN": f"http://localhost:{values.get('PORT', '3000')}",
         "USER_ORIGIN": f"http://localhost:{values.get('USER_PORT', '3002')}",
         "KEYCLOAK_ORIGIN": f"http://localhost:{values.get('KEYCLOAK_PORT', '8080')}",
+        "MCP_CALLBACK_PORT": "3010",
     }.items():
         default(key, value)
     default("OIDC_ISSUER", values["KEYCLOAK_ORIGIN"] + "/realms/iceberg")

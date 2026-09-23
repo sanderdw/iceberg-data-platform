@@ -1,5 +1,6 @@
 """Run the native DuckDB notebooks on temporary data in offline containers, as a reader and a writer."""
 
+import argparse
 import json
 import os
 import subprocess
@@ -15,16 +16,13 @@ from user_portal.notebook.synthetic import generate_energy_data
 
 CODE = """
 import importlib.util
-from types import SimpleNamespace
 import duckdb
 
 path = '/app/user_portal/notebook/examples/03_duckdb_iceberg.py'
 spec = importlib.util.spec_from_file_location('native_notebook', path)
 notebook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(notebook)
-_, definitions = notebook.app.run(defs={'table_settings': SimpleNamespace(value={
-    'namespace': 'synthetic', 'table': 'neighborhood_electricity'
-})})
+_, definitions = notebook.app.run(defs={'NAMESPACE': ['synthetic'], 'TABLE': 'neighborhood_electricity'})
 assert definitions['row_count'].iloc[0]['rows'] == 26880
 assert len(definitions['preview']) == 100
 assert len(definitions['snapshots']) == 1
@@ -106,8 +104,58 @@ lakehouse.close()
 print('PASS: Polaris refuses the Iceberg v3 write notebook for a reader and nothing is created')
 """
 
+FLIGHTS_WRITE_CODE = """
+import importlib.util
 
-def main():
+def run(name):
+    spec = importlib.util.spec_from_file_location('flights_notebook', '/app/user_portal/notebook/examples/' + name)
+    notebook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(notebook)
+    return notebook.app.run()[1]
+
+for attempt in range(2):
+    written = run('06_duckdb_flights_write.py')
+    counts = {r['dataset']: r['rows'] for r in written['published']}
+    assert counts == {'FLIGHT': 12000, 'AIRPORT': 8, 'CARRIER': 3, 'AIRCRAFT': 120, 'ROUTE': 56, 'RUNWAY': 16}
+    written['lakehouse'].close()
+print('PASS: native DuckDB publishes all six Ossie datasets twice without duplicate flights')
+"""
+
+FLIGHTS_READ_CODE = """
+import importlib.util
+import duckdb
+
+spec = importlib.util.spec_from_file_location('flights_reader', '/app/user_portal/notebook/examples/07_duckdb_flights_read.py')
+notebook = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(notebook)
+_, read = notebook.app.run()
+assert read['overview'].iloc[0]['scheduled_flights'] == 12000
+assert read['airport_delays']['scheduled_flights'].sum() == 12000
+assert read['carrier_performance']['eligible_arrivals'].sum() == 11587
+assert read['join_cardinality'].iloc[0]['runway_join_rows'] == 24000
+try:
+    read['lakehouse'].execute('DELETE FROM lakehouse.ai_flights.flights')
+except duckdb.Error:
+    pass
+else:
+    raise AssertionError('Expected the read-only attachment to reject writes')
+read['lakehouse'].close()
+
+from user_portal.notebook.flights import bind_flights
+from user_portal.notebook.duckdb_connection import connect_duckdb
+connection = connect_duckdb(['ai_flights'], 'flights')
+try:
+    bind_flights(connection, read['model'], ['ai_flights'], {'ontology_sha256': 'changed'})
+except ValueError as error:
+    assert 'semantics differ' in str(error)
+else:
+    raise AssertionError('Expected semantic version mismatch to be detected')
+connection.close()
+print('PASS: reader queries all six Iceberg tables, verifies semantics and rejects a mismatched ontology')
+"""
+
+
+def main(*, flights_only=False):
     context = json.loads(subprocess.check_output(["docker", "context", "inspect"]))[0]
     with (
         closing(docker.DockerClient(base_url=context["Endpoints"]["docker"]["Host"])) as daemon,
@@ -142,7 +190,9 @@ def main():
             network.connect(
                 os.environ.get("RUSTFS_CONTAINER", "iceberg-platform-rustfs-1"), aliases=["rustfs"]
             )
-            for code, account in ((CODE, reader), (V3_READER_CODE, reader), (V3_CODE, writer)):
+            checks = [] if flights_only else [(CODE, reader), (V3_READER_CODE, reader), (V3_CODE, writer)]
+            checks.extend([(FLIGHTS_WRITE_CODE, writer), (FLIGHTS_READ_CODE, reader)])
+            for code, account in checks:
                 run_notebook(daemon, network, database, account, code)
         finally:
             network.reload()
@@ -190,4 +240,6 @@ def run_notebook(daemon, network, database, account, code):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--flights-only", action="store_true", help="Run only the flights write/read pair")
+    main(flights_only=parser.parse_args().flights_only)

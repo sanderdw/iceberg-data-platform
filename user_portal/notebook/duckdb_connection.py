@@ -2,6 +2,7 @@
 
 import os
 from urllib.parse import quote, urlsplit
+from weakref import WeakKeyDictionary
 
 import duckdb
 import httpx
@@ -18,20 +19,37 @@ WRITE_ERROR = (
 )
 # Table property naming the example that created a table; only that example may replace it.
 EXAMPLE_PROPERTY = "iceberg-data-platform.example"
+# Per connection, track which table each currently installed secret can read.
+# Weak keys release this bookkeeping when a notebook releases its connection.
+_discovery_tables = WeakKeyDictionary()
 
 
-def _register_variant_with_marimo():
+def _configure_marimo_discovery():
     # marimo's datasets panel has no mapping for DuckDB's VARIANT and logs a warning for
     # every such column. It shows the column as "unknown" either way, so say that up front.
     try:
         from marimo._data import get_datasets
 
         get_datasets._UNKNOWN_TYPES.add("variant")
+        if not getattr(get_datasets.get_table_columns, "_scoped_iceberg_discovery", False):
+            original = get_datasets.get_table_columns
+
+            def scoped_columns(connection, table_name):
+                tables = _discovery_tables.get(connection) if connection is not None else None
+                if (tables is not None and table_name.startswith('"lakehouse".')
+                        and table_name not in tables.values()):
+                    # Catalog listing is allowed, but DESCRIBE can read manifests.
+                    # Do not trigger uncredentialed S3 requests for unrelated tables.
+                    return []
+                return original(connection, table_name)
+
+            scoped_columns._scoped_iceberg_discovery = True
+            get_datasets.get_table_columns = scoped_columns
     except ImportError, AttributeError:
-        pass  # No marimo (plain Python) or its internals moved: only the warning returns.
+        pass  # Marimo is optional; this adapter targets the pinned notebook version.
 
 
-_register_variant_with_marimo()
+_configure_marimo_discovery()
 
 
 def sql_literal(value):
@@ -87,12 +105,13 @@ def _vended(client, base, namespace, table, missing_ok=False):
     return loaded["config"], loaded["metadata"]["location"].rstrip("/") + "/"
 
 
-def _storage_secret(connection, storage, location):
+def _storage_secret(connection, storage, location, *, secret_name="table_storage"):
     s3 = urlsplit(os.environ["ICEBERG_S3_ENDPOINT"])
     if s3.scheme not in {"http", "https"} or not s3.netloc:
         raise ValueError("Invalid internal S3 endpoint")
+    secret_identifier = '"' + secret_name.replace('"', '""') + '"'
     connection.execute(f"""
-        CREATE OR REPLACE SECRET table_storage (
+        CREATE OR REPLACE SECRET {secret_identifier} (
             TYPE s3,
             KEY_ID {sql_literal(storage["s3.access-key-id"])},
             SECRET {sql_literal(storage["s3.secret-access-key"])},
@@ -142,6 +161,9 @@ def connect_duckdb(namespace, table, *, read_only=True, missing_ok=False):
                 ACCESS_DELEGATION_MODE 'none', SUPPORT_NESTED_NAMESPACES true{", READ_ONLY" if read_only else ""}
             )
         """)
+        _discovery_tables[connection] = (
+            {"table_storage": table_reference(namespace, table)} if vended else {}
+        )
         return connection
     except duckdb.Error, httpx.HTTPError, KeyError, ValueError:
         if connection is not None:
@@ -171,12 +193,13 @@ def drop_example_table(connection, namespace, table, example):
     connection.execute(f"DROP TABLE {reference}")
 
 
-def refresh_table_credentials(connection, namespace, table):
-    """Vend fresh S3 credentials for one table, such as a table this connection just created."""
+def refresh_table_credentials(connection, namespace, table, *, secret_name="table_storage"):
+    """Vend scoped S3 credentials; distinct secret names retain access for multi-table joins."""
     try:
         with httpx.Client(timeout=30, trust_env=False) as client:
             _, _, _, base = _catalog(client)
-            _storage_secret(connection, *_vended(client, base, namespace, table))
+            _storage_secret(connection, *_vended(client, base, namespace, table), secret_name=secret_name)
+        _discovery_tables.setdefault(connection, {})[secret_name] = table_reference(namespace, table)
     except duckdb.Error, httpx.HTTPError, KeyError, ValueError:
         raise RuntimeError(
             "Could not get storage credentials for this table. Check that it exists and your permissions."

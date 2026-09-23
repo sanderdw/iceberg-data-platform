@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Name = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,47}$")]
 TeamId = Annotated[str, Field(pattern=r"^team-[a-f0-9]{32}$")]
@@ -40,6 +40,10 @@ class DatabaseInput(Input):
 
 class DatabaseMove(Input):
     team: TeamId
+
+
+class DatabaseRename(Input):
+    name: Name
 
 
 class Membership(Input):
@@ -114,6 +118,15 @@ def share_expiry(value):
 
 
 class ShareInput(Input):
+    external: bool = True
+    recipient_team: TeamId | None = Field(default=None, alias="recipientTeam")
+
+    @model_validator(mode="after")
+    def audience(self):
+        if not self.external and not self.recipient_team:
+            raise ValueError("Choose another team, external sharing, or both.")
+        return self
+
     database: DatabaseId
     name: Name
     recipient: str = Field(default="", max_length=120)

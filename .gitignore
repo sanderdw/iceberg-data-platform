@@ -40,4 +40,4 @@ notebooktest/
 
 # Personal sample data and generated user credentials
 /personal/*
-docs/dbaas-reference-architecture.drawio
+docs/local_only/*

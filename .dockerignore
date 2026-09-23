@@ -8,6 +8,8 @@
 !Dockerfile
 !server/
 !server/*.py
+!scripts/
+!scripts/setup.py
 !public/
 !public/**
 !user_portal/

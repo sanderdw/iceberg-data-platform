@@ -362,3 +362,62 @@ def test_share_routes_need_an_admin_session():
 
     with TestClient(create_app(MemoryPolaris(), PASSWORD)) as c:
         assert c.delete(f"/api/shares/{SHARE}", headers=HEADERS).status_code == 401
+
+
+@pytest.mark.parametrize("external", [False, True])
+def test_team_share_access_and_membership_lifecycle(stack, external):
+    from server.models import UserInput
+
+    provider, db = stack
+    owner = provider.list_teams()[0]["id"]
+    recipient = provider.save_team(TeamInput(name="recipient"))["id"]
+    member = provider.create_user(UserInput(name="member", memberships=members([recipient])))["user"]
+    result = provider.create_share(share_input(db, external=external, recipientTeam=recipient), CREATOR)
+    share = result["share"]
+    grant = f"/principal-roles/{member['id']}/catalog-roles/{db}/{share['id']}"
+    assert grant in provider.grants
+    assert ("credentials" in result) == external
+    assert share["recipientTeam"] == recipient and share["external"] == external
+    assert len(provider.catalog_roles[db][share["id"]]) == 2
+    if not external:
+        assert f"/principals/{share['id']}/principal-roles" not in provider.grants
+        with pytest.raises(ServiceError, match="no external credential"):
+            provider.rotate_share(share["id"])
+    later = provider.create_user(UserInput(name="later", memberships=members([recipient])))["user"]
+    later_grant = f"/principal-roles/{later['id']}/catalog-roles/{db}/{share['id']}"
+    assert later_grant in provider.grants
+    provider.update_memberships(member["id"], {owner: "reader"})
+    assert grant not in provider.grants and later_grant in provider.grants
+    provider.update_memberships(member["id"], {recipient: "reader"})
+    assert grant in provider.grants
+    provider.delete_share(share["id"])
+    assert grant not in provider.grants and later_grant not in provider.grants
+
+
+def test_team_share_audience_validation(stack):
+    from pydantic import ValidationError
+
+    provider, db = stack
+    with pytest.raises(ValidationError, match="Choose another team"):
+        share_input(db, external=False)
+    with pytest.raises(ServiceError, match="other than the database owner"):
+        provider.create_share(share_input(db, recipientTeam=provider.list_teams()[0]["id"]), CREATOR)
+    with pytest.raises(ServiceError, match="no longer exists"):
+        provider.create_share(share_input(db, recipientTeam="team-" + "f" * 32), CREATOR)
+
+
+def test_team_share_failed_creation_preserves_existing_access(stack):
+    from server.models import UserInput
+
+    provider, db = stack
+    recipient = provider.save_team(TeamInput(name="recipient"))["id"]
+    member = provider.create_user(UserInput(name="member", memberships=members([recipient])))["user"]
+    provider.create_share(share_input(db, recipientTeam=recipient), CREATOR)
+    before = share_state(provider)
+    provider.fail = lambda path, method, body: (
+        path == f"/principal-roles/{member['id']}/catalog-roles/{db}" and method == "PUT"
+    )
+    with pytest.raises(ServiceError):
+        provider.create_share(share_input(db, name="second", external=False, recipientTeam=recipient), CREATOR)
+    provider.fail = None
+    assert share_state(provider) == before

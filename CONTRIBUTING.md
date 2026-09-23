@@ -1,52 +1,75 @@
 # Contributing
 
-Bug reports, documentation improvements and focused pull requests are welcome. Use English for all interface text, error messages, documentation, examples, comments and tests.
+Bug reports, documentation improvements and focused pull requests are welcome. Use English for all interface text, messages, documentation, comments and tests.
 
 ## Development
 
-Install Docker Compose, uv and Node.js 24 or later. Use the pinned Python version:
+Install Docker with Compose v2, [uv](https://docs.astral.sh/uv/) and Node.js 24 or later, then:
 
 ```bash
 uv python install
 uv sync --locked --all-groups
 npm ci
 uv run python -m scripts.setup
-npm run verify
-npm run check:release
 ```
 
-For backend development, start the platform, including Keycloak provisioning, then
-stop the administration container before running FastAPI locally on the same port:
+Start both stacks as described in [Run from source](README.md#run-from-source). For live reload of the admin backend, stop its container and run it locally:
 
 ```bash
-docker compose up -d --build --wait
 docker compose stop portal
 uv run python -m server --reload
+# afterwards: docker compose up -d --wait portal
 ```
 
-See [development instructions](README.md#development-and-tests) for restoring the container and local monitoring, [Run from source](README.md#run-from-source) for the standalone user stack, and [architecture](docs/architecture.md) for authorization boundaries.
+The user portal works the same way: stop `users` and run `uv run --group users python -m user_portal`. See [architecture](docs/architecture.md) for the authorization boundaries.
 
-## Changes and validation
-
-Keep pull requests focused on a concrete problem. Describe the behavior before and after the change and the checks you ran. Add regression tests for behavior changes, especially authorization, grants, cleanup and data operations. Never include actual credentials, copied `.env` files, personal notebook output or screenshots containing secrets.
+## Tests
 
 ```bash
-npm run verify
+npm run verify           # unit and authorization tests, Ruff, JavaScript syntax
+npm run check:release    # release allowlist, versions, licenses and Markdown links
 uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
-# Browser fixtures; no running stack needed:
+```
+
+Browser checks run against fixtures and don't need a running stack:
+
+```bash
 npx playwright install chromium
 npm run test:team-ui
 npm run test:catalog
 npm run test:shares-ui
 npm run test:forms-ui
 npm run test:navigation-ui
-# With both Compose stacks running:
-npm run test:e2e
+```
+
+With both stacks running (each test creates and cleans up its own resources):
+
+```bash
+UV_NO_SYNC=1 npm run test:e2e
+uv run --all-groups python -m scripts.smoke
+uv run --all-groups python -m scripts.data_smoke
+uv run --all-groups python -m scripts.catalog_smoke
+uv run --all-groups python -m scripts.share_smoke
+uv run --all-groups python -m scripts.duckdb_smoke
+npm run test:users
 npm run test:examples
 ```
 
-Integration tests create uniquely named resources and clean up only their own resources. Never run a blanket volume deletion against a shared development environment.
+With the [demo fixtures](docs/keycloak.md#demo-fixtures) installed:
 
-Update `uv.lock` or `package-lock.json` together with dependency manifests. Use `uv` for Python dependency management. Format Python changes with Ruff. Follow marimo's reactive cell model for example notebooks; put writes behind an explicit run button, unless the example is a linear notebook that only recreates its own table and preserve existing user notebooks when seeding examples.
+```bash
+npm run test:keycloak
+npm run test:mcp
+npm run test:mcp-admin
+```
 
-By submitting a contribution, you agree to license it under this project's Apache-2.0 license. Do not submit material you do not have permission to contribute. Be respectful, discuss ideas rather than people, and keep reports and reviews relevant to the project.
+## Pull requests
+
+- Keep pull requests focused, and describe the behaviour before and after the change plus the checks you ran.
+- Add regression tests for behaviour changes, especially around authorization, grants, cleanup and data operations.
+- Never include credentials, `.env` files, notebook output or screenshots that show secrets.
+- Never delete volumes wholesale on a shared development environment.
+- Update `uv.lock` or `package-lock.json` together with their manifests, and format Python with Ruff.
+- Example notebooks run from top to bottom and must never overwrite existing user notebooks.
+
+By submitting a contribution, you agree to license it under this project's Apache-2.0 license. Be respectful and keep discussions about the project.

@@ -6,6 +6,9 @@ COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md ./
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --group notebook
+# CPU quotas do not constrain host CPU discovery in native numerical libraries.
+# Bound each kernel's pools so several open notebooks fit the runtime's PID limit.
+ENV OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 NUMEXPR_NUM_THREADS=2 ARROW_IO_THREADS=2
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
 COPY user_portal/duckdb_extensions.py ./user_portal/
 RUN /app/.venv/bin/python user_portal/duckdb_extensions.py

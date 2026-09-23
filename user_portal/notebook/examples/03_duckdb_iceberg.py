@@ -11,16 +11,17 @@ def _():
 
     import marimo as mo
 
+    from user_portal.notebook.display import plain_table
     from user_portal.notebook.duckdb_connection import connect_duckdb, table_reference
 
-    return connect_duckdb, json, mo, os, table_reference
+    return (connect_duckdb, json, mo, os, table_reference, plain_table)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     # Native DuckDB on Iceberg
-    **Example 3 of 5**
+    **Example 3 of 7**
 
     Attach the selected Polaris database as **lakehouse**, then query Iceberg directly
     with DuckDB SQL. DuckDB reads the manifests and Parquet files from RustFS using
@@ -32,73 +33,64 @@ def _(mo):
     """)
 
 
-@app.cell(hide_code=True)
-def _(json, mo, os):
-    _selected = os.environ.get("ICEBERG_TABLE")
-    table_settings = mo.ui.dictionary(
-        {
-            "namespace": mo.ui.text(
-                value=(
-                    ".".join(json.loads(os.environ.get("ICEBERG_NAMESPACE", "[]")))
-                    if _selected
-                    else "synthetic"
-                ),
-                label="Namespace (dots separate nested levels)",
-            ),
-            "table": mo.ui.text(
-                value=os.environ.get("ICEBERG_TABLE") or "neighborhood_electricity", label="Table"
-            ),
-        }
-    ).form(submit_button_label="Connect / refresh credentials", show_clear_button=False)
-    mo.vstack([mo.md("### Choose a table"), table_settings])
-    return (table_settings,)
+@app.cell
+def _(json, os):
+    # Edit these values to query another table.
+    NAMESPACE = (
+        json.loads(os.environ.get("ICEBERG_NAMESPACE", "[]"))
+        if os.environ.get("ICEBERG_TABLE")
+        else ["synthetic"]
+    )
+    TABLE = os.environ.get("ICEBERG_TABLE") or "neighborhood_electricity"
+    return NAMESPACE, TABLE
 
 
 @app.cell
-def _(connect_duckdb, mo, table_reference, table_settings):
-    mo.stop(
-        table_settings.value is None, mo.md("Choose a table and click **Connect / refresh credentials**.")
-    )
-    _namespace = tuple(table_settings.value["namespace"].strip().split("."))
-    _table = table_settings.value["table"].strip()
-    mo.stop(not all(_namespace) or not _table, mo.md("Enter a namespace and table name."))
+def _(NAMESPACE, TABLE, connect_duckdb, mo, table_reference):
+    if not NAMESPACE or not all(NAMESPACE) or not TABLE:
+        raise ValueError("Set NAMESPACE and TABLE in the settings cell.")
     try:
-        lakehouse = connect_duckdb(_namespace, _table)
+        lakehouse = connect_duckdb(NAMESPACE, TABLE)
     except RuntimeError as _error:
         mo.stop(True, mo.callout(str(_error), kind="warn"))
-    selected_table = table_reference(_namespace, _table)
+    selected_table = table_reference(NAMESPACE, TABLE)
     lakehouse.execute(f"CREATE VIEW selected_iceberg_table AS SELECT * FROM {selected_table}")
     mo.md(f"Connected to `{selected_table}`. The SQL cells below use this DuckDB connection.")
     return lakehouse, selected_table
 
 
 @app.cell
-def _(lakehouse, mo):
-    tables = mo.sql("SHOW ALL TABLES", engine=lakehouse)
+def _(lakehouse, mo, plain_table):
+    tables = mo.sql("SHOW ALL TABLES", engine=lakehouse, output=False)
+    plain_table(tables)
     return (tables,)
 
 
 @app.cell
-def _(lakehouse, mo):
-    columns = mo.sql("DESCRIBE selected_iceberg_table", engine=lakehouse)
+def _(lakehouse, mo, plain_table):
+    columns = mo.sql("DESCRIBE selected_iceberg_table", engine=lakehouse, output=False)
+    plain_table(columns)
     return (columns,)
 
 
 @app.cell
-def _(lakehouse, mo):
-    preview = mo.sql("SELECT * FROM selected_iceberg_table LIMIT 100", engine=lakehouse)
+def _(lakehouse, mo, plain_table):
+    preview = mo.sql("SELECT * FROM selected_iceberg_table LIMIT 100", engine=lakehouse, output=False)
+    plain_table(preview)
     return (preview,)
 
 
 @app.cell
-def _(lakehouse, mo):
-    row_count = mo.sql("SELECT count(*) AS rows FROM selected_iceberg_table", engine=lakehouse)
+def _(lakehouse, mo, plain_table):
+    row_count = mo.sql("SELECT count(*) AS rows FROM selected_iceberg_table", engine=lakehouse, output=False)
+    plain_table(row_count)
     return (row_count,)
 
 
 @app.cell
-def _(lakehouse, mo, selected_table):
-    snapshots = mo.sql(f"SELECT * FROM iceberg_snapshots({selected_table})", engine=lakehouse)
+def _(lakehouse, mo, selected_table, plain_table):
+    snapshots = mo.sql(f"SELECT * FROM iceberg_snapshots({selected_table})", engine=lakehouse, output=False)
+    plain_table(snapshots)
     return (snapshots,)
 
 
@@ -113,7 +105,7 @@ def _(mo):
 
 
 @app.cell
-def _(columns, lakehouse, mo):
+def _(columns, lakehouse, mo, plain_table):
     mo.stop(
         not {"street", "home_id", "consumption_kwh", "generation_kwh"}.issubset(columns["column_name"]),
         mo.md("Select the neighborhood example table to run the energy aggregation."),
@@ -128,7 +120,9 @@ def _(columns, lakehouse, mo):
         ORDER BY street
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(street_totals)
     return (street_totals,)
 
 
@@ -136,7 +130,7 @@ def _(columns, lakehouse, mo):
 def _(mo):
     mo.md("""
     ### Refresh and explore
-    Click **Connect / refresh credentials** after another notebook changes the table,
+    Rerun the connection cell after another notebook changes the table,
     or when temporary credentials expire. Credentials stay in this process's memory.
     Reconnect for another table to obtain its scoped storage credentials.
 

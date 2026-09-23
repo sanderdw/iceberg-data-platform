@@ -11,6 +11,7 @@ def test_existing_workspace_receives_examples_without_overwriting_edits(tmp_path
     example = tmp_path / "01_pyiceberg_neighborhood.py"
     example.write_text("# Customized example")
     seed_workspace(tmp_path)
+    assert "shared_objects" in (tmp_path / "shared_workspace.py").read_text()
     assert personal.read_text() == "# Personal analysis"
     assert example.read_text() == "# Customized example"
     second = tmp_path / "02_duckdb_visualization.py"
@@ -77,13 +78,12 @@ def test_energy_data_is_reproducible_and_balanced():
     assert all(r["grid_draw_kwh"] >= 0 and r["grid_export_kwh"] >= 0 for r in rows)
 
 
-def test_duckdb_notebook_executes_sql_and_reacts_to_street_choice(monkeypatch):
+def test_duckdb_notebook_executes_sql_with_plain_street_setting(monkeypatch):
     pytest.importorskip("marimo")
     pytest.importorskip("pyarrow")
     pytest.importorskip("sqlglot")
     import importlib.util
     from pathlib import Path
-    from types import SimpleNamespace
 
     from user_portal.notebook.synthetic import generate_energy_data
 
@@ -98,7 +98,7 @@ def test_duckdb_notebook_executes_sql_and_reacts_to_street_choice(monkeypatch):
     )
     for choice in ("All streets", "Example Solar Street"):
         _, definitions = notebook.app.run(
-            defs={"energy_frame": frame, "street_choice": SimpleNamespace(value=choice)}
+            defs={"energy_frame": frame, "STREET": choice}
         )
         hourly = definitions["hourly_energy"]
         streets = definitions["street_totals"]
@@ -108,3 +108,32 @@ def test_duckdb_notebook_executes_sql_and_reacts_to_street_choice(monkeypatch):
         assert streets["homes"].sum() == 40
         assert hourly["consumption_kwh"].sum() == pytest.approx(expected["consumption_kwh"].sum())
         assert hourly["generation_kwh"].sum() == pytest.approx(expected["generation_kwh"].sum())
+
+
+def test_plain_writer_runs_without_a_button_and_skips_existing_rows(monkeypatch):
+    pytest.importorskip("marimo")
+    pytest.importorskip("pyarrow")
+    import importlib.util
+    from pathlib import Path
+    from unittest.mock import Mock
+
+    from user_portal.notebook.synthetic import generate_energy_data
+
+    monkeypatch.setenv("ICEBERG_DATABASE", "test_database")
+    data = generate_energy_data()
+    table = Mock()
+    table.scan.return_value.count.side_effect = [0, data.num_rows]
+    table.scan.return_value.to_arrow.return_value = data.slice(0, 10)
+    catalog = Mock()
+    catalog.create_table_if_not_exists.return_value = table
+    catalog.load_table.return_value = table
+    monkeypatch.setattr("user_portal.notebook.connection.connect", lambda: catalog)
+    path = Path(__file__).parents[1] / "user_portal/notebook/examples/01_pyiceberg_neighborhood.py"
+    spec = importlib.util.spec_from_file_location("plain_energy_writer", path)
+    notebook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(notebook)
+    first = notebook.app.run()[1]
+    second = notebook.app.run()[1]
+    assert first["write_message"] == "Created and populated: 26,880 rows."
+    assert second["write_message"] == "Table already contains 26,880 rows; append skipped."
+    table.append.assert_called_once()

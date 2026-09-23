@@ -12,20 +12,27 @@ def _():
     import marimo as mo
 
     from user_portal.notebook.connection import connect
+    from user_portal.notebook.display import plain_table
 
     catalog = connect()
     database = os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])
     namespace = tuple(json.loads(os.environ.get("ICEBERG_NAMESPACE", "[]")))
+    shared_objects = json.loads(os.environ["ICEBERG_SHARED_OBJECTS"]) if "ICEBERG_SHARED_OBJECTS" in os.environ else None
     selected_table = os.environ.get("ICEBERG_TABLE", "")
     mo.md(f"# {database}\nShared team files for this environment. Operations use your own data permissions.")
-    return catalog, mo, namespace, selected_table
+    return (catalog, mo, namespace, selected_table, plain_table, shared_objects)
 
 
 @app.cell
-def _(catalog, mo, namespace):
-    namespaces = catalog.list_namespaces(namespace)
-    tables = catalog.list_tables(namespace) if namespace else []
-    views = catalog.list_views(namespace) if namespace else []
+def _(catalog, mo, namespace, shared_objects):
+    if shared_objects is None:
+        namespaces = catalog.list_namespaces(namespace)
+        tables = catalog.list_tables(namespace) if namespace else []
+        views = catalog.list_views(namespace) if namespace else []
+    else:
+        namespaces = sorted({tuple(o["namespace"]) for o in shared_objects})
+        tables = [(*o["namespace"], o["name"]) for o in shared_objects if o["kind"] == "table"]
+        views = [(*o["namespace"], o["name"]) for o in shared_objects if o["kind"] == "view"]
     mo.vstack(
         [
             mo.md("## Available objects"),
@@ -35,7 +42,7 @@ def _(catalog, mo, namespace):
 
 
 @app.cell
-def _(catalog, mo, namespace, selected_table):
+def _(catalog, mo, namespace, selected_table, plain_table):
     mo.stop(
         not selected_table,
         mo.md(
@@ -57,7 +64,7 @@ def _(catalog, mo, namespace, selected_table):
                 kind="warn",
             ),
         )
-    mo.ui.table(df)
+    plain_table(df)
     return df, table
 
 

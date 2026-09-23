@@ -8,6 +8,7 @@ app = marimo.App(width="medium", app_title="04 · Write Iceberg v3 with DuckDB",
 def _():
     import marimo as mo
 
+    from user_portal.notebook.display import plain_table
     from user_portal.notebook.duckdb_connection import (
         EXAMPLE_PROPERTY,
         connect_duckdb,
@@ -33,6 +34,7 @@ def _():
         refresh_table_credentials,
         schema_reference,
         table_reference,
+        plain_table,
     )
 
 
@@ -40,7 +42,7 @@ def _():
 def _(mo):
     mo.md("""
     # Write Iceberg v3 with DuckDB
-    **Example 4 of 5**
+    **Example 4 of 7**
 
     DuckDB creates and writes an Iceberg **format-version 3** table through Polaris,
     using your own permissions. The table uses what v3 adds: a `VARIANT` column for
@@ -66,9 +68,9 @@ def _(mo):
 
 
 @app.cell
-def _(generate_sensor_events):
+def _(generate_sensor_events, plain_table):
     events = generate_sensor_events()
-    events.slice(0, 8).to_pandas()
+    plain_table(events.slice(0, 8))
     return (events,)
 
 
@@ -198,7 +200,7 @@ def _(mo):
 
 
 @app.cell
-def _(deleted_rows, lakehouse, mo, selected_table):
+def _(deleted_rows, lakehouse, mo, selected_table, plain_table):
     assert deleted_rows
     firmware = mo.sql(
         f"""
@@ -208,17 +210,21 @@ def _(deleted_rows, lakehouse, mo, selected_table):
         ORDER BY firmware
         """,
         engine=lakehouse,
+        output=False,
     )
+    plain_table(firmware)
     return (firmware,)
 
 
 @app.cell
-def _(firmware, lakehouse, mo, selected_table):
+def _(firmware, lakehouse, mo, selected_table, plain_table):
     assert len(firmware)
     snapshots = mo.sql(
         f"SELECT sequence_number, snapshot_id, timestamp_ms FROM iceberg_snapshots({selected_table})",
         engine=lakehouse,
+        output=False,
     )
+    plain_table(snapshots)
     return (snapshots,)
 
 

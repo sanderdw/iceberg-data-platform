@@ -8,7 +8,7 @@ from docker.errors import NotFound
 
 from server.models import ServiceError
 from user_portal.directory import UserSession
-from user_portal.runtime import LABEL, NotebookRuntime
+from user_portal.runtime import LABEL, NotebookRuntime, filespace_key
 
 
 @pytest.fixture
@@ -144,3 +144,16 @@ def test_volume_from_another_stack_is_rejected(runtime):
     with pytest.raises(ServiceError, match="does not belong"):
         runtime.start(session(), "db1", [], None)
     runtime.docker.containers.run.assert_not_called()
+
+
+def test_shared_notebook_uses_recipient_filespace_and_shared_starter(runtime):
+    import json
+
+    objects = [{'kind': 'table', 'namespace': ['sales'], 'name': 'orders'}]
+    member = session(team='recipient')
+    workspace = runtime.start(member, 'source-db', ['sales'], 'orders', shared_objects=objects)
+    assert workspace.team == 'recipient'
+    assert workspace.key == filespace_key('recipient', 'development')
+    assert workspace.public()['url'].endswith('?file=shared_workspace.py')
+    env = runtime.docker.containers.run.call_args.kwargs['environment']
+    assert json.loads(env['ICEBERG_SHARED_OBJECTS']) == objects

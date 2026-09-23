@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 — 2026-09-22
+
+- Bound native numerical thread pools in notebook kernels to the runtime’s two-CPU allocation. Multiple open notebooks previously exhausted the 256-process/thread limit and could abort the flights kernel. Image smoke tests now run concurrent flights generation under the production CPU, memory and PID limits.
+
+- Data shares can target another team, external recipients, or both. Internal recipients use their own accounts; access follows team membership and the share's selected objects, expiry and revocation. Existing shares remain external by default.
+- Received shares appear as read-only databases in Catalog and Notebooks. A reader can browse shared objects and open notebooks even when their team owns no databases. Shared notebooks use the recipient team's filespace and a dedicated starter that does not require catalog listing permissions. Only the source team can manage the database or its outgoing shares.
+
+- MCP server: the user portal serves a Model Context Protocol endpoint at `/mcp` for AI agents such as Claude Code. Tools list your databases, namespaces, tables and views, describe schemas, snapshots and view SQL, and preview up to 100 rows, using your own Keycloak identity and Polaris grants. Team administrators can also create, rename and delete their databases. Register it with `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg http://localhost:3002/mcp`.
+- Keycloak gains the public `iceberg-mcp` client (PKCE, fixed loopback redirect) and `.env` the `MCP_CALLBACK_PORT` setting (default `3010`). Setup adds the client to new realms; `keycloak-bootstrap` adds or updates it on startup of existing installations.
+- Administration MCP server: the administration portal serves `/mcp` for platform administrators, with tools to read the overview, browse catalogs, create, edit and delete teams and databases, create or link Keycloak users, change their access, revoke them and revoke data shares. Every call requires the `platform-admin` role from the token; destructive tools are annotated and `delete_database` requires the database's display name. Register it with `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-admin http://localhost:3000/mcp`.
+- Both application images include the `mcp` dependency group and share `server/mcp_auth.py`; the administration image ships `scripts/setup.py` so bootstrap and setup share one client definition. New live checks `npm run test:mcp` and `npm run test:mcp-admin` run in CI.
+- Team administrators can create, rename and permanently delete databases in the user portal. A separate **Databases** page keeps management consistent with the administration portal; the team overview retains database insights and a **Manage databases** link. Incomplete deletions can be resumed.
+- Signed-in users can explore and call the workspace API at `http://localhost:3002/docs`. Swagger uses their session and team permissions, supplies write-request headers, and handles the initial schema fetch correctly. The authenticated schema is available at `/openapi.json`.
+- Add shared notebook display helpers and flight-data examples for DuckDB reads and writes, with bundled dataset attribution and improved Iceberg connection handling.
+- Upgrade from 0.4.1: no data migration is required. Restart the platform so `keycloak-bootstrap` registers the new client, then update the portal, user portal and notebook images. Preserve existing configuration and data volumes. Users must sign in again after the portals restart.
+
 ## 0.4.1 — 2026-09-21
 
 - The notebook runtime uses one browser-free image with normal execution and HTML/Jupyter exports. PDF, thumbnail and screenshot exports and the optional browser image have been removed.

@@ -31,7 +31,8 @@ function renderCatalogListing(detail, contents, rows) {
   const entries = [['Namespaces', contents.namespaces.length], ['Tables', contents.tables.length], ['Views', contents.views.length]];
   if (detail.kind === 'database') {
     const db = detail.database;
-    entries.unshift(['Database', db.name], ['Environment', envNames[db.environment]], ['Team', state.teams.find(t => t.id === db.team)?.name || db.team]);
+    entries.unshift(['Database', db.name], ['Environment', envNames[db.environment]], ['Owner team', databaseOwner(db)]);
+    if (db.shared) entries.push(['Access', 'Shared · Read-only']);
     summary.append(facts(entries));
     const connection = element('details', undefined, 'catalog-disclosure');
     connection.append(element('summary', 'Connection information'), facts([['Catalog / warehouse', db.id], ['Catalog URI', detail.catalogUri], ['Protocol', 'Iceberg REST']]));

@@ -34,6 +34,7 @@ class Workspace:
     upstream: str
     token: str = field(repr=False)
     environment: str = "development"
+    shared: bool = False
 
     @property
     def url(self):
@@ -46,7 +47,7 @@ class Workspace:
             "team": self.team,
             "environment": self.environment,
             "filespace": self.key,
-            "url": self.url + "?file=workspace.py",
+            "url": self.url + ("?file=shared_workspace.py" if self.shared else "?file=workspace.py"),
             "filesUrl": self.url,
             "examples": [
                 {
@@ -62,6 +63,14 @@ class Workspace:
                 {
                     "title": "05 · Read Iceberg v3 with DuckDB",
                     "url": self.url + "?file=05_duckdb_iceberg_v3_read.py",
+                },
+                {
+                    "title": "06 · Write an AI-ready flights product",
+                    "url": self.url + "?file=06_duckdb_flights_write.py",
+                },
+                {
+                    "title": "07 · Read an AI-ready flights product",
+                    "url": self.url + "?file=07_duckdb_flights_read.py",
                 },
             ],
         }
@@ -97,7 +106,7 @@ class NotebookRuntime:
         for network in self.docker.networks.list(filters=filters):
             self.cleanup_network(network)
 
-    def start(self, session, database, namespace, table, *, database_name=None):
+    def start(self, session, database, namespace, table, *, database_name=None, shared_objects=None):
         key = filespace_key(session.team, session.environment)
         for workspace in self.workspaces.values():
             if workspace.key == key and workspace.session_id == session.id and workspace.database == database:
@@ -155,6 +164,8 @@ class NotebookRuntime:
                     "ICEBERG_ENVIRONMENT": session.environment,
                     "ICEBERG_NAMESPACE": json.dumps(namespace),
                     "ICEBERG_TABLE": table or "",
+                    **({"ICEBERG_SHARED_OBJECTS": json.dumps(shared_objects)}
+                       if shared_objects is not None else {}),
                     **({
                         "ICEBERG_ACCESS_TOKEN": session.token,
                         "ICEBERG_SESSION_TOKEN_URL": f"http://workspace-gateway:3002/internal/notebooks/{id}/token",
@@ -181,6 +192,7 @@ class NotebookRuntime:
                 f"http://{ip}:2718",
                 token,
                 session.environment,
+                shared=shared_objects is not None,
             )
             deadline = time.monotonic() + 45
             with httpx.Client(timeout=1, trust_env=False) as client:

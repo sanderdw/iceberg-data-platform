@@ -60,7 +60,8 @@ class FakeRuntime:
     def recover(self):
         self.recovered = True
 
-    def start(self, session, database, namespace, table, *, database_name=None):
+    def start(self, session, database, namespace, table, *, database_name=None, shared_objects=None):
+        self.shared_objects = shared_objects
         id = f"notebook-{len(self.workspaces)}"
         w = Workspace(
             id,
@@ -342,6 +343,79 @@ def test_team_switch_and_database_access(users):
     assert result.json()["tables"][0]["name"] == "events"
     assert result.json()["views"][0]["name"] == "report"
     assert len(users.calls) == 4  # OAuth, namespaces, tables, views; all as user.
+
+
+@pytest.mark.parametrize("role", ["reader", "writer"])
+def test_database_management_refuses_non_administrators(users, role):
+    c, p = users.client, users.provider
+    p.update_memberships(users.account["id"], {users.teams[0]: role, users.teams[1]: "writer"})
+    login(c)
+    assert c.post("/api/databases", json={"name": "new_data"}, headers=HEADERS).status_code == 403
+    assert c.patch(f"/api/databases/{users.databases[0]}", json={"name": "renamed"}, headers=HEADERS).status_code == 403
+    assert c.request("DELETE", f"/api/databases/{users.databases[0]}", json={"confirm_name": "data_0"}, headers=HEADERS).status_code == 403
+
+
+@pytest.mark.parametrize("role", ["admin", "bucket-admin"])
+def test_team_administrator_manages_own_database_in_active_environment(users, role):
+    c, p = users.client, users.provider
+    p.update_memberships(users.account["id"], {users.teams[0]: role, users.teams[1]: "writer"})
+    login(c)
+    assert c.post("/api/databases", json={"name": "wrong", "team": users.teams[2]}, headers=HEADERS).status_code == 422
+    created = c.post("/api/databases", json={"name": "team_data", "description": "Owned by us"}, headers=HEADERS)
+    assert created.status_code == 201
+    db = created.json()
+    assert (db["team"], db["environment"], db["description"]) == (users.teams[0], "development", "Owned by us")
+    assert c.patch(f"/api/databases/{db['id']}", json={"name": "data_0"}, headers=HEADERS).status_code == 409
+    renamed = c.patch(f"/api/databases/{db['id']}", json={"name": "renamed_data"}, headers=HEADERS)
+    assert renamed.status_code == 200
+    assert (renamed.json()["id"], renamed.json()["bucket"]) == (db["id"], db["bucket"])
+    assert c.get("/api/workspace").json()["databases"][-1]["name"] == "renamed_data"
+    assert c.patch(f"/api/databases/{users.databases[1]}", json={"name": "other"}, headers=HEADERS).status_code == 403
+    assert c.request("DELETE", f"/api/databases/{db['id']}", json={"confirm_name": "team_data"}, headers=HEADERS).status_code == 422
+    assert c.request("DELETE", f"/api/databases/{db['id']}", json={"confirm_name": "renamed_data"}, headers=HEADERS).status_code == 200
+    assert db["id"] not in {d["id"] for d in p.list_databases()}
+
+
+def test_database_deletion_can_be_resumed_only_by_current_team_administrator(users):
+    c, p = users.client, users.provider
+    p.update_memberships(users.account["id"], {users.teams[0]: "admin", users.teams[1]: "writer"})
+    login(c)
+    db = c.post("/api/databases", json={"name": "production_data"}, headers=HEADERS).json()
+    marker = f"/catalogs/{db['id']}/catalog-roles/catalog_admin/grants"
+    p.fail = lambda path, method, body: path == marker and method == "PUT"
+    path = f"/api/databases/{db['id']}"
+    assert c.request("DELETE", path, json={"confirm_name": db["name"]}, headers=HEADERS).status_code == 502
+    state = c.get("/api/workspace").json()
+    assert db["id"] in {d["id"] for d in state["deletingDatabases"]}
+    p.update_memberships(users.account["id"], {users.teams[0]: "reader", users.teams[1]: "writer"})
+    assert c.request("DELETE", path, json={"confirm_name": db["name"]}, headers=HEADERS).status_code == 403
+    p.update_memberships(users.account["id"], {users.teams[0]: "admin", users.teams[1]: "writer"})
+    p.fail = None
+    assert c.request("DELETE", path, json={"confirm_name": db["name"]}, headers=HEADERS).status_code == 200
+
+
+def test_database_management_is_limited_to_selected_environment(users):
+    c, p = users.client, users.provider
+    p.update_memberships(users.account["id"], {users.teams[0]: "admin", users.teams[1]: "writer"})
+    login(c)
+    production = p.create_database(DatabaseInput(name="prod_data", team=users.teams[0], environment="production"))
+    assert c.patch(f"/api/databases/{production['id']}", json={"name": "other"}, headers=HEADERS).status_code == 403
+    assert c.request("DELETE", f"/api/databases/{production['id']}", json={"confirm_name": "prod_data"}, headers=HEADERS).status_code == 403
+    c.patch("/api/environment", json={"environment": "production"}, headers=HEADERS)
+    created = c.post("/api/databases", json={"name": "fresh_prod"}, headers=HEADERS).json()
+    assert created["environment"] == "production"
+    assert c.request("DELETE", f"/api/databases/{created['id']}", json={"confirm_name": "fresh_prod"}, headers=HEADERS).status_code == 200
+
+
+def test_database_management_refuses_a_move_in_progress(users):
+    c, p = users.client, users.provider
+    p.update_memberships(users.account["id"], {users.teams[0]: "admin", users.teams[1]: "writer"})
+    login(c)
+    db = users.databases[0]
+    p.resources["catalogs"][db]["properties"]["portal.moving"] = users.teams[2]
+    assert c.patch(f"/api/databases/{db}", json={"name": "other"}, headers=HEADERS).status_code == 409
+    assert c.request("DELETE", f"/api/databases/{db}", json={"confirm_name": "data_0"}, headers=HEADERS).status_code == 409
+    assert p.resources["catalogs"][db]["properties"].get("portal.deleting") is None
 
 
 def test_csrf_and_invalid_inputs(users):
@@ -656,3 +730,108 @@ def test_share_requests_are_validated_and_csrf_protected(users):
     for username in ("partner", id):
         attempt = c.post("/api/session", json={"username": username, "secret": "correct-secret"}, headers=HEADERS)
         assert attempt.status_code == 401
+
+
+def test_user_api_docs_require_session_and_describe_authenticated_operations(users):
+    client = users.client
+    for path in ("/docs", "/openapi.json"):
+        assert client.get(path).status_code == 401
+    login(client)
+    docs = client.get("/docs")
+    assert docs.status_code == 200
+    assert '/docs.js' in docs.text
+    assert "https://cdn.jsdelivr.net" in docs.headers["content-security-policy"]
+    assert "https://cdn.jsdelivr.net" not in client.get("/").headers["content-security-policy"]
+    schema = client.get("/openapi.json").json()
+    assert all(path.startswith("/api/") for path in schema["paths"])
+    assert schema["components"]["securitySchemes"]["UserSession"]["name"] == COOKIE
+    assert schema["paths"]["/api/workspace"]["get"]["security"] == [{"UserSession": []}]
+    create = schema["paths"]["/api/databases"]["post"]
+    assert any(p["name"] == "X-Portal-Request" and p["schema"]["default"] == "1"
+               for p in create["parameters"])
+    assert client.post("/api/databases", json={"name": "forbidden"}, headers=HEADERS).status_code == 403
+    assert client.patch("/api/environment", json={"environment": "production"}).status_code == 403
+    assert client.patch("/api/environment", json={"environment": "production"}, headers=HEADERS).status_code == 200
+    client.request("DELETE", "/api/session", json={}, headers=HEADERS)
+    assert client.get("/openapi.json").status_code == 401
+
+
+def test_internal_shares_are_visible_only_to_recipient_team_and_environment(users):
+    c = users.client
+    first, second, third = users.teams
+    db = users.databases[0]
+    assert c.get('/api/received-shares').status_code == 401
+    login(c)
+    assert c.get('/api/share-teams').status_code == 403
+    promote(users, {first: 'admin', second: 'reader'})
+    assert {t['id'] for t in c.get('/api/share-teams').json()} == {second, third}
+    response = c.post('/api/shares', json=share_body(db, external=False, recipientTeam=second), headers=JSON)
+    assert response.status_code == 201, response.text
+    assert set(response.json()) == {'share'}
+    id = response.json()['share']['id']
+    assert c.get('/api/received-shares').json() == []
+    c.patch('/api/team', json={'team': second}, headers=JSON)
+    received = c.get('/api/received-shares').json()
+    assert [s['id'] for s in received] == [id]
+    assert received[0]['database'] == db
+    assert received[0]['ownerTeam'] == first
+    assert received[0]['ownerTeamName'] == next(t['name'] for t in users.provider.list_teams() if t['id'] == first)
+    assert 'clientId' not in received[0]
+    assert c.delete(f'/api/shares/{id}', headers=JSON).status_code == 403
+    c.patch('/api/environment', json={'environment': 'production'}, headers=JSON)
+    assert c.get('/api/received-shares').json() == []
+    c.patch('/api/environment', json={'environment': 'development'}, headers=JSON)
+    users.provider.resources['principals'][id]['properties']['portal.expires-at'] = '2020-01-01T00:00:00+00:00'
+    assert c.get('/api/received-shares').json() == []
+    assert not any(id in grant for grant in users.provider.grants)
+
+
+def test_shared_catalog_and_notebooks_without_owned_databases(users):
+    from server.models import ShareInput
+
+    c, provider = users.client, users.provider
+    owner, _, recipient = users.teams
+    db = users.databases[0]
+    provider.delete_database(users.databases[2])
+    share = provider.create_share(
+        ShareInput.model_validate(share_body(db, external=False, recipientTeam=recipient)), users.account,
+    )['share']
+    promote(users, {recipient: 'reader'})
+    login(c)
+    workspace = c.get('/api/workspace').json()
+    assert len(workspace['databases']) == 1
+    assert workspace['databases'][0]['id'] == db
+    assert workspace['databases'][0]['shared'] is True
+    assert workspace['databases'][0]['team'] == owner
+    owner_team = next(t for t in provider.list_teams() if t['id'] == owner)
+    assert workspace['databases'][0]['ownerTeamName'] == owner_team['name']
+    assert owner not in {t['id'] for t in workspace['teams']}
+    detail = c.get('/api/details', params={'database': db, 'kind': 'database'}).json()
+    assert detail['database']['ownerTeamName'] == owner_team['name']
+    assert len(workspace['filespaces']) == 1
+    root = c.get('/api/contents', params={'database': db}).json()
+    assert root['namespaces'] == [['analytics']]
+    contents = c.get('/api/contents', params={'database': db, 'namespace': 'analytics'}).json()
+    assert contents['tables'] == [{'name': 'events', 'namespace': ['analytics']}]
+    assert contents['views'] == [{'name': 'report', 'namespace': ['analytics']}]
+    assert c.get('/api/details', params={'database': db, 'kind': 'namespace', 'namespace': 'analytics'}).status_code == 200
+    assert c.get('/api/details', params={'database': db, 'kind': 'table', 'namespace': 'analytics', 'name': 'events'}).status_code == 200
+    assert c.get('/api/details', params={'database': db, 'kind': 'table', 'namespace': 'analytics', 'name': 'private'}).status_code == 403
+    opened = c.post('/api/notebooks', json={'database': db, 'namespace': ['analytics'], 'table': 'events'}, headers=JSON)
+    assert opened.status_code == 201, opened.text
+    assert opened.json()['team'] == recipient
+    assert users.runtime.shared_objects[0]['name'] == 'events'
+    # Recipient administrators still cannot manage the source database or outgoing shares.
+    promote(users, {recipient: 'admin'})
+    assert c.get('/api/shares', params={'database': db}).status_code == 403
+    assert c.post('/api/shares', json=share_body(db, name='reshare'), headers=JSON).status_code == 403
+    assert c.patch(f'/api/databases/{db}', json={'name': 'renamed'}, headers=JSON).status_code == 403
+    c.patch('/api/environment', json={'environment': 'production'}, headers=JSON)
+    assert c.get('/api/workspace').json()['databases'] == []
+    c.patch('/api/environment', json={'environment': 'development'}, headers=JSON)
+    c.post('/api/notebooks', json={'database': db}, headers=JSON)
+    provider.delete_share(share['id'])
+    workspace = c.get('/api/workspace').json()
+    assert workspace['databases'] == [] and workspace['notebooks'] == []
+    assert c.get('/api/contents', params={'database': db}).status_code == 403
+    assert c.post('/api/notebooks', json={'database': db}, headers=JSON).status_code == 403

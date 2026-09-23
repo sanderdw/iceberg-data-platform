@@ -1,7 +1,9 @@
 """Polaris adapter. Teams and memberships persist in Polaris/PostgreSQL.
 
-Mutations are serialized by the API. Reversible multi-provider changes compensate
-in reverse order. Deletion keeps its catalog as a durable retry marker until last.
+Mutations are serialized per portal process. Across both portals, database names and
+team deletion are fenced by versioned writes to the team role (`fence_team`).
+Reversible multi-provider changes compensate in reverse order. Deletion keeps its
+catalog as a durable retry marker until last.
 """
 
 import json
@@ -172,8 +174,10 @@ class PolarisProvider:
             if exc.status != 404:
                 raise
 
-    def update_properties(self, path, properties):
+    def update_properties(self, path, properties, *, expected_version=None):
         current = self.management(path)
+        if expected_version is not None and current["entityVersion"] != expected_version:
+            raise ServiceError(409, "This database changed. Refresh and try again.")
         return self.management(
             path, "PUT", {"currentEntityVersion": current["entityVersion"], "properties": properties}
         )
@@ -231,6 +235,37 @@ class PolarisProvider:
             key=lambda t: t["name"],
         )
 
+    def fence_team(self, id, *, deleting=False):
+        """The team's role, read before a check that other processes could invalidate.
+
+        Both portals write catalogs under separate locks. A writer reads this role before
+        checking database names or emptiness, commits its change, then publishes with
+        `commit_team`. That versioned write succeeds for only one of two racing writers.
+        """
+        try:
+            role = self.management(f"/principal-roles/{enc(id)}")
+        except ServiceError as exc:
+            if exc.status == 404:
+                raise ServiceError(404, "A selected team no longer exists.") from None
+            raise
+        if not self.managed(role) or role["properties"].get("portal.kind") != "team":
+            raise ServiceError(404, "A selected team no longer exists.")
+        if role["properties"].get("portal.deleting") == "true" and not deleting:
+            raise ServiceError(409, "This team is being deleted.")
+        return role
+
+    def commit_team(self, role, **properties):
+        try:
+            self.update_properties(
+                f"/principal-roles/{enc(role['name'])}",
+                {**role["properties"], "portal.revision": uuid4().hex, **properties},
+                expected_version=role["entityVersion"],
+            )
+        except ServiceError as exc:
+            if exc.status in (404, 409):
+                raise ServiceError(409, "This team changed at the same time. Nothing was saved; try again.") from None
+            raise
+
     def require_teams(self, ids):
         if not ids or len(ids) != len(set(ids)):
             raise ServiceError(400, "A user must belong to at least one team; teams must be unique.")
@@ -261,13 +296,16 @@ class PolarisProvider:
         return self.team(result)
 
     def delete_team(self, id):
-        self.require_teams([id])
+        role = self.fence_team(id, deleting=True)
         if any(d["team"] == id for d in self.list_databases()):
             raise ServiceError(409, "Move or delete this team's databases first.")
         users = [u for u in self.list_users() if id in u["teams"]]
         if any(len(u["teams"]) == 1 for u in users):
             raise ServiceError(409, "This is a user's last team. Assign that user to another team first.")
         with provision() as undo:
+            # Fences a database created by the user portal after the check above.
+            self.commit_team(role, **{"portal.deleting": "true"})
+            undo.append(lambda: self.update_properties(f"/principal-roles/{enc(id)}", role["properties"]))
             for user in users:
                 roles = {m["team"]: m["role"] for m in user["memberships"]}
                 self.update_memberships(user["id"], {t: r for t, r in roles.items() if t != id})
@@ -429,8 +467,23 @@ class PolarisProvider:
             self.management(path, "PUT", {"catalogRole": {"name": role}})
             undo.append(lambda p=path, r=role: self.remove(f"{p}/{r}"))
 
+    def sync_team_shares(self, user, before, after, undo, *, shares=None):
+        """Use personal roles so password and Keycloak identities share the same access."""
+        for share in self.list_shares() if shares is None else shares:
+            team = share.get("recipientTeam")
+            if not team or (team in before) == (team in after):
+                continue
+            base = f"/principal-roles/{enc(user['id'])}/catalog-roles/{enc(share['database'])}"
+            role = share["id"]
+            if team in after:
+                self.management(base, "PUT", {"catalogRole": {"name": role}})
+                undo.append(lambda b=base, r=role: self.remove(f"{b}/{r}"))
+            else:
+                self.remove(f"{base}/{role}")
+                undo.append(lambda b=base, r=role: self.management(b, "PUT", {"catalogRole": {"name": r}}))
+
     def create_database(self, data):
-        self.require_teams([data.team])
+        team = self.fence_team(data.team)
         if any(
             d["name"] == data.name and d["team"] == data.team and d["environment"] == data.environment
             for d in self.list_databases()
@@ -469,6 +522,9 @@ class PolarisProvider:
                 },
             )
             undo.append(lambda: self.remove(path))
+            # The catalog is visible now: a racing create, rename or team deletion that
+            # checked before it existed also read the team first, so one commit fails.
+            self.commit_team(team)
             for role, privileges in ROLES.items():
                 role_path = f"{path}/catalog-roles/{role}"
                 self.management(f"{path}/catalog-roles", "POST", {"catalogRole": {"name": role}})
@@ -486,7 +542,7 @@ class PolarisProvider:
             return self.database(self.management(path))
 
     def move_database(self, id, team):
-        self.require_teams([team])
+        destination = self.fence_team(team)
         path = f"/catalogs/{enc(id)}"
         catalog = self.require(path)
         old = catalog["properties"]["portal.team"]
@@ -511,7 +567,7 @@ class PolarisProvider:
         properties = {**catalog["properties"], "portal.share-epoch": uuid4().hex}
         properties.pop("portal.moving", None)
         with provision() as undo:
-            self.update_properties(path, {**properties, "portal.moving": team})
+            self.update_properties(path, {**properties, "portal.moving": team}, expected_version=catalog["entityVersion"])
             undo.append(lambda: self.update_properties(path, properties))
             if self.list_shares(id):
                 raise ServiceError(409, "Revoke this database's data shares first.")
@@ -522,6 +578,41 @@ class PolarisProvider:
             self.storage.tag_bucket(bucket, id, team)
             undo.append(lambda: self.storage.tag_bucket(bucket, id, old))
             result = self.update_properties(path, {**properties, "portal.team": team})
+            # The name now counts in the destination team; the first undo restores the old team.
+            self.commit_team(destination)
+            return self.database(result)
+
+    def rename_database(self, id, name, *, expected_team=None, expected_environment=None):
+        path = f"/catalogs/{enc(id)}"
+        catalog = self.require(path)
+        if not self.managed(catalog):
+            raise ServiceError(404, "Database not found.")
+        properties = catalog["properties"]
+        if expected_team is not None and properties["portal.team"] != expected_team:
+            raise ServiceError(409, "This database changed teams. Refresh and try again.")
+        if expected_environment is not None and properties["portal.environment"] != expected_environment:
+            raise ServiceError(409, "This database changed environments. Refresh and try again.")
+        if properties.get("portal.deleting") == "true":
+            raise ServiceError(409, "This database is being deleted.")
+        if properties.get("portal.moving"):
+            raise ServiceError(409, "This database is being moved. Try again after the move completes.")
+        if name == properties["portal.name"]:
+            return self.database(catalog)
+        team = self.fence_team(properties["portal.team"])
+        if any(
+            d["id"] != id and d["name"] == name
+            and d["team"] == properties["portal.team"]
+            and d["environment"] == properties["portal.environment"]
+            for d in self.list_databases()
+        ):
+            raise ServiceError(409, "This database name already exists in this team and environment.")
+        with provision() as undo:
+            result = self.update_properties(
+                path, {**properties, "portal.name": name}, expected_version=catalog["entityVersion"],
+            )
+            # Versioned, so a revert never clears a deletion marker written since.
+            undo.append(lambda: self.update_properties(path, properties, expected_version=result["entityVersion"]))
+            self.commit_team(team)
             return self.database(result)
 
     def create_user(self, data, *, identity_properties=None, activate=True):
@@ -560,6 +651,7 @@ class PolarisProvider:
                 undo.append(lambda: self.storage.delete_user(key))
             # S3 policy was just created. Only grant catalog permissions here.
             self.sync_access(user, {}, access, undo, s3=False)
+            self.sync_team_shares(user, set(), set(roles), undo)
             if activate:
                 self.management(f"{path}/principal-roles", "PUT", {"principalRole": {"name": id}})
             return {
@@ -591,6 +683,7 @@ class PolarisProvider:
                 # bucket-admin membership goes. This preserves credentials for
                 # re-promotion and lets failed changes roll back.
                 self.sync_access(user, before, after, undo)
+            self.sync_team_shares(user, set(user["teams"]), set(roles), undo)
             updated = self.update_properties(path, properties)
             return {
                 "user": self.user(updated),
@@ -628,9 +721,21 @@ class PolarisProvider:
                 self.request(f"{path}/{kind}/{enc(item['name'])}", "DELETE")
         self.request(path, "DELETE")
 
-    def delete_database(self, id):
+    def delete_database(self, id, *, expected_team=None, expected_environment=None, expected_name=None):
         path = f"/catalogs/{enc(id)}"
         catalog = self.require(path)
+        if not self.managed(catalog):
+            raise ServiceError(404, "Database not found.")
+        if expected_team is not None and catalog["properties"]["portal.team"] != expected_team:
+            raise ServiceError(409, "This database changed teams. Refresh and try again.")
+        if expected_environment is not None and catalog["properties"]["portal.environment"] != expected_environment:
+            raise ServiceError(409, "This database changed environments. Refresh and try again.")
+        # The other portal may rename between the caller's confirmation check and this read.
+        # The versioned marker write below fences a rename after it.
+        if expected_name is not None and catalog["properties"]["portal.name"] != expected_name:
+            raise ServiceError(409, "This database was renamed. Nothing was deleted; confirm the current name.")
+        if catalog["properties"].get("portal.moving"):
+            raise ServiceError(409, "This database is being moved. Try again after the move completes.")
         # Persist intent first; on retry revoke again, even after partial failure.
         # Polaris drops views with purge, which must be enabled on this catalog.
         # This is restricted to a confirmed full database deletion.
@@ -645,6 +750,7 @@ class PolarisProvider:
                     "portal.deleting": "true",
                     "polaris.config.drop-with-purge.enabled": "true",
                 },
+                expected_version=catalog["entityVersion"],
             )
         # External access ends with the database, before anything else is taken apart.
         for principal in self.management("/principals")["principals"]:
@@ -710,6 +816,8 @@ class PolarisProvider:
             "id": principal["name"],
             "name": p["portal.name"],
             "recipient": p.get("portal.recipient", ""),
+            "external": p.get("portal.external", "true") == "true",
+            "recipientTeam": p.get("portal.recipient-team"),
             "description": p.get("portal.description", ""),
             "database": p["portal.database"],
             "objects": objects,
@@ -775,6 +883,11 @@ class PolarisProvider:
                 continue
             actual = self.management(f"{self.share_role(principal)}/grants")["grants"] if drift else None
             shares.append(self.share(principal, actual))
+        if any(s.get("recipientTeam") for s in shares):
+            teams = {t["id"]: t["name"] for t in self.list_teams()}
+            for share in shares:
+                if share.get("recipientTeam"):
+                    share["recipientTeamName"] = teams.get(share["recipientTeam"], "Deleted team")
         return sorted(shares, key=lambda s: (s["database"], s["name"]))
 
     def require_share(self, id):
@@ -851,6 +964,10 @@ class PolarisProvider:
             raise ServiceError(409, "This database is being moved. Try again after the move completes.")
         if expected_team is not None and catalog["properties"]["portal.team"] != expected_team:
             raise ServiceError(409, "This database changed teams. Refresh and try again.")
+        if data.recipient_team:
+            self.require_teams([data.recipient_team])
+            if data.recipient_team == catalog["properties"]["portal.team"]:
+                raise ServiceError(422, "Choose a team other than the database owner.")
         existing = self.list_shares(data.database)
         if len(existing) >= MAX_SHARES:
             raise ServiceError(409, f"A database can have at most {MAX_SHARES} data shares.")
@@ -881,6 +998,8 @@ class PolarisProvider:
                             **marker,
                             "portal.name": data.name,
                             "portal.recipient": data.recipient,
+                            "portal.external": str(data.external).lower(),
+                            **({"portal.recipient-team": data.recipient_team} if data.recipient_team else {}),
                             "portal.description": data.description,
                             "portal.database": data.database,
                             "portal.objects": json.dumps(objects),
@@ -904,7 +1023,17 @@ class PolarisProvider:
             ):
                 raise ServiceError(409, "This database changed during share creation. Refresh and try again.")
             # Activation last: until here the new secret opens nothing.
-            self.management(f"/principals/{id}/principal-roles", "PUT", {"principalRole": {"name": id}})
+            if data.external:
+                self.management(f"/principals/{id}/principal-roles", "PUT", {"principalRole": {"name": id}})
+            if data.recipient_team:
+                for user in self.list_users():
+                    if data.recipient_team in user["teams"]:
+                        self.sync_team_shares(
+                            user, set(), set(user["teams"]), undo,
+                            shares=[self.share(result["principal"])],
+                        )
+            if not data.external:
+                return {"share": self.share(result["principal"])}
             return self.issued(result["principal"], result["credentials"])
 
     def update_share(self, id, data):
@@ -931,6 +1060,8 @@ class PolarisProvider:
 
     def rotate_share(self, id):
         principal = self.editable_share(id)
+        if principal["properties"].get("portal.external", "true") != "true":
+            raise ServiceError(409, "This share is only available to a team and has no external credential.")
         # `rotate` is reserved for the principal itself; `reset` keeps the client ID
         # and invalidates the old secret at once.
         result = self.management(f"/principals/{enc(id)}/reset", "POST", {})
@@ -943,8 +1074,15 @@ class PolarisProvider:
         # `share_principals` resumes a half-finished revocation.
         if principal["properties"].get("portal.deleting") != "true":
             self.update_properties(path, {**principal["properties"], "portal.deleting": "true"})
-        # Access stops with this first step: issued tokens lose their only role.
+        # Stop external access, then remove recipient members’ catalog grants.
         self.remove(f"{path}/principal-roles/{enc(id)}")
+        if team := principal["properties"].get("portal.recipient-team"):
+            for user in self.list_users():
+                if team in user["teams"]:
+                    self.remove(
+                        f"/principal-roles/{enc(user['id'])}/catalog-roles/"
+                        f"{enc(principal['properties']['portal.database'])}/{enc(id)}"
+                    )
         self.remove(self.share_role(principal))
         self.remove(f"/principal-roles/{enc(id)}")
         self.remove(path)
