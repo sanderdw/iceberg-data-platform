@@ -26,6 +26,7 @@ def test_keycloak_setup_is_repeatable_and_does_not_seed_demo_data(config_root):
     assert [u["username"] for u in document["users"]] == ["platform-admin"]
     assert document["users"][0]["credentials"][0]["temporary"] is True
     assert "UPDATE_PASSWORD" in document["users"][0]["requiredActions"]
+    assert document["users"][0]["realmRoles"] == ["default-roles-iceberg"]
     assert values["PLATFORM_ADMIN_PASSWORD"] not in json.dumps(document)
     assert document["clients"][0]["redirectUris"] == ["http://localhost:3000/auth/callback"]
     mcp = next(c for c in document["clients"] if c["clientId"] == "iceberg-mcp")

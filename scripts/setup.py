@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 MCP_CLIENT_ID = "iceberg-mcp"
+CLI_CLIENT_ID = "iceberg-cli"
+DEFAULT_ROLES = "default-roles-iceberg"
 
 
 def mapper(name, kind, config):
@@ -55,6 +57,25 @@ def mcp_client(callback_port):
     }
 
 
+def cli_client():
+    """Public client for tools on the user's own machine: device login, no redirect.
+
+    DuckDB and DBeaver hold a static bearer token, so this client alone issues
+    tokens for one hour instead of the realm's 15 minutes. The bootstrap service
+    reuses this definition to upgrade existing realms.
+    """
+    return {
+        "clientId": CLI_CLIENT_ID, "name": "Tools on your computer", "enabled": True,
+        "protocol": "openid-connect", "publicClient": True, "standardFlowEnabled": False,
+        "implicitFlowEnabled": False, "directAccessGrantsEnabled": False, "serviceAccountsEnabled": False,
+        "redirectUris": [], "webOrigins": [],
+        "attributes": {"oauth2.device.authorization.grant.enabled": "true", "access.token.lifespan": "3600"},
+        "defaultClientScopes": ["basic", "profile", "roles"],
+        # A refresh token that outlives the browser SSO session, like MCP clients.
+        "optionalClientScopes": ["offline_access"], "protocolMappers": polaris_mappers(),
+    }
+
+
 def realm(env):
     clients = []
     for name, origin, secret in [("iceberg-admin", env["PORTAL_ORIGIN"], "PORTAL"),
@@ -70,12 +91,15 @@ def realm(env):
             "defaultClientScopes": ["basic", "profile", "roles"], "protocolMappers": polaris_mappers(),
         })
     clients.append(mcp_client(env["MCP_CALLBACK_PORT"]))
+    clients.append(cli_client())
     users = [{
         "username": env["PLATFORM_ADMIN_USERNAME"], "enabled": True,
         "firstName": "Platform", "lastName": "Administrator",
         "email": "platform-admin@example.test", "emailVerified": True,
         "requiredActions": ["UPDATE_PASSWORD"],
         "credentials": [{"type": "password", "value": "${PLATFORM_ADMIN_PASSWORD}", "temporary": True}],
+        # Imported users do not receive the realm default roles, which include offline_access.
+        "realmRoles": [DEFAULT_ROLES],
         "clientRoles": {"iceberg-admin": ["platform-admin"]},
     }]
     return {
