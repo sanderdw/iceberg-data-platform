@@ -12,7 +12,8 @@ const OUT = 'presentation/screenshots', STATE = '.local/presentation/state.json'
 const RUSTFS = 'http://localhost:9001/rustfs/console/browser/', KEYCLOAK_USERS = env.KEYCLOAK_ORIGIN + '/admin/master/console/#/iceberg/users';
 
 // Fictional grid operator. Roles differ per team for sander, which the access dialog shows.
-// mila administers grid-planning and shares one of its tables with a municipality.
+// mila administers grid-planning: she creates a database herself and shares one table with a
+// municipality and with outage-response, where noor reads it without owning a database there.
 const TEAMS = [
   ['grid-planning', 'Capacity planning for the regional grid'],
   ['asset-management', 'Lifecycle of stations, cables and transformers'],
@@ -31,6 +32,8 @@ const USERS = [
 ];
 const DEMO_USER = 'sander', DEMO_TEAM = 'grid-planning', DEMO_DATABASE = 'smart-meter-readings';
 const TEAM_ADMIN = 'mila', SHARE = {name: 'municipality-heat-plan', recipient: 'Municipality of Example · heat transition team', description: 'Street-level consumption and solar production for the district heating plan', namespace: 'synthetic', table: 'neighborhood_electricity'};
+const TEAM_SHARE = {name: 'outage-street-load', team: 'outage-response', description: 'Street-level load to prioritise restoration'}, RECIPIENT = 'noor';
+const AI_DATABASE = {name: 'ai-examples', description: 'AI-ready data products built from the example notebooks'};
 
 // Passwords chosen at the forced first sign-in; kept outside git so the script can run again.
 const state = existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {users: {}};
@@ -63,6 +66,12 @@ async function signIn(page, origin, username, password, remember) {
     await page.locator('input[type=submit], button[type=submit]').click();
   }
   await page.waitForURL(url => url.origin === origin);
+}
+
+// Signing out stops the notebook runtimes of that session, so reruns do not run out of notebook slots.
+async function signOut(context) {
+  const response = await context.request.delete(env.USER_ORIGIN + '/api/session', {data: {}, headers: {'X-Portal-Request': '1'}});
+  if (!response.ok()) throw new Error(`Sign-out: ${response.status()}`);
 }
 
 async function api(context, method, path, data) {
@@ -115,6 +124,7 @@ async function openTable(page, namespace, table) {
   await page.getByRole('tab', {name: 'Overview', exact: true}).waitFor();
   await expect(page.getByRole('tabpanel')).toContainText('Format version');
 }
+const toPage = (page, name) => page.locator('#workspace-nav').getByRole('button', {name, exact: true}).click();
 const openTab = (page, name) => page.getByRole('tab', {name, exact: true}).click();
 async function loadPreview(page) {
   await page.getByRole('button', {name: 'Load preview', exact: true}).click();
@@ -139,6 +149,23 @@ try {
   await seed(admin);
   const database = (await api(admin, 'GET', '/api/overview')).databases.find(d => d.name === DEMO_DATABASE && d.environment === 'development');
 
+  // A team administrator creates a database from the user portal, without a portal administrator.
+  const owner = await newContext(), sharing = await owner.newPage();
+  sharing.setDefaultTimeout(30000);
+  await signIn(sharing, env.USER_ORIGIN, TEAM_ADMIN, state.users[TEAM_ADMIN], chosen => { state.users[TEAM_ADMIN] = chosen; });
+  await sharing.locator('#workspace-screen').waitFor();
+  await toPage(sharing, 'Databases');
+  await sharing.locator('#new-database').click();
+  await sharing.getByLabel('Database name', {exact: true}).fill(AI_DATABASE.name);
+  await sharing.getByLabel('Description (optional)').fill(AI_DATABASE.description);
+  await shot(sharing, '36-user-databases-create');
+  const form = sharing.locator('#database-form');
+  if ((await api(admin, 'GET', '/api/overview')).databases.some(d => d.name === AI_DATABASE.name)) await form.getByRole('button', {name: 'Cancel', exact: true}).click();
+  else {
+    await form.getByRole('button', {name: 'Create database', exact: true}).click();
+    await sharing.locator('#managed-databases').getByText(AI_DATABASE.name, {exact: true}).waitFor({timeout: 120000});
+  }
+
   // Team workspace: notebooks first, so the catalog and the bucket have tables to show.
   const member = await newContext(), workspace = await member.newPage();
   workspace.setDefaultTimeout(30000);
@@ -152,7 +179,7 @@ try {
   // The notebooks create both example tables; later shots need them, so a first run never skips this.
   const contents = await (await member.request.get(`${env.USER_ORIGIN}/api/contents?database=${database.id}`)).json();
   const seeded = ['synthetic', 'iceberg_v3'].every(name => contents.namespaces.some(ns => ns[0] === name));
-  if (!seeded || need(10, 11, 12, 13, 14, 25, 26, 27, 28)) {
+  if (!seeded || need(10, 12)) {
     await workspace.locator('#workspace-nav').getByRole('button', {name: 'Notebooks', exact: true}).click();
     await workspace.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
     await workspace.locator('#notebook-file').selectOption({label: '01 · Neighborhood data with PyIceberg'});
@@ -163,33 +190,38 @@ try {
     await toHeading(frame, '2. Write to Iceberg');
     await shot(workspace, '10-notebook-01-created');
 
-    frame = await runNotebook(workspace, '02 · Visualize with DuckDB', 'Totals by street');
-    // The plots are the large inline images; marimo also inlines small icons.
-    const plots = () => frame.locator('img[src^="data:image"]').evaluateAll(images => images.filter(i => i.naturalWidth >= 800).length);
-    await expect.poll(plots, {timeout: 60000}).toBe(2);
-    await frame.locator('img[src^="data:image"]').evaluateAll(images => images.find(i => i.naturalWidth >= 800).scrollIntoView({block: 'center'}));
-    await shot(workspace, '11-notebook-02-duckdb-chart');
-
-    frame = await runNotebook(workspace, '03 · Native DuckDB on Iceberg', 'Example Solar Street');
+    frame = await runNotebook(workspace, '03 · Native DuckDB on Iceberg', 'Aggregate the neighborhood example');
     await toCell(frame, 'DESCRIBE selected_iceberg_table');
     await shot(workspace, '12-notebook-03-attach');
-    await toCell(frame, 'iceberg_snapshots');
-    await shot(workspace, '13-notebook-03-snapshots');
-    await toHeading(frame, 'Aggregate the neighborhood example');
-    await shot(workspace, '14-notebook-03-aggregate');
 
-    frame = await runNotebook(workspace, '04 · Write Iceberg v3 with DuckDB', /deleted \d+ fault events/);
-    await toCell(frame, 'CREATE TABLE');
-    await shot(workspace, '25-notebook-04-v3-create');
-    await toHeading(frame, '5. Update and delete rows');
-    await shot(workspace, '26-notebook-04-v3-delete');
-
-    frame = await runNotebook(workspace, '05 · Read Iceberg v3 with DuckDB', /Every write is a snapshot/);
-    await toHeading(frame, '1. Variant');
-    await shot(workspace, '27-notebook-05-variant');
-    await toHeading(frame, '5. Row lineage');
-    await shot(workspace, '28-notebook-05-lineage');
+    // No capture: the v3 table it creates is shown in the catalog and the bucket.
+    await runNotebook(workspace, '04 · Write Iceberg v3 with DuckDB', /deleted \d+ fault events/);
+    // Otherwise the editor keeps showing this notebook while the next database's runtime starts.
+    await workspace.locator('#close-notebook').click();
+    await workspace.locator('#editor').waitFor({state: 'hidden'});
     await workspace.getByRole('navigation', {name: 'Workspace', exact: true}).getByRole('button', {name: 'Catalog', exact: true}).click();
+  }
+
+  // The flights data product lives in the database mila created.
+  if (need(41, 44)) {
+    await toPage(workspace, 'Notebooks');
+    await workspace.locator('#notebook-databases button').filter({hasText: AI_DATABASE.name}).first().click();
+    await expect(workspace.locator('#editor-title')).toContainText(AI_DATABASE.name, {timeout: 180000});
+    await workspace.frameLocator('#frame-host iframe').locator('.cm-content').first().waitFor({timeout: 180000});
+    let frame = await runNotebook(workspace, '06 · Write an AI-ready flights product', /Published [\d,]+ flight instances/);
+    await toHeading(frame, '3. Turn selected semantic rules into quality evidence');
+    await shot(workspace, '41-notebook-06-flights-quality');
+    frame = await runNotebook(workspace, '07 · Read an AI-ready flights product', '5. Context to give an AI consumer');
+    await toHeading(frame, '5. Context to give an AI consumer');
+    await shot(workspace, '44-notebook-07-flights-context');
+    await toPage(workspace, 'Catalog');
+  }
+
+  // Every route of the user portal, callable in the browser with the same session.
+  if (need(45)) {
+    await workspace.goto(env.USER_ORIGIN + '/docs');
+    await workspace.locator('.opblock').first().waitFor({timeout: 60000});
+    await shot(workspace, '45-user-api-docs');
   }
 
   // The same tables in the catalog browser, without a notebook.
@@ -210,20 +242,19 @@ try {
   await loadPreview(workspace);
   await shot(workspace, '30-user-table-v3-preview');
 
+  await signOut(member);
+
   // A team administrator shares one table with an external party, without a portal administrator.
-  if (need(32, 33, 34, 35)) {
-    const owner = await newContext(), sharing = await owner.newPage();
-    sharing.setDefaultTimeout(30000);
-    await signIn(sharing, env.USER_ORIGIN, TEAM_ADMIN, state.users[TEAM_ADMIN], chosen => { state.users[TEAM_ADMIN] = chosen; });
+  if (need(32, 33, 34, 35, 37, 38, 39, 40)) {
+    await sharing.goto(env.USER_ORIGIN);
     await sharing.locator('#workspace-screen').waitFor();
-    await sharing.locator('#databases button').filter({hasText: DEMO_DATABASE}).first().click();
-    await sharing.getByRole('button', {name: 'Data shares', exact: true}).click();
+    await toPage(sharing, 'Data shares');
     const shareDatabase = sharing.locator('.database-shares').filter({has: sharing.getByRole('heading', {name: DEMO_DATABASE, exact: true})});
     await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).waitFor();
     const existing = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares.find(s => s.name === SHARE.name);
     await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).click();
     await sharing.getByLabel('Share name').fill(SHARE.name);
-    await sharing.getByLabel('Recipient').fill(SHARE.recipient);
+    await sharing.getByLabel('Recipient', {exact: true}).fill(SHARE.recipient);
     await sharing.getByLabel('Description').fill(SHARE.description);
     await sharing.getByLabel(/^Expires/).fill(`${new Date().getUTCFullYear() + 1}-12-31`);
     await sharing.locator('.share-tree summary').filter({hasText: SHARE.namespace}).click();
@@ -239,13 +270,60 @@ try {
     await shot(sharing, '33-user-share-credential');
     await sharing.getByRole('button', {name: 'Done, I stored the secret', exact: true}).click();
     await shareDatabase.getByRole('region', {name: 'Data shares', exact: true}).waitFor();
+
+    // The same table for another team: its members read it with their own accounts, no credential.
+    const teams = await (await owner.request.get(`${env.USER_ORIGIN}/api/share-teams`)).json();
+    const shares = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares;
+    await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).click();
+    await sharing.getByLabel('Share name').fill(TEAM_SHARE.name);
+    await sharing.getByLabel('Another team', {exact: true}).check();
+    await sharing.getByLabel('Recipient team', {exact: true}).selectOption(teams.find(t => t.name === TEAM_SHARE.team).id);
+    await sharing.getByLabel('Externally', {exact: true}).uncheck();
+    await sharing.getByLabel('Description').fill(TEAM_SHARE.description);
+    await sharing.locator('.share-tree summary').filter({hasText: SHARE.namespace}).click();
+    await sharing.getByLabel(SHARE.table).check();
+    await sharing.locator('.database-shares').filter({hasText: DEMO_DATABASE}).first().evaluate(s => s.scrollIntoView({block: 'start'}));
+    await shot(sharing, '37-user-share-team-form');
+    if (shares.some(s => s.name === TEAM_SHARE.name)) await sharing.getByRole('button', {name: 'Cancel', exact: true}).click();
+    else await sharing.getByRole('button', {name: 'Create share', exact: true}).click();
+    await shareDatabase.getByText(TEAM_SHARE.name, {exact: true}).waitFor();
     await sharing.locator('#shares-page').evaluate(h => h.scrollIntoView({block: 'start'}));
     await shot(sharing, '34-user-share-list');
     const share = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares.find(s => s.name === SHARE.name);
     const renewed = await owner.request.post(`${env.USER_ORIGIN}/api/shares/${share.id}/rotate`, {data: {}, headers: {'X-Portal-Request': '1'}});
     if (!renewed.ok()) throw new Error(`The pictured secret was not replaced: ${renewed.status()}`);
-    await owner.close();
+
+    // noor's team owns no database in development, yet reads the shared table there.
+    const recipient = await newContext(), received = await recipient.newPage();
+    received.setDefaultTimeout(30000);
+    await signIn(received, env.USER_ORIGIN, RECIPIENT, state.users[RECIPIENT], chosen => { state.users[RECIPIENT] = chosen; });
+    await received.locator('#workspace-screen').waitFor();
+    if (await received.locator('#environment').inputValue() !== 'development') await received.locator('#environment').selectOption('development');
+    await toPage(received, 'Databases');
+    await received.locator('#received-databases').getByText(DEMO_DATABASE).first().waitFor();
+    await shot(received, '38-user-received-databases');
+    await toPage(received, 'Catalog');
+    await received.locator('#databases button').filter({hasText: DEMO_DATABASE}).first().click();
+    await received.locator('#catalog-database-context').waitFor();
+    await received.locator('.object-row').filter({hasText: SHARE.namespace}).getByRole('button').click();
+    await received.locator('.object-row').filter({hasText: SHARE.table}).waitFor();
+    await shot(received, '39-user-received-catalog');
+    if (need(40)) {
+      await toPage(received, 'Notebooks');
+      await received.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
+      const starter = received.frameLocator('#frame-host iframe');
+      await starter.locator('.cm-content').first().waitFor({timeout: 180000});
+      await starter.locator('.cm-content').first().click();
+      await received.keyboard.press('Control+Shift+r');
+      await starter.getByRole('heading', {name: 'Available objects'}).first().waitFor({timeout: 180000});
+      await expect(starter.locator('[data-status="queued"], [data-status="running"]')).toHaveCount(0, {timeout: 180000});
+      await toHeading(starter, 'Available objects');
+      await shot(received, '40-user-received-notebook');
+    }
+    await signOut(recipient);
+    await recipient.close();
   }
+  await owner.close();
 
   await portal.goto(env.PORTAL_ORIGIN);
   for (const [page, name] of [['databases', '02-admin-databases'], ['users', '03-admin-users'], ['teams', '04-admin-teams'], ['shares', '35-admin-shares'], ['infrastructure', '05-admin-infrastructure']]) {
