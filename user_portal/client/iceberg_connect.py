@@ -30,6 +30,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import webbrowser
 from pathlib import Path
@@ -57,11 +58,15 @@ def credentials_path(issuer=ISSUER):
 
 def _write_private(path, data):
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.unlink(missing_ok=True)
-    with os.fdopen(os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as file:
-        json.dump(data, file)
-    os.replace(temporary, path)
+    # A unique owner-only file per write, so concurrent refreshes never share a temporary file.
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "w") as file:
+            json.dump(data, file)
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
 
 
 def _expiry(token):
@@ -137,8 +142,9 @@ class Session:
             stored = json.loads(self.path.read_text())
         except (OSError, ValueError):
             return
-        self.http.post(self._endpoint("revoke"), data={
+        response = self.http.post(self._endpoint("revoke"), data={
             "client_id": self.client_id, "token": stored["refresh_token"], "token_type_hint": "refresh_token"})
+        response.raise_for_status()  # Keep the token when Keycloak did not revoke it, so logout can be retried.
         self.path.unlink(missing_ok=True)
         self._access_token = None
 

@@ -52,7 +52,9 @@ function renderCatalogListing(detail, contents, rows) {
     summary.append(facts(entries));
     const connection = element('details', undefined, 'catalog-disclosure');
     connection.append(element('summary', 'Connection information'), facts([['Catalog / warehouse', db.id], ['Catalog URI', detail.catalogUri], ['Protocol', 'Iceberg REST']]));
-    summary.append(connection, connectPanel(db));
+    summary.append(connection);
+    // The helper signs in through Keycloak, so password-mode portals do not offer it.
+    if (loginUrl) summary.append(connectPanel(db));
   } else {
     summary.append(facts(entries));
     const props = element('details', undefined, 'catalog-disclosure'); props.append(element('summary', 'Namespace properties'), propertyGrid(detail.properties)); summary.append(props);

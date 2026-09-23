@@ -3,6 +3,7 @@
 import base64
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 from urllib.parse import parse_qs
 
@@ -110,6 +111,23 @@ def test_logout_revokes_the_refresh_token_and_forgets_it(tmp_path):
     assert not user.path.exists()
     user.logout()
     assert len(calls) == 1
+
+
+def test_failed_revocation_keeps_the_refresh_token_for_a_retry(tmp_path):
+    user, _ = session(tmp_path, lambda endpoint, form: httpx.Response(503))
+    helper._write_private(user.path, {"issuer": ISSUER, "refresh_token": "refresh-1"})
+    with pytest.raises(httpx.HTTPStatusError):
+        user.logout()
+    assert json.loads(user.path.read_text())["refresh_token"] == "refresh-1"
+
+
+def test_concurrent_writes_use_their_own_temporary_files(tmp_path):
+    path = tmp_path / "platform" / "credentials.json"
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(lambda n: helper._write_private(path, {"refresh_token": f"refresh-{n}"}), range(64)))
+    assert json.loads(path.read_text())["refresh_token"].startswith("refresh-")
+    assert [entry.name for entry in path.parent.iterdir()] == ["credentials.json"]
+    assert path.stat().st_mode & 0o777 == 0o600
 
 
 def test_credentials_are_kept_per_platform(monkeypatch, tmp_path):
