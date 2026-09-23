@@ -4,6 +4,19 @@ let input = ''; for await (const chunk of process.stdin) input += chunk;
 const data = JSON.parse(input);
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 let page;
+// Docker interface events on the runner can still abort the editor's module
+// graph with ERR_NETWORK_CHANGED; reload the notebook frame once, then fail.
+async function editor() {
+  const frame = page.frameLocator('#frame-host iframe');
+  const cell = frame.locator('.cm-content').first();
+  try { await cell.waitFor({timeout: 20000}); } catch {
+    console.error('Notebook editor did not load; reloading its frame once');
+    await page.locator('#frame-host iframe').evaluate(iframe => { iframe.src = iframe.src; });
+    await cell.waitFor();
+  }
+  await cell.click();
+  return frame;
+}
 try {
   const context = await browser.newContext({viewport: {width: 1500, height: 1100}});
   await context.addCookies([{name: 'iceberg_user_session', value: data.cookie, url: data.baseURL, httpOnly: true, sameSite: 'Strict'}]);
@@ -20,9 +33,7 @@ try {
   // Reuse the runtime provisioned before Chromium launched, keeping Docker's
   // network topology stable while the editor's module graph loads.
   await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', data.notebook.examples[0].url);
-  let frame = page.frameLocator('#frame-host iframe');
-  await frame.locator('.cm-content').first().waitFor();
-  await frame.locator('.cm-content').first().click();
+  let frame = await editor();
   await page.keyboard.press('Control+Shift+r');
   await frame.getByText(/(Created and populated:|Table already contains) 26,880 rows/).waitFor({timeout:60000});
   // Run the write cell explicitly: the global shortcut only runs stale cells.
@@ -36,9 +47,7 @@ try {
   await mkdir('test-results/examples', {recursive:true});
   await page.screenshot({path:'test-results/examples/pyiceberg.png',fullPage:true});
   await page.locator('#notebook-file').selectOption({label:'02 · Visualize with DuckDB'});
-  frame = page.frameLocator('#frame-host iframe');
-  await frame.locator('.cm-content').first().waitFor();
-  await frame.locator('.cm-content').first().click();
+  frame = await editor();
   await page.keyboard.press('Control+Shift+r');
   await frame.getByText('Explore the neighborhood', {exact:true}).first().waitFor({timeout:60000});
   await frame.getByText('Totals by street', {exact:true}).first().waitFor({timeout:60000});
@@ -48,9 +57,7 @@ try {
   // The Iceberg v3 examples have no controls: running all cells completes them.
   for (const [label, text] of [['04 · Write Iceberg v3 with DuckDB', /deleted 45 fault events/], ['05 · Read Iceberg v3 with DuckDB', /Every write is a snapshot/]]) {
     await page.locator('#notebook-file').selectOption({label});
-    frame = page.frameLocator('#frame-host iframe');
-    await frame.locator('.cm-content').first().waitFor();
-    await frame.locator('.cm-content').first().click();
+    frame = await editor();
     await page.keyboard.press('Control+Shift+r');
     await frame.getByText(text).first().waitFor({timeout:90000});
   }
