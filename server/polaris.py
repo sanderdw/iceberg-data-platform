@@ -674,7 +674,7 @@ class PolarisProvider:
                 self.request(f"{path}/{kind}/{enc(item['name'])}", "DELETE")
         self.request(path, "DELETE")
 
-    def delete_database(self, id, *, expected_team=None, expected_environment=None):
+    def delete_database(self, id, *, expected_team=None, expected_environment=None, expected_name=None):
         path = f"/catalogs/{enc(id)}"
         catalog = self.require(path)
         if not self.managed(catalog):
@@ -683,6 +683,10 @@ class PolarisProvider:
             raise ServiceError(409, "This database changed teams. Refresh and try again.")
         if expected_environment is not None and catalog["properties"]["portal.environment"] != expected_environment:
             raise ServiceError(409, "This database changed environments. Refresh and try again.")
+        # The other portal may rename between the caller's confirmation check and this read.
+        # The versioned marker write below fences a rename after it.
+        if expected_name is not None and catalog["properties"]["portal.name"] != expected_name:
+            raise ServiceError(409, "This database was renamed. Nothing was deleted; confirm the current name.")
         if catalog["properties"].get("portal.moving"):
             raise ServiceError(409, "This database is being moved. Try again after the move completes.")
         # Persist intent first; on retry revoke again, even after partial failure.

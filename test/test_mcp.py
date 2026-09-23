@@ -262,6 +262,58 @@ def test_database_management_tools_follow_current_team_role(stack):
     assert deleted.structured_content["deleted"] and db["id"] not in {d["id"] for d in stack.provider.list_databases()}
 
 
+def test_delete_refuses_a_rename_after_confirmation(stack, monkeypatch):
+    team = stack.teams[0]
+    stack.provider.update_memberships(stack.account["id"], {team: "admin"})
+    database = stack.databases[0]
+    authorize = UserDirectory.manage_database
+
+    def renamed_meanwhile(self, session, id, **kwargs):
+        record = authorize(self, session, id, **kwargs)
+        # The administration portal has its own lock and may rename in between.
+        stack.provider.rename_database(id, "renamed_data")
+        return record
+
+    monkeypatch.setattr(UserDirectory, "manage_database", renamed_meanwhile)
+    refused = call(stack, stack.token, "delete_database", {"database": database, "confirm_name": "data_0"})
+    assert refused.is_error and "renamed" in text(refused)
+    catalog = stack.provider.resources["catalogs"][database]["properties"]
+    assert catalog["portal.name"] == "renamed_data" and "portal.deleting" not in catalog
+
+
+def test_shared_databases_are_listed_and_read_only(stack):
+    from test.test_shares import CREATOR, share_input
+
+    team, owner = stack.teams
+    database = stack.databases[1]
+    events = {"kind": "table", "namespace": ["analytics"], "name": "events"}
+    stack.provider.create_share(share_input(database, objects=[events], recipientTeam=team), CREATOR)
+    listing = call(stack, stack.token, "list_databases", {}).structured_content
+    assert [d["id"] for d in listing["databases"]] == stack.databases[:1]
+    shared = listing["sharedDatabases"]
+    assert [(d["id"], d["team"], d["sharedWithTeam"], d["ownerTeamName"]) for d in shared] == [
+        (database, owner, team, "team-1")
+    ]
+    assert shared[0]["readOnly"] and shared[0]["shared"]
+    result = call(stack, stack.token, "list_namespaces", {"database": database})
+    assert not result.is_error, text(result)
+    assert result.structured_content["namespaces"] == [["analytics"]]
+    result = call(stack, stack.token, "list_tables", {"database": database, "namespace": ["analytics"]})
+    assert result.structured_content["tables"] == [{"name": "events", "namespace": ["analytics"]}]
+    assert result.structured_content["views"] == []
+    result = call(stack, stack.token, "describe_table", {"database": database, "namespace": ["analytics"], "table": "events"})
+    assert not result.is_error, text(result)
+    result = call(stack, stack.token, "describe_view", {"database": database, "namespace": ["analytics"], "view": "report"})
+    assert result.is_error and "not shared" in text(result)
+    for name, arguments in [
+        ("rename_database", {"database": database, "name": "renamed"}),
+        ("delete_database", {"database": database, "confirm_name": "data_1"}),
+    ]:
+        refused = call(stack, stack.token, name, arguments)
+        assert refused.is_error and "read-only" in text(refused), (name, text(refused))
+    assert database in stack.provider.resources["catalogs"]
+
+
 def test_streamable_http_round_trip_authenticates_each_request(stack):
     async def run():
         async with stack.app.router.lifespan_context(stack.app):

@@ -34,6 +34,8 @@ class UserSession:
     oidc_subject: str = ""
     oidc_issuer: str = ""
     oidc_session: object | None = field(default=None, repr=False)
+    # MCP sessions have no active team: they see the shares received by every team of the user.
+    all_teams: bool = False
 
 
 class UserDirectory:
@@ -116,21 +118,29 @@ class UserDirectory:
             for d in all_databases
             if d["team"] in {t["id"] for t in teams}
         ]
-        received = {}
-        if session.team in roles:
+        recipients = [t["id"] for t in teams] if session.all_teams else [session.team] if session.team in roles else []
+        received, recipient = {}, {}
+        if recipients:
             for share in self.metadata.list_shares(drift=True):
-                if share.get("recipientTeam") != session.team:
+                if share.get("recipientTeam") not in recipients:
                     continue
+                # Team-share grants sit on each member's own role, so shares received by
+                # several of the user's teams combine.
                 received.setdefault(share["database"], []).extend(
                     o for o in share["objects"] if o.get("granted")
                 )
+                recipient[share["database"]] = min(
+                    recipient.get(share["database"], share["recipientTeam"]), share["recipientTeam"],
+                    key=recipients.index,
+                )
+        owners = set(recipients) if session.all_teams else {session.team}
         shared_databases = [
-            {**d, "shared": True, "sharedWithTeam": session.team,
+            {**d, "shared": True, "sharedWithTeam": recipient[d["id"]],
              "ownerTeamName": team_names.get(d["team"], d["team"]),
              "sharedObjects": list({(o["kind"], tuple(o["namespace"]), o["name"]): o
                                     for o in received[d["id"]]}.values())}
             for d in all_databases
-            if d["id"] in received and d["team"] != session.team and d["status"] == "ready"
+            if d["id"] in received and d["team"] not in owners and d["status"] == "ready"
         ]
         return {
             "sharedDatabases": shared_databases,
@@ -176,7 +186,7 @@ class UserDirectory:
         if confirm_name != database["name"]:
             raise ServiceError(422, "Type the database name exactly to confirm deletion.")
         self.metadata.delete_database(
-            id, expected_team=session.team, expected_environment=session.environment,
+            id, expected_team=session.team, expected_environment=session.environment, expected_name=confirm_name,
         )
         return {"deleted": True, "database": id, "name": database["name"], "environment": database["environment"]}
 

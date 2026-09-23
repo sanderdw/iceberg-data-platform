@@ -19,6 +19,7 @@ from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
 from server.app import create_app
 from server.identity import UserManagement
 from server.mcp_auth import KeycloakVerifier, protected_resource
+from server.models import ServiceError
 from test.conftest import PASSWORD, MemoryPolaris
 from test.test_identity_management import MemoryKeycloak
 from test.test_oidc import ISSUER, issuer  # noqa: F401 - fixture
@@ -190,6 +191,10 @@ def test_delete_database_requires_the_display_name(admin):
     catalog = admin.provider.resources["catalogs"][database]
     assert "portal.deleting" not in catalog["properties"]
     refused(admin, "delete_database", {"database": "db-" + "0" * 32, "confirm_name": "analytics"}, "Nothing was deleted")
+    # The provider rechecks the name itself: the user portal may rename after the check above.
+    with pytest.raises(ServiceError, match="renamed") as raised:
+        admin.provider.delete_database(database, expected_name="analytic")
+    assert raised.value.status == 409 and "portal.deleting" not in catalog["properties"]
     assert ok(admin, "delete_database", {"database": database, "confirm_name": "analytics"})["name"] == "analytics"
     assert database not in admin.provider.resources["catalogs"]
 

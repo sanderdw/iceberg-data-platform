@@ -1,5 +1,6 @@
 """Platform administration as MCP tools: the admin API's operations for platform administrators."""
 
+from functools import partial
 from typing import Annotated, Any
 
 from mcp.server.mcpserver.exceptions import ToolError
@@ -157,7 +158,7 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
                 raise ToolError("Database not found. Nothing was deleted.")
             if record["name"] != confirm_name:
                 raise ToolError("confirm_name does not match the database's display name. Nothing was deleted.")
-            await call(provider.delete_database, database)
+            await call(partial(provider.delete_database, database, expected_name=confirm_name))
         return {"deleted": True, "database": database, "name": record["name"], "environment": record["environment"]}
 
     @mcp.tool(annotations=READ_ONLY)

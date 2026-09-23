@@ -35,7 +35,9 @@ rename or delete its databases. create_database takes the owning team id and env
 rename_database and delete_database take the database id. Deletion immediately destroys
 tables, views, stored files, the bucket and data shares, including in Production. It requires
 confirm_name equal to the current display name and can be retried if cleanup stops partway.
-Ask the user before a destructive call."""
+Ask the user before a destructive call. list_databases also returns sharedDatabases: databases
+of other teams shared with one of the user's teams. They are read-only, the catalog tools show
+only their shared tables and views, and they cannot be renamed or deleted."""
 
 Namespace = Annotated[
     list[Annotated[str, Field(min_length=1, max_length=256)]],
@@ -63,7 +65,7 @@ def session_for(access):
     return UserSession(
         "mcp:" + access.subject, access.claims["polaris"]["principal_name"], "", "", "",
         access.token, until, until, "",
-        oidc_subject=access.subject, oidc_issuer=access.claims["iss"],
+        oidc_subject=access.subject, oidc_issuer=access.claims["iss"], all_teams=True,
     )
 
 
@@ -74,7 +76,7 @@ def create_mcp(directory, oidc, *, lock, previews):
         # Directory reads share the gateway lock like every /api request.
         return await run_locked(lock, fn, *args)
 
-    async def resolve(database=None, *, allow_deleting=False):
+    async def resolve(database=None, *, allow_deleting=False, shared=False):
         access = current_access()
         if not access.claims["polaris"]["principal_name"]:
             raise ToolError("Your Keycloak account is not linked to a platform user. Ask an administrator.")
@@ -84,6 +86,13 @@ def create_mcp(directory, oidc, *, lock, previews):
         if database is not None:
             available = profile["databases"] + (profile["deletingDatabases"] if allow_deleting else [])
             record = next((d for d in available if d["id"] == database), None)
+            received = next((d for d in profile["sharedDatabases"] if d["id"] == database), None)
+            if not record and received and not shared:
+                raise ToolError("This database is shared with your team read-only. Only its owning team can change it.")
+            if not record and received:
+                # The recipient team selects the shared objects, as in the portal's Catalog.
+                session.team, session.environment = received["sharedWithTeam"], received["environment"]
+                return session, profile
             if not record:
                 raise ToolError("This database is not available to you. Call list_databases first.")
             session.team, session.environment = record["team"], record["environment"]
@@ -99,7 +108,7 @@ def create_mcp(directory, oidc, *, lock, previews):
 
     @mcp.tool(annotations=READ_ONLY)
     async def list_databases() -> dict[str, Any]:
-        """The caller's teams with their role per team, and the databases those teams own."""
+        """The caller's teams with their role per team, the databases those teams own and read-only shared databases."""
         _, profile = await resolve()
         return {
             "user": profile["user"],
@@ -107,6 +116,11 @@ def create_mcp(directory, oidc, *, lock, previews):
             "databases": [
                 {k: d[k] for k in ("id", "name", "team", "environment", "description", "status")}
                 for d in profile["databases"] + profile["deletingDatabases"]
+            ],
+            "sharedDatabases": [
+                {**{k: d[k] for k in ("id", "name", "team", "ownerTeamName", "sharedWithTeam", "environment", "description")},
+                 "shared": True, "readOnly": True}
+                for d in profile["sharedDatabases"]
             ],
         }
 
@@ -137,7 +151,7 @@ def create_mcp(directory, oidc, *, lock, previews):
     async def list_namespaces(database: DatabaseId, namespace: Namespace = []) -> dict[str, Any]:  # noqa: B006
         """Child namespaces of a database or of one namespace; omit namespace for the top level."""
         parts = namespace_parts(namespace)
-        session, _ = await resolve(database)
+        session, _ = await resolve(database, shared=True)
         result = await query(directory.contents, session, database, parts)
         return {"database": database, "namespace": parts, "namespaces": result["namespaces"]}
 
@@ -147,7 +161,7 @@ def create_mcp(directory, oidc, *, lock, previews):
         parts = namespace_parts(namespace)
         if not parts:
             raise ToolError("Select a namespace.")
-        session, _ = await resolve(database)
+        session, _ = await resolve(database, shared=True)
         result = await query(directory.contents, session, database, parts)
         return {"database": database, "namespace": parts, "tables": result["tables"], "views": result["views"]}
 
@@ -157,7 +171,7 @@ def create_mcp(directory, oidc, *, lock, previews):
         parts = namespace_parts(namespace, table)
         if not parts:
             raise ToolError("Select a namespace.")
-        session, _ = await resolve(database)
+        session, _ = await resolve(database, shared=True)
         details = await query(directory.details, session, database, parts, "table", table)
         keep = (
             "name", "namespace", "uuid", "formatVersion", "location", "columns", "properties",
@@ -177,7 +191,7 @@ def create_mcp(directory, oidc, *, lock, previews):
         parts = namespace_parts(namespace, view)
         if not parts:
             raise ToolError("Select a namespace.")
-        session, _ = await resolve(database)
+        session, _ = await resolve(database, shared=True)
         details = await query(directory.details, session, database, parts, "view", view)
         keep = ("name", "namespace", "uuid", "formatVersion", "location", "columns", "properties", "currentVersionId")
         return {**{k: details[k] for k in keep}, "versions": details["versions"][:5]}
@@ -193,7 +207,7 @@ def create_mcp(directory, oidc, *, lock, previews):
         if previews.locked():
             raise ToolError("Preview slots are busy. Try again shortly.")
         async with previews:
-            session, _ = await resolve(database)
+            session, _ = await resolve(database, shared=True)
             prepared = await query(directory.preview_request, session, database, parts, table, snapshot_id, limit)
             # The sandboxed subprocess runs without the lock, like the portal preview.
             result = await call(run_preview, prepared)
