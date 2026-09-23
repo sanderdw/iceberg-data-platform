@@ -11,7 +11,8 @@ try {
   await page.clock.install();
   await page.route('http://navigation.test/**', async route => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/api/session') return route.fulfill({json: {authenticated: true, userManagement: 'keycloak'}});
+    if (path === '/api/session') return route.fulfill({json: {authenticated: true, loginUrl: '/auth/login', userManagement: 'keycloak'}});
+    if (path === '/api/users/user-a' && route.request().method() === 'PATCH') return route.fulfill({json: {user: overview.users[0]}});
     if (path === '/api/overview') return route.fulfill({json: overview});
     const asset = path === '/' ? 'public/index.html' : `public${path}`;
     const contentType = path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.ttf') ? 'font/ttf' : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
@@ -33,7 +34,7 @@ try {
   await page.getByLabel('First name').fill('Unsaved');
   const gap = await page.evaluate(() => document.querySelector('#modal-form').getBoundingClientRect().top - document.querySelector('.identity-mode').getBoundingClientRect().bottom);
   expect(gap).toBeGreaterThanOrEqual(32);
-  overview.users.push({id: 'user-a', name: 'alice', memberships: [{team: 'team-a', role: 'reader'}], createdAt: Date.now(), identity: {status: 'linked'}});
+  overview.users.push({id: 'user-a', name: 'alice', teams: ['team-a'], memberships: [{team: 'team-a', role: 'reader'}], createdAt: Date.now(), identity: {status: 'linked'}});
   await page.clock.runFor(31000);
   await expect(page.getByLabel('First name')).toHaveValue('Unsaved');
   await expect(page.locator('#modal-form input[name=name]')).toHaveValue('draft-user');
@@ -49,6 +50,34 @@ try {
   overview.users[0].name = 'alice-renamed';
   await page.evaluate(() => { document.activeElement.blur(); window.dispatchEvent(new Event('focus')); });
   await expect(page.locator('#table')).toContainText('alice-renamed');
+  // A status message stays on its page and is cleared by navigation.
+  await page.locator('tbody tr').filter({hasText: 'alice-renamed'}).getByRole('button', {name: 'Edit access'}).click();
+  await page.getByRole('dialog').getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(page.locator('#status')).toHaveText('[ Team access and permissions updated. ]');
+  await page.clock.runFor(31000);
+  await expect(page.locator('#status')).toHaveText('[ Team access and permissions updated. ]');
+  await page.getByRole('button', {name: 'Teams', exact: true}).click();
+  await expect(page.locator('#status')).toBeEmpty();
+  await page.goBack();
+  await expect(page.getByRole('heading', {name: 'Users.', exact: true})).toBeVisible();
+  await expect(page.locator('#status')).toBeEmpty();
+  // Getting started: portal, MCP agent and API, with commands for this origin.
+  await page.getByRole('button', {name: 'Getting started'}).click();
+  await expect(page.getByRole('heading', {name: 'Getting started.', exact: true})).toBeVisible();
+  for (const name of ['Point and click.', 'Ask an AI agent.', 'Script it.']) await expect(page.getByRole('heading', {name, exact: true})).toBeVisible();
+  await expect(page.locator('#guide-agent pre')).toHaveCount(3);
+  await expect(page.locator('#guide-agent pre').first()).toContainText('url = "http://navigation.test/mcp"');
+  await expect(page.locator('#guide-agent pre').last()).toContainText('iceberg-admin http://navigation.test/mcp');
+  await expect(page.locator('#guide-api pre').first()).toContainText("post('/api/identity/users'");
+  await expect(page.locator('#guide-api a[href="/docs"]')).toBeVisible();
+  await page.getByRole('button', {name: /02 \/ AGENT/}).click();
+  await expect(page.locator('#guide-agent')).toBeInViewport();
+  await page.screenshot({path: 'test-results/navigation/guide.png', fullPage: true});
+  await page.setViewportSize({width: 390, height: 844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.screenshot({path: 'test-results/navigation/guide-mobile.png', fullPage: true});
+  await page.getByRole('button', {name: 'Start with a team'}).click();
+  await expect(page.getByRole('heading', {name: 'Teams.', exact: true})).toBeVisible();
   expect(errors).toEqual([]);
-  console.log('PASS: admin reload and Back/Forward, persistent search, timed/focus list updates, unsaved form preservation, user-creation spacing');
+  console.log('PASS: admin reload and Back/Forward, persistent search, timed/focus list updates, unsaved form preservation, user-creation spacing, page-scoped status, getting started guide');
 } finally { await browser.close(); }

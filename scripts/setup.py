@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 MCP_CLIENT_ID = "iceberg-mcp"
+CLI_CLIENT_ID = "iceberg-cli"
+DEFAULT_ROLES = "default-roles-iceberg"
 
 
 def mapper(name, kind, config):
@@ -36,21 +38,42 @@ def polaris_mappers():
 
 
 def mcp_client(callback_port):
-    """Public client for MCP clients such as Claude Code: PKCE and one fixed loopback redirect.
+    """Public client for MCP clients such as Codex, GitHub Copilot and Claude Code: PKCE, loopback redirects.
 
-    Keycloak allows a wildcard only at the end of a redirect path, never in its port,
-    so MCP clients must listen on this port for the OAuth callback. The bootstrap
-    service reuses this definition to upgrade existing realms.
+    Agents choose their own callback: Claude Code listens on this fixed port, VS Code on
+    127.0.0.1:33418 or a random port, others on their own path. Keycloak retries an unmatched
+    http loopback redirect without its port, so the two wildcard entries accept any local
+    port and path (RFC 8252 section 7.3) and never a remote host. The bootstrap service
+    reuses this definition to upgrade existing realms.
     """
     return {
         "clientId": MCP_CLIENT_ID, "name": "MCP clients", "enabled": True, "protocol": "openid-connect",
         "publicClient": True, "standardFlowEnabled": True, "implicitFlowEnabled": False,
         "directAccessGrantsEnabled": False, "serviceAccountsEnabled": False,
-        "redirectUris": [f"http://localhost:{int(callback_port)}/callback"],
+        "redirectUris": [f"http://localhost:{int(callback_port)}/callback", "http://localhost/*", "http://127.0.0.1/*"],
         "webOrigins": [],
         "attributes": {"pkce.code.challenge.method": "S256"},
         "defaultClientScopes": ["basic", "profile", "roles"],
         # MCP clients request offline_access for a refresh token that outlives the browser SSO session.
+        "optionalClientScopes": ["offline_access"], "protocolMappers": polaris_mappers(),
+    }
+
+
+def cli_client():
+    """Public client for tools on the user's own machine: device login, no redirect.
+
+    DuckDB and DBeaver hold a static bearer token, so this client alone issues
+    tokens for one hour instead of the realm's 15 minutes. The bootstrap service
+    reuses this definition to upgrade existing realms.
+    """
+    return {
+        "clientId": CLI_CLIENT_ID, "name": "Tools on your computer", "enabled": True,
+        "protocol": "openid-connect", "publicClient": True, "standardFlowEnabled": False,
+        "implicitFlowEnabled": False, "directAccessGrantsEnabled": False, "serviceAccountsEnabled": False,
+        "redirectUris": [], "webOrigins": [],
+        "attributes": {"oauth2.device.authorization.grant.enabled": "true", "access.token.lifespan": "3600"},
+        "defaultClientScopes": ["basic", "profile", "roles"],
+        # A refresh token that outlives the browser SSO session, like MCP clients.
         "optionalClientScopes": ["offline_access"], "protocolMappers": polaris_mappers(),
     }
 
@@ -70,12 +93,15 @@ def realm(env):
             "defaultClientScopes": ["basic", "profile", "roles"], "protocolMappers": polaris_mappers(),
         })
     clients.append(mcp_client(env["MCP_CALLBACK_PORT"]))
+    clients.append(cli_client())
     users = [{
         "username": env["PLATFORM_ADMIN_USERNAME"], "enabled": True,
         "firstName": "Platform", "lastName": "Administrator",
         "email": "platform-admin@example.test", "emailVerified": True,
         "requiredActions": ["UPDATE_PASSWORD"],
         "credentials": [{"type": "password", "value": "${PLATFORM_ADMIN_PASSWORD}", "temporary": True}],
+        # Imported users do not receive the realm default roles, which include offline_access.
+        "realmRoles": [DEFAULT_ROLES],
         "clientRoles": {"iceberg-admin": ["platform-admin"]},
     }]
     return {

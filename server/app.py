@@ -13,7 +13,8 @@ import httpx
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi import Path as PathParam
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from .mcp_admin import create_admin_mcp
 from .mcp_auth import is_mcp_path, mount_mcp
@@ -33,7 +34,8 @@ from .validation import validation_message
 
 PUBLIC = Path(__file__).resolve().parent.parent / "public"
 FILES = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg",
-         "/infrastructure.js": "infrastructure.js", "/identity.js": "identity.js"}
+         "/infrastructure.js": "infrastructure.js", "/identity.js": "identity.js", "/guide.js": "guide.js",
+         "/docs.js": "docs.js"}
 FILES.update({f"/fonts/{name}.ttf": f"fonts/{name}.ttf" for name in ("doto", "space-grotesk", "space-mono")})
 
 
@@ -67,7 +69,36 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
                 if owned:
                     provider.close()
 
-    app = FastAPI(title="Iceberg Workspace API", version="0.5.0", lifespan=lifespan, redoc_url=None)
+    app = FastAPI(
+        title="Iceberg Workspace API", version="0.5.1", lifespan=lifespan, docs_url=None, redoc_url=None,
+        description=(
+            "Sign in to the administration portal first, then open /docs to call these APIs with your session. "
+            "Writes require X-Portal-Request: 1 and Content-Type: application/json. "
+            "Try it out supplies these headers automatically."
+        ),
+    )
+
+    def admin_openapi():
+        if app.openapi_schema is None:
+            schema = get_openapi(title=app.title, version=app.version,
+                                 description=app.description, routes=app.routes)
+            schema.setdefault("components", {}).setdefault("securitySchemes", {})["AdminSession"] = {
+                "type": "apiKey", "in": "cookie", "name": session_cookie,
+                "description": "Sign in through the administration portal. The browser sends the session cookie automatically.",
+            }
+            for path, operations in schema["paths"].items():
+                for method, operation in operations.items():
+                    if path not in ("/api/session", "/api/health"):
+                        operation["security"] = [{"AdminSession": []}]
+                    if method not in ("get", "head"):
+                        operation.setdefault("parameters", []).append({
+                            "name": "X-Portal-Request", "in": "header", "required": True,
+                            "schema": {"type": "string", "enum": ["1"], "default": "1"},
+                        })
+            app.openapi_schema = schema
+        return app.openapi_schema
+
+    app.openapi = admin_openapi
     sessions, attempts = {}, {}
     # This local control plane intentionally runs one worker. Serializing reads and
     # mutations also prevents orphan memberships during concurrent team deletion.
@@ -141,9 +172,9 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         )
         if path.startswith("/docs"):
             response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; "
                 "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; "
-                "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+                "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
             )
         return response
 
@@ -164,7 +195,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
             request._body = bytes(body)
         protected = (
             path.startswith("/api/") and path not in ("/api/session", "/api/health")
-        ) or path in ("/docs", "/openapi.json", "/docs/oauth2-redirect")
+        ) or path in ("/docs", "/openapi.json")
         if oidc and current and (protected or (path == "/api/session" and request.method == "GET")):
             try:
                 await oidc.renew(current)
@@ -363,6 +394,16 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         mcp = create_admin_mcp(provider, oidc, lock=mutation_lock, user_management=user_management,
                                overview=overview, users=list_users, update_user=update_user)
         mcp_running = mount_mcp(app, mcp, oidc, "Iceberg Workspace Administration")
+
+    @app.get("/docs", include_in_schema=False, response_class=HTMLResponse)
+    def api_docs():
+        return """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Iceberg Workspace API</title><link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js" defer></script>
+<script src="/docs.js" defer></script></head>
+<body><div id="swagger-ui"></div></body></html>"""
 
     @app.get("/{path:path}", include_in_schema=False)
     def static(path: str):

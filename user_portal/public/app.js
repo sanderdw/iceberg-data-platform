@@ -47,12 +47,13 @@ const workspacePages = {
   catalog: ['Catalog', 'Explore your team databases and read-only data shared by other teams.'],
   notebooks: ['Notebooks', 'Analyze team data and read-only shared data with Python and SQL in marimo.'],
   shares: ['Data shares', 'Share data with other teams and external parties, and review data shared with your team.'],
+  guide: ['Getting started', 'Notebook, your own tools or an AI agent. Three ways to work with your team data.'],
 };
 function showPage(page, updateRoute = true) {
   if (page !== workspacePage) clearNotice();
   workspacePage = page;
   for (const name of Object.keys(workspacePages)) $(`#${name}-page`).hidden = name !== page;
-  document.querySelectorAll('#workspace-nav button').forEach(button => {
+  document.querySelectorAll('header [data-page]').forEach(button => {
     if (button.dataset.page === page) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   });
@@ -61,10 +62,11 @@ function showPage(page, updateRoute = true) {
   if (page === 'team' && state) { renderTeamOverview(); loadTeamMembers(); }
   if (page === 'databases' && state) renderDatabases();
   if (page === 'shares') renderTeamShares();
+  if (page === 'guide' && state) renderGuide();
   placeNotice();
   if (updateRoute) saveRoute();
 }
-document.querySelectorAll('#workspace-nav button').forEach(button => button.addEventListener('click', () => showPage(button.dataset.page)));
+document.querySelectorAll('header [data-page]').forEach(button => button.addEventListener('click', () => showPage(button.dataset.page)));
 document.querySelectorAll('[data-workspace-page]').forEach(button => button.addEventListener('click', () => showPage(button.dataset.workspacePage)));
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
 function placeNotice() { const target = !$('#login-screen').hidden ? $('#login-status') : workspacePage === 'notebooks' && !$('#editor').hidden ? $('#editor-status') : $('#workspace-status'); target.append($('#notice')); }
@@ -114,11 +116,11 @@ function renderNotebookContext(notebook) {
   renderDatabaseContext($('#editor-database-context'), db);
 }
 function resetEditor() { $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
-function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
+function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; $('#guide-nav').hidden = true; sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
 async function api(path, method = 'GET', body) { const response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); const result = await response.json(); if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
 function renderState() {
-  $('#login-screen').hidden = true; $('#identity').hidden = false; $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; $('#workspace-nav').hidden = false; placeNotice();
+  $('#login-screen').hidden = true; $('#identity').hidden = false; $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; $('#workspace-nav').hidden = false; $('#guide-nav').hidden = false; placeNotice();
   $('#team').replaceChildren(...state.teams.map(t => { const option = element('option', `${t.name} · ${roleNames[t.role] || t.role}`); option.value = t.id; return option; })); $('#team').value = state.activeTeam;
   $('#environment').replaceChildren(...state.environments.map(env => { const option = element('option', envNames[env]); option.value = env; return option; })); $('#environment').value = state.activeEnvironment;
   $('#databases').replaceChildren(...databaseGroups(state.databases, db => db, items => items.map(d => { const b = element('button', undefined, `db${database === d.id ? ' selected' : ''}`); const label = databaseLabel(d); label.append(element('small', envNames[d.environment])); b.append(symbol('database'), label); b.setAttribute('aria-pressed', String(database === d.id)); b.addEventListener('click', () => browse(d.id, [])); return b; })));
@@ -139,6 +141,8 @@ function renderState() {
   const context = JSON.stringify([state.activeTeam, state.activeEnvironment, state.activeRole, state.databases.map(db => db.id)]);
   if (sharesContext !== context) { sharesContext = context; $('#team-shares').replaceChildren(); if (workspacePage === 'shares') renderTeamShares(); }
   renderDatabases();
+  // The guide's examples follow the active team, environment and role.
+  if (workspacePage === 'guide') renderGuide();
   if (workspacePage === 'team') {
     renderTeamOverview();
     if ($('#team-members').dataset.context !== teamMembersContext()) loadTeamMembers();

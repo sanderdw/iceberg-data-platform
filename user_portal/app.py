@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 import secrets
 import time
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
@@ -42,6 +43,7 @@ from .preview import run_preview
 from .runtime import NotebookRuntime, filespace_key
 
 PUBLIC = Path(__file__).parent / "public"
+CONNECT_SCRIPT = Path(__file__).parent / "client" / "iceberg_connect.py"
 COOKIE = "iceberg_user_session"
 LOG = logging.getLogger(__name__)
 
@@ -216,7 +218,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     directory.close()
 
     app = FastAPI(
-        title="Iceberg User Workspace", version="0.5.0", docs_url=None, redoc_url=None, lifespan=lifespan,
+        title="Iceberg User Workspace", version="0.5.1", docs_url=None, redoc_url=None, lifespan=lifespan,
         description=(
             "Sign in to the user portal first, then open /docs to call these APIs with your session. "
             "Your team roles and selected team/environment apply to every operation. "
@@ -710,12 +712,25 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         directory.metadata.delete_share(id)
         return {"deleted": True}
 
+    @app.get("/iceberg_connect.py", include_in_schema=False)
+    def connect_script():
+        # Tools on the user's computer sign in with Keycloak's device login. The
+        # script holds no secret, only where to sign in and which catalog to use.
+        if not oidc:
+            raise ServiceError(404, "Not found.")
+        values = {"ISSUER": oidc.issuer, "CATALOG_URI": directory.metadata.public_url + "/api/catalog"}
+        source = re.sub(r"^(ISSUER|CATALOG_URI) = .*$", lambda m: f"{m[1]} = {values[m[1]]!r}",
+                        CONNECT_SCRIPT.read_text(), flags=re.MULTILINE)
+        return Response(source, media_type="text/x-python", headers={
+            "Content-Disposition": 'attachment; filename="iceberg_connect.py"'})
+
     files = {
         "": "index.html",
         "app.js": "app.js",
         "docs.js": "docs.js",
         "catalog.js": "catalog.js",
         "shares.js": "shares.js",
+        "guide.js": "guide.js",
         "style.css": "style.css",
         "favicon.svg": "favicon.svg",
     }

@@ -53,6 +53,29 @@ def test_auth_static_csrf_validation_and_logout():
         assert c.get("/api/teams").status_code == 401
 
 
+def test_api_docs_require_session_and_send_write_headers():
+    with TestClient(create_app(MemoryPolaris(), PASSWORD)) as c:
+        for path in ("/docs", "/openapi.json"):
+            assert c.get(path).status_code == 401
+        for path in ("/guide.js", "/docs.js"):
+            assert c.get(path).status_code == 200
+        c.post("/api/session", json={"password": PASSWORD}, headers=HEADERS)
+        docs = c.get("/docs")
+        assert docs.status_code == 200
+        assert "/docs.js" in docs.text
+        policy = docs.headers["content-security-policy"]
+        assert "https://cdn.jsdelivr.net" in policy
+        assert "script-src 'self' https://cdn.jsdelivr.net;" in policy
+        assert "https://cdn.jsdelivr.net" not in c.get("/").headers["content-security-policy"]
+        schema = c.get("/openapi.json").json()
+        assert schema["components"]["securitySchemes"]["AdminSession"]["name"] == "portal_session"
+        assert schema["paths"]["/api/teams"]["get"]["security"] == [{"AdminSession": []}]
+        assert "parameters" not in schema["paths"]["/api/teams"]["get"]
+        create = schema["paths"]["/api/teams"]["post"]
+        assert any(p["name"] == "X-Portal-Request" and p["schema"]["default"] == "1" for p in create["parameters"])
+        assert "security" not in schema["paths"]["/api/health"]["get"]
+
+
 def test_login_throttle():
     with TestClient(create_app(MemoryPolaris(), PASSWORD)) as c:
         for _ in range(10):

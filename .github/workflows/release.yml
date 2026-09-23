@@ -194,7 +194,7 @@ jobs:
             gh release edit "$ENTRYPOINT" --prerelease --latest=false --notes-file "$RUNNER_TEMP/preview-notes.md"
           else
             gh release create "$ENTRYPOINT" dist/install.sh dist/install.ps1 --target "$GITHUB_SHA" \
-              --prerelease --latest=false --title "Preview of ${BRANCH} — install here" --notes-file "$RUNNER_TEMP/preview-notes.md"
+              --prerelease --latest=false --title "Preview of ${BRANCH} - install here" --notes-file "$RUNNER_TEMP/preview-notes.md"
           fi
           # A preview must never take over the stable installation command.
           stable_after=$(gh api "repos/${GH_REPO}/releases/latest" --jq .tag_name || true)

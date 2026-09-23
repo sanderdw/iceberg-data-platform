@@ -13,17 +13,18 @@ docker compose -f compose.users.yaml up -d --wait users
 
 For changes to the portal only, run `docker compose -f compose.users.yaml up -d --build --wait users`. This skips rebuilding the notebook image.
 
-To open the portal from a phone on the same network, set `PORTAL_LAN_IP` in `.env` and add `-f compose.users.lan.yaml` to the `up` command.
+To open the portals from a phone or another computer on the same network, use the [`lan-access` agent skill](../.agents/skills/lan-access/SKILL.md). Sign-in needs HTTPS off `localhost`, so a plain port binding such as `compose.users.lan.yaml` is not enough on its own.
 
 ## Using the portal
 
-The top menu has five sections, all scoped to the selected **Active team** and **Environment** (Development, Acceptance or Production). Your role is set per team, so you can write in one team and only read in another. The URL keeps your location, and lists refresh every 30 seconds.
+The top menu has six sections, all scoped to the selected **Active team** and **Environment** (Development, Acceptance or Production). Your role is set per team, so you can write in one team and only read in another. The URL keeps your location, and lists refresh every 30 seconds.
 
 - **Team overview:** the team's members and roles, its databases and your active notebooks.
 - **Databases:** team Administrators create, rename and delete the team's databases. Renaming keeps the catalog ID and connection settings. Deletion is immediate and removes all data and shares, so you must type the name to confirm it. If cleanup fails, use **Resume deletion**. Moving a database to another team is a platform-administrator action.
 - **Catalog:** browse namespaces, tables and views. **Details →** shows a table's schema, snapshots, branches and tags, partitioning, sort order and properties, or a view's SQL and versions. **Load preview** reads up to 100 rows from any snapshot with your own permissions. Everything here is read-only.
 - **Notebooks:** open a database in marimo. Choose **Shared files** in the notebook selector to browse team notebooks and the examples.
 - **Data shares:** see [below](#data-shares).
+- **Getting started:** three ways to work with your data: the portal, [your own tools](#connect-from-your-computer) and an [AI agent](#connect-an-mcp-client). It includes the commands for this installation, filled in for a database of the active team.
 
 The API is documented at http://localhost:3002/docs, and **Try it out** works with your session and permissions.
 
@@ -64,15 +65,53 @@ Choose **New data share** under a database, pick the tables and views, and optio
 
 The recipient can read only the selected objects and can't list anything. A view shares only its definition, so you must add every table it reads, and the recipient can read those tables in full. **Edit** changes the selection or expiry, **New secret** replaces the secret, and **Revoke** ends access immediately. To change the recipients, revoke the share and create a new one. See [the resource model](../docs/CONTEXT.md#data-shares) for the details.
 
+## Connect from your computer
+
+Use your own Python, DuckDB CLI or DBeaver instead of a notebook. You sign in as yourself, so your team role decides what you can read and write.
+
+In **Catalog**, select a database and open **Connect from your computer**:
+
+1. Download `iceberg_connect.py`. The portal fills in its Keycloak and catalog addresses. It holds no secret.
+2. Run `uv run iceberg_connect.py login`, then approve the code in your browser. The refresh token is stored in `~/.config/iceberg-platform` with owner-only permissions.
+3. Copy the snippet for your tool. `db-…` is the database's catalog name.
+
+| Tool | How |
+| --- | --- |
+| Python | `from iceberg_connect import catalog, duckdb_connection`. `catalog("db-…")` returns a PyIceberg catalog that renews its token itself. `duckdb_connection("db-…")` returns DuckDB with the database attached as `lakehouse`. |
+| DuckDB CLI | `duckdb -init <(uv run iceberg_connect.py duckdb db-…)` |
+| DBeaver | Create a DuckDB connection. Run `uv run iceberg_connect.py duckdb db-…` and add each printed line under **Connection settings › Initialization › Bootstrap queries**. |
+
+DuckDB attaches read-only. Add `--write` to write with your own permissions. DuckDB keeps the token it started with, and that token lasts one hour. After that, run the command again (or replace the `CREATE SECRET` line in DBeaver). `uv run iceberg_connect.py logout` revokes the sign-in. Keycloak, Polaris and RustFS listen on `127.0.0.1`, so this works on the machine that runs the platform.
+
 ## Connect an MCP client
 
-The portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`, so an AI agent can explore your data with your own permissions:
+The portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`, so an AI agent can explore your data with your own permissions. Register it in your coding agent:
 
 ```bash
-claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg http://localhost:3002/mcp
+# Claude Code
+claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-user http://localhost:3002/mcp
 ```
 
-The first call opens Keycloak in your browser. `--callback-port` must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again. Other MCP clients need the same URL, client ID and callback port.
+Codex, in `~/.codex/config.toml`, then run `codex mcp login iceberg-user`:
+
+```toml
+[mcp_servers.iceberg-user]
+url = "http://localhost:3002/mcp"
+scopes = ["openid", "profile", "offline_access"]
+
+[mcp_servers.iceberg-user.oauth]
+client_id = "iceberg-mcp"
+```
+
+GitHub Copilot in VS Code, in `.vscode/mcp.json`:
+
+```json
+{"servers": {"iceberg-user": {"type": "http", "url": "http://localhost:3002/mcp", "oauth": {"clientId": "iceberg-mcp"}}}}
+```
+
+The [administration guide](../docs/admin-guide.md#connect-an-mcp-client) also covers GitHub Copilot CLI and other clients.
+
+On first use, the agent opens Keycloak in your browser; sign in with your own account. Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again.
 
 Tools: `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view` and `preview_rows`. Team administrators also get `create_database`, `rename_database` and `delete_database`, which requires `confirm_name`. Platform administrators can add the [administration endpoint](../docs/admin-guide.md#connect-an-mcp-client) as a second server.
 
@@ -83,7 +122,7 @@ These settings live in the shared `.env`:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `USER_PORT` | `3002` | Host port |
-| `PORTAL_LAN_IP` | — | Extra binding with `compose.users.lan.yaml` |
+| `PORTAL_LAN_IP` | - | Extra binding with `compose.users.lan.yaml` |
 | `MAX_NOTEBOOKS` | `8` | Maximum simultaneous notebook containers |
 | `NOTEBOOK_MEMORY` | `1g` | Memory limit per notebook |
 | `USER_COOKIE_SECURE` | `false` | Set to `true` behind HTTPS |

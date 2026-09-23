@@ -114,11 +114,12 @@
     .reveal .layer .n { font-family: var(--r-code-font); color: var(--text-display); }
     .reveal .layer .d { color: var(--text-secondary); }
     .reveal .layer .n small { display: block; margin-top: 6px; font-size: 0.65em; color: var(--text-secondary); }
+    .reveal .principles .layer { grid-template-columns: 340px 1fr; }
     .reveal .metadata-example { grid-template-columns: 1fr 1fr; }
     .reveal .metadata-example pre { font-size: 0.62em; }
     /* Code: monochrome */
     .reveal pre { width: 100%; font-size: 0.48em; box-shadow: none; margin: 0; }
-    .reveal pre code { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-height: 64vh; padding: var(--space-md) var(--space-lg); color: var(--text-secondary); line-height: 1.45; }
+    .reveal pre code { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-height: 620px; padding: var(--space-md) var(--space-lg); color: var(--text-secondary); line-height: 1.45; }
     .reveal pre code .k { color: var(--text-display); }
     .reveal pre code .s { color: var(--text-primary); }
     .reveal pre code .n { color: var(--text-primary); }
@@ -187,6 +188,127 @@
   <aside class="notes">Tone: direct, no consultancy language. Keep it about capabilities and ownership. The Medium post covers the same ground in writing.</aside>
 </section>
 
+<section>
+  <div class="label">Intro · How I build</div>
+  <h2>Five principles behind every choice</h2>
+  <div class="layers principles">
+    <div class="layer"><span class="n">1 · Clean UX</span><span class="d"><strong>No ticket, no manual.</strong> From sign-in to a notebook in a few clicks, one design language in both portals, and a Getting started page in each.</span></div>
+    <div class="layer"><span class="n">2 · API first</span><span class="d"><strong>The portal is just a client.</strong> Every button is a documented route with an OpenAPI schema, so a script can do everything a person can.</span></div>
+    <div class="layer"><span class="n">3 · AI native</span><span class="d"><strong>Agents are first-class users.</strong> Both portals serve MCP with the user's own identity, and agent skills ship with the installer for work that takes many steps.</span></div>
+    <div class="layer"><span class="n">4 · Open source</span><span class="d"><strong>Nothing to rent.</strong> Every building block is Apache-2.0 or MIT, and so is the platform. No vendor account and no trial clock.</span></div>
+    <div class="layer"><span class="n">5 · Loosely coupled</span><span class="d"><strong>Open interfaces between the blocks.</strong> Iceberg REST, S3, OIDC and MCP, so you can replace one block without touching the others.</span></div>
+  </div>
+  <p class="secondary foot">These principles decide the trade-offs. When a feature does not fit them, it does not go in.</p>
+  <aside class="notes">This is the lens for the rest of the talk. Clean UX: team members serve themselves; destructive actions ask for the exact name. API first: the UI has no private backdoor, the OpenAPI schema comes from the same code. AI native: MCP on both portals, tokens issued to the iceberg-mcp client, and two skills in the Agent Skills format in the installation folder. Loosely coupled: every connection between building blocks is an open standard, which is what makes swapping possible.</aside>
+</section>
+
+<section>
+  <div class="label">First use · Install</div>
+  <h2>One command, and the platform runs</h2>
+  <pre style="font-size:0.56em;margin-bottom:24px"><code data-noescape><span class="c">$</span> <span class="k">curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh</span></code></pre>
+  <div class="cols-asym">
+    <pre style="font-size:0.56em"><code data-noescape>Downloading release v0.5.1...
+Preparing credentials in ~/iceberg-data-platform/.env...
+Pulling images for both stacks (the notebook image may take a few minutes)...
+Starting administration and data services...
+Starting the user portal...
+
+<span class="k">Iceberg Data Platform is ready.</span>
+
+Getting started:
+  Administration: http://localhost:3000/#guide
+  User portal:    http://localhost:3002/#guide
+
+Agent skills for Codex, GitHub Copilot, Claude Code and other coding agents:
+  lan-access    Open the portals to other devices on your network (HTTPS)
+  demo-company  Set up an Energy, Webshop or Retail demo company for a class</code></pre>
+    <ul style="font-size:0.8em">
+      <li>Linux, macOS and Windows. Only Docker with Compose is needed: no source checkout, Python or Node.js.</li>
+      <li>The installer verifies the bundle and writes random credentials to <code>.env</code>.</li>
+      <li>It pulls pinned images and starts both stacks.</li>
+      <li>It puts <code>iceberg_connect.py</code> for your own tools and the agent skills in the same folder.</li>
+      <li>To update, run it again. <code>.env</code> and the data stay.</li>
+    </ul>
+  </div>
+  <div class="caption foot">Windows PowerShell · irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex</div>
+  <aside class="notes">Output shortened: the real run also prints the portal and Keycloak addresses, the sign-in details location, the stop and start commands and the iceberg_connect.py login command. Every release pins the bundle and all images to its version; replace latest/download with download/vX.Y.Z to install a specific one.</aside>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">First use · Getting started</span><h2>Each portal explains its three ways in</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/48-user-guide.png" alt="User portal Getting started page with the notebook, your own tools and AI agent tracks">
+      <img class="shot" src="screenshots/47-admin-guide.png" alt="Administration portal Getting started page with the portal, AI agent and API tracks">
+    </div>
+    <div class="caption foot two"><span>User portal · notebook, your own tools, or an AI agent over MCP</span><span>Administration · portal, AI agent or API · examples use your own address</span></div>
+    <div class="hint">↓ full screen</div>
+  </section>
+  <section class="full" data-background-image="screenshots/48-user-guide.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · Getting started</div>
+  </section>
+  <section class="full" data-background-image="screenshots/47-admin-guide.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">Administration portal · Getting started</div>
+  </section>
+  <aside class="notes">The same setup three ways: click through the portal, ask an agent, or call the API. The guide in the user portal follows the active team, environment and role, so the snippets fit the person reading them.</aside>
+</section>
+
+<section>
+  <div class="label">First use · MCP</div>
+  <h2>Connect the agent you already use</h2>
+  <div class="cols-asym">
+    <div>
+      <div class="label tight">Codex · ~/.codex/config.toml</div>
+      <pre style="font-size:0.64em"><code data-noescape><span class="k">[mcp_servers.iceberg-user]</span>
+url = <span class="s">"http://localhost:3002/mcp"</span>
+scopes = [<span class="s">"openid"</span>, <span class="s">"profile"</span>, <span class="s">"offline_access"</span>]
+
+<span class="k">[mcp_servers.iceberg-user.oauth]</span>
+client_id = <span class="s">"iceberg-mcp"</span></code></pre>
+      <div class="label tight" style="margin-top:24px">Claude Code</div>
+      <pre style="font-size:0.64em"><code data-noescape>claude mcp add --transport http --client-id iceberg-mcp \
+  --callback-port 3010 iceberg-user http://localhost:3002/mcp</code></pre>
+    </div>
+    <div style="font-size:0.85em">
+      <div class="group"><div class="label tight">01 · Register</div><p class="secondary">Codex, GitHub Copilot, Claude Code or any other MCP client. One URL and one public client ID, no secret.</p></div>
+      <div class="group"><div class="label tight">02 · Sign in</div><p class="secondary">The agent opens Keycloak in your browser. From then on it works as <em>you</em>, with your grants.</p></div>
+      <div class="group"><div class="label tight">03 · Ask</div><p class="secondary">“Which tables in smart-meter-readings changed this week, and what do their schemas look like?”</p></div>
+    </div>
+  </div>
+  <p class="secondary foot">The portals print these recipes with your own address, for both the user and the administration endpoint.</p>
+  <aside class="notes">The iceberg-mcp client accepts any loopback callback port; Claude Code uses 3010. Codex needs the scopes line or Keycloak refuses with invalid_scope. GitHub Copilot uses .vscode/mcp.json with oauth.clientId. The tools and security of both endpoints come back in the demo.</aside>
+</section>
+
+<section>
+  <div class="label">First use · Skills</div>
+  <h2>Skills turn one sentence into a finished setup</h2>
+  <div class="cols-asym">
+    <div>
+      <pre style="font-size:0.58em"><code data-noescape><span class="c">&gt;</span> <span class="k">Set up a demo company for my class</span>
+
+  How many participants?   <span class="s">12</span>
+  Which company?           <span class="s">Energy · Voltara Energy</span>
+
+  Plan · 3 teams of 4 · 1 team admin and 3 writers each
+  create_team      grid-planning, …          <span class="s">3</span>
+  create_database  production, development   <span class="s">6</span>
+  create_user      one per participant       <span class="s">12</span>
+
+  <span class="k"># Voltara Energy demo accounts: 12 participants</span>
+  | # | Username    | Team            | Role  | Temporary password |
+  | 1 | noor-bakker | grid-planning   | admin | ••••••••••••       |
+  | … |             |                 |       |                    |</code></pre>
+    </div>
+    <div style="font-size:0.85em">
+      <div class="group"><div class="label tight">demo-company</div><p class="secondary">A fictional Energy, Webshop or Retail company for a class of up to 48. One account per participant, teams with their own databases, and a sign-in list to hand out. All through the administration MCP server.</p></div>
+      <div class="group"><div class="label tight">lan-access</div><p class="secondary">Opens the portals to laptops and phones on your network with a local HTTPS proxy, and knows how to undo it.</p></div>
+      <div class="group"><div class="label tight">Where they live</div><p class="secondary">In <code>.agents/skills</code> of the installation folder, in the open Agent Skills format. Start your agent there and ask.</p></div>
+    </div>
+  </div>
+  <p class="secondary foot">A skill carries the know-how, MCP does the work with your permissions, through the same API as the portal.</p>
+  <aside class="notes">Illustrative transcript, shortened. Codex, GitHub Copilot, Gemini CLI and Cursor read .agents/skills directly; Claude Code reads .claude/skills, so ask it to follow .agents/skills/demo-company/SKILL.md or copy the folder. The skill asks for the class size and domain, shows the plan, creates only what is missing on a rerun, and writes the one-time passwords to a credentials file with chmod 600. The skills are updated with the installer.</aside>
+</section>
+
 <section class="title">
   <div class="label">The one-liner</div>
   <h1 class="doto quote">Apache Iceberg is doing for data what open APIs did for applications.</h1>
@@ -241,7 +363,7 @@
     </tbody>
   </table>
   <p class="secondary foot">PostgreSQL brings these jobs together. With Iceberg, you choose the components separately.</p>
-  <aside class="notes">Compare responsibilities, not identical internals. PostgreSQL also stores data in files; applications normally access those files through its server. For an Iceberg query, the engine asks Polaris for the table metadata and access, then reads table files directly from storage. Polaris can read and write Iceberg metadata during catalog operations, but query rows do not flow through it. Even when Polaris uses PostgreSQL as its backing store, that database holds catalog records and permissions; the Iceberg schema and snapshot history live in object storage. Sources: <a href="https://www.postgresql.org/docs/current/tutorial-arch.html">PostgreSQL architecture</a>, <a href="https://www.postgresql.org/docs/current/catalogs.html">PostgreSQL system catalogs</a>, <a href="https://polaris.apache.org/releases/1.7.0/entities/">Polaris 1.7.0 entities</a>, <a href="https://polaris.apache.org/releases/1.7.0/vended-credentials/">Polaris 1.7.0 vended credentials</a>, <a href="https://polaris.apache.org/releases/1.7.0/metastores/relational-jdbc/">Polaris 1.7.0 JDBC metastore</a>. Background reading: <a href="https://community.cloudera.com/t5/Developer-Blogs/The-Architecture-of-Apache-Polaris-Under-the-Hood/ba-p/414066">The Architecture of Apache Polaris — Under the Hood</a>.</aside>
+  <aside class="notes">Compare responsibilities, not identical internals. PostgreSQL also stores data in files; applications normally access those files through its server. For an Iceberg query, the engine asks Polaris for the table metadata and access, then reads table files directly from storage. Polaris can read and write Iceberg metadata during catalog operations, but query rows do not flow through it. Even when Polaris uses PostgreSQL as its backing store, that database holds catalog records and permissions; the Iceberg schema and snapshot history live in object storage. Sources: <a href="https://www.postgresql.org/docs/current/tutorial-arch.html">PostgreSQL architecture</a>, <a href="https://www.postgresql.org/docs/current/catalogs.html">PostgreSQL system catalogs</a>, <a href="https://polaris.apache.org/releases/1.7.0/entities/">Polaris 1.7.0 entities</a>, <a href="https://polaris.apache.org/releases/1.7.0/vended-credentials/">Polaris 1.7.0 vended credentials</a>, <a href="https://polaris.apache.org/releases/1.7.0/metastores/relational-jdbc/">Polaris 1.7.0 JDBC metastore</a>. Background reading: <a href="https://community.cloudera.com/t5/Developer-Blogs/The-Architecture-of-Apache-Polaris-Under-the-Hood/ba-p/414066">The Architecture of Apache Polaris, Under the Hood</a>.</aside>
 </section>
 
 <section>
@@ -318,6 +440,13 @@
   </div>
   <p class="secondary foot">If another writer commits first, the change must be rechecked and retried or rejected.</p>
   <aside class="notes">The familiar PostgreSQL idea is COMMIT making a transaction visible. Here, the atomic publication described is for one Iceberg table; do not imply a PostgreSQL-style transaction across several tables. The catalog checks the expected prior state. Uploading a Parquet file alone does not add it to the table. Unchanged files can be reused by the new snapshot. Snapshot expiry must leave running readers enough time to finish. Source: <a href="https://iceberg.apache.org/docs/latest/reliability/">Iceberg reliability and concurrent writes</a>.</aside>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">01 · Iceberg</span><h2>A delete adds one small file instead of rewriting data</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/31-rustfs-v3-puffin.png" alt="RustFS console listing the Parquet data files and Puffin deletion vectors of the v3 table"></div>
+  <div class="caption foot">Iceberg v3 · RustFS · sensor_events/data · the Parquet data files stay untouched · each update or delete adds a Puffin deletion vector of a few hundred bytes</div>
+  <aside class="notes">Same idea as the batch: nothing is changed in place. In Iceberg v3 a delete or update writes a deletion vector, a bitmap of row positions in a small Puffin file, and commits a new snapshot that references it. Readers skip those positions. The old snapshot still sees the rows until it expires. Compaction later rewrites files and drops the vectors. This demo table is created with DuckDB later in the talk. Source: <a href="https://iceberg.apache.org/spec/#deletion-vectors">Iceberg specification: deletion vectors</a>.</aside>
 </section>
 
 <section>
@@ -583,6 +712,13 @@
 </section>
 
 <section class="shot-slide">
+  <div class="head"><span class="label">Demo · Administration</span><h2>Create a user: an account and a role per team</h2></div>
+  <div class="fig"><img class="shot" src="screenshots/46-admin-user-create.png" alt="Create user dialog with username, name, email and a writer role for team outage-response"></div>
+  <div class="caption foot">Admin portal · Create user · a new Keycloak account or link an existing one · pick the teams and a role in each · the temporary password is shown once</div>
+  <aside class="notes">One form creates the Keycloak account, the Polaris principal and the grants for every database of the selected teams. Link existing account is for people who already have a Keycloak account; their password stays unchanged. The same operation is POST /api/identity/users and the create_user MCP tool.</aside>
+</section>
+
+<section class="shot-slide">
   <div class="head"><span class="label">Demo · Administration</span><h2>A role per team</h2></div>
   <div class="fig"><img class="shot" src="screenshots/24-admin-edit-access.png" alt="Edit access dialog with a role select for every team of the user"></div>
   <div class="caption foot">Edit access · sander reads asset-management and writes grid-planning · each role reaches only the databases of that team</div>
@@ -640,25 +776,6 @@
 </section>
 
 <section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Notebooks</span><h2>Your engine, the same table</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/10-notebook-01-created.png" alt="marimo notebook writing the neighborhood table with PyIceberg">
-      <img class="shot" src="screenshots/12-notebook-03-attach.png" alt="DuckDB attached to Polaris, describing the same Iceberg table">
-    </div>
-    <div class="caption foot two"><span>Example 01 writes 26,880 rows with PyIceberg</span><span>Example 03: DuckDB reads the same files with credentials vended by Polaris · one copy of the data, the engine is a choice per workload</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/10-notebook-01-created.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">marimo · write with PyIceberg</div>
-  </section>
-  <section class="full" data-background-image="screenshots/12-notebook-03-attach.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">marimo · read natively with DuckDB</div>
-  </section>
-  <aside class="notes">Each notebook runs in its own container with only this user's credentials, without platform secrets or access to the Docker socket. Writing requires the writer role, which Polaris enforces rather than the UI. PyIceberg here because it is small and explicit; DuckDB attaches the Polaris catalog and reads manifests and Parquet from RustFS directly, so only query results come back to the notebook. Trino or Spark can read and write the same table without changing anything about the data. Seven examples ship with the platform; every one runs top to bottom.</aside>
-</section>
-
-<section>
   <div class="label">Demo · Iceberg v3</div>
   <h2>Iceberg v3, written by DuckDB</h2>
   <div class="cols-asym">
@@ -684,12 +801,6 @@
     </ul>
   </div>
   <div class="caption foot">Plain SQL through the Polaris REST catalog, with the user's own permissions · GEOGRAPHY and UNKNOWN are not in DuckDB yet · PyIceberg does not read these v3 types yet</div>
-</section>
-
-<section class="shot-slide">
-  <div class="head"><span class="label">Demo · Iceberg v3</span><h2>A delete adds one small file instead of rewriting data</h2></div>
-  <div class="fig"><img class="shot" src="screenshots/31-rustfs-v3-puffin.png" alt="RustFS console listing the Parquet data files and Puffin deletion vectors of the v3 table"></div>
-  <div class="caption foot">RustFS · iceberg_v3/sensor_events/data · Parquet data files stay untouched · each update or delete adds a Puffin deletion vector of a few hundred bytes</div>
 </section>
 
 <section>
@@ -735,39 +846,6 @@
   <section class="full" data-background-image="screenshots/30-user-table-v3-preview.png" data-background-size="contain" data-background-color="#000000">
     <div class="caption">User portal · preview of the v3 table · geometry as text, VARIANT as JSON</div>
   </section>
-</section>
-
-<section>
-  <div class="label">Demo · AI-ready data</div>
-  <h2>An AI-ready data product: data, meaning, evidence and access</h2>
-  <div class="layers">
-    <div class="layer"><span class="n">1 · Meaning<small>flights.yaml · Apache Ossie ontology</small></span><span class="d"><strong>What is a flight?</strong> Concepts, relationships, units and the mapping to physical fields, read before a single row exists.</span></div>
-    <div class="layer"><span class="n">2 · Data<small>notebook 06 · DuckDB SQL</small></span><span class="d"><strong>Six tables, reproducible.</strong> 12,000 synthetic flights plus airports, carriers, aircraft, routes and runways.</span></div>
-    <div class="layer"><span class="n">3 · Evidence<small>flights.product.yaml · SQL checks</small></span><span class="d"><strong>Can I trust it?</strong> Identity, join integrity, coordinates, time ordering and cancellation nulls; publication stops on a violation.</span></div>
-    <div class="layer"><span class="n">4 · Access<small>Iceberg in Polaris</small></span><span class="d"><strong>Who may read it, and which version is it?</strong> Polaris grants decide access. Every table records hashes of the ontology and contract it was built from.</span></div>
-    <div class="layer"><span class="n">5 · Context<small>notebook 07 · read only</small></span><span class="d"><strong>What does an AI consumer need?</strong> Definitions, policies and join cardinality next to the permitted table names.</span></div>
-  </div>
-  <p class="secondary foot">Correct SQL is not the same as a correct answer. The meaning has to travel with the data.</p>
-  <aside class="notes">The ontology is the unchanged Apache Ossie (incubating) flights example, Apache-2.0, with its NOTICE beside it. flights.product.yaml is a local demonstration contract, not part of the Ossie specification: grain, UTC convention, units, null policy, metrics as SQL, quality checks and AI guidance. The generator is a hand-written SQL implementation of this example, not an ontology compiler. No AI service or API key is involved; the notebooks prepare what you would hand to one. Everything is synthetic, without passenger data.</aside>
-</section>
-
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · AI-ready data</span><h2>Publish only what passes the checks, then hand over the context</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/41-notebook-06-flights-quality.png" alt="marimo notebook with the quality checks of the flights product and their violation counts">
-      <img class="shot" src="screenshots/44-notebook-07-flights-context.png" alt="marimo notebook listing the context and an example prompt for an AI consumer">
-    </div>
-    <div class="caption foot two"><span>Rules from the ontology and the contract as executable SQL · zero violations or no publication</span><span>Definitions, exclusions and an example prompt to hand over with the table names</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/41-notebook-06-flights-quality.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">marimo · quality evidence before publication</div>
-  </section>
-  <section class="full" data-background-image="screenshots/44-notebook-07-flights-context.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">marimo · context for an AI consumer</div>
-  </section>
-  <aside class="notes">Example 06 publishes six Iceberg tables in ai_flights; each records the hashes of the definitions it was built from. Example 07 reads them read-only and shows why the context matters: "most punctual carrier" needs a policy (arrival delay under 15 minutes among noncanceled, nondiverted flights), and joining runways to flights is valid SQL that multiplies every flight. The metric definitions are read from flights.product.yaml, so the displayed definition and the executed SQL travel together.</aside>
 </section>
 
 <section>
@@ -895,7 +973,7 @@ catalog.load_table(<span class="s">"synthetic.other"</span>)  <span class="c"># 
     <div>
       <pre style="font-size:0.6em"><code data-noescape>claude mcp add --transport http \
   --client-id iceberg-mcp --callback-port 3010 \
-  iceberg http://localhost:3002/mcp</code></pre>
+  iceberg-user http://localhost:3002/mcp</code></pre>
       <table class="api" style="margin-top:32px;font-size:0.62em"><tbody>
         <tr><td class="mono">list_databases</td><td>Your teams, your role in each, owned and shared databases</td></tr>
         <tr><td class="mono">list_namespaces · list_tables</td><td>Browse what your grants allow</td></tr>

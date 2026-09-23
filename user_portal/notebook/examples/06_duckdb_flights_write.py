@@ -65,7 +65,7 @@ def _(load_semantics, mo):
     model, product, fingerprints = load_semantics(mo.notebook_dir())
     mo.md(f"""
     ## 1. Read the meaning before generating rows
-    **{model["name"]}** — {model["description"]}
+    **{model["name"]}** - {model["description"]}
 
     **Grain:** {product["grain"]}
 

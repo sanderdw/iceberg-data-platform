@@ -1,95 +1,61 @@
 # Changelog
 
-## 0.5.0 — 2026-09-22
+## 0.5.1 - 2026-09-23
 
-- Bound native numerical thread pools in notebook kernels to the runtime’s two-CPU allocation. Multiple open notebooks previously exhausted the 256-process/thread limit and could abort the flights kernel. Image smoke tests now run concurrent flights generation under the production CPU, memory and PID limits.
+- **Connect from your machine:** use PyIceberg, DuckDB, the DuckDB CLI or DBeaver with your own account instead of a notebook. **Catalog › Connect from your computer** shows the snippets for each database; the `iceberg_connect.py` helper signs you in through the browser.
+- **Getting started** pages in both portals show the three ways in: the portal, your own tools or scripts, and an AI agent through MCP.
+- MCP works with Codex, GitHub Copilot, Cursor, Gemini CLI and other MCP clients, not only Claude Code.
+- **Try it out** works for writes in the administration API documentation at `/docs`.
+- The installation folder includes two agent skills: `lan-access` opens the portals to other devices on your network over HTTPS, and `demo-company` sets up a demo company with teams, databases and accounts for a class. See [agent skills](docs/install.md#agent-skills).
+- Fixed: the platform administrator of an existing installation could not sign in to the administration MCP server.
+- Fixed: status messages in the administration portal stayed visible on other pages.
 
-- Data shares can target another team, external recipients, or both. Internal recipients use their own accounts; access follows team membership and the share's selected objects, expiry and revocation. Existing shares remain external by default.
-- Received shares appear as read-only databases in Catalog and Notebooks. A reader can browse shared objects and open notebooks even when their team owns no databases. Shared notebooks use the recipient team's filespace and a dedicated starter that does not require catalog listing permissions. Only the source team can manage the database or its outgoing shares.
+## 0.5.0 - 2026-09-22
 
-- MCP server: the user portal serves a Model Context Protocol endpoint at `/mcp` for AI agents such as Claude Code. Tools list your databases, namespaces, tables and views, describe schemas, snapshots and view SQL, and preview up to 100 rows, using your own Keycloak identity and Polaris grants. Team administrators can also create, rename and delete their databases. Register it with `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg http://localhost:3002/mcp`.
-- Keycloak gains the public `iceberg-mcp` client (PKCE, fixed loopback redirect) and `.env` the `MCP_CALLBACK_PORT` setting (default `3010`). Setup adds the client to new realms; `keycloak-bootstrap` adds or updates it on startup of existing installations.
-- Administration MCP server: the administration portal serves `/mcp` for platform administrators, with tools to read the overview, browse catalogs, create, edit and delete teams and databases, create or link Keycloak users, change their access, revoke them and revoke data shares. Every call requires the `platform-admin` role from the token; destructive tools are annotated and `delete_database` requires the database's display name. Register it with `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-admin http://localhost:3000/mcp`.
-- Both application images include the `mcp` dependency group and share `server/mcp_auth.py`; the administration image ships `scripts/setup.py` so bootstrap and setup share one client definition. New live checks `npm run test:mcp` and `npm run test:mcp-admin` run in CI.
-- Team administrators can create, rename and permanently delete databases in the user portal. A separate **Databases** page keeps management consistent with the administration portal; the team overview retains database insights and a **Manage databases** link. Incomplete deletions can be resumed.
-- Signed-in users can explore and call the workspace API at `http://localhost:3002/docs`. Swagger uses their session and team permissions, supplies write-request headers, and handles the initial schema fetch correctly. The authenticated schema is available at `/openapi.json`.
-- Add shared notebook display helpers and flight-data examples for DuckDB reads and writes, with bundled dataset attribution and improved Iceberg connection handling.
-- Upgrade from 0.4.1: no data migration is required. Restart the platform so `keycloak-bootstrap` registers the new client, then update the portal, user portal and notebook images. Preserve existing configuration and data volumes. Users must sign in again after the portals restart.
+- Share data with another team, not only with external parties. Recipients use their own accounts and see received shares as read-only databases in Catalog and Notebooks.
+- MCP servers for AI agents such as Claude Code. Users browse, describe and preview their data with their own permissions; platform administrators manage teams, databases, users and shares.
+- Team administrators create, rename and delete their databases on a new **Databases** page in the user portal.
+- Try the workspace API with your own session at `http://localhost:3002/docs`.
+- New flight-data example notebooks for reading and writing Iceberg tables with DuckDB.
+- Fixed: several open notebooks could exhaust the runtime's thread limit and stop a kernel.
+- Upgrade from 0.4.1: no data migration is needed. Update the images and restart; users sign in again.
 
-## 0.4.1 — 2026-09-21
+## 0.4.1 - 2026-09-21
 
-- The notebook runtime uses one browser-free image with normal execution and HTML/Jupyter exports. PDF, thumbnail and screenshot exports and the optional browser image have been removed.
-- Fix the share-name browser regex so invalid names such as `Sensor Events` are rejected before submission. Both portals explain the naming rules and return useful field-specific API errors without echoing submitted values.
-- Align account email and personal-name validation with the API. Reject whitespace-only names before provisioning, trim surrounding profile-field spaces, and preserve case, accents and internal spaces.
-- Allow shares to expire at the end of the current UTC day. Explain and enforce object-selection limits, and complete team-selection and legacy login length checks.
-- Add a browser audit for portal forms to CI, covering invalid input, limits, account linking and browser console errors. Document the field-by-field validation rules.
-- Exclude nested local Python environments from source archives and Docker builds, and verify the project version in the Python lockfile during release checks.
-- Upgrade from 0.4.0: no data migration is required. Share names still use lowercase letters, digits, hyphens or underscores, starting with a letter.
+- Notebooks export to HTML and Jupyter; PDF, thumbnail and screenshot exports are removed.
+- Clearer validation and error messages for share names, account emails, names and share expiry. Shares can expire at the end of today.
 
-## 0.4.0 — 2026-09-20
+## 0.4.0 - 2026-09-20
 
-- Data shares: a team's Administrator shares selected tables and views of a database with an external party from the user portal, without a portal administrator. Each share has its own Polaris client ID and secret, shown once with **Copy DuckDB snippet**, an optional expiry, **New secret** and **Revoke**. The copied Python script runs with `uv`, lists every shared table and view in comments, and queries the first table; the UI does not display the code. The recipient reads exactly the selected objects and cannot list, write or reach any other table or database; vended storage credentials are read-only and confined to the shared table. A view shares only its definition, so its tables must be shared with it.
-- The user portal has a consistent top menu for **Catalog**, **Notebooks** and **Data shares**. Readers and writers can see shares for their active team and environment, with disabled management buttons explaining the required administrator role.
-- Both portals preserve navigation in the URL across reloads and Back/Forward. Lists refresh every 30 seconds while visible and on returning to the tab, preserving forms and open notebooks. User creation has more space below the account-mode buttons.
-- Keycloak access tokens renew automatically within an eight-hour portal session and Keycloak's session limits. Notebook helpers retrieve the current user token from the gateway without receiving refresh tokens; existing DuckDB attachments need reconnecting to refresh cached credentials. Sign-in returns to the requested portal location.
-- The administration portal lists every data share on a new **Data shares** page and can revoke it. Deleting a database revokes its shares.
-- Breaking: a database with data shares cannot be moved to another team until the shares are revoked.
-- Concurrent share creation and database moves recheck persisted move state before activating a share. Shares expiring today remain editable without changing their expiry. Notebook token renewal reads the private token file written by the runtime entrypoint.
-- Upgrade note: the user gateway now also writes to Polaris with the platform identity, to manage data shares. `compose.users.yaml` passes `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` to it. Sharing with parties outside this machine needs your own TLS reverse proxy for the Polaris catalog API and RustFS, with both variables set before the shared databases are created; see `SECURITY.md`.
+- Data shares: a team administrator shares selected tables and views with an external party, with its own credentials, an optional expiry, a new secret on demand and revocation. The recipient can read only the shared objects.
+- Platform administrators see and revoke every data share on a new **Data shares** page.
+- The user portal has one top menu for **Catalog**, **Notebooks** and **Data shares**.
+- Both portals keep your place in the URL across reloads and Back/Forward, and lists refresh on their own.
+- Sessions stay signed in for up to eight hours; notebooks get renewed tokens automatically.
+- Breaking: a database with data shares can't move to another team until its shares are revoked.
+- Upgrade: sharing outside this machine needs your own TLS proxy in front of Polaris and RustFS; see `SECURITY.md`.
 
-## 0.3.1 — 2026-09-19
+## 0.3.1 - 2026-09-19
 
-- Open notebooks are grouped under the `iceberg-workspaces` stack in Docker tools and listed with their CPU and memory on the **Infrastructure** page. Compose commands leave them alone; the user portal still starts and removes them.
+- Open notebooks are listed with their CPU and memory on the **Infrastructure** page.
 
-## 0.3.0 — 2026-09-19
+## 0.3.0 - 2026-09-19
 
-- Upgrade note: this release signs in through Keycloak and there is no migration from a password-based 0.2 installation. Rerunning the latest installation command on a 0.2 installation moves it to 0.3.0; start from a fresh installation instead.
-- Stable installers, Compose files and application images are pinned to their release. `/releases/latest/download/install.sh` installs the newest stable release from `main`; `/releases/download/vX.Y.Z/install.sh` installs exactly that version.
-- Any branch can publish tested prereleases with one-command installers and matching
-  image tags under `BRANCH-preview`, independently of stable releases: on every push
-  for branches listed in the `Release` workflow, on demand for all others. The five
-  newest builds of a branch are kept.
-- Stable tags must be on `main`, only the highest version is marked Latest, and the workflow verifies the latest installation command after every publication.
-- Supported Keycloak OIDC integration for both portals, Polaris and per-user notebooks.
-- Administration-portal account creation, explicit linking, temporary password reset and access revocation.
-- Keycloak in the existing platform/workspace Compose split and standard application images, optional demo fixtures and dedicated integration CI.
-- Source and Docker installation bundles include Keycloak setup and operating documentation.
-- Roles are assigned per team: a user can hold a different role in each team, managed in one **Edit access** dialog. The user portal shows the role of the active team.
-- Breaking: users are created and edited with `memberships: [{team, role}]`; `PATCH /api/users/{id}` replaces the full list and `PATCH /api/users/{id}/role` is removed. Existing users keep their access and are rewritten to the new `portal.memberships` property on their next edit. Downgrading to an older portal version is not supported afterwards.
-- Two example notebooks write and read an Iceberg format-version 3 table with DuckDB's native Iceberg extension: `VARIANT`, `TIMESTAMP_NS`, `GEOMETRY`, default values, row lineage, deletion vectors and time travel. They run from top to bottom without controls. The writing example replaces only a table it created itself, recorded in a table property.
-- The DuckDB connection helper can attach writable and vend storage credentials for a table it just created.
-- The table preview reads with DuckDB's Iceberg extension instead of PyIceberg, so Iceberg v3 tables with `variant` and `geometry` columns preview too. It stays an isolated, bounded process that cannot take the portal down; the user portal image no longer contains PyIceberg and PyArrow. The starter notebook explains when PyIceberg cannot read a v3 table.
-- Both images log the DuckDB extension builds they installed and keep them in `/opt/duckdb/extensions/VERSIONS`, because extensions are not pinned by `uv.lock`.
-- `FORWARDED_ALLOW_IPS` reaches both portals, so sign-in limits apply per visitor behind a reverse proxy.
-- RustFS 1.0.0 replaces the 1.0.0-rc.6 release candidate; existing `rustfs-data` volumes are kept.
+- Sign in to both portals, Polaris and notebooks with Keycloak. Administrators create, link, reset and revoke accounts from the portal.
+- A user can have a different role in each team, managed in one **Edit access** dialog.
+- Example notebooks for Iceberg v3 tables with DuckDB; table previews support v3 types such as `variant` and `geometry`.
+- Install a specific version, or test a branch preview, with a one-command installer.
+- Breaking: no upgrade from a password-based 0.2 installation; start from a fresh installation. The users API takes `memberships: [{team, role}]` instead of a single role.
 
-## 0.2.1 — 2026-09-16
+## 0.2.1 - 2026-09-16
 
-- One-command installers for Linux/macOS and Windows PowerShell: download and verify configuration, generate `.env`, pull images, and start both stacks automatically.
-- Installation Compose files use `:latest` for all application images, including on-demand notebooks.
-- Rerunning the installer preserves credentials and data volumes and backs up the existing Compose files.
+- One-command installers for Linux, macOS and Windows. Rerunning one keeps your credentials and data.
 
-## 0.2.0 — 2026-09-15
+## 0.2.0 - 2026-09-15
 
 Initial public release:
 
-- Versioned GitHub container packages for AMD64 and ARM64, plus a Docker-only installation bundle with checksums.
-
-- Edit existing user roles, including catalog permission changes, S3 access promotion/demotion and rollback on provider failures.
-
-- Development, Acceptance and Production environments, with database names scoped to team and environment.
-- One shared notebook filespace per team/environment, concurrent member access and separate execution using each member's credentials. Fresh setup only; no migration of earlier user-specific workspaces.
-
-- Nothing-inspired user portal with persistent dark/light themes, monochrome controls, Doto headlines and inline status messages.
-
-- English interface, API messages, documentation and notebook examples throughout.
-- Compose projects named `iceberg-platform` for administration and data services and `iceberg-workspaces` for user notebooks.
-
-- FastAPI administration portal with central team management, multi-team users, movable databases and complete database deletion.
-- Portal-administrator catalog explorer for namespaces, tables and views.
-- Separate user portal with existing username/client-secret login and team selection.
-- Isolated, persistent marimo workspaces with two synthetic-energy examples using PyIceberg and DuckDB.
-- uv lockfile, pinned Python version, separate Compose stacks, authorization and browser tests.
-- Apache-2.0 license, third-party font notices, contributor/security documentation, CI and a checked source-release builder.
-
-No migration from earlier experimental metadata formats is provided. The public release uses the `iceberg-portal-v2` resource marker.
+- Administration portal for teams, users with a role per team, and databases that can be moved and deleted, plus a catalog explorer.
+- User portal with team selection, catalog browsing and persistent marimo notebooks, shared per team and environment.
+- Development, Acceptance and Production environments per team.
+- Container images for AMD64 and ARM64 and a Docker-only installation bundle.

@@ -61,6 +61,7 @@ With the [demo fixtures](docs/keycloak.md#demo-fixtures) installed:
 npm run test:keycloak
 npm run test:mcp
 npm run test:mcp-admin
+npm run test:connect
 ```
 
 ## Pull requests

@@ -147,6 +147,7 @@ jobs:
       - run: docker compose run --build --rm keycloak-bootstrap --demo
       - run: npm run test:keycloak
       - run: uv run --all-groups python -m scripts.mcp_smoke
+      - run: uv run --all-groups python -m scripts.connect_smoke
       - run: uv run --all-groups python -m scripts.mcp_admin_smoke
       - name: Clean this runner's Keycloak stack
         if: always()

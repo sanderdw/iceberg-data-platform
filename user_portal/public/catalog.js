@@ -26,6 +26,22 @@ function facts(entries) {
 function propertyGrid(values) { return dataGrid(['Property', 'Value'], Object.entries(values || {}).sort(([a], [b]) => a.localeCompare(b)), 'Properties'); }
 function action(label, callback) { const button = element('button', label, 'quiet'); button.type = 'button'; button.addEventListener('click', () => busy(button, callback)); return button; }
 
+/* Tools on the user's computer sign in as the user through Keycloak's device login. */
+function connectPanel(db) {
+  const panel = element('details', undefined, 'catalog-disclosure connect-panel');
+  panel.append(element('summary', 'Connect from your computer'));
+  const download = element('a', 'Download iceberg_connect.py'); download.href = '/iceberg_connect.py'; download.download = 'iceberg_connect.py';
+  const intro = element('p', 'Download the helper and sign in once with ', 'hint'); intro.append(element('code', 'uv run iceberg_connect.py login'), '. Your tools then use your own account and permissions.');
+  panel.append(download, intro);
+  connectSnippets(db.id).forEach(([title, code, hint]) => {
+    const block = element('pre', code, 'view-sql'), buttons = element('div', undefined, 'share-actions');
+    buttons.append(copyButton('Copy', code, `${title} snippet copied.`));
+    panel.append(element('h3', title), block, element('p', hint, 'hint'), buttons);
+  });
+  panel.append(element('p', db.shared ? 'Shared databases are read-only.' : 'The DuckDB attach is read-only. Add --write to write; your role still decides what is allowed.', 'hint'));
+  return panel;
+}
+
 function renderCatalogListing(detail, contents, rows) {
   const host = $('#objects'), summary = element('section', undefined, 'catalog-summary');
   const entries = [['Namespaces', contents.namespaces.length], ['Tables', contents.tables.length], ['Views', contents.views.length]];
@@ -37,6 +53,8 @@ function renderCatalogListing(detail, contents, rows) {
     const connection = element('details', undefined, 'catalog-disclosure');
     connection.append(element('summary', 'Connection information'), facts([['Catalog / warehouse', db.id], ['Catalog URI', detail.catalogUri], ['Protocol', 'Iceberg REST']]));
     summary.append(connection);
+    // The helper signs in through Keycloak, so password-mode portals do not offer it.
+    if (loginUrl) summary.append(connectPanel(db));
   } else {
     summary.append(facts(entries));
     const props = element('details', undefined, 'catalog-disclosure'); props.append(element('summary', 'Namespace properties'), propertyGrid(detail.properties)); summary.append(props);

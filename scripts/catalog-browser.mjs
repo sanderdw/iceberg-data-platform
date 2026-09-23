@@ -17,7 +17,7 @@ const table = {
 };
 const view = {kind: 'view', uuid: 'view-uuid', formatVersion: 1, schemaId: 0, columns, properties: {}, currentVersionId: 1,
   versions: [{id: 1, schemaId: 0, timestamp: 1789506000000, defaultNamespace: ['analytics'], representations: [{dialect: 'spark', sql: 'SELECT meter_id, SUM(kwh) AS kwh\nFROM readings\nGROUP BY meter_id'}]}]};
-let previewCalls = [], deny = false;
+let previewCalls = [], deny = false, oidc = true;
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 try {
   const page = await browser.newPage({viewport: {width: 1440, height: 1050}});
@@ -25,7 +25,7 @@ try {
   await page.route('http://catalog.test/**', async route => {
     const url = new URL(route.request().url()), path = url.pathname;
     let body;
-    if (path === '/api/session') body = {authenticated: true};
+    if (path === '/api/session') body = {authenticated: true, ...(oidc ? {loginUrl: '/auth/login'} : {})};
     else if (path === '/api/workspace') body = {user: {name: 'Analyst'}, teams: [{id: 'analytics', name: 'Energy analytics', role: 'reader'}], databases: [database], activeTeam: 'analytics', activeRole: 'reader', activeEnvironment: 'development', environments: ['development', 'acceptance', 'production'], notebooks: []};
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'readings'}], views: [{name: 'daily_energy'}]} : {namespaces: [['analytics']], tables: [], views: []};
     else if (path === '/api/details') body = ({database: {kind: 'database', database}, namespace: {kind: 'namespace', properties: {owner: 'Energy analytics'}}, table, view})[url.searchParams.get('kind')];
@@ -43,6 +43,21 @@ try {
   await page.goto('http://catalog.test');
   await page.locator('#databases button').click();
   await expect(page.locator('.catalog-summary')).toContainText('Energy analytics');
+  await page.getByText('Connect from your computer', {exact: true}).click();
+  const connect = page.locator('.connect-panel');
+  await expect(connect.getByRole('link', {name: 'Download iceberg_connect.py'})).toHaveAttribute('href', '/iceberg_connect.py');
+  await expect(connect.locator('pre')).toHaveCount(3);
+  await expect(connect.locator('pre').nth(1)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb warehouse-dev)');
+  await page.screenshot({path: 'test-results/catalog/connect-dark.png', fullPage: true});
+  await page.getByText('Connect from your computer', {exact: true}).click();
+  // Password-mode portals have no Keycloak device login, so the helper is not offered.
+  oidc = false;
+  await page.reload();
+  await expect(page.locator('.catalog-summary')).toContainText('Energy analytics');
+  await expect(page.locator('.connect-panel')).toHaveCount(0);
+  oidc = true;
+  await page.reload();
+  await expect(page.locator('.connect-panel')).toHaveCount(1);
   await page.getByRole('button', {name: 'Open →', exact: true}).click();
   await page.getByRole('searchbox', {name: 'Filter objects'}).fill('no match');
   await expect(page.getByText('No matching objects.', {exact: true})).toBeVisible();
@@ -96,5 +111,5 @@ try {
   await page.getByText('Version 1 · current', {exact: false}).click();
   await expect(page.locator('.view-sql')).toBeVisible();
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS: catalog navigation/filtering, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts');
+  console.log('PASS: catalog navigation/filtering, connect panel only with OIDC, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts');
 } finally { await browser.close(); }

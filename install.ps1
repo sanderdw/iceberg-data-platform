@@ -77,11 +77,26 @@
         Write-Host 'Starting the user portal...'
         Invoke-UsersCompose up -d --no-build --wait --wait-timeout 300 users
         Write-Host "`nIceberg Data Platform is ready."
-        Write-Host 'Administration: http://localhost:3000'
-        Write-Host 'User portal:    http://localhost:3002'
-        Write-Host "Keycloak:      http://localhost:8080"
-        Write-Host "Login: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in $InstallDir/.env"
-        Write-Host "Configuration: $InstallDir"
+        Write-Host 'Keycloak:       http://localhost:8080  (sign-in service, managed through the administration portal; no need to open it)'
+        $ShownDir = $InstallDir
+        foreach ($Separator in @('/', '\')) {
+            if ($HOME -and $InstallDir.StartsWith("$HOME$Separator")) { $ShownDir = '~' + $InstallDir.Substring($HOME.Length) }
+        }
+        # Quote the full path when it needs quoting.
+        $LocationDir = if ($ShownDir -match '^[\w~./\\:-]+$') { $ShownDir } else { "`"$InstallDir`"" }
+        Write-Host "Login: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in $ShownDir/.env"
+        Write-Host "Configuration: $ShownDir"
+        Write-Host "`nStop:  Set-Location $LocationDir; docker compose -f compose.users.yaml down; docker compose down"
+        Write-Host "Start: Set-Location $LocationDir; docker compose up -d --wait; docker compose -f compose.users.yaml up -d --wait users"
+        Write-Host "Your own tools: Set-Location $LocationDir; uv run iceberg_connect.py login"
+        Write-Host "`nGetting started:"
+        Write-Host '  Administration: http://localhost:3000/#guide'
+        Write-Host '  User portal:    http://localhost:3002/#guide'
+        Write-Host "`nAgent skills for Codex, GitHub Copilot, Claude Code and other coding agents, in $ShownDir/.agents/skills:"
+        Write-Host '  lan-access    Open the portals to other devices on your network (HTTPS)'
+        Write-Host '  demo-company  Set up an Energy, Webshop or Retail demo company for a class, one account per participant'
+        Write-Host "Start your coding agent in $ShownDir and ask it to use one of these skills."
+        Write-Host 'Claude Code reads .claude/skills only: ask it to follow .agents/skills/<name>/SKILL.md.'
     }
     finally {
         if (Test-Path $TemporaryDir) { Remove-Item $TemporaryDir -Recurse -Force }

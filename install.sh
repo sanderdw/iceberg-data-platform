@@ -99,7 +99,25 @@ main() {
     admin_compose up -d --no-build --wait --wait-timeout 300
     printf 'Starting the user portal...\n'
     users_compose up -d --no-build --wait --wait-timeout 300 users
-    printf '\nIceberg Data Platform is ready.\nAdministration: http://localhost:3000\nUser portal:    http://localhost:3002\nKeycloak:      http://localhost:8080\nLogin: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in %s/.env\nConfiguration: %s\n' "$install_dir" "$install_dir"
+    shown_dir=$install_dir
+    if [ -n "${HOME:-}" ] && [ "$HOME" != / ]; then
+        case $install_dir in "$HOME"/*) shown_dir="~/${install_dir#"$HOME"/}" ;; esac
+    fi
+    # cd expands ~ only unquoted; quote the full path when it needs quoting.
+    case $shown_dir in
+        *[!A-Za-z0-9_./~-]*) cd_dir="\"$install_dir\"" ;;
+        *) cd_dir=$shown_dir ;;
+    esac
+    printf '\nIceberg Data Platform is ready.\nKeycloak:       http://localhost:8080  (sign-in service, managed through the administration portal; no need to open it)\nLogin: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in %s/.env\nConfiguration: %s\n' "$shown_dir" "$shown_dir"
+    printf '\nStop:  cd %s && docker compose -f compose.users.yaml down && docker compose down\n' "$cd_dir"
+    printf 'Start: cd %s && docker compose up -d --wait && docker compose -f compose.users.yaml up -d --wait users\n' "$cd_dir"
+    printf 'Your own tools: cd %s && uv run iceberg_connect.py login\n' "$cd_dir"
+    printf '\nGetting started:\n  Administration: http://localhost:3000/#guide\n  User portal:    http://localhost:3002/#guide\n'
+    printf '\nAgent skills for Codex, GitHub Copilot, Claude Code and other coding agents, in %s/.agents/skills:\n' "$shown_dir"
+    printf '  lan-access    Open the portals to other devices on your network (HTTPS)\n'
+    printf '  demo-company  Set up an Energy, Webshop or Retail demo company for a class, one account per participant\n'
+    printf 'Start your coding agent in %s and ask it to use one of these skills.\n' "$shown_dir"
+    printf 'Claude Code reads .claude/skills only: ask it to follow .agents/skills/<name>/SKILL.md.\n'
 }
 
 verify_checksum() {

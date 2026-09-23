@@ -1,0 +1,5 @@
+# Keycloak behind the HTTPS proxy: trust its X-Forwarded-* headers.
+services:
+  keycloak:
+    environment:
+      KC_PROXY_HEADERS: xforwarded

@@ -1,16 +1,6 @@
 // Keycloak account management, enabled by the authenticated session metadata.
 let keycloakUsers = false;
 
-function identityGuide() {
-  const steps = [
-    ['Create a team, then a database', 'Teams own databases. Team administrators can create databases in the user portal; platform administrators can create them here.'],
-    ['Create or link a user', 'On Users, create a Keycloak account or select an existing account to link. Choose teams and a data role per team. Share new accounts’ temporary passwords securely.'],
-    ['Sign in and open a notebook', 'Open the user portal and choose Sign in with Keycloak. New users must change their temporary password. Their notebooks use their own database permissions.'],
-    ['Manage access', 'Use Edit access to change teams and the role in each team. Revoke removes platform access and preserves the Keycloak account. Use Retry setup if account creation was interrupted.'],
-  ];
-  $('#page-content').innerHTML = `<section class="panel guide"><span class="eyebrow">GUIDE / KEYCLOAK PILOT</span><h2>From account to data.</h2>${steps.map(([title, text], i) => `<div class="guide-step"><span>0${i + 1}</span><div><h3>${title}</h3><p>${text}</p></div></div>`).join('')}<div class="panel-note">Keycloak manages sign-in. This portal manages teams and data permissions. The data administrator role does not grant access to this administration portal.</div></section>`;
-}
-
 function identityLabel(user) {
   return ({linked: 'Keycloak account', unlinked: 'Not linked to Keycloak', pending: 'Setup incomplete',
     revoking: 'Revocation incomplete'})[user.identity?.status] || 'Service account';
