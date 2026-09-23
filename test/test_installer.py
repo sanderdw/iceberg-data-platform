@@ -136,6 +136,9 @@ def assert_next_steps(output, target):
     assert f'"{target}"' in output
     assert "http://localhost:3000/#guide" in output
     assert "User portal:    http://localhost:3002/#guide\n" in output
+    # The portals are listed once, under Getting started; Keycloak needs no manual visit.
+    assert "Administration: http://localhost:3000\n" not in output
+    assert "no need to open it" in output
     # The installer points to the bundled agent skills and copies the dot-directory.
     assert (target / ".agents/skills/demo-company/SKILL.md").is_file()
     # Windows temporary folders sit under HOME, so the folder may be shown with ~.

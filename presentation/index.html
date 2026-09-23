@@ -119,7 +119,7 @@
     .reveal .metadata-example pre { font-size: 0.62em; }
     /* Code: monochrome */
     .reveal pre { width: 100%; font-size: 0.48em; box-shadow: none; margin: 0; }
-    .reveal pre code { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-height: 64vh; padding: var(--space-md) var(--space-lg); color: var(--text-secondary); line-height: 1.45; }
+    .reveal pre code { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-height: 620px; padding: var(--space-md) var(--space-lg); color: var(--text-secondary); line-height: 1.45; }
     .reveal pre code .k { color: var(--text-display); }
     .reveal pre code .s { color: var(--text-primary); }
     .reveal pre code .n { color: var(--text-primary); }
@@ -214,9 +214,6 @@ Starting administration and data services...
 Starting the user portal...
 
 <span class="k">Iceberg Data Platform is ready.</span>
-Administration: http://localhost:3000
-User portal:    http://localhost:3002
-Keycloak:       http://localhost:8080
 
 Getting started:
   Administration: http://localhost:3000/#guide
@@ -234,7 +231,7 @@ Agent skills for Codex, GitHub Copilot, Claude Code and other coding agents:
     </ul>
   </div>
   <div class="caption foot">Windows PowerShell · irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex</div>
-  <aside class="notes">Output shortened: the real run also prints the sign-in details location, the stop and start commands and the iceberg_connect.py login command. Every release pins the bundle and all images to its version; replace latest/download with download/vX.Y.Z to install a specific one.</aside>
+  <aside class="notes">Output shortened: the real run also prints the portal and Keycloak addresses, the sign-in details location, the stop and start commands and the iceberg_connect.py login command. Every release pins the bundle and all images to its version; replace latest/download with download/vX.Y.Z to install a specific one.</aside>
 </section>
 
 <section>

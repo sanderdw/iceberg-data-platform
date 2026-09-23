@@ -77,9 +77,7 @@
         Write-Host 'Starting the user portal...'
         Invoke-UsersCompose up -d --no-build --wait --wait-timeout 300 users
         Write-Host "`nIceberg Data Platform is ready."
-        Write-Host 'Administration: http://localhost:3000'
-        Write-Host 'User portal:    http://localhost:3002'
-        Write-Host 'Keycloak:       http://localhost:8080'
+        Write-Host 'Keycloak:       http://localhost:8080  (sign-in service, managed through the administration portal; no need to open it)'
         $ShownDir = $InstallDir
         foreach ($Separator in @('/', '\')) {
             if ($HOME -and $InstallDir.StartsWith("$HOME$Separator")) { $ShownDir = '~' + $InstallDir.Substring($HOME.Length) }

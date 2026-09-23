@@ -108,7 +108,7 @@ main() {
         *[!A-Za-z0-9_./~-]*) cd_dir="\"$install_dir\"" ;;
         *) cd_dir=$shown_dir ;;
     esac
-    printf '\nIceberg Data Platform is ready.\nAdministration: http://localhost:3000\nUser portal:    http://localhost:3002\nKeycloak:       http://localhost:8080\nLogin: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in %s/.env\nConfiguration: %s\n' "$shown_dir" "$shown_dir"
+    printf '\nIceberg Data Platform is ready.\nKeycloak:       http://localhost:8080  (sign-in service, managed through the administration portal; no need to open it)\nLogin: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in %s/.env\nConfiguration: %s\n' "$shown_dir" "$shown_dir"
     printf '\nStop:  cd %s && docker compose -f compose.users.yaml down && docker compose down\n' "$cd_dir"
     printf 'Start: cd %s && docker compose up -d --wait && docker compose -f compose.users.yaml up -d --wait users\n' "$cd_dir"
     printf 'Your own tools: cd %s && uv run iceberg_connect.py login\n' "$cd_dir"
