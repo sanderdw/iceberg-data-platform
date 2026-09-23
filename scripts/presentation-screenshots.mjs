@@ -109,8 +109,6 @@ async function runNotebook(page, label, done) {
   return frame;
 }
 const toHeading = (frame, name) => frame.getByRole('heading', {name}).first().evaluate(h => h.scrollIntoView({block: 'start'}));
-// Puts the code cell that contains the text at the top of the editor.
-const toCell = (frame, text) => frame.locator('.cm-content').filter({hasText: text}).first().evaluate(c => c.scrollIntoView({block: 'start'}));
 
 async function openNamespace(page, namespace) {
   await page.goto(env.USER_ORIGIN);
@@ -178,43 +176,18 @@ try {
 
   // The notebooks create both example tables; later shots need them, so a first run never skips this.
   const contents = await (await member.request.get(`${env.USER_ORIGIN}/api/contents?database=${database.id}`)).json();
-  const seeded = ['synthetic', 'iceberg_v3'].every(name => contents.namespaces.some(ns => ns[0] === name));
-  if (!seeded || need(10, 12)) {
+  if (!['synthetic', 'iceberg_v3'].every(name => contents.namespaces.some(ns => ns[0] === name))) {
     await workspace.locator('#workspace-nav').getByRole('button', {name: 'Notebooks', exact: true}).click();
     await workspace.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
     await workspace.locator('#notebook-file').selectOption({label: '01 · Neighborhood data with PyIceberg'});
-    let frame = workspace.frameLocator('#frame-host iframe');
-    await frame.locator('.cm-content').first().waitFor({timeout: 180000});
+    await workspace.frameLocator('#frame-host iframe').locator('.cm-content').first().waitFor({timeout: 180000});
     // With the row count, so the f-string in the cell's own code does not match.
-    frame = await runNotebook(workspace, '01 · Neighborhood data with PyIceberg', /(Created and populated:|Table already contains) [\d,]+ rows/);
-    await toHeading(frame, '2. Write to Iceberg');
-    await shot(workspace, '10-notebook-01-created');
-
-    frame = await runNotebook(workspace, '03 · Native DuckDB on Iceberg', 'Aggregate the neighborhood example');
-    await toCell(frame, 'DESCRIBE selected_iceberg_table');
-    await shot(workspace, '12-notebook-03-attach');
-
-    // No capture: the v3 table it creates is shown in the catalog and the bucket.
+    await runNotebook(workspace, '01 · Neighborhood data with PyIceberg', /(Created and populated:|Table already contains) [\d,]+ rows/);
+    // No captures: the catalog and the bucket show the tables these notebooks create.
     await runNotebook(workspace, '04 · Write Iceberg v3 with DuckDB', /deleted \d+ fault events/);
-    // Otherwise the editor keeps showing this notebook while the next database's runtime starts.
     await workspace.locator('#close-notebook').click();
     await workspace.locator('#editor').waitFor({state: 'hidden'});
     await workspace.getByRole('navigation', {name: 'Workspace', exact: true}).getByRole('button', {name: 'Catalog', exact: true}).click();
-  }
-
-  // The flights data product lives in the database mila created.
-  if (need(41, 44)) {
-    await toPage(workspace, 'Notebooks');
-    await workspace.locator('#notebook-databases button').filter({hasText: AI_DATABASE.name}).first().click();
-    await expect(workspace.locator('#editor-title')).toContainText(AI_DATABASE.name, {timeout: 180000});
-    await workspace.frameLocator('#frame-host iframe').locator('.cm-content').first().waitFor({timeout: 180000});
-    let frame = await runNotebook(workspace, '06 · Write an AI-ready flights product', /Published [\d,]+ flight instances/);
-    await toHeading(frame, '3. Turn selected semantic rules into quality evidence');
-    await shot(workspace, '41-notebook-06-flights-quality');
-    frame = await runNotebook(workspace, '07 · Read an AI-ready flights product', '5. Context to give an AI consumer');
-    await toHeading(frame, '5. Context to give an AI consumer');
-    await shot(workspace, '44-notebook-07-flights-context');
-    await toPage(workspace, 'Catalog');
   }
 
   // Every route of the user portal, callable in the browser with the same session.
@@ -222,6 +195,14 @@ try {
     await workspace.goto(env.USER_ORIGIN + '/docs');
     await workspace.locator('.opblock').first().waitFor({timeout: 60000});
     await shot(workspace, '45-user-api-docs');
+  }
+
+  // Getting started: notebook, your own tools or an AI agent over MCP.
+  if (need(48)) {
+    await workspace.goto(env.USER_ORIGIN);
+    await workspace.locator('#guide-nav').click();
+    await workspace.locator('#guide .guide-track').first().waitFor();
+    await shot(workspace, '48-user-guide');
   }
 
   // The same tables in the catalog browser, without a notebook.
@@ -344,7 +325,27 @@ try {
   await access.getByRole('row').filter({hasText: DEMO_USER}).getByRole('button', {name: 'Edit access', exact: true}).click();
   await access.getByRole('dialog').waitFor();
   await shot(access, '24-admin-edit-access');
+  // Creating a user: a Keycloak account plus a role per team. Filled in, never submitted.
+  if (need(46)) {
+    await access.keyboard.press('Escape');
+    await access.locator('#create').click();
+    const create = access.getByRole('dialog');
+    await create.locator('[name=name]').fill('jonas');
+    await create.locator('[name=first_name]').fill('Jonas');
+    await create.locator('[name=last_name]').fill('Example');
+    await create.locator('[name=email]').fill('jonas@example.com');
+    const row = create.locator('.team-role').filter({hasText: TEAM_SHARE.team});
+    await row.locator('[name=teams]').check();
+    await row.locator('select').selectOption('writer');
+    await shot(access, '46-admin-user-create');
+  }
   await close.close();
+  // Getting started in the administration portal: portal, AI agent or API.
+  if (need(47)) {
+    await portal.locator('[data-page="guide"]').first().click();
+    await portal.locator('.guide-track').first().waitFor();
+    await shot(portal, '47-admin-guide');
+  }
 
   // The accounts behind the users, in the Keycloak admin console.
   const operator = await newContext(), keycloak = await operator.newPage();
