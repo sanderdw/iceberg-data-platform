@@ -106,7 +106,7 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
     assert files["iceberg_connect.py"] == (release_tree / "user_portal/client/iceberg_connect.py").read_bytes()
     skills = sorted(path.relative_to(release_tree).as_posix()
                     for path in (release_tree / ".agents/skills").rglob("*") if path.is_file())
-    assert {".agents/skills/lan-access/SKILL.md", ".agents/skills/lan-access/assets/Caddyfile",
+    assert {".agents/skills/quick-share/SKILL.md", ".agents/skills/quick-share/assets/Caddyfile",
             ".agents/skills/demo-company/SKILL.md", ".agents/skills/demo-company/references/retail.md"} <= set(skills)
     assert all(files[name] == (release_tree / name).read_bytes() for name in skills)
     for content in files.values():

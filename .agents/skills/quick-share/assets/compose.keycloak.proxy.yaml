@@ -1,4 +1,4 @@
-# Keycloak behind the HTTPS proxy: trust its X-Forwarded-* headers.
+# Keycloak behind the HTTPS tunnel: trust its X-Forwarded-* headers.
 services:
   keycloak:
     environment:

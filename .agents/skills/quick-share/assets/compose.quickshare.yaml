@@ -1,0 +1,36 @@
+# Temporary public HTTPS addresses through Cloudflare quick tunnels. Each tunnel gets a
+# random trycloudflare.com address with a trusted certificate; nothing listens on the host.
+name: iceberg-quickshare
+services:
+  admin-tunnel:
+    image: cloudflare/cloudflared:latest
+    # A restarted tunnel gets a new address, which breaks sign-in until the switch is rerun.
+    restart: "no"
+    command: tunnel --url http://portal:3000
+    networks:
+      - platform
+  users-tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: "no"
+    command: tunnel --url http://users:3002
+    networks:
+      - platform
+  keycloak-tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: "no"
+    command: tunnel --url http://keycloak-filter:8080
+    depends_on:
+      - keycloak-filter
+    networks:
+      - platform
+  keycloak-filter:
+    image: caddy:2
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - platform
+networks:
+  platform:
+    external: true
+    name: iceberg-platform_default

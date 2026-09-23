@@ -13,7 +13,7 @@ docker compose -f compose.users.yaml up -d --wait users
 
 For changes to the portal only, run `docker compose -f compose.users.yaml up -d --build --wait users`. This skips rebuilding the notebook image.
 
-To open the portals from a phone or another computer on the same network, use the [`lan-access` agent skill](../.agents/skills/lan-access/SKILL.md). Sign-in needs HTTPS off `localhost`, so a plain port binding such as `compose.users.lan.yaml` is not enough on its own.
+To open the portals from a phone or another computer for a class or demo, use the [`quick-share` agent skill](../.agents/skills/quick-share/SKILL.md). Sign-in needs HTTPS off `localhost`, so a plain port binding such as `compose.users.lan.yaml` is not enough on its own.
 
 ## Using the portal
 

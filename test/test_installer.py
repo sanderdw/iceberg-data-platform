@@ -35,7 +35,7 @@ def installer_env(tmp_path, request):
             ".env.example": b"PORTAL_PASSWORD=replace-with-generated-password\n",
             "scripts/setup.py": (ROOT / "scripts/setup.py").read_bytes(),
             "iceberg_connect.py": b"# helper\n",
-            ".agents/skills/lan-access/SKILL.md": b"---\nname: lan-access\n---\n",
+            ".agents/skills/quick-share/SKILL.md": b"---\nname: quick-share\n---\n",
             ".agents/skills/demo-company/SKILL.md": b"---\nname: demo-company\n---\n",
         }.items():
             info = tarfile.TarInfo("iceberg-data-platform-0.2.1-install/" + name)
@@ -143,7 +143,7 @@ def assert_next_steps(output, target):
     assert (target / ".agents/skills/demo-company/SKILL.md").is_file()
     # Windows temporary folders sit under HOME, so the folder may be shown with ~.
     assert "/.agents/skills:\n" in output
-    assert "lan-access    Open the portals to other devices on your network (HTTPS)" in output
+    assert "quick-share   Open the portals to participants anywhere for a class or demo (temporary HTTPS)" in output
     assert "demo-company  Set up an Energy, Webshop or Retail demo company for a class" in output
     assert "Agent skills for Codex, GitHub Copilot, Claude Code and other coding agents, in " in output
     assert " and ask it to use one of these skills.\n" in output

@@ -25,7 +25,7 @@ Everything goes through the administration portal's MCP server, the same API the
 
 You need the tools of the administration MCP server: `get_overview`, `create_team`, `create_database`, `create_user`, `find_accounts`, `list_users` and `retry_user_setup`. Your agent may show them with a prefix, usually the server name (`iceberg-admin`). Call `get_overview` once. It must succeed and report the provider online.
 
-If the tools are missing, stop and tell the user how to connect. Pick the recipe for the agent you are running in, and fill in the administration address. `<URL>` is `PORTAL_ORIGIN` from `.env` plus `/mcp`, by default `http://localhost:3000/mcp`; after the lan-access skill, the HTTPS address.
+If the tools are missing, stop and tell the user how to connect. Pick the recipe for the agent you are running in, and fill in the administration address. `<URL>` is `PORTAL_ORIGIN` from `.env` plus `/mcp`, by default `http://localhost:3000/mcp`; after the quick-share skill, the administration tunnel address.
 
 1. Sign in once at the administration portal as the platform administrator from `.env` (`PLATFORM_ADMIN_USERNAME` / `PLATFORM_ADMIN_PASSWORD`) and set a new password.
 2. Register the MCP server:

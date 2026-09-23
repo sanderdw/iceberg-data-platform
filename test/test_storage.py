@@ -48,9 +48,13 @@ def test_admin_requests_have_s3_payload_signature_and_sanitize_errors(storage):
     assert "must-not-leak" not in str(exc.value)
 
 
+OWN_TAGS = {"TagSet": [{"Key": "managed-by", "Value": "iceberg-portal"}, {"Key": "database", "Value": "own-db"}]}
+
+
 def test_delete_includes_versions_markers_objects_and_uploads(storage):
     storage.call = Mock(
         side_effect=[
+            OWN_TAGS,
             {
                 "Versions": [{"Key": "old", "VersionId": "v1"}],
                 "DeleteMarkers": [{"Key": "old", "VersionId": "v2"}],
@@ -66,8 +70,8 @@ def test_delete_includes_versions_markers_objects_and_uploads(storage):
             {},
         ]
     )
-    storage.delete_bucket("own-bucket")
-    assert storage.call.call_args_list[1].kwargs["Delete"]["Objects"] == [
+    storage.delete_bucket("own-bucket", "own-db")
+    assert storage.call.call_args_list[2].kwargs["Delete"]["Objects"] == [
         {"Key": "old", "VersionId": "v1"},
         {"Key": "old", "VersionId": "v2"},
     ]
@@ -79,13 +83,33 @@ def test_delete_includes_versions_markers_objects_and_uploads(storage):
 def test_partial_object_errors_stop_deletion(storage):
     storage.call = Mock(
         side_effect=[
+            OWN_TAGS,
             {"Versions": [{"Key": "locked", "VersionId": "v1"}]},
             {"Errors": [{"Code": "AccessDenied"}]},
         ]
     )
     with pytest.raises(ServiceError, match="object versions"):
-        storage.delete_bucket("own-bucket")
+        storage.delete_bucket("own-bucket", "own-db")
     assert not any(c.args == ("delete_bucket",) for c in storage.call.call_args_list)
+
+
+def test_delete_refuses_a_bucket_of_another_database(storage):
+    # A catalog admin can point portal.bucket at another database's bucket.
+    storage.call = Mock(return_value=OWN_TAGS)
+    with pytest.raises(ServiceError, match="does not belong") as exc:
+        storage.delete_bucket("own-bucket", "other-db")
+    assert exc.value.status == 409
+    assert [c.args for c in storage.call.call_args_list] == [("get_bucket_tagging",)]
+
+
+def test_delete_refuses_an_untagged_bucket_and_skips_a_missing_one(storage):
+    missing = ServiceError(404, "The storage operation failed.")
+    storage.call = Mock(side_effect=[missing, {}])
+    with pytest.raises(ServiceError, match="does not belong"):
+        storage.delete_bucket("foreign-bucket", "own-db")
+    storage.call = Mock(side_effect=[missing, missing])
+    storage.delete_bucket("own-bucket", "own-db")
+    assert [c.args for c in storage.call.call_args_list] == [("get_bucket_tagging",), ("head_bucket",)]
 
 
 def test_provider_errors_do_not_leak_credentials(storage):

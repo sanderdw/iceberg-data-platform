@@ -114,7 +114,7 @@ main() {
     printf 'Your own tools: cd %s && uv run iceberg_connect.py login\n' "$cd_dir"
     printf '\nGetting started:\n  Administration: http://localhost:3000/#guide\n  User portal:    http://localhost:3002/#guide\n'
     printf '\nAgent skills for Codex, GitHub Copilot, Claude Code and other coding agents, in %s/.agents/skills:\n' "$shown_dir"
-    printf '  lan-access    Open the portals to other devices on your network (HTTPS)\n'
+    printf '  quick-share   Open the portals to participants anywhere for a class or demo (temporary HTTPS)\n'
     printf '  demo-company  Set up an Energy, Webshop or Retail demo company for a class, one account per participant\n'
     printf 'Start your coding agent in %s and ask it to use one of these skills.\n' "$shown_dir"
     printf 'Claude Code reads .claude/skills only: ask it to follow .agents/skills/<name>/SKILL.md.\n'

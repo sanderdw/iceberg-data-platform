@@ -782,7 +782,7 @@ class PolarisProvider:
         prefix = f"/api/catalog/v1/{enc(id)}"
         for namespace in self.pages(f"{prefix}/namespaces", "namespaces"):
             self.clear_namespace(prefix, namespace)
-        self.storage.delete_bucket(catalog["properties"]["portal.bucket"])
+        self.storage.delete_bucket(catalog["properties"]["portal.bucket"], id)
         for role in ROLES:
             self.remove(f"{path}/catalog-roles/{role}")
         # The user gateway is a second writer: a share created there during this deletion

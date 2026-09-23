@@ -93,7 +93,7 @@
         Write-Host '  Administration: http://localhost:3000/#guide'
         Write-Host '  User portal:    http://localhost:3002/#guide'
         Write-Host "`nAgent skills for Codex, GitHub Copilot, Claude Code and other coding agents, in $ShownDir/.agents/skills:"
-        Write-Host '  lan-access    Open the portals to other devices on your network (HTTPS)'
+        Write-Host '  quick-share   Open the portals to participants anywhere for a class or demo (temporary HTTPS)'
         Write-Host '  demo-company  Set up an Energy, Webshop or Retail demo company for a class, one account per participant'
         Write-Host "Start your coding agent in $ShownDir and ask it to use one of these skills."
         Write-Host 'Claude Code reads .claude/skills only: ask it to follow .agents/skills/<name>/SKILL.md.'

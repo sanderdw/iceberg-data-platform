@@ -191,7 +191,7 @@ def test_delete_database_can_resume_and_keeps_users(portal):
     assert p.patch(f"/databases/{d['id']}", {"team": owner}).status_code == 409
     p.provider.storage.delete_bucket.side_effect = None
     assert p.delete(f"/databases/{d['id']}").status_code == 200
-    p.provider.storage.delete_bucket.assert_called_with(d["bucket"])
+    p.provider.storage.delete_bucket.assert_called_with(d["bucket"], d["id"])
     assert p.client.get("/api/databases").json() == []
     assert p.client.get("/api/users").json()[0]["id"] == u["id"]
     assert p.delete(f"/users/{u['id']}").status_code == 200

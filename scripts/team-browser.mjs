@@ -93,7 +93,11 @@ try {
   await page.reload();
   await expect(page.locator('#guide-nav')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('#guide-computer a[href="/iceberg_connect.py"]')).toBeVisible();
+  // DuckDB CLI only: install, sign in, then read-only and writable attach.
+  await expect(page.locator('#guide-computer pre')).toHaveCount(4);
+  await expect(page.locator('#guide-computer pre').nth(0)).toHaveText('brew install duckdb');
   await expect(page.locator('#guide-computer pre').nth(2)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb energy-dev)');
+  await expect(page.locator('#guide-computer pre').nth(3)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb energy-dev --write)');
   // One recipe per coding agent: Codex, GitHub Copilot in VS Code and Claude Code.
   await expect(page.locator('#guide-agent pre')).toHaveCount(3);
   await expect(page.locator('#guide-agent pre').nth(0)).toHaveText('[mcp_servers.iceberg-user]\nurl = "http://team.test/mcp"\nscopes = ["openid", "profile", "offline_access"]\n\n[mcp_servers.iceberg-user.oauth]\nclient_id = "iceberg-mcp"');
@@ -102,6 +106,7 @@ try {
   await expect(page.locator('#guide-agent .guide-prompts li')).toHaveCount(2);
   await page.getByLabel('Environment', {exact: true}).selectOption('production');
   await expect(page.locator('#guide-computer pre').nth(2)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb <database>)');
+  await expect(page.locator('#guide-computer pre').nth(3)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb <database> --write)');
   await page.getByLabel('Environment', {exact: true}).selectOption('development');
   await expect(page.locator('#guide-computer pre').nth(2)).toContainText('energy-dev');
   await page.locator('.guide-index button').nth(2).click();

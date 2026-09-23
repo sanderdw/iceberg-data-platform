@@ -1,0 +1,15 @@
+# Keeps the Keycloak administration console off the public tunnel. The portals still
+# reach Keycloak's admin API internally at http://keycloak:8080.
+{
+	auto_https off
+	servers {
+		# Keep the tunnel's X-Forwarded-Proto: https instead of replacing it with http.
+		trusted_proxies static private_ranges
+	}
+}
+
+:8080 {
+	@admin path /admin /admin/*
+	respond @admin 404
+	reverse_proxy keycloak:8080
+}

@@ -1,4 +1,4 @@
-"""Point the portal sign-in clients and linked users at new origins after a LAN switch.
+"""Point the portal sign-in clients and linked users at new origins after an address switch.
 
 Keycloak skips the realm import once the realm exists, so changed origins never reach
 the iceberg-admin and iceberg-users clients. Linked users also carry the issuer they
@@ -8,9 +8,9 @@ Run inside the keycloak-bootstrap image, which has the Keycloak administrator an
 Polaris credentials. Pipe this file in so nothing needs to be mounted:
 
     docker compose run --rm --no-deps -T --entrypoint /app/.venv/bin/python keycloak-bootstrap - \\
-        --admin-origins https://LAN_IP:3000 http://localhost:3000 \\
-        --user-origins https://LAN_IP:3002 http://localhost:3002 \\
-        --old-issuer http://localhost:8080/realms/iceberg < lan_sync.py
+        --admin-origins https://ADMIN.trycloudflare.com http://localhost:3000 \\
+        --user-origins https://USERS.trycloudflare.com http://localhost:3002 \\
+        --old-issuer http://localhost:8080/realms/iceberg < sync_origins.py
 
 The new issuer is OIDC_ISSUER from the current .env. Running it twice changes nothing.
 """

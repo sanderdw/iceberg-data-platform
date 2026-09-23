@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New agent skill `quick-share` opens the portals to participants anywhere for a class or demo. Free Cloudflare quick tunnels give public HTTPS addresses with trusted certificates, so nobody imports a certificate. It replaces the `lan-access` skill and its Caddy certificate authority. See [agent skills](docs/install.md#agent-skills).
+
 ## 0.5.1 - 2026-09-23
 
 - **Connect from your machine:** use PyIceberg, DuckDB, the DuckDB CLI or DBeaver with your own account instead of a notebook. **Catalog › Connect from your computer** shows the snippets for each database; the `iceberg_connect.py` helper signs you in through the browser.
