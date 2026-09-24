@@ -1,11 +1,21 @@
-Iceberg Data Platform
+# Iceberg Data Platform
 
-A local platform for managing team access to Apache Iceberg and exploring data in shared team marimo notebooks. It combines admin and user portals with Keycloak, Apache Polaris, PostgreSQL and RustFS.
+**An open lakehouse you actually own.** Apache Iceberg as the table format, with every other building block open source and replaceable. It runs on a single laptop with one command.
+
+Getting started with Iceberg takes more than a table format. You need a catalog, object storage, identity, an engine and a place to work. Vendors make that part easy, and that is usually where lock-in starts. This platform shows the other route: Apache Polaris, Keycloak, RustFS, PostgreSQL, marimo and DuckDB, connected through open interfaces (Iceberg REST, S3, OIDC and MCP). You can replace one block without touching the others.
+
+Teams create, own and share their databases. People, notebooks and AI agents all sign in through Keycloak and work with the same grants.
+
+# Use it as:
+- **A reference architecture.** See how catalog, storage, identity and engines fit together with team ownership, data sharing and AI agents on one identity. Every choice and boundary is documented, so you can reuse what fits your own platform.
+- **A classroom.** The demo-company skill sets up a fictional company for up to 48 participants, with one account each and a sign-in list to hand out. The quick-share skill opens the portals to a room for the session.
+- **A personal lab.** Learn Iceberg hands-on: create tables in a notebook, follow a query from the catalog to the Parquet files, and try snapshots, branches and Iceberg v3 with no cloud account or trial clock.
+
+---
 
 ![Iceberg Data Platform](docs/portal.png)
 
 ## What it does
-
 - **Administration portal:** manage teams, users with a role per team, databases and data shares, and browse every Polaris catalog.
 - **User portal:** sign in with Keycloak, pick a team and environment, and manage databases, browse catalogs, open notebooks and share data.
 - **Catalog details:** table schemas, snapshots, branches and tags, partitioning, view SQL and a 100-row preview, all with your own permissions.
@@ -13,7 +23,7 @@ A local platform for managing team access to Apache Iceberg and exploring data i
 - **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Seven example notebooks cover PyIceberg, DuckDB, Iceberg v3 and a semantic data product.
 - **MCP servers:** AI agents such as Claude Code sign in through Keycloak to explore data or administer the platform.
 
-This is a **local development platform**. Read [the security model](SECURITY.md) before deploying it elsewhere.
+This is a **educational local development platform**. Read [the security model](SECURITY.md) before deploying it elsewhere.
 
 ## Quick start
 
