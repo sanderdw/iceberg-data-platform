@@ -27,6 +27,6 @@ Default ports bind to localhost. For anything beyond a trusted local network:
 - Make reverse proxies preserve the Host header and support WebSockets.
 - Set `FORWARDED_ALLOW_IPS` to the proxy's address so sign-in limits apply per client. Never use `*` on a directly reachable portal.
 - Never expose the Docker socket, the Polaris management API or the storage administration endpoints.
-- For external data shares, put TLS in front of Polaris `/api/catalog` and the RustFS S3 API only. Set `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` before creating the shared databases.
+- For external data shares or tools on other computers, put TLS in front of Polaris `/api/catalog` and the RustFS S3 API only. Then set `POLARIS_PUBLIC_URL` and `S3_ENDPOINT`. The quick-share skill's gateway does exactly this: it passes only `/api/catalog` to Polaris and only AWS-signed requests outside `/rustfs` and `/minio` to RustFS, so its administration API stays internal.
 
 Keep `.env`, data volumes and team notebooks private. Database deletion is irreversible, so routine upgrades and tests must preserve volumes.

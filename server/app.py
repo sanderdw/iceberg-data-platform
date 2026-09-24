@@ -61,6 +61,12 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
             if mcp_running:
                 # A sub-application's lifespan never runs; the MCP transport is started here.
                 await stack.enter_async_context(mcp_running())
+            if owned:
+                try:
+                    if updated := await asyncio.to_thread(provider.sync_storage_endpoints):
+                        logging.getLogger(__name__).info("S3 endpoint updated for %d databases", len(updated))
+                except Exception as exc:
+                    logging.getLogger(__name__).warning("Could not update the databases' S3 endpoint: %s", exc)
             try:
                 yield
             finally:
@@ -70,7 +76,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
                     provider.close()
 
     app = FastAPI(
-        title="Iceberg Workspace API", version="0.5.2", lifespan=lifespan, docs_url=None, redoc_url=None,
+        title="Iceberg Workspace API", version="0.5.3", lifespan=lifespan, docs_url=None, redoc_url=None,
         description=(
             "Sign in to the administration portal first, then open /docs to call these APIs with your session. "
             "Writes require X-Portal-Request: 1 and Content-Type: application/json. "

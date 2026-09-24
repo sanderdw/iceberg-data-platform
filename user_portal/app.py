@@ -154,6 +154,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                 if any(d["environment"] == env for d in team_databases)
             ],
             "notebooks": [w.public() for w in runtime.workspaces.values() if w.session_id == session.id],
+            "catalogUri": directory.metadata.public_url + "/api/catalog",
         }
 
     async def sweep():
@@ -218,7 +219,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     directory.close()
 
     app = FastAPI(
-        title="Iceberg User Workspace", version="0.5.2", docs_url=None, redoc_url=None, lifespan=lifespan,
+        title="Iceberg User Workspace", version="0.5.3", docs_url=None, redoc_url=None, lifespan=lifespan,
         description=(
             "Sign in to the user portal first, then open /docs to call these APIs with your session. "
             "Your team roles and selected team/environment apply to every operation. "
@@ -718,8 +719,9 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         # script holds no secret, only where to sign in and which catalog to use.
         if not oidc:
             raise ServiceError(404, "Not found.")
-        values = {"ISSUER": oidc.issuer, "CATALOG_URI": directory.metadata.public_url + "/api/catalog"}
-        source = re.sub(r"^(ISSUER|CATALOG_URI) = .*$", lambda m: f"{m[1]} = {values[m[1]]!r}",
+        values = {"ISSUER": oidc.issuer, "CATALOG_URI": directory.metadata.public_url + "/api/catalog",
+                  "PORTAL": oidc.origin}
+        source = re.sub(r"^(ISSUER|CATALOG_URI|PORTAL) = .*$", lambda m: f"{m[1]} = {values[m[1]]!r}",
                         CONNECT_SCRIPT.read_text(), flags=re.MULTILINE)
         return Response(source, media_type="text/x-python", headers={
             "Content-Disposition": 'attachment; filename="iceberg_connect.py"'})

@@ -47,7 +47,7 @@ try {
   const connect = page.locator('.connect-panel');
   await expect(connect.getByRole('link', {name: 'Download iceberg_connect.py'})).toHaveAttribute('href', '/iceberg_connect.py');
   await expect(connect.locator('pre')).toHaveCount(3);
-  await expect(connect.locator('pre').nth(1)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb warehouse-dev)');
+  await expect(connect.locator('pre').nth(1)).toHaveText('uv run iceberg_connect.py shell warehouse-dev');
   await page.screenshot({path: 'test-results/catalog/connect-dark.png', fullPage: true});
   await page.getByText('Connect from your computer', {exact: true}).click();
   // Password-mode portals have no Keycloak device login, so the helper is not offered.

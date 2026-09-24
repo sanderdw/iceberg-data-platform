@@ -78,10 +78,12 @@ In **Catalog**, select a database and open **Connect from your computer**:
 | Tool | How |
 | --- | --- |
 | Python | `from iceberg_connect import catalog, duckdb_connection`. `catalog("db-…")` returns a PyIceberg catalog that renews its token itself. `duckdb_connection("db-…")` returns DuckDB with the database attached as `lakehouse`. |
-| DuckDB CLI | `duckdb -init <(uv run iceberg_connect.py duckdb db-…)` |
+| DuckDB CLI | `uv run iceberg_connect.py shell db-…` opens the DuckDB CLI with the database attached, on macOS, Linux and Windows. It needs `duckdb` on your `PATH`. |
 | DBeaver | Create a DuckDB connection. Run `uv run iceberg_connect.py duckdb db-…` and add each printed line under **Connection settings › Initialization › Bootstrap queries**. |
 
-DuckDB attaches read-only. Add `--write` to write with your own permissions. DuckDB keeps the token it started with, and that token lasts one hour. After that, run the command again (or replace the `CREATE SECRET` line in DBeaver). `uv run iceberg_connect.py logout` revokes the sign-in. Keycloak, Polaris and RustFS listen on `127.0.0.1`, so this works on the machine that runs the platform.
+DuckDB attaches read-only. Add `--write` to write with your own permissions. DuckDB keeps the token it started with, and that token lasts one hour. After that, run the command again (or replace the `CREATE SECRET` line in DBeaver). `uv run iceberg_connect.py logout` revokes the sign-in.
+
+Keycloak, Polaris and RustFS listen on `127.0.0.1`, so out of the box this works only on the machine that runs the platform. The [quick-share skill](../docs/install.md#agent-skills) makes it work from anywhere: it publishes the catalog and S3 API on the user portal's address. The Getting started guide warns when the catalog address only works on the platform's own machine. The helper names the address it could not reach and tells the user to download it again.
 
 ## Connect an MCP client
 
@@ -127,8 +129,8 @@ These settings live in the shared `.env`:
 | `NOTEBOOK_MEMORY` | `1g` | Memory limit per notebook |
 | `USER_COOKIE_SECURE` | `false` | Set to `true` behind HTTPS |
 | `MCP_CALLBACK_PORT` | `3010` | OAuth callback port of MCP clients |
-| `POLARIS_PUBLIC_URL` | `http://localhost:8181` | Catalog address given to external share recipients |
-| `S3_ENDPOINT` | `http://localhost:9000` | Storage address for share recipients; fixed per database at creation |
+| `POLARIS_PUBLIC_URL` | `http://localhost:8181` | Catalog address for `iceberg_connect.py` and external share recipients |
+| `S3_ENDPOINT` | `http://localhost:9000` | Storage address that Polaris hands out with each table. On restart, the administration portal moves existing databases to it. |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Address of a reverse proxy, so sign-in limits apply per visitor |
 
 Behind a reverse proxy, enable WebSockets and preserve the Host header. See the [security model](../SECURITY.md) for the isolation and trust boundaries.

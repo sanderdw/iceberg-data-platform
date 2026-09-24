@@ -237,6 +237,8 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
 .guide-code-bar button::before { content: '['; padding-right: 4px; }
 .guide-code-bar button::after { content: ']'; padding-left: 4px; }
 .guide-code pre { margin: 8px 0 0; overflow-wrap: break-word; }
+.guide-os { margin-top: 24px; }
+.guide-warning { margin: 16px 0 0; padding: 16px; border-left: 2px solid var(--accent); background: var(--surface); }
 .guide-prompts { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 16px; }
 .guide-prompts li { padding-left: 20px; border-left: 1px solid var(--border-visible); line-height: 1.65; color: var(--text-primary); }
 .guide-note { max-width: 850px; padding-top: 32px; margin-top: 32px; border-top: 1px solid var(--border); }

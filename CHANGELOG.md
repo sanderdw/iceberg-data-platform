@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.5.3 - 2026-09-24
+
+- **Participants get going from a single slip.** The `demo-company` skill now also writes printable sign-in slips, one per participant. Each slip holds the user portal address with a QR code, the username and the one-time password.
+- **quick-share now uses two addresses instead of three, and your own tools work through them.**
+  - The user portal address also carries the Iceberg catalog and S3 storage, so DuckDB, PyIceberg and DBeaver work on participants' laptops.
+  - The administration address carries sign-in.
+  - A gateway keeps the Polaris management API, the RustFS console and the Keycloak administration console off the internet.
+- `uv run iceberg_connect.py shell db-…` opens the DuckDB CLI with the database attached, on macOS, Linux and Windows. The old `duckdb -init <(…)` only worked in bash.
+- The helper checks the catalog before DuckDB starts. It names an address it can't reach and tells the user to download it again from the portal.
+- Getting started shows install commands for macOS, Linux and Windows. It also warns when the catalog address only works on the platform's own machine.
+- The administration portal points existing databases at the current `S3_ENDPOINT` when it starts. A database created before the platform got a public address now works from outside, so `S3_ENDPOINT` no longer has to be set before databases are created.
+- Updated dependencies, including marimo 0.25.0 and uv 0.12.18. Notebooks still ignore a `.env` file in the team workspace, so one member's `.env` never sets variables for the whole team.
+
 ## 0.5.2 - 2026-09-24
 
 - New agent skill `quick-share` opens the portals to participants anywhere for a class or demo. Free Cloudflare quick tunnels give public HTTPS addresses with trusted certificates, so nobody imports a certificate. It replaces the `lan-access` skill. See [agent skills](docs/install.md#agent-skills).

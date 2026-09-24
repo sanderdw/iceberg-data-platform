@@ -172,8 +172,11 @@ def test_pyiceberg_catalog_uses_the_refreshing_session(monkeypatch):
 
 def test_cli_prints_duckdb_sql_and_explains_a_missing_sign_in(monkeypatch, capsys):
     monkeypatch.setattr(helper, "session", lambda: type("S", (), {"access_token": lambda self: "t"})())
+    checked = []
+    monkeypatch.setattr(helper, "check_catalog", lambda warehouse, token: checked.append((warehouse, token)))
     helper.main(["duckdb", "db-1", "--as", "sales"])
     assert "ATTACH 'db-1' AS sales" in capsys.readouterr().out
+    assert checked == [("db-1", "t")]
 
     def signed_out():
         raise helper.LoginRequired("You are not signed in. " + helper.LOGIN_AGAIN)
@@ -198,6 +201,68 @@ def test_portal_serves_the_helper_with_its_own_issuer_and_catalog(issuer):  # no
     assert response.headers["content-disposition"] == 'attachment; filename="iceberg_connect.py"'
     assert f"\nISSUER = {ISSUER!r}\n" in response.text
     assert "\nCATALOG_URI = 'http://catalog.example:8181/api/catalog'\n" in response.text
+    assert "\nPORTAL = 'http://localhost:13000'\n" in response.text
     compile(response.text, "iceberg_connect.py", "exec")
     with TestClient(create_app(directory, FakeRuntime())) as client:
         assert client.get("/iceberg_connect.py").status_code == 404
+
+
+def test_catalog_check_names_the_database_the_user_cannot_open():
+    seen = []
+
+    def wire(request):
+        seen.append(request)
+        return httpx.Response(200 if request.url.params["warehouse"] == "db-1" else 403, json={})
+
+    http = httpx.Client(transport=httpx.MockTransport(wire))
+    helper.check_catalog("db-1", "t", http)
+    assert str(seen[0].url) == helper.CATALOG_URI + "/v1/config?warehouse=db-1"
+    assert seen[0].headers["authorization"] == "Bearer t"
+    with pytest.raises(ValueError, match="No database db-2 that you can access"):
+        helper.check_catalog("db-2", "t", http)
+
+
+def test_shell_attaches_through_a_private_file_and_removes_it(monkeypatch):
+    monkeypatch.setattr(helper.shutil, "which", lambda name: "/usr/bin/duckdb" if name == "duckdb" else None)
+    monkeypatch.setattr(helper, "session", lambda: type("S", (), {"access_token": lambda self: "secret-token"})())
+    monkeypatch.setattr(helper, "check_catalog", lambda warehouse, token: None)
+    started = []
+
+    class Process:
+        waits = 0
+
+        def wait(self):
+            # The first Ctrl+C belongs to DuckDB, which cancels a query; the helper keeps waiting.
+            self.waits += 1
+            if self.waits == 1:
+                raise KeyboardInterrupt
+            return 3
+
+    def popen(argv):
+        started.append(argv)
+        path = helper.Path(argv[2])
+        assert path.read_text() == helper.duckdb_sql("db-1", "secret-token", "sales", True)
+        assert path.stat().st_mode & 0o077 == 0
+        return Process()
+
+    assert helper.duckdb_shell("db-1", "sales", True, popen=popen) == 3
+    (argv,) = started
+    assert argv[:2] == ["/usr/bin/duckdb", "-init"] and "secret-token" not in " ".join(argv)
+    assert not helper.Path(argv[2]).exists()
+
+
+def test_shell_explains_a_missing_duckdb_cli(monkeypatch):
+    monkeypatch.setattr(helper.shutil, "which", lambda name: None)
+    with pytest.raises(ValueError, match="Install the DuckDB CLI"):
+        helper.duckdb_shell("db-1")
+
+
+def test_cli_names_the_address_it_could_not_reach(monkeypatch):
+    def unreachable(self):
+        raise httpx.ConnectError("refused", request=httpx.Request("GET", "http://localhost:8181/api/catalog/v1/config"))
+
+    monkeypatch.setattr(helper, "session", lambda: type("S", (), {"access_token": unreachable})())
+    with pytest.raises(SystemExit) as error:
+        helper.main(["duckdb", "db-1"])
+    assert "Could not reach http://localhost:8181." in str(error.value)
+    assert f"download iceberg_connect.py again from {helper.PORTAL}" in str(error.value)

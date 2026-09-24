@@ -2,6 +2,7 @@
 
 import importlib.util
 import math
+import os
 import re
 from pathlib import Path
 
@@ -91,9 +92,11 @@ def test_skill_files_are_linked_from_the_skill():
     skill = (SKILLS / "demo-company/SKILL.md").read_text()
     for reference in (*DOMAINS, "people"):
         assert f"(references/{reference}.md)" in skill
+    assert "scripts/slips.py" in skill
     skill = (SKILLS / "quick-share/SKILL.md").read_text()
     for asset in (*(SKILLS / "quick-share/assets").iterdir(), *(SKILLS / "quick-share/scripts").glob("*.py")):
         assert asset.name in skill
+    assert "demo-company/scripts/slips.py" in skill
 
 
 @pytest.mark.parametrize("name", ["quick-share", "demo-company"])
@@ -190,3 +193,54 @@ def test_sync_origins_accepts_origins(sync_origins, value, expected):
 def test_sync_origins_rejects_insecure_or_invalid_origins(sync_origins, value):
     with pytest.raises(Exception, match="origin|localhost"):
         sync_origins.origin(value)
+
+
+@pytest.fixture
+def slips():
+    spec = importlib.util.spec_from_file_location("slips", SKILLS / "demo-company/scripts/slips.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.qr = lambda url: f'<svg data-url="{url}"></svg>'  # segno is only installed when uv runs the script.
+    return module
+
+
+def credentials_template():
+    """The summary format of demo-company/SKILL.md, filled in the way the skill writes it."""
+    text = (SKILLS / "demo-company/SKILL.md").read_text()
+    template = re.search(r"```markdown\n(# <Company>.*?)```", text, re.DOTALL)[1]
+    return (template.replace("<Company>", "Voltara Energy").replace("<N>", "3")
+            .replace("<team-name>: <team description>", "grid-operations: Keeps the grid <balanced>")
+            .replace("| … | … | … | … | … |", "| 2 | daan-visser | Daan Visser | writer | existing, password unchanged |\n"
+                     "| 3 | emma-smit | Emma <Smit> | writer | Tc6Yk1Rn8Jv5Pl0e |")
+            .replace("<password>", "Hq7vX2kPz9Lm4Tw8"))
+
+
+def test_slips_read_the_documented_credentials_format(slips):
+    company, portal, people = slips.parse(credentials_template())
+    assert company == "Voltara Energy" and portal == "http://localhost:3002"
+    assert [(p["number"], p["username"], p["team"], p["role"]) for p in people] == [
+        (1, "noor-bakker", "grid-operations", "admin"), (2, "daan-visser", "grid-operations", "writer"),
+        (3, "emma-smit", "grid-operations", "writer")]
+
+
+def test_slips_follow_the_shared_address_and_escape_text(slips, tmp_path):
+    credentials = tmp_path / "demo-company-energy-credentials.md"
+    credentials.write_text(credentials_template())
+    (tmp_path / ".env").write_text("USER_ORIGIN=http://localhost:3002\nUSER_ORIGIN=https://users.trycloudflare.com/\n")
+    slips.main([str(credentials)])
+    output = tmp_path / "demo-company-energy-slips.html"
+    page = output.read_text()
+    assert page.count('<article class="slip">') == 3
+    assert page.count('data-url="https://users.trycloudflare.com"') == 3 and "localhost" not in page
+    assert "Hq7vX2kPz9Lm4Tw8" in page and "Emma &lt;Smit&gt;" in page and "<Smit>" not in page
+    # An existing account keeps its password; its slip says so instead of showing a one-time password.
+    assert page.count("ONE-TIME") == 2 and "Sign in with your existing password." in page
+    if os.name != "nt":
+        assert output.stat().st_mode & 0o777 == 0o600
+    # A rerun replaces a file that was made readable by others with a new owner-only one.
+    output.chmod(0o644)
+    slips.main([str(credentials), "--portal", "https://class.example"])
+    if os.name != "nt":
+        assert output.stat().st_mode & 0o777 == 0o600
+    assert not list(tmp_path.glob("*.tmp"))
+    assert 'data-url="https://class.example"' in output.read_text()

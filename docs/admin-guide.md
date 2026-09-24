@@ -36,7 +36,7 @@ Lists refresh every 30 seconds while visible. Navigation and filters are kept in
 
 Team administrators create data shares in the [user portal](../user_portal/README.md#data-shares). The **Data shares** page lists every share with its database, team, objects, expiry and creator, and you can revoke any of them there. A database that has shares can't be moved until they are revoked.
 
-Recipients outside this machine need addresses they can reach. Put Polaris and RustFS behind your own TLS reverse proxy. Expose only `/api/catalog` of Polaris and only the S3 API of RustFS. Then set `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` in `.env` **before creating the databases you intend to share**, because each catalog records its storage endpoint when it is created. Read [the security model](../SECURITY.md) first.
+Recipients outside this machine need addresses they can reach. Put Polaris and RustFS behind your own TLS reverse proxy. Expose only `/api/catalog` of Polaris and only the S3 API of RustFS. Then set `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` in `.env` and restart. The administration portal then points the storage of existing databases at the new `S3_ENDPOINT`. For a temporary class or demo, the [quick-share skill](install.md#agent-skills) does all of this through Cloudflare quick tunnels. Read [the security model](../SECURITY.md) first.
 
 ## Catalog browser
 
