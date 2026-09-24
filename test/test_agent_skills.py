@@ -237,5 +237,10 @@ def test_slips_follow_the_shared_address_and_escape_text(slips, tmp_path):
     assert page.count("ONE-TIME") == 2 and "Sign in with your existing password." in page
     if os.name != "nt":
         assert output.stat().st_mode & 0o777 == 0o600
+    # A rerun replaces a file that was made readable by others with a new owner-only one.
+    output.chmod(0o644)
     slips.main([str(credentials), "--portal", "https://class.example"])
+    if os.name != "nt":
+        assert output.stat().st_mode & 0o777 == 0o600
+    assert not list(tmp_path.glob("*.tmp"))
     assert 'data-url="https://class.example"' in output.read_text()

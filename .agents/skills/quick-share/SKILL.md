@@ -108,6 +108,7 @@ curl -s -o /dev/null -w "%{http_code}\n" <ADMIN_URL>/admin/
 curl -s -o /dev/null -w "%{http_code}\n" "<USERS_URL>/api/catalog/v1/config?warehouse=check"
 curl -s -o /dev/null -w "%{http_code} %{content_type}\n" <USERS_URL>/api/management/v1/catalogs
 curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: AWS4-HMAC-SHA256 Credential=check" <USERS_URL>/check/check
+curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: AWS4-HMAC-SHA256 Credential=check" <USERS_URL>/rustfs/admin/v3/info
 ```
 Expect:
 - Both portals return `302` to `<ADMIN_URL>/realms/iceberg/protocol/openid-connect/auth?...`, with a `redirect_uri` on the same portal address.
@@ -116,6 +117,7 @@ Expect:
 - The catalog returns `401`: Polaris answers and wants a token.
 - The management API returns `401 application/json` from the user portal (`Sign in to open your workspace`), never from Polaris.
 - The signed request returns `403` from RustFS (`Invalid SigV4 authorization header`).
+- The signed request to the RustFS administration API returns `404` from the gateway.
 
 A new address can take up to a minute before DNS resolves it everywhere; retry before digging deeper. If a portal restarts in a loop, run `docker compose logs portal` (or `docker compose -f compose.users.yaml logs users`). "HTTP OIDC is restricted to localhost" means an origin in `.env` still starts with `http://`.
 

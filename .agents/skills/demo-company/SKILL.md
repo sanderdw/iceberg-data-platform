@@ -132,7 +132,7 @@ Then make the printable sign-in slips, one per participant:
 ```sh
 uv run .agents/skills/demo-company/scripts/slips.py demo-company-<domain>-credentials.md
 ```
-It writes `demo-company-<domain>-slips.html` next to the credentials file, with owner-only permissions. Each slip has the user portal address (from `USER_ORIGIN` in `.env`) with a QR code, the person's name, team, username and one-time password, and two steps: sign in and choose a password, then follow Getting started in the portal. The trainer opens it in a browser, prints it on A4 and cuts it into slips. If the platform is shared later with quick-share, that skill makes the slips again with the new address.
+It writes `demo-company-<domain>-slips.html` next to the credentials file, readable only by you on macOS and Linux. Each slip has the user portal address (from `USER_ORIGIN` in `.env`) with a QR code, the person's name, team, username and one-time password, and two steps: sign in and choose a password, then follow Getting started in the portal. The trainer opens it in a browser, prints it on A4 and cuts it into slips. If the platform is shared later with quick-share, that skill makes the slips again with the new address.
 
 Tell the user both files hold live passwords and should be deleted once the accounts have been handed out.
 

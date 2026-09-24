@@ -6,8 +6,8 @@
 
     uv run .agents/skills/demo-company/scripts/slips.py demo-company-energy-credentials.md
 
-Writes demo-company-<domain>-slips.html next to the credentials file, with owner-only
-permissions: it holds the same live one-time passwords. The portal address comes from
+Writes demo-company-<domain>-slips.html next to the credentials file, owner-only on macOS
+and Linux: it holds the same live one-time passwords. The portal address comes from
 USER_ORIGIN in the .env next to it, so the slips follow a quick share. --portal overrides it.
 """
 
@@ -16,6 +16,7 @@ import html
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*$")
@@ -147,11 +148,16 @@ ol {{ margin: 0; padding-left: 4mm; font-size: 8pt; color: var(--secondary); }}
 
 
 def write_private(path, text):
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-        file.write(text)
-    if os.name != "nt":
-        os.chmod(path, 0o600)  # Also when the file already existed with wider permissions.
+    # A new owner-only file replaces the old one, so the passwords never sit in a file with wider
+    # permissions. Windows has no such mode bits; the file there gets the folder's permissions.
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+            file.write(text)
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
 
 
 def main(argv=None):

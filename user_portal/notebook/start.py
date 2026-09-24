@@ -24,7 +24,10 @@ def write_preferences(config):
         text += '\n[package_management]\nmanager = "uv"\n'
     # marimo loads the .env next to the notebooks by default. The whole team shares /work,
     # so one member's .env must not set variables in every member's kernel.
-    if "dotenv" not in preferences.get("runtime", {}):
+    runtime = preferences.get("runtime", {})
+    if runtime.get("dotenv") == []:
+        text = re.sub(r"^dotenv[ \t]*=[ \t]*\[\s*\]", NO_DOTENV, text, count=1, flags=re.MULTILINE)
+    elif "dotenv" not in runtime:
         text, found = re.subn(
             r"^\[runtime\][ \t]*(#.*)?$", lambda header: header[0] + "\n" + NO_DOTENV, text, count=1,
             flags=re.MULTILINE,

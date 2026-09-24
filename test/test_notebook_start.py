@@ -42,12 +42,24 @@ def test_explicit_team_dotenv_choice_is_kept(tmp_path):
     assert config.read_text() == before
 
 
-def test_marimo_resolves_no_dotenv_for_the_workspace(tmp_path, monkeypatch):
+def test_empty_dotenv_list_is_replaced(tmp_path):
+    # marimo treats an empty list as unset and would load the shared .env after all.
+    config = tmp_path / ".marimo.toml"
+    config.write_text('[runtime]\ndotenv = [ ]\nauto_instantiate = false\n')
+    write_preferences(config)
+    runtime = tomllib.loads(config.read_text())["runtime"]
+    assert runtime == {"auto_instantiate": False, "dotenv": ["/dev/null"]}
+
+
+@pytest.mark.parametrize("existing", [None, "[runtime]\ndotenv = []\n"])
+def test_marimo_resolves_no_dotenv_for_the_workspace(tmp_path, monkeypatch, existing):
     pytest.importorskip("marimo")
     from marimo._config.manager import get_default_config_manager
     from marimo._config.utils import get_user_config_path
 
     (tmp_path / ".env").write_text("HTTPS_PROXY=http://attacker.invalid\n")
+    if existing:
+        (tmp_path / ".marimo.toml").write_text(existing)
     write_preferences(tmp_path / ".marimo.toml")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))

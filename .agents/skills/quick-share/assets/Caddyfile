@@ -23,13 +23,16 @@
 # Everything a participant uses: the user portal, the Iceberg REST catalog of Polaris and the
 # S3 API of RustFS. Only /api/catalog of Polaris is public, never /api/management. S3 requests
 # are recognised by their AWS signature, so the RustFS console and unsigned requests never reach it.
+# The RustFS administration and cluster APIs stay internal, even for signed requests.
 :8081 {
+	@storageadmin path /rustfs /rustfs/* /minio /minio/*
 	@catalog path /api/catalog/*
 	@s3 {
 		header Authorization AWS4-HMAC-SHA256*
 	}
 	@s3presigned query X-Amz-Algorithm=AWS4-HMAC-SHA256
 	route {
+		respond @storageadmin 404
 		reverse_proxy @catalog polaris:8181
 		reverse_proxy @s3 rustfs:9000
 		reverse_proxy @s3presigned rustfs:9000
