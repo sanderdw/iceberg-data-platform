@@ -51,7 +51,7 @@ The skills are updated with the installer. Keep your own changes in a copy under
 Replace `latest/download` with `download/vX.Y.Z`. The bundle, Compose files and images are all pinned to that version:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.5.2/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.5.3/install.sh | sh
 ```
 
 ## Test a branch

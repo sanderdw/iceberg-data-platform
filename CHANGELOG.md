@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.3 - 2026-09-24
+
 - **Participants get going from a single slip.** The `demo-company` skill now also writes printable sign-in slips, one per participant. Each slip holds the user portal address with a QR code, the username and the one-time password.
 - **quick-share now uses two addresses instead of three, and your own tools work through them.**
   - The user portal address also carries the Iceberg catalog and S3 storage, so DuckDB, PyIceberg and DBeaver work on participants' laptops.
