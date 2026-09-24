@@ -83,6 +83,8 @@ In **Catalog**, select a database and open **Connect from your computer**:
 
 DuckDB attaches read-only. Add `--write` to write with your own permissions. DuckDB keeps the token it started with, and that token lasts one hour. After that, run the command again (or replace the `CREATE SECRET` line in DBeaver). `uv run iceberg_connect.py logout` revokes the sign-in.
 
+The helper turns off DuckDB's metadata-log lookup (`SET iceberg_use_metadata_log = false`). With the lookup on, a catalog clock that runs ahead of your computer makes the next write to a table fail with "Metadata-log exists but none of the entries were valid". Keep the platform host's clock in sync with NTP anyway.
+
 Keycloak, Polaris and RustFS listen on `127.0.0.1`, so out of the box this works only on the machine that runs the platform. The [quick-share skill](../docs/install.md#agent-skills) makes it work from anywhere: it publishes the catalog and S3 API on the user portal's address. The Getting started guide warns when the catalog address only works on the platform's own machine. The helper names the address it could not reach and tells the user to download it again.
 
 ## Connect an MCP client

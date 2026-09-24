@@ -174,6 +174,9 @@ def duckdb_sql(warehouse, token, alias="lakehouse", write=False, catalog_uri=CAT
         raise ValueError("The alias must be a plain SQL identifier.")
     return "\n".join([
         "INSTALL httpfs;", "LOAD httpfs;", "INSTALL iceberg;", "LOAD iceberg;",
+        # The catalog stamps table metadata with its own clock. When that clock runs ahead of this
+        # computer, DuckDB's metadata-log lookup fails the next write or reads an older table state.
+        "SET iceberg_use_metadata_log = false;",
         f"CREATE OR REPLACE SECRET {alias}_token (TYPE iceberg, TOKEN {sql_literal(token)});",
         f"DETACH DATABASE IF EXISTS {alias};",
         (f"ATTACH {sql_literal(warehouse)} AS {alias} (TYPE iceberg, ENDPOINT {sql_literal(catalog_uri)}, "

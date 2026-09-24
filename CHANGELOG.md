@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: DuckDB from your own computer could write to a table only once when the platform host's clock ran ahead. The next `INSERT` failed with "Metadata-log exists but none of the entries were valid". `iceberg_connect.py` now turns off DuckDB's metadata-log lookup. Download it again from the portal.
+
 ## 0.5.3 - 2026-09-24
 
 - **Participants get going from a single slip.** The `demo-company` skill now also writes printable sign-in slips, one per participant. Each slip holds the user portal address with a QR code, the username and the one-time password.
