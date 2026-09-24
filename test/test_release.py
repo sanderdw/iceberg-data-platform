@@ -109,6 +109,12 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
     assert {".agents/skills/quick-share/SKILL.md", ".agents/skills/quick-share/assets/Caddyfile",
             ".agents/skills/demo-company/SKILL.md", ".agents/skills/demo-company/references/retail.md"} <= set(skills)
     assert all(files[name] == (release_tree / name).read_bytes() for name in skills)
+    # Claude Code finds each skill through a pointer with the same name and description.
+    for skill in ("quick-share", "demo-company"):
+        pointer = files[f".claude/skills/{skill}/SKILL.md"].decode()
+        original = (release_tree / f".agents/skills/{skill}/SKILL.md").read_text()
+        assert pointer.split("---\n", 2)[1] == original.split("---\n", 2)[1]
+        assert f"Read `.agents/skills/{skill}/SKILL.md` and follow it." in pointer
     for content in files.values():
         assert secret.encode() not in content
         assert str(release_tree).encode() not in content

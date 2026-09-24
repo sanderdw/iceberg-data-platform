@@ -20,7 +20,7 @@ The installer does the following:
 - creates `.env` with random credentials in `~/iceberg-data-platform` (`$HOME\iceberg-data-platform` on Windows)
 - pulls the images and starts both Compose projects
 - puts `iceberg_connect.py` next to `.env`, so you can [connect your own tools](../user_portal/README.md#connect-from-your-computer) such as Python, the DuckDB CLI or DBeaver
-- ends with the commands to stop and start both stacks, links to the **Getting started** pages of both portals, and the bundled [agent skills](#agent-skills)
+- ends with where to sign in first: the administration portal, `platform-admin` and, on a new installation, the temporary password (you choose a new one at first sign-in). It also lists the commands to stop and start both stacks and the bundled [agent skills](#agent-skills)
 
 The bundled `iceberg_connect.py` uses the default local addresses. If you changed `POLARIS_PUBLIC_URL` or the Keycloak address, download it from the user portal instead (**Catalog › Connect from your computer**), which fills in your addresses.
 
@@ -33,7 +33,7 @@ The installer scripts and archives are available in the [release assets](https:/
 The installation folder contains two skills for coding agents in `.agents/skills`, in the open [Agent Skills](https://agentskills.io) format. Start your agent in the installation folder and ask it to use a skill, for example "Set up a demo company for my class".
 
 - **Read `.agents/skills` by themselves:** Codex, GitHub Copilot (VS Code and CLI), Gemini CLI and Cursor.
-- **Claude Code** only reads `.claude/skills`. Ask it to follow `.agents/skills/demo-company/SKILL.md`, or copy the folder to `.claude/skills`.
+- **Claude Code** only reads `.claude/skills`. The installer adds a pointer there for each skill, so it finds them too.
 
 The skills that use the platform's MCP server explain how to connect each agent. The same steps are in the [administration guide](admin-guide.md#connect-an-mcp-client).
 
@@ -47,7 +47,7 @@ The skills are updated with the installer. Keep your own changes in a copy under
 Replace `latest/download` with `download/vX.Y.Z`. The bundle, Compose files and images are all pinned to that version:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.5.1/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.5.2/install.sh | sh
 ```
 
 ## Test a branch
