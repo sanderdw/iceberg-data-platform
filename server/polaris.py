@@ -736,6 +736,8 @@ class PolarisProvider:
             raise ServiceError(409, "This database was renamed. Nothing was deleted; confirm the current name.")
         if catalog["properties"].get("portal.moving"):
             raise ServiceError(409, "This database is being moved. Try again after the move completes.")
+        # Before anything is taken apart: a mismatch must leave the database whole.
+        self.storage.check_bucket_owner(catalog["properties"]["portal.bucket"], id)
         # Persist intent first; on retry revoke again, even after partial failure.
         # Polaris drops views with purge, which must be enabled on this catalog.
         # This is restricted to a confirmed full database deletion.

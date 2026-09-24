@@ -151,7 +151,19 @@ def assert_next_steps(output, target):
     assert output.rstrip().endswith('and ask, for example: "Set up a demo company for my class"')
 
 
+def use_shared_origins(target):
+    # A kept .env from a quick-share session: the rerun must show its addresses, not localhost.
+    env = target / ".env"
+    env.write_text(env.read_text()
+                   .replace("PORTAL_ORIGIN=http://localhost:3000", "PORTAL_ORIGIN=https://admin.trycloudflare.com")
+                   .replace("USER_ORIGIN=http://localhost:3002", "USER_ORIGIN=https://users.trycloudflare.com"))
+    return env.read_bytes()
+
+
 def assert_rerun_hides_password(output, target):
+    assert "administration portal\n   https://admin.trycloudflare.com/#guide\n" in output
+    assert "user portal\n   https://users.trycloudflare.com/#guide\n" in output
+    assert "localhost:300" not in output.split("is running.")[1]
     # After the first sign-in the password in .env is stale, so a rerun only points to it.
     assert "Password  the one you chose at first sign-in (initial: PLATFORM_ADMIN_PASSWORD in " in output
     assert "/.env)\n" in output
@@ -167,7 +179,7 @@ def test_shell_install_and_rerun_preserve_configuration(shell_installer):
     assert_started(env)
     target = Path(env["ICEBERG_INSTALL_DIR"])
     assert_next_steps(result.stdout, target)
-    original = (target / ".env").read_bytes()
+    original = use_shared_origins(target)
     assert (target / ".env").stat().st_mode & 0o777 == 0o600
     (target / "compose.yaml").write_text("previous config")
     result = run()
@@ -256,7 +268,7 @@ def test_powershell_install_and_rerun_preserve_configuration(powershell_installe
     assert_started(env)
     target = Path(env["ICEBERG_INSTALL_DIR"])
     assert_next_steps(result.stdout, target)
-    original = (target / ".env").read_bytes()
+    original = use_shared_origins(target)
     (target / "compose.yaml").write_text("previous config")
     result = run()
     assert result.returncode == 0, result.stdout + result.stderr

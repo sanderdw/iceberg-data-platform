@@ -117,9 +117,12 @@ main() {
         password="the one you chose at first sign-in (initial: PLATFORM_ADMIN_PASSWORD in $shown_dir/.env)"
     fi
     printf '\nIceberg Data Platform %s is running.\n' "$version"
-    printf '\n1. Sign in to the administration portal\n   http://localhost:3000/#guide\n'
+    # A kept .env can hold other ports or a quick-share session's public addresses.
+    portal_origin=$(env_value PORTAL_ORIGIN)
+    user_origin=$(env_value USER_ORIGIN)
+    printf '\n1. Sign in to the administration portal\n   %s/#guide\n' "${portal_origin%/}"
     printf '   Username  %s\n   Password  %s\n' "$(env_value PLATFORM_ADMIN_USERNAME)" "$password"
-    printf '\n2. Create a team and a user, then sign in as that user in the user portal\n   http://localhost:3002/#guide\n   Or skip the setup: the demo-company skill below creates teams, users and databases for you\n'
+    printf '\n2. Create a team and a user, then sign in as that user in the user portal\n   %s/#guide\n   Or skip the setup: the demo-company skill below creates teams, users and databases for you\n' "${user_origin%/}"
     printf '\nInstalled in %s\n' "$shown_dir"
     printf '   Stop     cd %s && docker compose -f compose.users.yaml down && docker compose down\n' "$cd_dir"
     printf '   Start    cd %s && docker compose up -d --wait && docker compose -f compose.users.yaml up -d --wait users\n' "$cd_dir"

@@ -89,13 +89,16 @@
         }
         $Password = "the one you chose at first sign-in (initial: PLATFORM_ADMIN_PASSWORD in $ShownDir/.env)"
         if ($NewEnv) { $Password = "$(Get-EnvValue PLATFORM_ADMIN_PASSWORD)  (temporary: you choose a new one at first sign-in)" }
+        # A kept .env can hold other ports or a quick-share session's public addresses.
+        $PortalOrigin = (Get-EnvValue PORTAL_ORIGIN).TrimEnd('/')
+        $UserOrigin = (Get-EnvValue USER_ORIGIN).TrimEnd('/')
         Write-Host "`nIceberg Data Platform $($Entry.Version) is running."
         Write-Host "`n1. Sign in to the administration portal"
-        Write-Host '   http://localhost:3000/#guide'
+        Write-Host "   $PortalOrigin/#guide"
         Write-Host "   Username  $(Get-EnvValue PLATFORM_ADMIN_USERNAME)"
         Write-Host "   Password  $Password"
         Write-Host "`n2. Create a team and a user, then sign in as that user in the user portal"
-        Write-Host '   http://localhost:3002/#guide'
+        Write-Host "   $UserOrigin/#guide"
         Write-Host '   Or skip the setup: the demo-company skill below creates teams, users and databases for you'
         Write-Host "`nInstalled in $ShownDir"
         Write-Host "   Stop     Set-Location $LocationDir; docker compose -f compose.users.yaml down; docker compose down"

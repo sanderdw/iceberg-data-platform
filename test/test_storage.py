@@ -112,6 +112,14 @@ def test_delete_refuses_an_untagged_bucket_and_skips_a_missing_one(storage):
     assert [c.args for c in storage.call.call_args_list] == [("get_bucket_tagging",), ("head_bucket",)]
 
 
+def test_owner_check_reports_a_missing_bucket_and_accepts_its_own(storage):
+    missing = ServiceError(404, "The storage operation failed.")
+    storage.call = Mock(side_effect=[missing, missing])
+    assert storage.check_bucket_owner("own-bucket", "own-db") is False
+    storage.call = Mock(return_value=OWN_TAGS)
+    assert storage.check_bucket_owner("own-bucket", "own-db") is True
+
+
 def test_provider_errors_do_not_leak_credentials(storage):
     provider = PolarisProvider({"POLARIS_URL": "http://polaris"}, storage)
     provider.access_token = lambda: "test-token"
