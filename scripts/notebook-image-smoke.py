@@ -104,7 +104,14 @@ if __name__ == "__main__":
         finally:
             process.terminate()
             process.wait(timeout=15)
-    print("PASS: notebook starts read-only and offline; HTML/Jupyter exports work; no browser dependencies")
+    # A teammate's .env in the shared filespace must not reach other members' kernels.
+    dotenv = subprocess.run(
+        [sys.executable, "-c", ("from marimo._config.manager import get_default_config_manager as m; "
+                                "print(m(current_path='/work').get_config(hide_secrets=False)['runtime']['dotenv'])")],
+        cwd="/work", check=True, capture_output=True, text=True, timeout=30,
+    ).stdout.strip()
+    assert dotenv == "['/dev/null']", f"marimo loads {dotenv}"
+    print("PASS: notebook starts read-only and offline; HTML/Jupyter exports work; no browser dependencies; no shared .env")
 
 
 if __name__ == "__main__":

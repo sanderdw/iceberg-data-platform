@@ -10,15 +10,15 @@ dependencies = [
   "fastapi==0.141.1",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
-  "boto3>=1.43.98",
+  "boto3>=1.43.101",
   "python-dotenv>=1.2.3",
   "psycopg[binary]>=3.3.6,<4",
 ]
 
 [dependency-groups]
-oidc = ["Authlib==1.8.0", "httpx2>=2.13.0"]
+oidc = ["Authlib==1.8.0", "httpx2>=2.13.1"]
 mcp = ["mcp>=2.2.0,<3"]
-dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.16.8", "httpx2>=2.13.0"]
+dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.16.8", "httpx2>=2.13.1"]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "pandas>=3.0.6", "ipykernel>=7.3.0", "matplotlib>=3.11.2"]
 users = [
     "docker==7.2.0",
@@ -27,7 +27,7 @@ users = [
 notebook = [
     "altair>=6.3.0",
     "duckdb==1.5.5",
-    "marimo[sql]==0.24.2",
+    "marimo[sql]==0.25.0",
     "matplotlib>=3.11.2",
     "nbformat>=5.11.1",
     "pandas>=3.0.6",

@@ -13,6 +13,7 @@
 - The helper checks the catalog before DuckDB starts. It names an address it can't reach and tells the user to download it again from the portal.
 - Getting started shows install commands for macOS, Linux and Windows. It also warns when the catalog address only works on the platform's own machine.
 - The administration portal points existing databases at the current `S3_ENDPOINT` when it starts. A database created before the platform got a public address now works from outside, so `S3_ENDPOINT` no longer has to be set before databases are created.
+- Updated dependencies, including marimo 0.25.0 and uv 0.12.18. Notebooks still ignore a `.env` file in the team workspace, so one member's `.env` never sets variables for the whole team.
 
 ## 0.5.2 - 2026-09-24
 
