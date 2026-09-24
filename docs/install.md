@@ -22,7 +22,7 @@ The installer does the following:
 - puts `iceberg_connect.py` next to `.env`, so you can [connect your own tools](../user_portal/README.md#connect-from-your-computer) such as Python, the DuckDB CLI or DBeaver
 - ends with where to sign in first: the administration portal, `platform-admin` and, on a new installation, the temporary password (you choose a new one at first sign-in). It also lists the commands to stop and start both stacks and the bundled [agent skills](#agent-skills)
 
-The bundled `iceberg_connect.py` uses the default local addresses. If you changed `POLARIS_PUBLIC_URL` or the Keycloak address, download it from the user portal instead (**Catalog › Connect from your computer**), which fills in your addresses.
+The bundled `iceberg_connect.py` uses the default local addresses. If you changed `POLARIS_PUBLIC_URL` or the Keycloak address, for example with `quick-share`, download it from the user portal instead (**Catalog › Connect from your computer**). The portal fills in your addresses.
 
 You don't need a source checkout, Python or Node.js. Continue with the [first steps](../README.md#first-steps).
 
@@ -37,8 +37,12 @@ The installation folder contains two skills for coding agents in `.agents/skills
 
 The skills that use the platform's MCP server explain how to connect each agent. The same steps are in the [administration guide](admin-guide.md#connect-an-mcp-client).
 
-- [`quick-share`](../.agents/skills/quick-share/SKILL.md) makes the portals reachable from anywhere for a temporary session, such as a class with `demo-company`. It starts free Cloudflare quick tunnels that give each portal and the sign-in page a public `trycloudflare.com` address with a trusted certificate, so nobody installs an app or imports a certificate. The addresses are random, public and change whenever the tunnels restart, so end the session with the skill's undo. The Keycloak administration console, Polaris and S3 stay off the internet.
-- [`demo-company`](../.agents/skills/demo-company/SKILL.md) sets up a fictional Energy, Webshop or Retail company for a class or training through the [administration MCP server](admin-guide.md#connect-an-mcp-client). It asks how many participants there are (up to 48) and creates one account per participant. The accounts are spread over up to 6 teams of about 4 people, each person in one team, and each team gets its own databases. Each team has one team admin and the others are writers, so every participant can work hands-on. It ends with a numbered list of every username and one-time password to hand out. Connect the agent to the administration MCP server first; the skill explains how.
+- [`quick-share`](../.agents/skills/quick-share/SKILL.md) makes the portals reachable from anywhere for a temporary session, such as a class with `demo-company`. It starts two free Cloudflare quick tunnels with public `trycloudflare.com` addresses and trusted certificates, so nobody installs an app or imports a certificate.
+  - Participants use only the user portal address. It also carries the Iceberg catalog and S3 API, so DuckDB and PyIceberg on their own laptops work too.
+  - The other address serves the administration portal and sign-in.
+  - A gateway keeps the Keycloak administration console, the Polaris management API and the RustFS console off the internet.
+  - The addresses are random, public and change whenever the tunnels restart, so end the session with the skill's undo.
+- [`demo-company`](../.agents/skills/demo-company/SKILL.md) sets up a fictional Energy, Webshop or Retail company for a class or training through the [administration MCP server](admin-guide.md#connect-an-mcp-client). It asks how many participants there are (up to 48) and creates one account per participant. The accounts are spread over up to 6 teams of about 4 people, each person in one team, and each team gets its own databases. Each team has one team admin and the others are writers, so every participant can work hands-on. It ends with a numbered list of every username and one-time password, plus a printable page of sign-in slips, one per participant, with the portal address, a QR code and their credentials. Connect the agent to the administration MCP server first; the skill explains how.
 
 The skills are updated with the installer. Keep your own changes in a copy under another name.
 

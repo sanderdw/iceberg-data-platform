@@ -9,6 +9,7 @@
 """Connect your own tools to the Iceberg platform as yourself.
 
     uv run iceberg_connect.py login              # sign in once in your browser
+    uv run iceberg_connect.py shell DATABASE     # open the DuckDB CLI with the database attached
     uv run iceberg_connect.py duckdb DATABASE    # SQL for the DuckDB CLI or DBeaver
     uv run iceberg_connect.py token              # a fresh access token
     uv run iceberg_connect.py logout             # revoke and forget the sign-in
@@ -29,6 +30,8 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -40,10 +43,12 @@ import httpx
 # Defaults match a local installation; the user portal fills in these values when you download this file.
 ISSUER = "http://localhost:8080/realms/iceberg"
 CATALOG_URI = "http://localhost:8181/api/catalog"
+PORTAL = "http://localhost:3002"
 CLIENT_ID = "iceberg-cli"
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 LOGIN_AGAIN = "Sign in again with: uv run iceberg_connect.py login"
+DOWNLOAD_AGAIN = f"If the platform moved, download iceberg_connect.py again from {PORTAL}"
 
 
 class LoginRequired(RuntimeError):
@@ -177,6 +182,39 @@ def duckdb_sql(warehouse, token, alias="lakehouse", write=False, catalog_uri=CAT
     ]) + "\n"
 
 
+def check_catalog(warehouse, token, http=None):
+    """Fail with a clear message before DuckDB does with a bare connection error."""
+    response = (http or session().http).get(
+        f"{CATALOG_URI}/v1/config", params={"warehouse": warehouse}, headers={"Authorization": f"Bearer {token}"})
+    if response.status_code in (403, 404):
+        raise ValueError(f"No database {warehouse} that you can access. Copy its name from the Catalog page.")
+    response.raise_for_status()
+
+
+def duckdb_shell(warehouse, alias="lakehouse", write=False, popen=subprocess.Popen):
+    """Run the DuckDB CLI with the database attached, on any operating system.
+
+    The SQL holds the access token, so it goes through an owner-only file, never the command line.
+    """
+    cli = shutil.which("duckdb")
+    if not cli:
+        raise ValueError(f"Install the DuckDB CLI first. The guide at {PORTAL}/#guide shows how.")
+    token = session().access_token()
+    check_catalog(warehouse, token)
+    descriptor, path = tempfile.mkstemp(prefix="iceberg-connect-", suffix=".sql")
+    try:
+        with os.fdopen(descriptor, "w") as file:
+            file.write(duckdb_sql(warehouse, token, alias, write))
+        process = popen([cli, "-init", path])
+        while True:
+            try:
+                return process.wait()
+            except KeyboardInterrupt:  # Ctrl+C cancels a query in DuckDB; keep the shell open.
+                pass
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
 def duckdb_connection(warehouse, alias="lakehouse", write=False):
     """A DuckDB connection with the database attached. The token lasts an hour; connect again to renew."""
     import duckdb
@@ -221,10 +259,12 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("login", help="sign in with your browser")
     commands.add_parser("token", help="print a fresh access token")
-    duckdb_command = commands.add_parser("duckdb", help="print SQL that attaches a database in DuckDB")
-    duckdb_command.add_argument("warehouse", help="catalog name of the database, for example db-...")
-    duckdb_command.add_argument("--as", dest="alias", default="lakehouse", help="name to attach it as")
-    duckdb_command.add_argument("--write", action="store_true", help="attach writable (default: read-only)")
+    for name, help in (("shell", "open the DuckDB CLI with a database attached"),
+                       ("duckdb", "print SQL that attaches a database in DuckDB")):
+        command = commands.add_parser(name, help=help)
+        command.add_argument("warehouse", help="catalog name of the database, for example db-...")
+        command.add_argument("--as", dest="alias", default="lakehouse", help="name to attach it as")
+        command.add_argument("--write", action="store_true", help="attach writable (default: read-only)")
     commands.add_parser("logout", help="revoke and forget your sign-in")
     args = parser.parse_args(argv)
     try:
@@ -232,17 +272,25 @@ def main(argv=None):
             session().login()
         elif args.command == "token":
             print(session().access_token())
+        elif args.command == "shell":
+            sys.exit(duckdb_shell(args.warehouse, args.alias, args.write))
         elif args.command == "duckdb":
-            print(duckdb_sql(args.warehouse, session().access_token(), args.alias, args.write), end="")
+            token = session().access_token()
+            check_catalog(args.warehouse, token)
+            print(duckdb_sql(args.warehouse, token, args.alias, args.write), end="")
         else:
             session().logout()
             print("Signed out.")
     except (LoginRequired, ValueError) as exc:
         sys.exit(str(exc))
     except httpx.HTTPStatusError as exc:
-        sys.exit(f"Keycloak refused the request with status {exc.response.status_code}.")
-    except httpx.TransportError:
-        sys.exit(f"Could not reach {ISSUER}. Is the platform running?")
+        sys.exit(f"{_origin(exc.request.url)} refused the request with status {exc.response.status_code}.")
+    except httpx.TransportError as exc:
+        sys.exit(f"Could not reach {_origin(exc.request.url)}. Is the platform running? {DOWNLOAD_AGAIN}.")
+
+
+def _origin(url):
+    return f"{url.scheme}://{url.netloc.decode()}"
 
 
 if __name__ == "__main__":

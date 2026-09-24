@@ -182,6 +182,31 @@ class PolarisProvider:
             path, "PUT", {"currentEntityVersion": current["entityVersion"], "properties": properties}
         )
 
+    def sync_storage_endpoints(self):
+        """Point the vended S3 endpoint of every portal database at the current S3_ENDPOINT.
+
+        A catalog records its endpoint when it is created, so after a new public address (a
+        quick share, a reverse proxy) clients would still be sent to the old one.
+        """
+        endpoint = self.env.get("S3_ENDPOINT", "http://localhost:9000")
+        updated = []
+        for catalog in self.management("/catalogs")["catalogs"]:
+            storage = catalog.get("storageConfigInfo", {})
+            if not self.managed(catalog) or storage.get("storageType") != "S3" or storage.get("endpoint") == endpoint:
+                continue
+            # Polaris clears the properties of a catalog update that leaves them out.
+            self.management(
+                f"/catalogs/{enc(catalog['name'])}",
+                "PUT",
+                {
+                    "currentEntityVersion": catalog["entityVersion"],
+                    "properties": catalog["properties"],
+                    "storageConfigInfo": {**storage, "endpoint": endpoint},
+                },
+            )
+            updated.append(catalog["name"])
+        return updated
+
     def health(self):
         try:
             self.management("/catalogs")

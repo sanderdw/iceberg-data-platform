@@ -6,14 +6,14 @@ const teams = [
   {id: 'analytics', name: 'Energy analytics', description: 'Understand energy use together.', role: 'reader'},
   {id: 'research', name: 'Research', description: '', role: 'writer'},
 ];
-let team = 'analytics', environment = 'development', failMembers = false, delayedMembers = null, keycloak = false;
+let team = 'analytics', environment = 'development', failMembers = false, delayedMembers = null, keycloak = false, catalogUri = 'http://team.test/api/catalog';
 const members = {
   analytics: [{id: 'alice', name: 'alice', role: 'reader'}, {id: 'bob', name: '<img src=x onerror=alert(1)>', role: 'admin'}],
   research: [{id: 'alice', name: 'alice', role: 'writer'}],
 };
 const database = {id: 'energy-dev', name: 'Energy', team: 'analytics', environment: 'development'};
 const databases = [database];
-const workspace = () => ({user: {id: 'alice', name: 'alice'}, teams, activeTeam: team, activeRole: teams.find(t => t.id === team).role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], databases: databases.filter(db => db.team === team && db.environment === environment), deletingDatabases: [], notebooks: []});
+const workspace = () => ({user: {id: 'alice', name: 'alice'}, teams, activeTeam: team, activeRole: teams.find(t => t.id === team).role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], databases: databases.filter(db => db.team === team && db.environment === environment), deletingDatabases: [], notebooks: [], catalogUri});
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 try {
   const page = await browser.newPage({viewport: {width: 1440, height: 1050}}), errors = [];
@@ -93,11 +93,17 @@ try {
   await page.reload();
   await expect(page.locator('#guide-nav')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('#guide-computer a[href="/iceberg_connect.py"]')).toBeVisible();
-  // DuckDB CLI only: install, sign in, then read-only and writable attach.
+  // DuckDB CLI only: install for the chosen operating system, sign in, then read-only and writable attach.
   await expect(page.locator('#guide-computer pre')).toHaveCount(4);
-  await expect(page.locator('#guide-computer pre').nth(0)).toHaveText('brew install duckdb');
-  await expect(page.locator('#guide-computer pre').nth(2)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb energy-dev)');
-  await expect(page.locator('#guide-computer pre').nth(3)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb energy-dev --write)');
+  await expect(page.locator('#guide-computer .guide-warning')).toHaveCount(0);
+  await page.locator('#guide-computer').getByRole('tab', {name: 'macOS', exact: true}).click();
+  await expect(page.locator('#guide-computer pre').nth(0)).toHaveText('brew install uv duckdb');
+  await page.locator('#guide-computer').getByRole('tab', {name: 'Windows', exact: true}).click();
+  await expect(page.locator('#guide-computer').getByRole('tab', {name: 'Windows', exact: true})).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#guide-computer pre').nth(0)).toHaveText('winget install --id=astral-sh.uv -e\nwinget install DuckDB.cli');
+  await expect(page.locator('#guide-computer pre')).toHaveCount(4);
+  await expect(page.locator('#guide-computer pre').nth(2)).toHaveText('uv run iceberg_connect.py shell energy-dev');
+  await expect(page.locator('#guide-computer pre').nth(3)).toHaveText('uv run iceberg_connect.py shell energy-dev --write');
   // One recipe per coding agent: Codex, GitHub Copilot in VS Code and Claude Code.
   await expect(page.locator('#guide-agent pre')).toHaveCount(3);
   await expect(page.locator('#guide-agent pre').nth(0)).toHaveText('[mcp_servers.iceberg-user]\nurl = "http://team.test/mcp"\nscopes = ["openid", "profile", "offline_access"]\n\n[mcp_servers.iceberg-user.oauth]\nclient_id = "iceberg-mcp"');
@@ -105,10 +111,17 @@ try {
   await expect(page.locator('#guide-agent pre').nth(2)).toHaveText('claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-user http://team.test/mcp');
   await expect(page.locator('#guide-agent .guide-prompts li')).toHaveCount(2);
   await page.getByLabel('Environment', {exact: true}).selectOption('production');
-  await expect(page.locator('#guide-computer pre').nth(2)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb <database>)');
-  await expect(page.locator('#guide-computer pre').nth(3)).toHaveText('duckdb -init <(uv run iceberg_connect.py duckdb <database> --write)');
+  await expect(page.locator('#guide-computer pre').nth(2)).toHaveText('uv run iceberg_connect.py shell <database>');
+  await expect(page.locator('#guide-computer pre').nth(3)).toHaveText('uv run iceberg_connect.py shell <database> --write');
   await page.getByLabel('Environment', {exact: true}).selectOption('development');
   await expect(page.locator('#guide-computer pre').nth(2)).toContainText('energy-dev');
+  // A catalog on localhost only works on the platform's own machine; this page runs elsewhere.
+  catalogUri = 'http://localhost:8181/api/catalog';
+  await page.evaluate(() => refreshWorkspace());
+  await expect(page.locator('#guide-computer .guide-warning')).toContainText('cannot reach this platform from other computers');
+  catalogUri = 'http://team.test/api/catalog';
+  await page.evaluate(() => refreshWorkspace());
+  await expect(page.locator('#guide-computer .guide-warning')).toHaveCount(0);
   await page.locator('.guide-index button').nth(2).click();
   await expect(page.locator('#guide-agent')).toBeInViewport();
   await page.screenshot({path: 'test-results/team/guide-dark.png', fullPage: true});

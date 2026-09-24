@@ -5,17 +5,27 @@ description: Make an installed Iceberg Data Platform reachable from anywhere for
 
 # Quick share for Iceberg Data Platform
 
-Out of the box every portal listens on `127.0.0.1` only. This skill starts three free [Cloudflare quick tunnels](https://developers.cloudflare.com/tunnel/get-started/#quick-tunnels-development) that give the administration portal, user portal and Keycloak sign-in each a random `https://<name>.trycloudflare.com` address, and points the sign-in configuration at them. Browsers, phones and agents trust the certificates as they are. Nothing is rebuilt.
+Out of the box every portal listens on `127.0.0.1` only. This skill starts two free [Cloudflare quick tunnels](https://developers.cloudflare.com/tunnel/get-started/#quick-tunnels-development), each with a random `https://<name>.trycloudflare.com` address, and points the platform at them. Browsers, phones and agents trust the certificates as they are. Nothing is rebuilt.
+
+- **Participants** need only the user portal address. It also carries the Iceberg catalog and S3 storage, so DuckDB, PyIceberg and DBeaver on their own laptops work too.
+- **The administration address** serves the administration portal and Keycloak sign-in.
+
+A small gateway in front of the tunnels routes each request and keeps internal consoles off the internet.
 
 **Meant for temporary sessions.** Quick tunnels are free and need no Cloudflare account, but:
-- The addresses are random and change every time a tunnel starts. After a restart or reboot, run this skill again; participants then use the new addresses.
+- The addresses are random and change every time a tunnel starts. After a restart or reboot, run this skill again; participants then use the new address.
 - The addresses are public. Anyone who has one reaches the sign-in page. Cloudflare offers no access control for quick tunnels.
 - Cloudflare supports quick tunnels for testing only, with no uptime guarantee and a limit of 200 concurrent requests. That is enough for a class of 48.
 
 **What changes:**
-- Administration, user portal and Keycloak become three `https://<name>.trycloudflare.com` addresses.
+- The administration address serves the administration portal plus Keycloak's `iceberg` realm.
+  - The Keycloak administration console (`/admin`) and the `master` realm are blocked.
+- The user portal address serves the user portal plus two APIs:
+  - the Polaris Iceberg REST catalog (`/api/catalog`), behind Keycloak tokens;
+  - the RustFS S3 API, for signed requests only.
+  - The Polaris management API, the RustFS console and pgAdmin stay local-only.
 - Sign-in through `http://localhost` stops working, including on the host itself, until you undo the change.
-- The Keycloak administration console (`/admin`) is blocked on the public address. Polaris (8181), RustFS/S3 (9000) and pgAdmin (5050) stay local-only.
+- On restart the administration portal points existing databases' storage at the new address, so databases created before the share keep working from outside.
 
 Work from the installation directory: the one holding `.env`, `compose.yaml` and `compose.users.yaml` (default `~/iceberg-data-platform`). Commands refer to this skill's files at `.agents/skills/quick-share`.
 
@@ -34,18 +44,17 @@ Tell the user that the platform will be reachable from the internet at public ad
 
 ## 3. Start the tunnels
 
-1. Start them straight from the skill folder; nothing is copied. `compose.quickshare.yaml` runs a tunnel per service, and a small `Caddyfile` proxy in front of Keycloak blocks its administration console. `--force-recreate` gives every tunnel a new address, so all three always belong to the same session:
+1. Start them straight from the skill folder; nothing is copied. `compose.quickshare.yaml` runs two tunnels and a gateway. The gateway's `Caddyfile` decides which service answers each path. `--force-recreate` gives both tunnels a new address, so they always belong to the same session:
    ```sh
    docker compose -f .agents/skills/quick-share/assets/compose.quickshare.yaml up -d --force-recreate
    ```
-2. Read each address from the tunnel's log. It takes a few seconds to appear; retry until all three are there:
+2. Read each address from the tunnel's log. It takes a few seconds to appear; retry until both are there:
    ```sh
    docker compose -f .agents/skills/quick-share/assets/compose.quickshare.yaml logs admin-tunnel | grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" | tail -1
    docker compose -f .agents/skills/quick-share/assets/compose.quickshare.yaml logs users-tunnel | grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" | tail -1
-   docker compose -f .agents/skills/quick-share/assets/compose.quickshare.yaml logs keycloak-tunnel | grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" | tail -1
    ```
    PowerShell: `docker compose -f .agents/skills/quick-share/assets/compose.quickshare.yaml logs admin-tunnel 2>&1 | Select-String -Pattern "https://[a-z0-9-]+\.trycloudflare\.com" | Select-Object -Last 1`.
-   Call them `<ADMIN_URL>`, `<USERS_URL>` and `<KEYCLOAK_URL>` below. If a log shows an error instead, the host cannot reach Cloudflare; outbound HTTPS and QUIC (UDP 7844) must be allowed.
+   Call them `<ADMIN_URL>` and `<USERS_URL>` below. If a log shows an error instead, the host cannot reach Cloudflare; outbound HTTPS and QUIC (UDP 7844) must be allowed.
 3. Find the platform network's subnet. The tunnels reach the portals from an address in it:
    `docker network inspect iceberg-platform_default --format "{{(index .IPAM.Config 0).Subnet}}"`
 
@@ -54,13 +63,17 @@ Tell the user that the platform will be reachable from the internet at public ad
 Edit `.env`. Replace a key's existing uncommented line, or append the key when it is missing. Never add a second line for the same key. The addresses have no port:
 ```dotenv
 PORTAL_ORIGIN=<ADMIN_URL>
+KEYCLOAK_ORIGIN=<ADMIN_URL>
+OIDC_ISSUER=<ADMIN_URL>/realms/iceberg
 USER_ORIGIN=<USERS_URL>
-KEYCLOAK_ORIGIN=<KEYCLOAK_URL>
-OIDC_ISSUER=<KEYCLOAK_URL>/realms/iceberg
+POLARIS_PUBLIC_URL=<USERS_URL>
+S3_ENDPOINT=<USERS_URL>
 USER_COOKIE_SECURE=true
 FORWARDED_ALLOW_IPS=<platform subnet from step 3>
 ```
-`FORWARDED_ALLOW_IPS` lets the portals trust the tunnels' `X-Forwarded-*` headers, so they see HTTPS and the visitor's address. Leave `OIDC_INTERNAL_ISSUER` unchanged: containers reach Keycloak internally at `http://keycloak:8080`.
+- `FORWARDED_ALLOW_IPS` lets the portals trust the gateway's `X-Forwarded-*` headers, so they see HTTPS and the visitor's address.
+- `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` are what tools on participants' laptops use. The user portal writes the catalog address into the `iceberg_connect.py` it serves, and Polaris hands out the storage address with each table.
+- Leave `OIDC_INTERNAL_ISSUER` unchanged: containers reach Keycloak internally at `http://keycloak:8080`.
 
 ## 5. Restart
 
@@ -90,26 +103,33 @@ From the host. No `-k`: the certificates are trusted.
 ```sh
 curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" <ADMIN_URL>/auth/login
 curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" <USERS_URL>/auth/login
-curl -s <KEYCLOAK_URL>/realms/iceberg/.well-known/openid-configuration
-curl -s -o /dev/null -w "%{http_code}\n" <KEYCLOAK_URL>/admin/
+curl -s <ADMIN_URL>/realms/iceberg/.well-known/openid-configuration
+curl -s -o /dev/null -w "%{http_code}\n" <ADMIN_URL>/admin/
+curl -s -o /dev/null -w "%{http_code}\n" "<USERS_URL>/api/catalog/v1/config?warehouse=check"
+curl -s -o /dev/null -w "%{http_code} %{content_type}\n" <USERS_URL>/api/management/v1/catalogs
+curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: AWS4-HMAC-SHA256 Credential=check" <USERS_URL>/check/check
 ```
 Expect:
-- Both portals return `302` to `<KEYCLOAK_URL>/realms/iceberg/protocol/openid-connect/auth?...`, with a `redirect_uri` on the same portal address.
+- Both portals return `302` to `<ADMIN_URL>/realms/iceberg/protocol/openid-connect/auth?...`, with a `redirect_uri` on the same portal address.
 - The discovery document's `issuer` is the new `OIDC_ISSUER`.
 - `/admin/` returns `404`.
+- The catalog returns `401`: Polaris answers and wants a token.
+- The management API returns `401 application/json` from the user portal (`Sign in to open your workspace`), never from Polaris.
+- The signed request returns `403` from RustFS (`Invalid SigV4 authorization header`).
 
 A new address can take up to a minute before DNS resolves it everywhere; retry before digging deeper. If a portal restarts in a loop, run `docker compose logs portal` (or `docker compose -f compose.users.yaml logs users`). "HTTP OIDC is restricted to localhost" means an origin in `.env` still starts with `http://`.
 
 ## 8. Tell the user
 
 Summarize:
-- The addresses to hand out: administration `<ADMIN_URL>`, user portal `<USERS_URL>`, and the guides at `/#guide` on each. Participants only need the user portal address; Keycloak's address appears by itself during sign-in.
+- The address to hand out: user portal `<USERS_URL>`. Participants need only this one; the sign-in page on `<ADMIN_URL>` appears by itself. Its guide at `<USERS_URL>/#guide` covers the browser, their own tools and AI agents. The administration portal is at `<ADMIN_URL>`.
+- If a `demo-company-*-credentials.md` file is in the installation directory, regenerate the printable sign-in slips so they carry the new address: `uv run .agents/skills/demo-company/scripts/slips.py <credentials file>`. It writes `demo-company-<domain>-slips.html` next to it, one slip per participant with the address, a QR code, username and one-time password. Tell the user it holds live passwords and should be deleted after printing.
 - MCP connections from coding agents use `<ADMIN_URL>/mcp` (administration) and `<USERS_URL>/mcp` (user portal) instead of localhost. No certificate setup is needed. Replace the URL in the agent's MCP configuration and sign in again:
   - Codex: change `url` under `[mcp_servers.iceberg-admin]` in `~/.codex/config.toml`, then run `codex mcp login iceberg-admin`.
   - GitHub Copilot: change `url` in `.vscode/mcp.json` or `~/.copilot/mcp-config.json`.
   - Claude Code: `claude mcp remove iceberg-admin`, then `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-admin <ADMIN_URL>/mcp`.
   - Other agents: change the server URL in their MCP settings.
-- `iceberg_connect.py` has the issuer built in. Download it again from the user portal's connection page.
+- `iceberg_connect.py` has the sign-in and catalog addresses built in. Anyone who downloaded it before the share downloads it again from the user portal; the helper says so when it cannot reach an old address.
 - The addresses stop working when a tunnel stops, Docker restarts or the host sleeps. Run this skill again for new addresses. Keep the host awake during the session.
 - End the session with "Undo". Until then the platform stays reachable from the internet, and localhost sign-in does not work.
 
@@ -122,4 +142,4 @@ Summarize:
    - `--admin-origins http://localhost:<PORT>`
    - `--user-origins http://localhost:<USER_PORT>`
    - `--old-issuer` set to the tunnel issuer from step 2.
-5. Tell the user that sign-in works at `http://localhost:<PORT>` and `http://localhost:<USER_PORT>` again, and that MCP clients and `iceberg_connect.py` need their localhost addresses back.
+5. Tell the user that sign-in works at `http://localhost:<PORT>` and `http://localhost:<USER_PORT>` again. The restart already pointed the databases' storage back at `S3_ENDPOINT` from the restored `.env`. MCP clients and `iceberg_connect.py` need their localhost addresses back.

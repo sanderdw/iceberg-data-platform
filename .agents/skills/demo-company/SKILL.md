@@ -123,15 +123,24 @@ Databases: <name> (production), <name> (development)
 | … | … | … | … | … |
 ```
 
-- Use the actual portal addresses. If `PORTAL_ORIGIN` / `USER_ORIGIN` in `.env` are HTTPS LAN addresses, use those.
+- Use the actual portal addresses: `PORTAL_ORIGIN` and `USER_ORIGIN` from `.env`, such as the tunnel addresses after the quick-share skill.
 - Number the rows across all teams from 1 to N, so the trainer can hand out one line per participant.
+- Keep this format exactly: the slips script below reads it.
 - End with counts: participants, teams, databases and users created or reused, plus any problems.
-- Tell the user the file holds live passwords and should be deleted once the accounts have been handed out.
+
+Then make the printable sign-in slips, one per participant:
+```sh
+uv run .agents/skills/demo-company/scripts/slips.py demo-company-<domain>-credentials.md
+```
+It writes `demo-company-<domain>-slips.html` next to the credentials file, with owner-only permissions. Each slip has the user portal address (from `USER_ORIGIN` in `.env`) with a QR code, the person's name, team, username and one-time password, and two steps: sign in and choose a password, then follow Getting started in the portal. The trainer opens it in a browser, prints it on A4 and cuts it into slips. If the platform is shared later with quick-share, that skill makes the slips again with the new address.
+
+Tell the user both files hold live passwords and should be deleted once the accounts have been handed out.
 
 ## 6. Next steps to suggest
 
-- Each participant signs in to the user portal and sees their own team's databases. Writers can create tables and run notebooks; the team admin can also create databases and data shares.
-- The new databases are empty. Tables come from the example notebooks in the user portal: on Notebooks, open a database and pick an example in the notebook picker, or from your own tools via `iceberg_connect.py`. The admin MCP server cannot create tables.
+- Hand out the slips. Each participant signs in to the user portal and sees their own team's databases. Writers can create tables and run notebooks; the team admin can also create databases and data shares. Getting started in the portal (`/#guide`) walks them through the browser, their own tools (DuckDB via `iceberg_connect.py`) and AI agents.
+- For participants outside this machine's network, run the quick-share skill first or afterwards. Until then the addresses on the slips only work on this machine.
+- The new databases are empty. Tables come from the example notebooks in the user portal: on Notebooks, open a database and pick an example in the notebook picker, or from participants' own tools via `iceberg_connect.py`. The admin MCP server cannot create tables.
 - Data shares between teams are created in the user portal by a team admin.
 
 ## Cleanup (only when the user asks)

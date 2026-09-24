@@ -5,8 +5,8 @@ function connectSnippets(db) {
   return [
     ['Python · PyIceberg and DuckDB', `from iceberg_connect import catalog, duckdb_connection\n\nlake = catalog("${db}")\nprint(lake.list_namespaces())\n\ncon = duckdb_connection("${db}")\ncon.sql("SHOW ALL TABLES").show()`,
       'Keep iceberg_connect.py next to your script. The environment needs httpx, pyiceberg[pyarrow] and duckdb.'],
-    ['DuckDB CLI', `duckdb -init <(uv run iceberg_connect.py duckdb ${db})`,
-      'Attaches the database as lakehouse. The token lasts an hour; run the command again to renew it.'],
+    ['DuckDB CLI', `uv run iceberg_connect.py shell ${db}`,
+      'Opens the DuckDB CLI with the database attached as lakehouse. The token lasts an hour; run the command again to renew it.'],
     ['DBeaver', `uv run iceberg_connect.py duckdb ${db}`,
       'In a DuckDB connection, add each printed line under Connection settings › Initialization › Bootstrap queries. After an hour, run it again and replace the CREATE SECRET line.'],
   ];
@@ -46,6 +46,40 @@ function guideTrack(id, number, label, title, text, steps) {
   return track;
 }
 
+/* Install commands per operating system; the helper needs uv, the shell command the DuckDB CLI. */
+const installs = [
+  ['macOS', 'BASH', 'brew install uv duckdb'],
+  ['Linux', 'BASH', 'curl -LsSf https://astral.sh/uv/install.sh | sh\ncurl https://install.duckdb.org | sh'],
+  ['Windows', 'POWERSHELL', 'winget install --id=astral-sh.uv -e\nwinget install DuckDB.cli'],
+];
+
+let guideOs = null; // The chosen tab survives the guide's periodic re-render.
+
+function guideInstall() {
+  const host = element('div'), tabs = element('div', undefined, 'catalog-tabs guide-os');
+  tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Operating system');
+  const platform = (navigator.userAgentData?.platform || navigator.userAgent).toLowerCase();
+  const detected = platform.includes('win') ? 2 : platform.includes('mac') ? 0 : platform.includes('linux') ? 1 : 0;
+  const buttons = installs.map(([name, shell, code], i) => {
+    const button = element('button', name, 'quiet'); button.type = 'button'; button.setAttribute('role', 'tab');
+    button.addEventListener('click', () => {
+      guideOs = i;
+      buttons.forEach(b => b.setAttribute('aria-selected', String(b === button)));
+      host.lastChild.replaceWith(guideCode(shell, code));
+    });
+    return button;
+  });
+  tabs.append(...buttons); host.append(tabs, element('span'));
+  buttons[guideOs ?? detected].click();
+  return host;
+}
+
+/* The helper uses the catalog address set by the administrator. A localhost address only works on the platform's own machine. */
+function catalogReachable() {
+  const local = host => ['localhost', '127.0.0.1', '[::1]'].includes(host);
+  try { return !local(new URL(state.catalogUri).hostname) || local(location.hostname); } catch { return true; }
+}
+
 function guideLink(label, page) {
   const button = element('button', label, 'quiet guide-start'); button.type = 'button';
   button.addEventListener('click', () => showPage(page));
@@ -65,17 +99,18 @@ function renderGuide() {
   ];
 
   const download = element('a', 'Download iceberg_connect.py', 'button quiet guide-start'); download.href = '/iceberg_connect.py'; download.download = 'iceberg_connect.py';
-  const attach = `duckdb -init <(uv run iceberg_connect.py duckdb ${db?.id || '<database>'}`;
+  const attach = `uv run iceberg_connect.py shell ${db?.id || '<database>'}`;
+  const unreachable = element('p', 'Your own tools cannot reach this platform from other computers yet: its catalog address is only valid on the machine that runs it. Use the portal or an AI agent, or ask your administrator to share the platform.', 'guide-warning');
   const computer = loginUrl ? [
-    ['Install DuckDB', ['The DuckDB CLI through Homebrew. The helper also needs uv: ', ['brew install uv'], '.'],
-      guideCode('BASH', 'brew install duckdb')],
+    ['Install uv and DuckDB', ['uv runs the helper; the DuckDB CLI is where you query. Open a new terminal after installing.'],
+      ...(catalogReachable() ? [] : [unreachable]), guideInstall()],
     ['Download the helper', ['One Python file for ', ['uv'], '. The portal fills in where to sign in and which catalog to use. It holds no secret.'], download],
     ['Sign in once', ['Approve the code in your browser. The sign-in stays in ', ['~/.config/iceberg-platform'], ' for 30 days of inactivity. ', ['uv run iceberg_connect.py logout'], ' revokes it.'],
       guideCode('BASH', 'uv run iceberg_connect.py login')],
     ['Open DuckDB', db
       ? [`Commands for ${db.name}. `, 'Catalog › Connect from your computer has them for every database. DuckDB attaches read-only; add ', ['--write'], ' to write.']
       : ['Replace ', ['<database>'], ' with a catalog name from Catalog › Connection information. DuckDB attaches read-only; add ', ['--write'], ' to write.'],
-      guideCode('DUCKDB · READ', `${attach})`), guideCode('DUCKDB · WRITE', `${attach} --write)`),
+      guideCode('DUCKDB · READ', attach), guideCode('DUCKDB · WRITE', `${attach} --write`),
       element('p', 'Attaches the database as lakehouse, so refer to tables as lakehouse.<namespace>.<table>. The token lasts an hour; run the command again to renew it. Your team role decides what you can write, and shared databases stay read-only.', 'hint')],
   ] : keycloak;
 

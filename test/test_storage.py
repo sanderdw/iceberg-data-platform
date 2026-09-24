@@ -1,3 +1,4 @@
+import json
 import re
 from unittest.mock import Mock
 
@@ -134,3 +135,36 @@ def test_provider_errors_do_not_leak_credentials(storage):
         assert "sensitive" not in str(exc.value)
     finally:
         provider.http.close()
+
+
+def test_databases_follow_a_new_public_s3_endpoint(storage):
+    # A quick share or proxy changes S3_ENDPOINT after the databases exist.
+    new = "https://users.trycloudflare.com"
+    s3 = {"storageType": "S3", "endpoint": "http://localhost:9000", "endpointInternal": "http://rustfs:9000",
+          "allowedLocations": ["s3://bucket/"], "pathStyleAccess": True}
+    managed = {"portal.managed-by": "iceberg-portal-v2", "portal.name": "sales", "portal.team": "team-1"}
+    catalogs = [
+        {"name": "db-old", "entityVersion": 4, "properties": managed, "storageConfigInfo": s3},
+        {"name": "db-current", "entityVersion": 2, "properties": managed, "storageConfigInfo": {**s3, "endpoint": new}},
+        {"name": "external", "entityVersion": 1, "properties": {}, "storageConfigInfo": s3},
+    ]
+    updates = []
+
+    def wire(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"catalogs": catalogs})
+        updates.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={})
+
+    provider = PolarisProvider({"POLARIS_URL": "http://polaris", "S3_ENDPOINT": new}, storage)
+    provider.access_token = lambda: "test-token"
+    provider.http.close()
+    provider.http = httpx.Client(transport=httpx.MockTransport(wire))
+    try:
+        assert provider.sync_storage_endpoints() == ["db-old"]
+    finally:
+        provider.http.close()
+    (path, body), = updates
+    assert path == "/api/management/v1/catalogs/db-old"
+    # Polaris clears properties that an update leaves out, so they are sent back unchanged.
+    assert body == {"currentEntityVersion": 4, "properties": managed, "storageConfigInfo": {**s3, "endpoint": new}}
