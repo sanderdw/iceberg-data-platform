@@ -191,11 +191,23 @@ def test_delete_database_can_resume_and_keeps_users(portal):
     assert p.patch(f"/databases/{d['id']}", {"team": owner}).status_code == 409
     p.provider.storage.delete_bucket.side_effect = None
     assert p.delete(f"/databases/{d['id']}").status_code == 200
-    p.provider.storage.delete_bucket.assert_called_with(d["bucket"])
+    p.provider.storage.delete_bucket.assert_called_with(d["bucket"], d["id"])
     assert p.client.get("/api/databases").json() == []
     assert p.client.get("/api/users").json()[0]["id"] == u["id"]
     assert p.delete(f"/users/{u['id']}").status_code == 200
     assert p.delete(f"/teams/{owner}").status_code == 200
+
+
+def test_delete_database_with_a_foreign_bucket_changes_nothing(portal):
+    owner = team(portal)
+    user(portal, [owner])
+    db = database(portal, owner)
+    portal.provider.storage.check_bucket_owner.side_effect = ServiceError(409, "not this database")
+    portal.provider.events.clear()
+    assert portal.delete(f"/databases/{db['id']}").status_code == 409
+    assert [m for _, m, _ in portal.provider.events if m != "GET"] == []
+    assert portal.client.get("/api/databases").json()[0]["status"] != "deleting"
+    portal.provider.storage.delete_bucket.assert_not_called()
 
 
 def test_provisioning_conflict_never_deletes_existing_catalog(portal):

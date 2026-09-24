@@ -130,7 +130,34 @@ class RustFSStorage:
             if exc.status != 404:
                 raise
 
-    def delete_bucket(self, bucket):
+    def bucket_database(self, bucket):
+        tags = {t["Key"]: t["Value"] for t in self.call("get_bucket_tagging", Bucket=bucket)["TagSet"]}
+        return tags.get("database") if tags.get("managed-by") == "iceberg-portal" else None
+
+    def check_bucket_owner(self, bucket, database):
+        """Returns False when the bucket is already gone, as in a resumed deletion."""
+        # The bucket name comes from catalog properties, which a catalog admin can edit.
+        # Only the tags written at creation bind it to this database.
+        try:
+            owner = self.bucket_database(bucket)
+        except ServiceError as exc:
+            if exc.status != 404:
+                raise
+            # 404 is either a missing bucket or a bucket without tags.
+            try:
+                self.call("head_bucket", Bucket=bucket)
+            except ServiceError as missing:
+                if missing.status != 404:
+                    raise
+                return False
+            owner = None
+        if owner != database:
+            raise ServiceError(409, "The storage bucket does not belong to this database. Nothing was deleted.")
+        return True
+
+    def delete_bucket(self, bucket, database):
+        if not self.check_bucket_owner(bucket, database):
+            return
         # Includes all object versions and delete markers, not just currently visible keys.
         try:
             while True:

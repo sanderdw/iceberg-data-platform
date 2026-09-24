@@ -35,7 +35,7 @@ def installer_env(tmp_path, request):
             ".env.example": b"PORTAL_PASSWORD=replace-with-generated-password\n",
             "scripts/setup.py": (ROOT / "scripts/setup.py").read_bytes(),
             "iceberg_connect.py": b"# helper\n",
-            ".agents/skills/lan-access/SKILL.md": b"---\nname: lan-access\n---\n",
+            ".agents/skills/quick-share/SKILL.md": b"---\nname: quick-share\n---\n",
             ".agents/skills/demo-company/SKILL.md": b"---\nname: demo-company\n---\n",
         }.items():
             info = tarfile.TarInfo("iceberg-data-platform-0.2.1-install/" + name)
@@ -128,26 +128,48 @@ if args[0] == 'run':
 
 
 def assert_next_steps(output, target):
+    # Success names the version, then the first sign-in with the temporary password from the new .env.
+    password = next(line.split("=", 1)[1] for line in (target / ".env").read_text().splitlines()
+                    if line.startswith("PLATFORM_ADMIN_PASSWORD="))
+    assert "\nIceberg Data Platform 0.2.1 is running.\n" in output
+    assert "1. Sign in to the administration portal\n   http://localhost:3000/#guide\n" in output
+    assert "   Username  platform-admin\n" in output
+    assert f"   Password  {password}  (temporary: you choose a new one at first sign-in)\n" in output
+    assert "   http://localhost:3002/#guide\n   Or skip the setup: the demo-company skill below" in output
+    # Keycloak needs no manual visit, so the output leaves it out.
+    assert "8080" not in output.split("is running.")[1]
     # The installation folder holds the helper and the commands to start and stop both stacks.
     assert (target / "iceberg_connect.py").read_bytes() == b"# helper\n"
     assert "docker compose -f compose.users.yaml down" in output
     assert "docker compose -f compose.users.yaml up -d --wait users" in output
     assert "uv run iceberg_connect.py login" in output
     assert f'"{target}"' in output
-    assert "http://localhost:3000/#guide" in output
-    assert "User portal:    http://localhost:3002/#guide\n" in output
-    # The portals are listed once, under Getting started; Keycloak needs no manual visit.
-    assert "Administration: http://localhost:3000\n" not in output
-    assert "no need to open it" in output
     # The installer points to the bundled agent skills and copies the dot-directory.
     assert (target / ".agents/skills/demo-company/SKILL.md").is_file()
-    # Windows temporary folders sit under HOME, so the folder may be shown with ~.
-    assert "/.agents/skills:\n" in output
-    assert "lan-access    Open the portals to other devices on your network (HTTPS)" in output
-    assert "demo-company  Set up an Energy, Webshop or Retail demo company for a class" in output
-    assert "Agent skills for Codex, GitHub Copilot, Claude Code and other coding agents, in " in output
-    assert " and ask it to use one of these skills.\n" in output
-    assert output.rstrip().endswith("Claude Code reads .claude/skills only: ask it to follow .agents/skills/<name>/SKILL.md.")
+    assert "quick-share    Share the portals for a class or demo over temporary HTTPS links" in output
+    assert "demo-company   Create an Energy, Webshop or Retail demo company, one account per participant" in output
+    assert output.rstrip().endswith('and ask, for example: "Set up a demo company for my class"')
+
+
+def use_shared_origins(target):
+    # A kept .env from a quick-share session: the rerun must show its addresses, not localhost.
+    env = target / ".env"
+    env.write_text(env.read_text()
+                   .replace("PORTAL_ORIGIN=http://localhost:3000", "PORTAL_ORIGIN=https://admin.trycloudflare.com")
+                   .replace("USER_ORIGIN=http://localhost:3002", "USER_ORIGIN=https://users.trycloudflare.com"))
+    return env.read_bytes()
+
+
+def assert_rerun_hides_password(output, target):
+    assert "administration portal\n   https://admin.trycloudflare.com/#guide\n" in output
+    assert "user portal\n   https://users.trycloudflare.com/#guide\n" in output
+    assert "localhost:300" not in output.split("is running.")[1]
+    # After the first sign-in the password in .env is stale, so a rerun only points to it.
+    assert "Password  the one you chose at first sign-in (initial: PLATFORM_ADMIN_PASSWORD in " in output
+    assert "/.env)\n" in output
+    password = next(line.split("=", 1)[1] for line in (target / ".env").read_text().splitlines()
+                    if line.startswith("PLATFORM_ADMIN_PASSWORD="))
+    assert password not in output
 
 
 def test_shell_install_and_rerun_preserve_configuration(shell_installer):
@@ -157,10 +179,12 @@ def test_shell_install_and_rerun_preserve_configuration(shell_installer):
     assert_started(env)
     target = Path(env["ICEBERG_INSTALL_DIR"])
     assert_next_steps(result.stdout, target)
-    original = (target / ".env").read_bytes()
+    original = use_shared_origins(target)
     assert (target / ".env").stat().st_mode & 0o777 == 0o600
     (target / "compose.yaml").write_text("previous config")
-    assert run().returncode == 0
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert_rerun_hides_password(result.stdout, target)
     assert (target / ".env").read_bytes() == original
     assert (target / "compose.yaml.bak").read_text() == "previous config"
 
@@ -172,11 +196,11 @@ def test_shell_shows_a_home_installation_with_tilde(shell_installer, tmp_path):
     result = run()
     assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "iceberg-data-platform" / "iceberg_connect.py").is_file()
-    assert "Configuration: ~/iceberg-data-platform\n" in result.stdout
+    assert "Installed in ~/iceberg-data-platform\n" in result.stdout
     # Unquoted, so the shell expands ~.
-    assert "Stop:  cd ~/iceberg-data-platform && " in result.stdout
-    assert "coding agents, in ~/iceberg-data-platform/.agents/skills:\n" in result.stdout
-    assert str(tmp_path) not in result.stdout.split("is ready.")[1]
+    assert "Stop     cd ~/iceberg-data-platform && " in result.stdout
+    assert "Open your agent in ~/iceberg-data-platform and ask" in result.stdout
+    assert str(tmp_path) not in result.stdout.split("is running.")[1]
 
 
 def test_shell_checksum_failure_does_not_install(shell_installer):
@@ -244,10 +268,11 @@ def test_powershell_install_and_rerun_preserve_configuration(powershell_installe
     assert_started(env)
     target = Path(env["ICEBERG_INSTALL_DIR"])
     assert_next_steps(result.stdout, target)
-    original = (target / ".env").read_bytes()
+    original = use_shared_origins(target)
     (target / "compose.yaml").write_text("previous config")
     result = run()
     assert result.returncode == 0, result.stdout + result.stderr
+    assert_rerun_hides_password(result.stdout, target)
     assert (target / ".env").read_bytes() == original
     assert (target / "compose.yaml.bak").read_text() == "previous config"
 

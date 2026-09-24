@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+## 0.5.2 - 2026-09-24
+
+- New agent skill `quick-share` opens the portals to participants anywhere for a class or demo. Free Cloudflare quick tunnels give public HTTPS addresses with trusted certificates, so nobody imports a certificate. It replaces the `lan-access` skill. See [agent skills](docs/install.md#agent-skills).
+- The installer ends with what to do next.
+- Fixed: deleting a database could remove the storage bucket of another database when a catalog admin had changed the catalog's bucket property. The portal now only deletes a bucket that its tags assign to that database, and otherwise stops with nothing deleted.
+
 ## 0.5.1 - 2026-09-23
 
 - **Connect from your machine:** use PyIceberg, DuckDB, the DuckDB CLI or DBeaver with your own account instead of a notebook. **Catalog › Connect from your computer** shows the snippets for each database; the `iceberg_connect.py` helper signs you in through the browser.

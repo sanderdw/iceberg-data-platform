@@ -40,7 +40,7 @@ def class_plan(participants, teams):
     return members
 
 
-@pytest.mark.parametrize("name", ["lan-access", "demo-company"])
+@pytest.mark.parametrize("name", ["quick-share", "demo-company"])
 def test_skill_frontmatter_names_its_folder(name):
     meta = frontmatter(SKILLS / name / "SKILL.md")
     assert meta["name"] == name
@@ -91,12 +91,12 @@ def test_skill_files_are_linked_from_the_skill():
     skill = (SKILLS / "demo-company/SKILL.md").read_text()
     for reference in (*DOMAINS, "people"):
         assert f"(references/{reference}.md)" in skill
-    skill = (SKILLS / "lan-access/SKILL.md").read_text()
-    for asset in (SKILLS / "lan-access/assets").iterdir():
+    skill = (SKILLS / "quick-share/SKILL.md").read_text()
+    for asset in (*(SKILLS / "quick-share/assets").iterdir(), *(SKILLS / "quick-share/scripts").glob("*.py")):
         assert asset.name in skill
 
 
-@pytest.mark.parametrize("name", ["lan-access", "demo-company"])
+@pytest.mark.parametrize("name", ["quick-share", "demo-company"])
 def test_skills_work_in_any_coding_agent(name):
     skill = (SKILLS / name / "SKILL.md").read_text()
     # No agent-specific tool names; every Claude Code recipe sits next to the Codex and Copilot ones.
@@ -106,8 +106,8 @@ def test_skills_work_in_any_coding_agent(name):
 
 
 @pytest.fixture
-def lan_sync():
-    spec = importlib.util.spec_from_file_location("lan_sync", SKILLS / "lan-access/scripts/lan_sync.py")
+def sync_origins():
+    spec = importlib.util.spec_from_file_location("sync_origins", SKILLS / "quick-share/scripts/sync_origins.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -138,22 +138,22 @@ class Keycloak:
         return Response()
 
 
-def test_lan_sync_sets_redirects_for_every_origin(lan_sync):
+def test_sync_origins_sets_redirects_for_every_origin(sync_origins):
     kc = Keycloak({"id": "abc", "clientId": "iceberg-admin", "secret": "keep",
                    "attributes": {"pkce.code.challenge.method": "S256"}})
-    origins = ["https://10.1.2.3:3000", "http://localhost:3000"]
-    lan_sync.update_client(kc, "/admin/realms/iceberg", "iceberg-admin", origins)
+    origins = ["https://admin.trycloudflare.com", "http://localhost:3000"]
+    sync_origins.update_client(kc, "/admin/realms/iceberg", "iceberg-admin", origins)
     (path, client), = kc.puts
     assert path == "/admin/realms/iceberg/clients/abc"
-    assert client["redirectUris"] == ["https://10.1.2.3:3000/auth/callback", "http://localhost:3000/auth/callback"]
+    assert client["redirectUris"] == ["https://admin.trycloudflare.com/auth/callback", "http://localhost:3000/auth/callback"]
     assert client["webOrigins"] == origins
     assert client["attributes"] == {"pkce.code.challenge.method": "S256",
-                                    "post.logout.redirect.uris": "https://10.1.2.3:3000/##http://localhost:3000/"}
+                                    "post.logout.redirect.uris": "https://admin.trycloudflare.com/##http://localhost:3000/"}
     assert client["secret"] == "keep"
 
 
-def test_lan_sync_moves_only_users_of_the_old_issuer(lan_sync):
-    old, new = "http://localhost:8080/realms/iceberg", "https://10.1.2.3:8080/realms/iceberg"
+def test_sync_origins_moves_only_users_of_the_old_issuer(sync_origins):
+    old, new = "http://localhost:8080/realms/iceberg", "https://auth.trycloudflare.com/realms/iceberg"
     principals = [
         {"name": "portal-a", "properties": {"portal.oidc-issuer": old, "portal.oidc-subject": "s1"}},
         {"name": "portal-b", "properties": {"portal.oidc-issuer": "https://other/realms/iceberg"}},
@@ -172,20 +172,21 @@ def test_lan_sync_moves_only_users_of_the_old_issuer(lan_sync):
             self.updates.append((path, properties))
 
     provider = Provider()
-    assert lan_sync.migrate_issuer(provider, old + "/", new, lambda v: v) == ["portal-a"]
+    assert sync_origins.migrate_issuer(provider, old + "/", new, lambda v: v) == ["portal-a"]
     assert provider.updates == [("/principals/portal-a", {"portal.oidc-issuer": new, "portal.oidc-subject": "s1"})]
-    assert lan_sync.migrate_issuer(provider, new, new, lambda v: v) == []
+    assert sync_origins.migrate_issuer(provider, new, new, lambda v: v) == []
 
 
 @pytest.mark.parametrize("value,expected", [
-    ("https://10.1.2.3:3000/", "https://10.1.2.3:3000"),
+    ("https://admin.trycloudflare.com/", "https://admin.trycloudflare.com"),
+    ("https://10.1.2.3:3000", "https://10.1.2.3:3000"),
     ("http://localhost:3000", "http://localhost:3000"),
 ])
-def test_lan_sync_accepts_origins(lan_sync, value, expected):
-    assert lan_sync.origin(value) == expected
+def test_sync_origins_accepts_origins(sync_origins, value, expected):
+    assert sync_origins.origin(value) == expected
 
 
 @pytest.mark.parametrize("value", ["http://10.1.2.3:3000", "https://10.1.2.3:3000/app", "ftp://host", "10.1.2.3"])
-def test_lan_sync_rejects_insecure_or_invalid_origins(lan_sync, value):
+def test_sync_origins_rejects_insecure_or_invalid_origins(sync_origins, value):
     with pytest.raises(Exception, match="origin|localhost"):
-        lan_sync.origin(value)
+        sync_origins.origin(value)

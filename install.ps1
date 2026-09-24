@@ -64,6 +64,8 @@
             if (Test-Path "$InstallDir/$File") { Copy-Item "$InstallDir/$File" "$InstallDir/$File.bak" -Force }
         }
         Get-ChildItem -Force $BundleDir | Copy-Item -Destination $InstallDir -Recurse -Force
+        # Only a new .env still holds the password the administrator signs in with.
+        $NewEnv = !(Test-Path "$InstallDir/.env")
         Write-Host "Preparing credentials in $InstallDir/.env..."
         Invoke-Docker pull $SetupImage
         Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" `
@@ -76,27 +78,39 @@
         Invoke-AdminCompose up -d --no-build --wait --wait-timeout 300
         Write-Host 'Starting the user portal...'
         Invoke-UsersCompose up -d --no-build --wait --wait-timeout 300 users
-        Write-Host "`nIceberg Data Platform is ready."
-        Write-Host 'Keycloak:       http://localhost:8080  (sign-in service, managed through the administration portal; no need to open it)'
         $ShownDir = $InstallDir
         foreach ($Separator in @('/', '\')) {
             if ($HOME -and $InstallDir.StartsWith("$HOME$Separator")) { $ShownDir = '~' + $InstallDir.Substring($HOME.Length) }
         }
         # Quote the full path when it needs quoting.
         $LocationDir = if ($ShownDir -match '^[\w~./\\:-]+$') { $ShownDir } else { "`"$InstallDir`"" }
-        Write-Host "Login: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in $ShownDir/.env"
-        Write-Host "Configuration: $ShownDir"
-        Write-Host "`nStop:  Set-Location $LocationDir; docker compose -f compose.users.yaml down; docker compose down"
-        Write-Host "Start: Set-Location $LocationDir; docker compose up -d --wait; docker compose -f compose.users.yaml up -d --wait users"
-        Write-Host "Your own tools: Set-Location $LocationDir; uv run iceberg_connect.py login"
-        Write-Host "`nGetting started:"
-        Write-Host '  Administration: http://localhost:3000/#guide'
-        Write-Host '  User portal:    http://localhost:3002/#guide'
-        Write-Host "`nAgent skills for Codex, GitHub Copilot, Claude Code and other coding agents, in $ShownDir/.agents/skills:"
-        Write-Host '  lan-access    Open the portals to other devices on your network (HTTPS)'
-        Write-Host '  demo-company  Set up an Energy, Webshop or Retail demo company for a class, one account per participant'
-        Write-Host "Start your coding agent in $ShownDir and ask it to use one of these skills."
-        Write-Host 'Claude Code reads .claude/skills only: ask it to follow .agents/skills/<name>/SKILL.md.'
+        function Get-EnvValue($Key) {
+            (Get-Content "$InstallDir/.env" | Where-Object { $_.StartsWith("$Key=") } | Select-Object -Last 1) -replace '^[^=]*=', ''
+        }
+        $Password = "the one you chose at first sign-in (initial: PLATFORM_ADMIN_PASSWORD in $ShownDir/.env)"
+        if ($NewEnv) { $Password = "$(Get-EnvValue PLATFORM_ADMIN_PASSWORD)  (temporary: you choose a new one at first sign-in)" }
+        # A kept .env can hold other ports or a quick-share session's public addresses.
+        $PortalOrigin = (Get-EnvValue PORTAL_ORIGIN).TrimEnd('/')
+        $UserOrigin = (Get-EnvValue USER_ORIGIN).TrimEnd('/')
+        Write-Host "`nIceberg Data Platform $($Entry.Version) is running."
+        Write-Host "`n1. Sign in to the administration portal"
+        Write-Host "   $PortalOrigin/#guide"
+        Write-Host "   Username  $(Get-EnvValue PLATFORM_ADMIN_USERNAME)"
+        Write-Host "   Password  $Password"
+        Write-Host "`n2. Create a team and a user, then sign in as that user in the user portal"
+        Write-Host "   $UserOrigin/#guide"
+        Write-Host '   Or skip the setup: the demo-company skill below creates teams, users and databases for you'
+        Write-Host "`nInstalled in $ShownDir"
+        Write-Host "   Stop     Set-Location $LocationDir; docker compose -f compose.users.yaml down; docker compose down"
+        Write-Host "   Start    Set-Location $LocationDir; docker compose up -d --wait; docker compose -f compose.users.yaml up -d --wait users"
+        Write-Host '   Update   run the install command again; your data and .env are kept'
+        Write-Host "`nOptional"
+        Write-Host '   Connect Python, DuckDB or DBeaver (needs uv):'
+        Write-Host "     Set-Location $LocationDir; uv run iceberg_connect.py login"
+        Write-Host '   Skills for coding agents such as Claude Code, Codex and GitHub Copilot:'
+        Write-Host '     quick-share    Share the portals for a class or demo over temporary HTTPS links'
+        Write-Host '     demo-company   Create an Energy, Webshop or Retail demo company, one account per participant'
+        Write-Host "   Open your agent in $ShownDir and ask, for example: `"Set up a demo company for my class`""
     }
     finally {
         if (Test-Path $TemporaryDir) { Remove-Item $TemporaryDir -Recurse -Force }

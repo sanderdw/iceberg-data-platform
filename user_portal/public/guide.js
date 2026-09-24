@@ -65,15 +65,18 @@ function renderGuide() {
   ];
 
   const download = element('a', 'Download iceberg_connect.py', 'button quiet guide-start'); download.href = '/iceberg_connect.py'; download.download = 'iceberg_connect.py';
-  const snippets = connectSnippets(db?.id || '<database>').flatMap(([title, code, hint]) => [guideCode(title.toUpperCase(), code), element('p', hint, 'hint')]);
+  const attach = `duckdb -init <(uv run iceberg_connect.py duckdb ${db?.id || '<database>'}`;
   const computer = loginUrl ? [
+    ['Install DuckDB', ['The DuckDB CLI through Homebrew. The helper also needs uv: ', ['brew install uv'], '.'],
+      guideCode('BASH', 'brew install duckdb')],
     ['Download the helper', ['One Python file for ', ['uv'], '. The portal fills in where to sign in and which catalog to use. It holds no secret.'], download],
     ['Sign in once', ['Approve the code in your browser. The sign-in stays in ', ['~/.config/iceberg-platform'], ' for 30 days of inactivity. ', ['uv run iceberg_connect.py logout'], ' revokes it.'],
       guideCode('BASH', 'uv run iceberg_connect.py login')],
-    ['Connect your tool', db
-      ? [`Examples for ${db.name}. `, 'Catalog › Connect from your computer has them for every database. DuckDB attaches read-only; add ', ['--write'], ' to write.']
+    ['Open DuckDB', db
+      ? [`Commands for ${db.name}. `, 'Catalog › Connect from your computer has them for every database. DuckDB attaches read-only; add ', ['--write'], ' to write.']
       : ['Replace ', ['<database>'], ' with a catalog name from Catalog › Connection information. DuckDB attaches read-only; add ', ['--write'], ' to write.'],
-      ...snippets],
+      guideCode('DUCKDB · READ', `${attach})`), guideCode('DUCKDB · WRITE', `${attach} --write)`),
+      element('p', 'Attaches the database as lakehouse, so refer to tables as lakehouse.<namespace>.<table>. The token lasts an hour; run the command again to renew it. Your team role decides what you can write, and shared databases stay read-only.', 'hint')],
   ] : keycloak;
 
   const prompts = [
@@ -93,7 +96,7 @@ function renderGuide() {
 
   const ways = [
     ['portal', '01', 'PORTAL', 'Explore in the browser', 'Catalog, notebooks and data shares.'],
-    ['computer', '02', 'YOUR COMPUTER', 'Use your own tools', 'Python, DuckDB CLI or DBeaver, as yourself.'],
+    ['computer', '02', 'YOUR COMPUTER', 'Use your own tools', 'The DuckDB CLI, as yourself.'],
     ['agent', '03', 'AGENT', 'Ask an AI agent', 'Explore through MCP with your permissions.'],
   ];
   const index = element('nav', undefined, 'guide-index'); index.setAttribute('aria-label', 'Ways to get started');
@@ -111,7 +114,7 @@ function renderGuide() {
   guide.append(element('span', 'GUIDE / THREE WAYS IN', 'eyebrow'), element('h2', 'Your team data. Work with it your way.'),
     element('p', 'Browse and analyze in this portal, connect the tools you already use, or let an AI agent do the legwork. Each route signs in as you.', 'guide-lead'), index,
     guideTrack('portal', '01', 'PORTAL', 'Explore in the browser.', ['The pages of this workspace, one step at a time.'], portal),
-    guideTrack('computer', '02', 'YOUR COMPUTER', 'Connect your own tools as yourself.', ['Python, the DuckDB CLI and DBeaver read and write Iceberg directly, with your account and your team role. No notebook and no shared secret.'], computer),
+    guideTrack('computer', '02', 'YOUR COMPUTER', 'Connect your own tools as yourself.', ['The DuckDB CLI reads and writes Iceberg directly, with your account and your team role. No notebook and no shared secret.'], computer),
     guideTrack('agent', '03', 'AGENT', 'Ask an AI agent.', ['This workspace serves a Model Context Protocol endpoint at ', ['/mcp'], '. An agent such as Claude Code gets your catalog as tools and signs in as you.'], agent),
     note);
   $('#guide').replaceChildren(guide);

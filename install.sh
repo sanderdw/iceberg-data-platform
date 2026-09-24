@@ -85,6 +85,9 @@ main() {
     done
     cp -R "$bundle_dir/." "$install_dir/"
     cd "$install_dir"
+    # Only a new .env still holds the password the administrator signs in with.
+    new_env=true
+    [ ! -f .env ] || new_env=false
     printf 'Preparing credentials in %s/.env...\n' "$install_dir"
     docker pull "$setup_image"
     docker run --rm --user "$(id -u):$(id -g)" \
@@ -108,16 +111,28 @@ main() {
         *[!A-Za-z0-9_./~-]*) cd_dir="\"$install_dir\"" ;;
         *) cd_dir=$shown_dir ;;
     esac
-    printf '\nIceberg Data Platform is ready.\nKeycloak:       http://localhost:8080  (sign-in service, managed through the administration portal; no need to open it)\nLogin: PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD in %s/.env\nConfiguration: %s\n' "$shown_dir" "$shown_dir"
-    printf '\nStop:  cd %s && docker compose -f compose.users.yaml down && docker compose down\n' "$cd_dir"
-    printf 'Start: cd %s && docker compose up -d --wait && docker compose -f compose.users.yaml up -d --wait users\n' "$cd_dir"
-    printf 'Your own tools: cd %s && uv run iceberg_connect.py login\n' "$cd_dir"
-    printf '\nGetting started:\n  Administration: http://localhost:3000/#guide\n  User portal:    http://localhost:3002/#guide\n'
-    printf '\nAgent skills for Codex, GitHub Copilot, Claude Code and other coding agents, in %s/.agents/skills:\n' "$shown_dir"
-    printf '  lan-access    Open the portals to other devices on your network (HTTPS)\n'
-    printf '  demo-company  Set up an Energy, Webshop or Retail demo company for a class, one account per participant\n'
-    printf 'Start your coding agent in %s and ask it to use one of these skills.\n' "$shown_dir"
-    printf 'Claude Code reads .claude/skills only: ask it to follow .agents/skills/<name>/SKILL.md.\n'
+    if [ "$new_env" = true ]; then
+        password="$(env_value PLATFORM_ADMIN_PASSWORD)  (temporary: you choose a new one at first sign-in)"
+    else
+        password="the one you chose at first sign-in (initial: PLATFORM_ADMIN_PASSWORD in $shown_dir/.env)"
+    fi
+    printf '\nIceberg Data Platform %s is running.\n' "$version"
+    # A kept .env can hold other ports or a quick-share session's public addresses.
+    portal_origin=$(env_value PORTAL_ORIGIN)
+    user_origin=$(env_value USER_ORIGIN)
+    printf '\n1. Sign in to the administration portal\n   %s/#guide\n' "${portal_origin%/}"
+    printf '   Username  %s\n   Password  %s\n' "$(env_value PLATFORM_ADMIN_USERNAME)" "$password"
+    printf '\n2. Create a team and a user, then sign in as that user in the user portal\n   %s/#guide\n   Or skip the setup: the demo-company skill below creates teams, users and databases for you\n' "${user_origin%/}"
+    printf '\nInstalled in %s\n' "$shown_dir"
+    printf '   Stop     cd %s && docker compose -f compose.users.yaml down && docker compose down\n' "$cd_dir"
+    printf '   Start    cd %s && docker compose up -d --wait && docker compose -f compose.users.yaml up -d --wait users\n' "$cd_dir"
+    printf '   Update   run the install command again; your data and .env are kept\n'
+    printf '\nOptional\n   Connect Python, DuckDB or DBeaver (needs uv):\n'
+    printf '     cd %s && uv run iceberg_connect.py login\n' "$cd_dir"
+    printf '   Skills for coding agents such as Claude Code, Codex and GitHub Copilot:\n'
+    printf '     quick-share    Share the portals for a class or demo over temporary HTTPS links\n'
+    printf '     demo-company   Create an Energy, Webshop or Retail demo company, one account per participant\n'
+    printf '   Open your agent in %s and ask, for example: "Set up a demo company for my class"\n' "$shown_dir"
 }
 
 verify_checksum() {
@@ -126,6 +141,10 @@ verify_checksum() {
     else
         shasum -a 256 --check install.sha256
     fi
+}
+
+env_value() {
+    awk -v key="$1" 'index($0, key "=") == 1 {value = substr($0, length(key) + 2)} END {print value}' "$install_dir/.env"
 }
 
 fail() {

@@ -207,31 +207,35 @@
   <h2>One command, and the platform runs</h2>
   <pre style="font-size:0.56em;margin-bottom:24px"><code data-noescape><span class="c">$</span> <span class="k">curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh</span></code></pre>
   <div class="cols-asym">
-    <pre style="font-size:0.56em"><code data-noescape>Downloading release v0.5.1...
-Preparing credentials in ~/iceberg-data-platform/.env...
+    <pre style="font-size:0.56em"><code data-noescape>Downloading release v0.5.2...
 Pulling images for both stacks (the notebook image may take a few minutes)...
-Starting administration and data services...
 Starting the user portal...
 
-<span class="k">Iceberg Data Platform is ready.</span>
+<span class="k">Iceberg Data Platform 0.5.2 is running.</span>
 
-Getting started:
-  Administration: http://localhost:3000/#guide
-  User portal:    http://localhost:3002/#guide
+1. Sign in to the administration portal
+   http://localhost:3000/#guide
+   Username  platform-admin
+   Password  ••••••••••••  (temporary: you choose a new one)
 
-Agent skills for Codex, GitHub Copilot, Claude Code and other coding agents:
-  lan-access    Open the portals to other devices on your network (HTTPS)
-  demo-company  Set up an Energy, Webshop or Retail demo company for a class</code></pre>
+2. Create a team and a user, then sign in as that user
+   http://localhost:3002/#guide
+   Or skip the setup: the demo-company skill below does it
+
+Optional
+   Skills for coding agents such as Claude Code, Codex and GitHub Copilot:
+     quick-share    Share the portals for a class or demo
+     demo-company   Create a demo company, one account per participant</code></pre>
     <ul style="font-size:0.8em">
       <li>Linux, macOS and Windows. Only Docker with Compose is needed: no source checkout, Python or Node.js.</li>
-      <li>The installer verifies the bundle and writes random credentials to <code>.env</code>.</li>
+      <li>The installer verifies the bundle and writes random credentials to <code>.env</code>. It ends with who signs in first, and where.</li>
       <li>It pulls pinned images and starts both stacks.</li>
       <li>It puts <code>iceberg_connect.py</code> for your own tools and the agent skills in the same folder.</li>
       <li>To update, run it again. <code>.env</code> and the data stay.</li>
     </ul>
   </div>
   <div class="caption foot">Windows PowerShell · irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex</div>
-  <aside class="notes">Output shortened: the real run also prints the portal and Keycloak addresses, the sign-in details location, the stop and start commands and the iceberg_connect.py login command. Every release pins the bundle and all images to its version; replace latest/download with download/vX.Y.Z to install a specific one.</aside>
+  <aside class="notes">Output shortened: the real run also prints every progress step, the stop, start and update commands and the iceberg_connect.py login command. The password is shown once, on a new installation; it is temporary and Keycloak asks for a new one at first sign-in. Every release pins the bundle and all images to its version; replace latest/download with download/vX.Y.Z to install a specific one.</aside>
 </section>
 
 <section>
@@ -301,12 +305,12 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
     </div>
     <div style="font-size:0.85em">
       <div class="group"><div class="label tight">demo-company</div><p class="secondary">A fictional Energy, Webshop or Retail company for a class of up to 48. One account per participant, teams with their own databases, and a sign-in list to hand out. All through the administration MCP server.</p></div>
-      <div class="group"><div class="label tight">lan-access</div><p class="secondary">Opens the portals to laptops and phones on your network with a local HTTPS proxy, and knows how to undo it.</p></div>
+      <div class="group"><div class="label tight">quick-share</div><p class="secondary">Opens the portals to participants anywhere for a class or demo, over temporary public HTTPS addresses. No app to install, no certificate to import, and it knows how to undo it.</p></div>
       <div class="group"><div class="label tight">Where they live</div><p class="secondary">In <code>.agents/skills</code> of the installation folder, in the open Agent Skills format. Start your agent there and ask.</p></div>
     </div>
   </div>
   <p class="secondary foot">A skill carries the know-how, MCP does the work with your permissions, through the same API as the portal.</p>
-  <aside class="notes">Illustrative transcript, shortened. Codex, GitHub Copilot, Gemini CLI and Cursor read .agents/skills directly; Claude Code reads .claude/skills, so ask it to follow .agents/skills/demo-company/SKILL.md or copy the folder. The skill asks for the class size and domain, shows the plan, creates only what is missing on a rerun, and writes the one-time passwords to a credentials file with chmod 600. The skills are updated with the installer.</aside>
+  <aside class="notes">Illustrative transcript, shortened. Codex, GitHub Copilot, Gemini CLI and Cursor read .agents/skills directly; Claude Code reads .claude/skills, and the installer puts a pointer there for each skill. The skill asks for the class size and domain, shows the plan, creates only what is missing on a rerun, and writes the one-time passwords to a credentials file with chmod 600. The skills are updated with the installer.</aside>
 </section>
 
 <section class="title">

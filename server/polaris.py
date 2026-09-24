@@ -736,6 +736,8 @@ class PolarisProvider:
             raise ServiceError(409, "This database was renamed. Nothing was deleted; confirm the current name.")
         if catalog["properties"].get("portal.moving"):
             raise ServiceError(409, "This database is being moved. Try again after the move completes.")
+        # Before anything is taken apart: a mismatch must leave the database whole.
+        self.storage.check_bucket_owner(catalog["properties"]["portal.bucket"], id)
         # Persist intent first; on retry revoke again, even after partial failure.
         # Polaris drops views with purge, which must be enabled on this catalog.
         # This is restricted to a confirmed full database deletion.
@@ -782,7 +784,7 @@ class PolarisProvider:
         prefix = f"/api/catalog/v1/{enc(id)}"
         for namespace in self.pages(f"{prefix}/namespaces", "namespaces"):
             self.clear_namespace(prefix, namespace)
-        self.storage.delete_bucket(catalog["properties"]["portal.bucket"])
+        self.storage.delete_bucket(catalog["properties"]["portal.bucket"], id)
         for role in ROLES:
             self.remove(f"{path}/catalog-roles/{role}")
         # The user gateway is a second writer: a share created there during this deletion

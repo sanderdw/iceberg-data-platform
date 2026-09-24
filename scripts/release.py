@@ -236,6 +236,14 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
         relative = path.relative_to(root).as_posix()
         if relative.startswith(SKILLS_DIR + "/"):
             contents[relative] = path.read_bytes()
+            if path.name == "SKILL.md":
+                # Claude Code reads .claude/skills only; point it to the same skill.
+                skill = path.parent.name
+                frontmatter = path.read_text().split("---\n", 2)[1]
+                contents[f".claude/skills/{skill}/SKILL.md"] = (
+                    f"---\n{frontmatter}---\n\nRead `{SKILLS_DIR}/{skill}/SKILL.md` and follow it. "
+                    f"Paths in that skill are relative to `{SKILLS_DIR}/{skill}/`.\n"
+                ).encode()
     name = f"iceberg-data-platform-{version}-install"
     archive = output / f"{name}.tar.gz"
     with (
