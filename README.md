@@ -13,7 +13,7 @@ Teams create, own and share their databases. People, notebooks and AI agents all
 
 ---
 
-![Iceberg Data Platform](docs/portal.png)
+[![Iceberg Data Platform](docs/portal.png)](https://www.youtube.com/watch?v=T8D3tp1hWQk "Apache Iceberg Data Platform - An open source lakehouse you actually own")
 
 ## What it does
 - **Administration portal:** manage teams, users with a role per team, databases and data shares, and browse every Polaris catalog.
