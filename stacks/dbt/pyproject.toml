@@ -1,0 +1,49 @@
+[project]
+name = "iceberg-dbt"
+version = "0.1.0"
+description = "dbt v2 pipelines for the Iceberg Data Platform: an API and MCP server for agents, and pipeline visualization"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi==0.141.1",
+  "uvicorn[standard]>=0.53.0",
+  "httpx>=0.28.1",
+  "joserfc>=1.7.5",
+  "mcp>=2.2.0,<3",
+  "croniter>=6.2.4",
+  "duckdb==1.5.5",
+]
+
+[dependency-groups]
+# The launcher is the only component with the Docker socket.
+launcher = ["docker==7.2.0"]
+# The isolated run image: dbt v2 OSS with its DuckDB driver and extensions, and PyIceberg for metadata.
+runner = [
+  "dbt-oss==2.0.5",
+  "duckdb==1.5.5",
+  "duckdb-extension-iceberg==1.5.5",
+  "duckdb-extension-httpfs==1.5.5",
+  "duckdb-extension-avro==1.5.5",
+  "pyiceberg>=0.12.0",
+]
+dev = [{include-group = "launcher"}, "pytest>=9.1.1", "ruff>=0.16.8", "pyiceberg>=0.12.0"]
+
+[tool.iceberg-dbt]
+# Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
+bridge-contract = ">=1.0,<2"
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "C4", "RUF"]
+ignore = ["RUF001", "RUF002"]

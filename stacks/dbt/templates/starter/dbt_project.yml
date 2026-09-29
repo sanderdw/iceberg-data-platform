@@ -1,0 +1,20 @@
+name: {{PROJECT}}
+version: "1.0"
+profile: iceberg_platform
+
+# Every model and seed lands in one of your team's databases in the run's environment.
+# A database is addressed by its display name with '-' replaced by '_'.
+models:
+  {{PROJECT}}:
+    +catalog_name: {{CATALOG}}
+    # Keeps each table's identity across runs, so data shares and column docs survive.
+    +materialized: replace_table
+    staging:
+      +schema: staging
+    marts:
+      +schema: marts
+
+seeds:
+  {{PROJECT}}:
+    +catalog_name: {{CATALOG}}
+    +schema: seeds

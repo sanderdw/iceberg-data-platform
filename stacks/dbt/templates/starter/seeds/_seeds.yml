@@ -1,0 +1,7 @@
+seeds:
+  - name: regions
+    description: Sales regions, maintained in this project.
+    columns:
+      - name: region_id
+        description: Stable region identifier.
+        data_tests: [not_null, unique]

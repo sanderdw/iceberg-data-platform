@@ -7,9 +7,11 @@ contract change.
 
 ## Engine: dbt v2 OSS, installed from PyPI
 
-- `dbt-oss==2.0.5` (Apache-2.0) is a Python wheel that ships the Rust engine
-  (`dbt/_core.abi3.so`). It is pinned and hashed in the dbt stack's `uv.lock`, the same way the core
-  pins its Python dependencies. No CDN or GitHub download is needed.
+- `dbt-oss==2.0.5` (Apache-2.0) on PyPI is a 5 KB source shim. Its build step installs the
+  platform wheel with the Rust engine (`dbt/_core.abi3.so`) from dbt's GitHub release and checks the
+  sha256 the shim pins. Wheels exist for Linux x86_64 and arm64 (manylinux_2_28), macOS and Windows.
+  The dbt stack's `uv.lock` pins the shim's hash, so image builds are reproducible. The download
+  happens at image build only.
 - dbt v2 loads warehouse drivers through the ADBC driver manager. Without a local driver it
   downloads one from `public.cdn.getdbt.com`. Run containers have no internet, so the runner image
   registers the ADBC entry point `duckdb_adbc_init` of the pinned `duckdb==1.5.5` wheel in a driver
@@ -19,6 +21,8 @@ contract change.
   (`duckdb-extension-*==1.5.5`). They are copied into `$HOME/.duckdb/extensions` at image build.
   The `extension_directory` setting in the profile does not reach the attach that dbt generates.
 - `DBT_SEND_ANONYMOUS_USAGE_STATS=false` stops all telemetry connections.
+- dbt keeps state in `~/.dbt`, so the runner points `HOME` at `/tmp` and links the image's read-only
+  DuckDB extensions there.
 - The fallback engine, dbt-core 1.12 with dbt-duckdb, is not needed.
 
 ## Catalog attach
@@ -88,8 +92,9 @@ as the Iceberg namespace verbatim. dbt's default would prefix it with the target
   macro edges included, filtered out by the stack)
 - `dbt.models`, `dbt.seeds`, `dbt.sources`, `dbt.data_tests`, `dbt.node_columns` (descriptions)
 - `dbt_rt.run_results` (status, timing, rows_affected)
-- `dbt.column_lineage`, which stays empty in the OSS build
+- `dbt.column_lineage`, which stays empty in the OSS build: `--static-analysis strict` reports that
+  "this distribution of dbt OSS does not include the static analysis engine"
 
 The dbt stack reads these files with DuckDB. `run_results.json` (v6) and `manifest.json` are
-also written. `dbt docs generate` builds a static, self-contained docs site; its DuckDB-WASM
+also written. The information schema has no compiled SQL; it is in `target/compiled/<package>/<path>`. `dbt docs generate` builds a static, self-contained docs site; its DuckDB-WASM
 location is set with `--duckdb-cdn-base`.

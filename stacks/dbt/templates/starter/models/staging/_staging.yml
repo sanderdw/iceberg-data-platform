@@ -1,0 +1,9 @@
+models:
+  - name: stg_regions
+    description: Cleaned regions.
+    columns:
+      - name: region_id
+        description: Stable region identifier.
+        data_tests: [not_null, unique]
+      - name: country_code
+        description: ISO 3166 alpha-2 country code.

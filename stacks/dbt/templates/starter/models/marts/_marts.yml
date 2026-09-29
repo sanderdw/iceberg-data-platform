@@ -1,0 +1,9 @@
+models:
+  - name: regions_per_country
+    description: Number of sales regions per country.
+    columns:
+      - name: country_code
+        description: ISO 3166 alpha-2 country code.
+        data_tests: [not_null, unique]
+      - name: regions
+        description: Number of regions in the country.

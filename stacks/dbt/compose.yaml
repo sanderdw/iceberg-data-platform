@@ -1,0 +1,84 @@
+# The dbt stack: a separate Compose project that uses the platform only through the Extension
+# Bridge (contracts/bridge in the platform repository), Iceberg REST and S3.
+name: iceberg-dbt
+
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+services:
+  dbt-portal:
+    build: .
+    image: iceberg-dbt:0.1.0
+    <<: *hardened
+    labels:
+      io.iceberg-platform.extension: dbt
+    env_file: [.env.bridge]
+    environment:
+      LAUNCHER_URL: http://dbt-launcher:3006
+      LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
+      MAX_CONCURRENT_RUNS: ${MAX_CONCURRENT_RUNS:-4}
+      RUN_TIMEOUT_SECONDS: ${RUN_TIMEOUT_SECONDS:-2700}
+    ports:
+      - "127.0.0.1:${DBT_PORT:-3004}:3004"
+    volumes:
+      - dbt-state:/data
+      - dbt-artifacts:/data/artifacts:ro
+    networks: [platform, launch]
+    depends_on:
+      dbt-launcher:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3004/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # The only container with the Docker socket. It launches the pinned runner image, with fixed
+  # isolation, on a private network holding only the platform's catalog and storage.
+  dbt-launcher:
+    image: iceberg-dbt:0.1.0
+    <<: *hardened
+    command: ["/app/.venv/bin/uvicorn", "launcher.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3006", "--no-access-log"]
+    user: "0:0"
+    labels:
+      io.iceberg-platform.extension: dbt
+    environment:
+      LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-dbt-runner:0.1.0}
+      ARTIFACTS_DIR: /artifacts
+      BRIDGE_EXTENSION_ID: dbt
+      RUN_MEMORY: ${RUN_MEMORY:-2g}
+      RUN_CPUS: ${RUN_CPUS:-2}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dbt-artifacts:/artifacts
+    networks: [launch]
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3006/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # Build-only: the isolated image every run uses.
+  runner-image:
+    image: iceberg-dbt-runner:0.1.0
+    build:
+      context: .
+      dockerfile: runner/Dockerfile
+    profiles: [images]
+
+networks:
+  platform:
+    external: true
+    name: ${PLATFORM_NETWORK:-iceberg-platform_default}
+  launch:
+    internal: true
+
+volumes:
+  dbt-state:
+  dbt-artifacts:
