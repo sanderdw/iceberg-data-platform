@@ -142,6 +142,18 @@
     .arch rect { fill: var(--black); stroke: var(--border-visible); stroke-width: 1.5; }
     .arch rect.hi { stroke: var(--text-display); }
     .arch line, .arch path { stroke: var(--text-disabled); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+    /* RBAC diagram: fills the space between heading and caption */
+    .rbac { flex: 1 1 auto; min-height: 0; }
+    .rbac svg { height: 100%; }
+    .rbac line, .rbac path { marker-end: url(#arr-rbac); }
+    .rbac line.plain { marker-end: none; stroke: var(--border-visible); stroke-dasharray: 2 6; }
+    .rbac line.admin { stroke: var(--text-display); }
+    .rbac line.off, .rbac rect.off, .rbac rect.out { stroke-dasharray: 4 4; }
+    .rbac rect.off { stroke: var(--border); }
+    .rbac text.off { fill: var(--text-disabled); }
+    .rbac .code { font-family: "Space Mono", monospace; font-size: 11px; fill: var(--text-primary); }
+    .rbac-teams line, .rbac-teams path { marker-end: url(#arr-rbac-teams); }
+    .rbac text.cat { font-size: 14px; }
     /* Chrome: small quiet controls, thin progress, dim slide number */
     .reveal .progress { color: var(--text-secondary); height: 2px; }
     .reveal .controls { font-size: 5px; color: var(--text-disabled); opacity: 0.35; transition: opacity 200ms cubic-bezier(0.25, 0.1, 0.25, 1); }
@@ -636,6 +648,138 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
     </ul>
   </div>
   <p class="lede foot">Ownership is explicit: a team owns a database and a database owns a bucket. That is the governance model.</p>
+</section>
+
+<section>
+  <div class="label">03 · Platform</div>
+  <h2>Polaris RBAC per team: the high-level view</h2>
+  <div class="arch rbac rbac-teams">
+    <svg viewBox="0 0 1440 480" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="rbac-teams-title">
+      <title id="rbac-teams-title">Team-level view of a 12-person Voltara Energy class. The company has three teams, grid-planning, asset-management and outage-response, each with four members: one admin and three writers. Each team owns a production and a development catalog. In both catalogs, the admin gets the admin catalog role and the writers the writer catalog role; the reader catalog role is not used. The Keycloak platform-admin role sits outside the teams.</title>
+      <defs><marker id="arr-rbac-teams" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#666666"/></marker></defs>
+
+      <text class="lbl" x="0" y="20">Level</text>
+      <text class="lbl" x="260" y="20">Voltara Energy · 12 participants</text>
+      <line class="plain" x1="240" y1="32" x2="240" y2="470"/>
+
+      <rect class="hi" x="0" y="40" width="220" height="56" rx="8"/><text class="hi" x="110" y="64" text-anchor="middle">Company</text><text class="sub" x="110" y="84" text-anchor="middle">one installation</text>
+      <rect class="hi" x="0" y="150" width="220" height="76" rx="8"/><text class="hi" x="110" y="180" text-anchor="middle">Team</text><text class="sub" x="110" y="204" text-anchor="middle">members, one role each</text>
+      <rect class="hi" x="0" y="290" width="220" height="56" rx="8"/><text class="hi" x="110" y="314" text-anchor="middle">Catalog role</text><text class="sub" x="110" y="334" text-anchor="middle">admin · writer · reader</text>
+      <rect class="hi" x="0" y="400" width="220" height="60" rx="8"/><text class="hi" x="110" y="425" text-anchor="middle">Catalog</text><text class="sub" x="110" y="445" text-anchor="middle">one per database · own bucket</text>
+      <line x1="110" y1="96" x2="110" y2="150"/><text class="lbl" x="124" y="128">has</text>
+      <line x1="110" y1="226" x2="110" y2="290"/><text class="lbl" x="124" y="262">role becomes</text>
+      <line x1="110" y1="346" x2="110" y2="400"/><text class="lbl" x="124" y="377">on</text>
+
+      <rect class="hi" x="260" y="40" width="780" height="56" rx="8"/><text class="hi" x="650" y="64" text-anchor="middle">Voltara Energy</text><text class="sub" x="650" y="84" text-anchor="middle">grid operator and energy supplier · voltara.example</text>
+      <rect class="out" x="1060" y="40" width="380" height="56" rx="8"/><text x="1250" y="64" text-anchor="middle">platform-admin · the trainer</text><text class="sub" x="1250" y="84" text-anchor="middle">Keycloak role, outside every team</text>
+      <line x1="650" y1="96" x2="450" y2="150"/><line x1="650" y1="96" x2="850" y2="150"/><line x1="650" y1="96" x2="1250" y2="150"/>
+
+      <rect class="hi" x="260" y="150" width="380" height="76" rx="8"/><text class="hi" x="450" y="180" text-anchor="middle">grid-planning</text><text class="sub" x="450" y="204" text-anchor="middle">4 members · 1 admin · 3 writers</text>
+      <rect class="hi" x="660" y="150" width="380" height="76" rx="8"/><text class="hi" x="850" y="180" text-anchor="middle">asset-management</text><text class="sub" x="850" y="204" text-anchor="middle">4 members · 1 admin · 3 writers</text>
+      <rect class="hi" x="1060" y="150" width="380" height="76" rx="8"/><text class="hi" x="1250" y="180" text-anchor="middle">outage-response</text><text class="sub" x="1250" y="204" text-anchor="middle">4 members · 1 admin · 3 writers</text>
+
+      <line x1="450" y1="226" x2="352.5" y2="290"/><line x1="450" y1="226" x2="547.5" y2="290"/>
+      <line x1="850" y1="226" x2="752.5" y2="290"/><line x1="850" y1="226" x2="947.5" y2="290"/>
+      <line x1="1250" y1="226" x2="1152.5" y2="290"/><line x1="1250" y1="226" x2="1347.5" y2="290"/>
+
+      <rect x="260" y="290" width="185" height="56" rx="8"/><text class="code" x="352.5" y="314" text-anchor="middle">admin ×1 · writer ×3</text><text class="sub off" x="352.5" y="334" text-anchor="middle">reader ×0</text>
+      <rect x="455" y="290" width="185" height="56" rx="8"/><text class="code" x="547.5" y="314" text-anchor="middle">admin ×1 · writer ×3</text><text class="sub off" x="547.5" y="334" text-anchor="middle">reader ×0</text>
+      <rect x="660" y="290" width="185" height="56" rx="8"/><text class="code" x="752.5" y="314" text-anchor="middle">admin ×1 · writer ×3</text><text class="sub off" x="752.5" y="334" text-anchor="middle">reader ×0</text>
+      <rect x="855" y="290" width="185" height="56" rx="8"/><text class="code" x="947.5" y="314" text-anchor="middle">admin ×1 · writer ×3</text><text class="sub off" x="947.5" y="334" text-anchor="middle">reader ×0</text>
+      <rect x="1060" y="290" width="185" height="56" rx="8"/><text class="code" x="1152.5" y="314" text-anchor="middle">admin ×1 · writer ×3</text><text class="sub off" x="1152.5" y="334" text-anchor="middle">reader ×0</text>
+      <rect x="1255" y="290" width="185" height="56" rx="8"/><text class="code" x="1347.5" y="314" text-anchor="middle">admin ×1 · writer ×3</text><text class="sub off" x="1347.5" y="334" text-anchor="middle">reader ×0</text>
+
+      <line x1="352.5" y1="346" x2="352.5" y2="400"/><line x1="547.5" y1="346" x2="547.5" y2="400"/>
+      <line x1="752.5" y1="346" x2="752.5" y2="400"/><line x1="947.5" y1="346" x2="947.5" y2="400"/>
+      <line x1="1152.5" y1="346" x2="1152.5" y2="400"/><line x1="1347.5" y1="346" x2="1347.5" y2="400"/>
+
+      <rect class="hi" x="260" y="400" width="185" height="60" rx="8"/><text class="hi cat" x="352.5" y="425" text-anchor="middle">grid-capacity</text><text class="sub" x="352.5" y="445" text-anchor="middle">production</text>
+      <rect class="hi" x="455" y="400" width="185" height="60" rx="8"/><text class="hi cat" x="547.5" y="425" text-anchor="middle">grid-capacity-scenarios</text><text class="sub" x="547.5" y="445" text-anchor="middle">development</text>
+      <rect class="hi" x="660" y="400" width="185" height="60" rx="8"/><text class="hi cat" x="752.5" y="425" text-anchor="middle">grid-assets</text><text class="sub" x="752.5" y="445" text-anchor="middle">production</text>
+      <rect class="hi" x="855" y="400" width="185" height="60" rx="8"/><text class="hi cat" x="947.5" y="425" text-anchor="middle">maintenance-forecasts</text><text class="sub" x="947.5" y="445" text-anchor="middle">development</text>
+      <rect class="hi" x="1060" y="400" width="185" height="60" rx="8"/><text class="hi cat" x="1152.5" y="425" text-anchor="middle">outage-events</text><text class="sub" x="1152.5" y="445" text-anchor="middle">production</text>
+      <rect class="hi" x="1255" y="400" width="185" height="60" rx="8"/><text class="hi cat" x="1347.5" y="425" text-anchor="middle">outage-analytics</text><text class="sub" x="1347.5" y="445" text-anchor="middle">development</text>
+    </svg>
+  </div>
+  <div class="caption foot">A team's role applies to every catalog it owns · no grant crosses a team boundary · a data share would be the only way across · next: one team opened up to its members</div>
+  <aside class="notes">The trainer-level picture: one company, three teams of four, two catalogs per team. Whatever role you hold in your team, you hold in both of its catalogs; production and development only change what the portal shows you. Every catalog carries reader, writer and admin catalog roles, but the skill only hands out admin and writer, so everyone can build tables. No grant crosses a team boundary, so grid-planning cannot see outage-events until a team admin creates a data share. platform-admin is the trainer's Keycloak role and is not part of any team. Polaris itself has no notion of a team member: the next slide shows the principals and principal roles underneath.</aside>
+</section>
+
+<section>
+  <div class="label">03 · Platform</div>
+  <h2>Polaris RBAC, filled in by the demo-company skill</h2>
+  <div class="arch rbac">
+    <svg viewBox="0 0 1440 575" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="rbac-title">
+      <title id="rbac-title">The Polaris RBAC chain, principal to principal role to catalog role to privilege to catalog, applied to the grid-planning team of a 12-person Voltara Energy class. Each of the four members has a personal principal role. The admin's role is granted the admin catalog role and the three writers' roles the writer catalog role, in both team catalogs. The reader catalog roles exist but are not assigned. Team records and the Keycloak platform-admin role sit outside the chain. asset-management and outage-response follow the same pattern.</title>
+      <defs><marker id="arr-rbac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#666666"/></marker></defs>
+
+      <text class="lbl" x="0" y="20">Polaris RBAC model</text>
+      <text class="lbl" x="340" y="20">Voltara · grid-planning · 4 of 12</text>
+      <line class="plain admin" style="stroke-dasharray:none" x1="820" y1="16" x2="850" y2="16"/><text class="lbl" x="858" y="20">admin grant</text>
+      <line class="plain" style="stroke:var(--text-disabled);stroke-dasharray:none" x1="975" y1="16" x2="1005" y2="16"/><text class="lbl" x="1013" y="20">writer grant</text>
+      <text class="lbl" x="1180" y="20">Around the chain</text>
+      <line class="plain" x1="305" y1="32" x2="305" y2="570"/>
+      <line class="plain" x1="1165" y1="32" x2="1165" y2="570"/>
+
+      <rect class="hi" x="0" y="40" width="260" height="56" rx="8"/><text class="hi" x="130" y="64" text-anchor="middle">Principal</text><text class="sub" x="130" y="84" text-anchor="middle">an identity, such as a person</text>
+      <rect class="hi" x="0" y="150" width="260" height="56" rx="8"/><text class="hi" x="130" y="174" text-anchor="middle">Principal role</text><text class="sub" x="130" y="194" text-anchor="middle">usually shared by many principals</text>
+      <rect class="hi" x="0" y="290" width="260" height="56" rx="8"/><text class="hi" x="130" y="314" text-anchor="middle">Catalog role</text><text class="sub" x="130" y="334" text-anchor="middle">belongs to one catalog</text>
+      <rect class="hi" x="0" y="380" width="260" height="76" rx="8"/><text class="hi" x="130" y="410" text-anchor="middle">Privilege</text><text class="sub" x="130" y="432" text-anchor="middle">CATALOG_… (prefix dropped →)</text>
+      <rect class="hi" x="0" y="500" width="260" height="60" rx="8"/><text class="hi" x="130" y="525" text-anchor="middle">Securable object</text><text class="sub" x="130" y="545" text-anchor="middle">catalog · namespace · table · view</text>
+      <line x1="130" y1="96" x2="130" y2="150"/><text class="lbl" x="144" y="128">has</text>
+      <line x1="130" y1="206" x2="130" y2="290"/><text class="lbl" x="144" y="252">is granted</text>
+      <line x1="130" y1="346" x2="130" y2="380"/><text class="lbl" x="144" y="367">holds</text>
+      <line x1="130" y1="456" x2="130" y2="500"/><text class="lbl" x="144" y="482">on</text>
+
+      <rect class="hi" x="340" y="40" width="190" height="56" rx="8"/><text class="hi" x="435" y="64" text-anchor="middle">noor-bakker</text><text class="sub" x="435" y="84" text-anchor="middle">admin · portal-…</text>
+      <rect x="546" y="40" width="190" height="56" rx="8"/><text x="641" y="64" text-anchor="middle">lucas-meijer</text><text class="sub" x="641" y="84" text-anchor="middle">writer · portal-…</text>
+      <rect x="752" y="40" width="190" height="56" rx="8"/><text x="847" y="64" text-anchor="middle">amira-haddad</text><text class="sub" x="847" y="84" text-anchor="middle">writer · portal-…</text>
+      <rect x="958" y="40" width="190" height="56" rx="8"/><text x="1053" y="64" text-anchor="middle">kenji-sato</text><text class="sub" x="1053" y="84" text-anchor="middle">writer · portal-…</text>
+      <line x1="435" y1="96" x2="435" y2="150"/><line x1="641" y1="96" x2="641" y2="150"/><line x1="847" y1="96" x2="847" y2="150"/><line x1="1053" y1="96" x2="1053" y2="150"/>
+      <text class="lbl" x="447" y="128">1 : 1, personal</text>
+
+      <rect class="hi" x="340" y="150" width="190" height="56" rx="8"/><text class="hi" x="435" y="174" text-anchor="middle">portal-…</text><text class="sub" x="435" y="194" text-anchor="middle">principal role · 1 member</text>
+      <rect x="546" y="150" width="190" height="56" rx="8"/><text x="641" y="174" text-anchor="middle">portal-…</text><text class="sub" x="641" y="194" text-anchor="middle">principal role · 1 member</text>
+      <rect x="752" y="150" width="190" height="56" rx="8"/><text x="847" y="174" text-anchor="middle">portal-…</text><text class="sub" x="847" y="194" text-anchor="middle">principal role · 1 member</text>
+      <rect x="958" y="150" width="190" height="56" rx="8"/><text x="1053" y="174" text-anchor="middle">portal-…</text><text class="sub" x="1053" y="194" text-anchor="middle">principal role · 1 member</text>
+
+      <line x1="641" y1="206" x2="537.5" y2="290"/><line x1="641" y1="206" x2="952.5" y2="290"/>
+      <line x1="847" y1="206" x2="537.5" y2="290"/><line x1="847" y1="206" x2="952.5" y2="290"/>
+      <line x1="1053" y1="206" x2="537.5" y2="290"/><line x1="1053" y1="206" x2="952.5" y2="290"/>
+      <line class="admin" x1="435" y1="206" x2="402.5" y2="290"/><line class="admin" x1="435" y1="206" x2="817.5" y2="290"/>
+
+      <rect class="hi" x="340" y="290" width="125" height="56" rx="8"/><text class="hi" x="402.5" y="314" text-anchor="middle">admin</text><text class="sub" x="402.5" y="334" text-anchor="middle">catalog role</text>
+      <rect x="475" y="290" width="125" height="56" rx="8"/><text x="537.5" y="314" text-anchor="middle">writer</text><text class="sub" x="537.5" y="334" text-anchor="middle">catalog role</text>
+      <rect class="off" x="610" y="290" width="125" height="56" rx="8"/><text class="off" x="672.5" y="314" text-anchor="middle">reader</text><text class="sub off" x="672.5" y="334" text-anchor="middle">catalog role</text>
+      <rect class="hi" x="755" y="290" width="125" height="56" rx="8"/><text class="hi" x="817.5" y="314" text-anchor="middle">admin</text><text class="sub" x="817.5" y="334" text-anchor="middle">catalog role</text>
+      <rect x="890" y="290" width="125" height="56" rx="8"/><text x="952.5" y="314" text-anchor="middle">writer</text><text class="sub" x="952.5" y="334" text-anchor="middle">catalog role</text>
+      <rect class="off" x="1025" y="290" width="125" height="56" rx="8"/><text class="off" x="1087.5" y="314" text-anchor="middle">reader</text><text class="sub off" x="1087.5" y="334" text-anchor="middle">catalog role</text>
+
+      <line x1="402.5" y1="346" x2="402.5" y2="380"/><line x1="537.5" y1="346" x2="537.5" y2="380"/><line class="off" x1="672.5" y1="346" x2="672.5" y2="380"/>
+      <line x1="817.5" y1="346" x2="817.5" y2="380"/><line x1="952.5" y1="346" x2="952.5" y2="380"/><line class="off" x1="1087.5" y1="346" x2="1087.5" y2="380"/>
+
+      <rect x="340" y="380" width="125" height="76" rx="8"/><text class="code" x="402.5" y="402" text-anchor="middle">MANAGE_CONTENT</text><text class="code" x="402.5" y="420" text-anchor="middle">+ MANAGE_ACCESS</text><text class="code" x="402.5" y="438" text-anchor="middle">+ MANAGE_METADATA</text>
+      <rect x="475" y="380" width="125" height="76" rx="8"/><text class="code" x="537.5" y="412" text-anchor="middle">MANAGE_CONTENT</text><text class="sub" x="537.5" y="432" text-anchor="middle">read + write data</text>
+      <rect class="off" x="610" y="380" width="125" height="76" rx="8"/><text class="sub off" x="672.5" y="412" text-anchor="middle">8 read privileges</text><text class="sub off" x="672.5" y="432" text-anchor="middle">not assigned</text>
+      <rect x="755" y="380" width="125" height="76" rx="8"/><text class="code" x="817.5" y="402" text-anchor="middle">MANAGE_CONTENT</text><text class="code" x="817.5" y="420" text-anchor="middle">+ MANAGE_ACCESS</text><text class="code" x="817.5" y="438" text-anchor="middle">+ MANAGE_METADATA</text>
+      <rect x="890" y="380" width="125" height="76" rx="8"/><text class="code" x="952.5" y="412" text-anchor="middle">MANAGE_CONTENT</text><text class="sub" x="952.5" y="432" text-anchor="middle">read + write data</text>
+      <rect class="off" x="1025" y="380" width="125" height="76" rx="8"/><text class="sub off" x="1087.5" y="412" text-anchor="middle">8 read privileges</text><text class="sub off" x="1087.5" y="432" text-anchor="middle">not assigned</text>
+
+      <line x1="402.5" y1="456" x2="402.5" y2="500"/><line x1="537.5" y1="456" x2="537.5" y2="500"/><line class="off" x1="672.5" y1="456" x2="672.5" y2="500"/>
+      <line x1="817.5" y1="456" x2="817.5" y2="500"/><line x1="952.5" y1="456" x2="952.5" y2="500"/><line class="off" x1="1087.5" y1="456" x2="1087.5" y2="500"/>
+
+      <rect class="hi" x="340" y="500" width="395" height="60" rx="8"/><text class="hi" x="537.5" y="525" text-anchor="middle">grid-capacity</text><text class="sub" x="537.5" y="545" text-anchor="middle">catalog · production · db-… · own bucket</text>
+      <rect class="hi" x="755" y="500" width="395" height="60" rx="8"/><text class="hi" x="952.5" y="525" text-anchor="middle">grid-capacity-scenarios</text><text class="sub" x="952.5" y="545" text-anchor="middle">catalog · development · db-… · own bucket</text>
+
+      <rect class="out" x="1180" y="40" width="260" height="56" rx="8"/><text x="1310" y="64" text-anchor="middle">platform-admin</text><text class="sub" x="1310" y="84" text-anchor="middle">Keycloak role, not a team role</text>
+      <rect class="out" x="1180" y="150" width="260" height="56" rx="8"/><text x="1310" y="174" text-anchor="middle">team-… × 3</text><text class="sub" x="1310" y="194" text-anchor="middle">principal role · never granted</text>
+      <text class="lbl" x="1180" y="276">Same chain, other teams</text>
+      <rect x="1180" y="290" width="260" height="128" rx="8"/><text class="hi" x="1310" y="316" text-anchor="middle">asset-management</text><text class="sub" x="1310" y="340" text-anchor="middle">daan-visser admin · 3 writers</text><text class="sub" x="1310" y="358" text-anchor="middle">grid-assets · production</text><text class="sub" x="1310" y="376" text-anchor="middle">maintenance-forecasts · dev</text><text class="code" x="1310" y="402" text-anchor="middle">8 grants</text>
+      <rect x="1180" y="432" width="260" height="128" rx="8"/><text class="hi" x="1310" y="458" text-anchor="middle">outage-response</text><text class="sub" x="1310" y="482" text-anchor="middle">priya-raman admin · 3 writers</text><text class="sub" x="1310" y="500" text-anchor="middle">outage-events · production</text><text class="sub" x="1310" y="518" text-anchor="middle">outage-analytics · development</text><text class="code" x="1310" y="544" text-anchor="middle">8 grants</text>
+    </svg>
+  </div>
+  <div class="caption foot">12 participants · 3 teams · 6 catalogs · 18 catalog roles, 6 of them unused readers · 12 principals with 12 personal roles · 24 grants: 6 admin, 18 writer · 0 data shares · production and development are workspace filters, not privilege levels</div>
+  <aside class="notes">Left is the Polaris model from the 1.7 access-control docs: privileges are granted to catalog roles, catalog roles to principal roles, principal roles to principals. Right is what the demo-company skill leaves behind for 12 participants on a fresh install; seats go round-robin, so grid-planning gets pool entries 1, 4, 7 and 10. The twist: the platform gives every user a personal principal role (create_user) and grants catalog roles to that, per catalog the team owns (sync_access). A team is also a principal role (save_team), but only as a record: nobody is granted it. Membership lives in the portal.memberships property and is turned into grants whenever it changes. Every database gets reader, writer and admin catalog roles (create_database); the skill never assigns reader. CATALOG_MANAGE_CONTENT already includes MANAGE_METADATA and table read and write, so in Polaris terms admin adds MANAGE_ACCESS. Creating databases and data shares as team admin is checked by the user portal, not by a Polaris privilege. platform-admin is a Keycloak role; the admin portal and its MCP server then act as Polaris service_admin.</aside>
 </section>
 
 <section>
