@@ -87,8 +87,9 @@ class Services:
 
     async def whoami(self, caller):
         me = await self.me(caller)
+        discovery = await self.bridge.discovery()
         return {**me, "extension": self.settings.extension_id, "origin": self.settings.origin,
-                "environments": list(ENVIRONMENTS)}
+                "environments": list(ENVIRONMENTS), "userPortalUrl": discovery.get("userPortalUrl", "")}
 
     async def environments(self, caller, team):
         me = await self.me(caller)

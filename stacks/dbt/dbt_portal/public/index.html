@@ -1,1 +1,82 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><title>dbt pipelines</title></head><body><p>Pipeline viewer</p></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pipelines · Iceberg Data Platform</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="/style.css">
+<script src="/graph.js" defer></script>
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/">iceberg<span>/ pipelines</span></a>
+  <nav id="crumbs" aria-label="Location"></nav>
+  <div class="header-actions">
+    <button id="theme" class="ghost" type="button" aria-label="Toggle color theme">Light / ○</button>
+    <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
+  </div>
+</header>
+
+<main id="signin" class="center" hidden>
+  <div class="card narrow">
+    <p class="eyebrow">DBT · ICEBERG DATA PLATFORM</p>
+    <h1>Pipelines<span class="dot-accent">.</span></h1>
+    <p>See the dbt pipelines of your teams: what they build, how the last runs went, and where each table comes from. Agents build and change them through the API and MCP server.</p>
+    <a class="button" id="signin-link" href="/auth/login">Sign in with Keycloak</a>
+  </div>
+</main>
+
+<main id="projects" hidden>
+  <section class="page-heading">
+    <div><p class="eyebrow">PROJECTS</p><h1>Your pipelines<span class="dot-accent">.</span></h1>
+    <p>dbt projects of your teams. Open one to see its pipeline per environment.</p></div>
+  </section>
+  <div id="project-list" class="grid"></div>
+  <section class="card agent-hint">
+    <h2>Build with an AI agent</h2>
+    <p>Everything here is created and changed through the dbt MCP server or the REST API. Connect your agent, sign in through Keycloak and ask it to model your data.</p>
+    <pre id="mcp-command"></pre>
+    <p class="small">API reference: <a href="/api/v1/openapi.json">/api/v1/openapi.json</a> · MCP: <code>/mcp</code></p>
+  </section>
+</main>
+
+<main id="project" hidden>
+  <section class="project-bar">
+    <div class="project-title"><p class="eyebrow" id="project-team"></p><h1 id="project-name"></h1></div>
+    <div id="environments" class="segmented" role="tablist" aria-label="Environment"></div>
+    <div id="views" class="segmented" role="tablist" aria-label="View">
+      <button type="button" data-view="pipeline" role="tab">Pipeline</button>
+      <button type="button" data-view="runs" role="tab">Runs</button>
+      <button type="button" data-view="schedules" role="tab">Schedules</button>
+    </div>
+  </section>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+  <section id="pipeline-view" class="pipeline">
+    <div class="toolbar">
+      <label class="search"><span class="visually-hidden">Find a node</span><input id="find" type="search" placeholder="Find a model, seed or source…" autocomplete="off"></label>
+      <div class="legend" aria-hidden="true">
+        <span><i class="status success"></i>built</span><span><i class="status fail"></i>failed</span>
+        <span><i class="status warn"></i>warning</span><span><i class="status never_run"></i>not run</span>
+      </div>
+      <div class="toolbar-actions">
+        <button id="fit" class="quiet" type="button">Fit</button>
+        <a id="docs-link" class="button quiet" target="_blank" rel="noopener" hidden>dbt docs</a>
+        <button id="run-now" type="button" hidden>Build now</button>
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <svg id="graph" role="img" aria-label="Pipeline graph"></svg>
+      <div id="graph-empty" class="empty" hidden></div>
+      <aside id="panel" class="panel" hidden aria-label="Node details"></aside>
+    </div>
+    <div id="timeline" class="timeline" aria-label="Recent runs"></div>
+  </section>
+
+  <section id="runs-view" hidden><div id="run-table"></div><div id="run-detail" class="card" hidden></div></section>
+  <section id="schedules-view" hidden><div id="schedule-table"></div></section>
+</main>
+</body>
+</html>

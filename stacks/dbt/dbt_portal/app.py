@@ -171,6 +171,12 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
     def index():
         return FileResponse(PUBLIC / "index.html")
 
+    @app.get("/fonts/{name}", include_in_schema=False)
+    def fonts(name: str):
+        if not re.match(r"^[a-z0-9-]+\.ttf$", name) or not (PUBLIC / "fonts" / name).is_file():
+            raise DbtError(404, "Not found.", "not_found")
+        return FileResponse(PUBLIC / "fonts" / name, headers={"Cache-Control": "public, max-age=86400"})
+
     @app.get("/{name}", include_in_schema=False)
     def static(name: str):
         if not re.match(r"^[a-z0-9-]+\.(js|css|svg)$", name) or not (PUBLIC / name).is_file():

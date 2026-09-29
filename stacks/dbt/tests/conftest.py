@@ -48,7 +48,8 @@ class FakeBridge:
     async def discovery(self, refresh=False):
         return {"contractVersion": "1.0.0",
                 "catalog": {"internalUri": "http://polaris-control-plane:8181/api/catalog"},
-                "storage": {"endpoint": "http://localhost:9000", "internalEndpoint": "http://rustfs:9000"}}
+                "storage": {"endpoint": "http://localhost:9000", "internalEndpoint": "http://rustfs:9000"},
+                "userPortalUrl": "http://localhost:3002"}
 
     async def close(self):
         pass

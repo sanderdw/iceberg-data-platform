@@ -87,6 +87,9 @@ uv run pytest && uv run ruff check .
 uv run python -m scripts.api_contract    # after an API change; review contracts/dbt-api/v1/openapi.yaml
 ```
 
+The dbt docs site (`command=docs`, linked from the viewer) loads DuckDB-WASM from
+cdn.jsdelivr.net in the browser.
+
 Limits of 0.1.0: runs last at most 45 minutes (the platform token lifetime), and storage must be
 reached through the platform's loopback S3 endpoint (the default). A received data share is not
 readable by runs.
