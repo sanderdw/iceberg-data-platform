@@ -38,7 +38,8 @@ production) and are unique per team and environment. Roles per team are reader, 
 bucket-admin (direct S3 access) is not available to Keycloak users. create_user creates a Keycloak
 account and returns a temporary password exactly once: pass it to the person over a secure channel
 and never store or repeat it. delete_team, delete_database, delete_user and revoke_share are
-irreversible. delete_database destroys every table, view, storage object and data share of that
+irreversible, like revoke_automation_principal, which stops an extension such as dbt from acting for
+a team environment. delete_database destroys every table, view, storage object and data share of that
 database and requires confirm_name; delete_user revokes platform access but keeps the Keycloak
 account. Ask the administrator before any destructive call. browse_catalog lists namespaces,
 tables and views by name only."""
@@ -46,6 +47,9 @@ tables and views by name only."""
 # Free-text parameters stay unconstrained here and are validated by the API's own models,
 # whose messages name the field without echoing the submitted value.
 UserId = Annotated[str, Field(pattern=r"^portal-[a-f0-9]{32}$", description="User id from list_users.")]
+AutomationPrincipalId = Annotated[
+    str, Field(pattern=r"^svc-[a-f0-9]{32}$", description="Id from list_automation_principals.")
+]
 ObjectName = Annotated[
     str, Field(description="3 to 48 lowercase letters, digits, hyphens or underscores, starting with a letter.")
 ]
@@ -203,6 +207,20 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
         """End all access through this share immediately: the recipient team's and any external credential."""
         await query(provider.delete_share, share)
         return {"revoked": True, "share": share}
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def list_automation_principals() -> dict[str, Any]:
+        """Service accounts through which extension stacks such as dbt act for a team in one environment."""
+        return {"automationPrincipals": await query(provider.list_automation)}
+
+    @mcp.tool(annotations=DESTRUCTIVE)
+    async def revoke_automation_principal(principal: AutomationPrincipalId) -> dict[str, Any]:
+        """Stop an extension from acting for a team environment; its runs fail from now on."""
+        def revoke():
+            provider.require_automation(principal)
+            provider.delete_automation(principal)
+        await query(revoke)
+        return {"revoked": True, "principal": principal}
 
     if user_management:
 

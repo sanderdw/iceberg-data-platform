@@ -119,8 +119,19 @@ function resetEditor() { $('#frame-host').replaceChildren(); $('#editor').hidden
 function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; $('#guide-nav').hidden = true; sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
 async function api(path, method = 'GET', body) { const response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); const result = await response.json(); if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
+// Extension stacks (such as dbt) open in their own origin; the portal only links to them.
+function renderExtensions() {
+  document.querySelectorAll('#workspace-nav .extension-link').forEach(link => link.remove());
+  for (const extension of state.extensions || []) {
+    const link = element('a', extension.id === 'dbt' ? 'Pipelines' : extension.id, 'nav-item extension-link');
+    link.href = extension.origin + '/'; link.target = '_blank'; link.rel = 'noopener';
+    link.title = `Open ${extension.id} in a new tab`; link.dataset.extension = extension.id;
+    $('#workspace-nav').append(link);
+  }
+}
 function renderState() {
   $('#login-screen').hidden = true; $('#identity').hidden = false; $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; $('#workspace-nav').hidden = false; $('#guide-nav').hidden = false; placeNotice();
+  renderExtensions();
   $('#team').replaceChildren(...state.teams.map(t => { const option = element('option', `${t.name} · ${roleNames[t.role] || t.role}`); option.value = t.id; return option; })); $('#team').value = state.activeTeam;
   $('#environment').replaceChildren(...state.environments.map(env => { const option = element('option', envNames[env]); option.value = env; return option; })); $('#environment').value = state.activeEnvironment;
   $('#databases').replaceChildren(...databaseGroups(state.databases, db => db, items => items.map(d => { const b = element('button', undefined, `db${database === d.id ? ' selected' : ''}`); const label = databaseLabel(d); label.append(element('small', envNames[d.environment])); b.append(symbol('database'), label); b.setAttribute('aria-pressed', String(database === d.id)); b.addEventListener('click', () => browse(d.id, [])); return b; })));

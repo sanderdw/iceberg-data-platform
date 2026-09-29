@@ -32,6 +32,7 @@ services:
       NOTEBOOK_IMAGE: iceberg-user-notebook:0.1.0
       MAX_NOTEBOOKS: ${MAX_NOTEBOOKS:-8}
       NOTEBOOK_MEMORY: ${NOTEBOOK_MEMORY:-1g}
+      PLATFORM_EXTENSIONS: ${PLATFORM_EXTENSIONS:-}
     ports:
       - "127.0.0.1:${USER_PORT:-3002}:3002"
     volumes:

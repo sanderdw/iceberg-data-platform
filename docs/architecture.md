@@ -34,12 +34,20 @@ The third party never signs in to a portal. A team administrator hands over the 
 
 | File | Project | Services |
 | --- | --- | --- |
-| `compose.yaml` | `iceberg-platform` | Admin portal, Keycloak, Polaris, PostgreSQL, RustFS, pgAdmin, monitoring |
+| `compose.yaml` | `iceberg-platform` | Admin portal, Extension Bridge, Keycloak, Polaris, PostgreSQL, RustFS, pgAdmin, monitoring |
 | `compose.users.yaml` | `iceberg-workspaces` | User portal, plus the notebook image build |
+| `stacks/dbt/compose.yaml` | `iceberg-dbt` | Optional dbt stack, released separately (see [extensions](extensions.md)) |
 
 - **Keycloak** signs in people and MCP clients. **Polaris** holds all application metadata (teams, users, databases, shares) and enforces data permissions; see the [resource model](CONTEXT.md). There is no separate application database.
 - **The user portal** joins the platform network and doesn't depend on the admin portal. Catalog browsing and notebooks use the signed-in user's own token. The portal uses its platform identity only for directory lookups and for the database and share actions of team administrators.
 - **Both portals** keep sessions in memory for up to eight hours and serve `/mcp` for MCP clients, which authenticate every request with their own bearer token.
+
+## Extensions
+
+Extension stacks add functionality in their own Compose project, repository folder and release
+cycle. They talk to the core only through the versioned Extension Bridge (`bridge` service,
+`/bridge/v1`), Iceberg REST and S3. The [extensions guide](extensions.md) describes the model and
+the contract lives in `contracts/bridge`.
 
 ## Notebooks
 
@@ -62,4 +70,6 @@ The user portal controls Docker and is therefore a trusted service. The same goe
 | `pgadmin/` | Preconfigured pgAdmin connection |
 | `test/` | Unit and authorization tests |
 | `docs/` | Documentation |
+| `contracts/bridge/` | Extension Bridge contract: OpenAPI, table-property, network and handshake conventions |
+| `stacks/` | Extension stacks with their own versions and releases, such as `stacks/dbt` |
 | `presentation/` | reveal.js deck, published to GitHub Pages and excluded from source releases |

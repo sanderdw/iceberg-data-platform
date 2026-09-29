@@ -136,3 +136,23 @@ def test_probe_history_is_bounded_and_http_errors_are_failures():
         assert len(service["history"]) == 60
         assert service["availabilityPercent"] == 0
         assert service["latencyMs"] is None
+
+
+def test_containers_include_labelled_extension_stacks_once():
+    monitor = Monitor({"MONITOR_PROJECTS": "iceberg-platform"})
+    platform = {"Id": "a", "Names": ["/iceberg-platform-bridge-1"], "State": "exited",
+                "Labels": {"com.docker.compose.service": "bridge"}}
+    extension = {"Id": "b", "Names": ["/iceberg-dbt-dbt-portal-1"], "State": "exited",
+                 "Labels": {"com.docker.compose.service": "dbt-portal", "io.iceberg-platform.extension": "dbt"}}
+    listings = {'{"label": ["com.docker.compose.project=iceberg-platform"]}': [platform],
+                '{"label": ["io.iceberg-platform.extension"]}': [extension, platform]}
+
+    def docker_get(path, **params):
+        if path == "/containers/json":
+            return listings[params["filters"]]
+        return {"RestartCount": 0, "State": {"StartedAt": "2026-09-29T00:00:00Z"}}
+
+    monitor.docker_get = docker_get
+    rows = monitor.containers()
+    assert [(r["name"], r["service"]) for r in rows] == [
+        ("iceberg-dbt-dbt-portal-1", "dbt-portal"), ("iceberg-platform-bridge-1", "bridge")]

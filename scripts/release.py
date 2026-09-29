@@ -206,7 +206,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
     output.mkdir(parents=True, exist_ok=True)
     registry = "ghcr.io/sanderdw/iceberg-data-platform"
     image_names = {"portal": "portal", "monitor": "portal", "users": "users", "notebook-image": "notebook",
-                   "keycloak-bootstrap": "portal"}
+                   "keycloak-bootstrap": "portal", "bridge": "portal"}
     contents = {name: installer_source(root, name, release_tag, image_tag) for name in ("install.sh", "install.ps1")}
     for filename in ("compose.yaml", "compose.users.yaml"):
         model = json.loads(subprocess.check_output([

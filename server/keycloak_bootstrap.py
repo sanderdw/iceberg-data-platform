@@ -6,14 +6,24 @@ import os
 import httpx
 
 # The installer ships scripts/setup.py on its own, so the client definition lives there.
-from scripts.setup import CLI_CLIENT_ID, DEFAULT_ROLES, MCP_CLIENT_ID, cli_client, mcp_client
+from scripts.setup import (
+    CLI_CLIENT_ID,
+    DEFAULT_ROLES,
+    MCP_CLIENT_ID,
+    cli_client,
+    extension_client,
+    extension_mcp_client,
+    mcp_client,
+    parse_pairs,
+)
+from server import extensions as registry
 from server.models import DatabaseInput, TeamInput, UserInput
 from server.polaris import PolarisProvider, enc
 from server.storage import RustFSStorage
 
 
-def upsert_public_client(kc, prefix, config):
-    """Create or update a public client, add missing mappers by name and attach its optional scopes."""
+def upsert_client(kc, prefix, config):
+    """Create or update a client, add missing mappers by name and attach its optional scopes."""
     config = dict(config)
     mappers = config.pop("protocolMappers")
     response = kc.get(prefix + "/clients", params={"clientId": config["clientId"]})
@@ -38,6 +48,27 @@ def upsert_public_client(kc, prefix, config):
     scopes = {scope["name"]: scope["id"] for scope in response.json()}
     for name in config["optionalClientScopes"]:
         kc.put(prefix + "/clients/" + client_id + "/optional-client-scopes/" + scopes[name]).raise_for_status()
+
+
+upsert_public_client = upsert_client
+
+
+def reconcile_extensions(kc, prefix, env):
+    """Clients of the extension stacks in PLATFORM_EXTENSIONS; clients of removed ones are disabled."""
+    known = registry.extensions(env)
+    secrets = parse_pairs(env.get("PLATFORM_EXTENSION_SECRETS"))
+    for extension, origin in known.items():
+        if not secrets.get(extension):
+            raise RuntimeError(f"No client secret for extension {extension}; run scripts.setup --extension")
+        upsert_client(kc, prefix, extension_client(extension, origin, secrets[extension]))
+        upsert_client(kc, prefix, extension_mcp_client(extension, env.get("MCP_CALLBACK_PORT", "3010")))
+    wanted = {registry.client_id(e) for e in known} | {registry.mcp_client_id(e) for e in known}
+    response = kc.get(prefix + "/clients")
+    response.raise_for_status()
+    for client in response.json():
+        if client["clientId"].startswith("ext-") and client["clientId"] not in wanted and client.get("enabled"):
+            kc.put(prefix + "/clients/" + client["id"], json={**client, "enabled": False}).raise_for_status()
+    return wanted
 
 
 def main():
@@ -78,6 +109,7 @@ def main():
             # clients; existing realms skip the import, so reconcile them here.
             upsert_public_client(kc, prefix, mcp_client(os.environ.get("MCP_CALLBACK_PORT", "3010")))
             upsert_public_client(kc, prefix, cli_client())
+            extension_clients = reconcile_extensions(kc, prefix, os.environ)
             # Realms imported by earlier setups gave the administrator no default roles, so
             # Keycloak refused the offline_access scope that MCP clients request.
             response = kc.get(prefix + "/users", params={
@@ -106,7 +138,8 @@ def main():
             response = kc.get(prefix + "/clients")
             response.raise_for_status()
             for client in response.json():
-                if client["clientId"] in ("iceberg-admin", "iceberg-users", MCP_CLIENT_ID, CLI_CLIENT_ID):
+                if client["clientId"] in ("iceberg-admin", "iceberg-users", MCP_CLIENT_ID, CLI_CLIENT_ID,
+                                          *extension_clients):
                     kc.put(prefix + "/clients/" + client["id"] + "/default-client-scopes/" + basic).raise_for_status()
             response = kc.get(prefix + "/users/profile")
             response.raise_for_status()

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Extension Bridge:** a versioned interface (`contracts/bridge`, `/bridge/v1`) through which separately released extension stacks, such as the new dbt stack, use the platform. It provides the signed-in user's teams and databases, and service accounts per team and environment that only team administrators enable. Extensions receive one-hour catalog tokens, never secrets or storage keys. See [extensions](docs/extensions.md).
+- New `bridge` service, and `scripts.setup --extension <id> --origin <url> --handshake <file>` to register an extension with its own Keycloak clients.
+- The user portal links to registered extensions. The administration portal lists extension service accounts on the Teams page and can revoke them, also through the new MCP tools `list_automation_principals` and `revoke_automation_principal`.
+- The Infrastructure page includes the containers of extension stacks.
+
 ## 0.5.3 - 2026-09-24
 
 - **Participants get going from a single slip.** The `demo-company` skill now also writes printable sign-in slips, one per participant. Each slip holds the user portal address with a QR code, the username and the one-time password.

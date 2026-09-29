@@ -37,6 +37,9 @@ ROLES = {
 # not filter listings, so any list privilege would reveal every other name.
 SHARE_PRIVILEGES = {"table": "TABLE_READ_DATA", "view": "VIEW_READ_PROPERTIES"}
 MAX_SHARES = 20
+# An automation principal (service account) of an extension has one principal role per
+# access level: its token names exactly one, so a read token cannot write.
+AUTOMATION_ROLES = {"write": ("", "writer"), "read": ("-read", "reader")}
 
 
 def enc(value):
@@ -233,8 +236,12 @@ class PolarisProvider:
         return self.managed(resource) and resource["properties"].get("portal.kind") == "share"
 
     def is_user(self, resource):
-        # Share principals are machine identities: never a user, member or portal login.
-        return self.managed(resource) and not self.is_share(resource)
+        # An allowlist: users carry no kind. Share and automation principals are machine
+        # identities, never a user, member or portal login.
+        return self.managed(resource) and resource["properties"].get("portal.kind", "user") == "user"
+
+    def is_automation(self, resource):
+        return self.managed(resource) and resource["properties"].get("portal.kind") == "automation"
 
     def require_user(self, path):
         principal = self.require(path)
@@ -335,6 +342,10 @@ class PolarisProvider:
                 roles = {m["team"]: m["role"] for m in user["memberships"]}
                 self.update_memberships(user["id"], {t: r for t, r in roles.items() if t != id})
                 undo.append(lambda u=user, r=roles: self.update_memberships(u["id"], r))
+            # The team has no databases, so its automation principals hold no grants. A
+            # revocation interrupted here is resumed by `list_automation` as an orphan.
+            for item in self.list_automation(team=id):
+                self.delete_automation(item["id"])
             self.remove(f"/principal-roles/{enc(id)}")
 
     def database(self, catalog):
@@ -468,11 +479,20 @@ class PolarisProvider:
 
     def access(self, user, databases):
         roles = {m["team"]: m["role"] for m in user["memberships"]}
+        # Users hold their team role in every environment; an automation principal in one.
+        environment = user.get("environment")
         return {
             d["id"]: {**d, "role": roles[d["team"]]}
             for d in databases
-            if d["team"] in roles and d["status"] == "ready"
+            if d["team"] in roles and d["status"] == "ready" and environment in (None, d["environment"])
         }
+
+    def access_holders(self):
+        """Every principal role that holds team access: users and active automation principals."""
+        return self.list_users() + [
+            holder for item in self.list_automation() if item["status"] == "active"
+            for holder in self.automation_holders(item)
+        ]
 
     def sync_access(self, user, before, after, undo, *, s3=True):
         base = f"/principal-roles/{enc(user['id'])}/catalog-roles"
@@ -559,7 +579,7 @@ class PolarisProvider:
                         f"{role_path}/grants", "PUT", {"grant": {"type": "catalog", "privilege": privilege}}
                     )
             databases = self.list_databases()
-            for user in self.list_users():
+            for user in self.access_holders():
                 after = self.access(user, databases)
                 before = {k: v for k, v in after.items() if k != id}
                 if before != after:
@@ -596,7 +616,7 @@ class PolarisProvider:
             undo.append(lambda: self.update_properties(path, properties))
             if self.list_shares(id):
                 raise ServiceError(409, "Revoke this database's data shares first.")
-            for user in self.list_users():
+            for user in self.access_holders():
                 # Also re-binds when the user holds different roles in both teams.
                 self.sync_access(user, self.access(user, databases), self.access(user, moved), undo)
             bucket = catalog["properties"]["portal.bucket"]
@@ -784,7 +804,7 @@ class PolarisProvider:
             if self.is_share(principal) and principal["properties"]["portal.database"] == id:
                 self.delete_share(principal["name"])
         databases = self.list_databases()
-        for user in self.list_users():
+        for user in self.access_holders():
             if catalog["properties"]["portal.team"] in user["teams"]:
                 # Every role: the membership role may have changed since a failed attempt.
                 for role in ROLES:
@@ -1113,3 +1133,181 @@ class PolarisProvider:
         self.remove(self.share_role(principal))
         self.remove(f"/principal-roles/{enc(id)}")
         self.remove(path)
+
+    # Automation principals: service accounts through which extensions such as the dbt
+    # stack act for a team in one environment. Their secret never leaves the bridge.
+
+    def automation(self, principal):
+        p = principal["properties"]
+        return {
+            "id": principal["name"],
+            "name": p.get("portal.name", ""),
+            "team": p["portal.team"],
+            "environment": p["portal.environment"],
+            "extension": p["portal.extension"],
+            "status": "revoking" if p.get("portal.deleting") == "true" else "active",
+            "createdAt": principal.get("createTimestamp"),
+            "createdBy": p.get("portal.created-by-name", ""),
+        }
+
+    @staticmethod
+    def automation_holders(item):
+        """Its principal roles, shaped like users for `access` and `sync_access`."""
+        return [
+            {
+                "id": item["id"] + suffix,
+                "memberships": [{"team": item["team"], "role": role}],
+                "teams": [item["team"]],
+                "environment": item["environment"],
+                "bucketAccess": False,
+            }
+            for suffix, role in AUTOMATION_ROLES.values()
+        ]
+
+    def list_automation(self, team=None, extension=None):
+        """Live automation principals. Half-revoked ones and those of deleted teams are revoked first."""
+        teams = None
+        items = []
+        for principal in self.management("/principals")["principals"]:
+            if not self.is_automation(principal):
+                continue
+            item = self.automation(principal)
+            if teams is None:
+                teams = {t["id"] for t in self.list_teams()}
+            if item["status"] == "revoking" or item["team"] not in teams:
+                self.delete_automation(item["id"])
+                continue
+            if (team is None or item["team"] == team) and (extension is None or item["extension"] == extension):
+                items.append(item)
+        return sorted(items, key=lambda i: (i["team"], i["extension"], i["environment"]))
+
+    def require_automation(self, id, *, extension=None):
+        try:
+            principal = self.require(f"/principals/{enc(id)}")
+        except ServiceError as exc:
+            if exc.status == 404:
+                raise ServiceError(404, "This automation principal no longer exists.") from None
+            raise
+        if not self.is_automation(principal) or (extension and principal["properties"]["portal.extension"] != extension):
+            raise ServiceError(404, "This automation principal no longer exists.")
+        if principal["properties"].get("portal.deleting") == "true":
+            raise ServiceError(404, "This automation principal is being revoked.")
+        return principal
+
+    def automation_scope(self, id, *, extension=None):
+        item = self.automation(self.require_automation(id, extension=extension))
+        databases = [
+            {k: d[k] for k in ("id", "name", "team", "environment", "storageLocation", "status")}
+            for d in self.list_databases()
+            if d["team"] == item["team"] and d["environment"] == item["environment"] and d["status"] == "ready"
+        ]
+        return {**item, "databases": sorted(databases, key=lambda d: d["name"])}
+
+    def create_automation(self, team, environment, extension, created_by):
+        """One automation principal per team, environment and extension; idempotent."""
+        role = self.fence_team(team)
+        for item in self.list_automation(team=team, extension=extension):
+            if item["environment"] == environment:
+                return item, False
+        id = f"svc-{uuid4().hex}"
+        marker = {"portal.managed-by": MANAGED, "portal.kind": "automation"}
+        with provision() as undo:
+            for suffix, _ in AUTOMATION_ROLES.values():
+                name = id + suffix
+                self.management("/principal-roles", "POST", {"principalRole": {"name": name, "properties": marker}})
+                # Removing a principal role removes its catalog-role assignments.
+                undo.append(lambda n=name: self.remove(f"/principal-roles/{enc(n)}"))
+            result = self.management(
+                "/principals",
+                "POST",
+                {
+                    "principal": {
+                        "name": id,
+                        "properties": {
+                            **marker,
+                            "portal.name": f"{extension}-{environment}",
+                            "portal.team": team,
+                            "portal.environment": environment,
+                            "portal.extension": extension,
+                            "portal.created-by": created_by["id"],
+                            "portal.created-by-name": created_by["name"],
+                            # An older portal lists every non-share principal as a user;
+                            # an empty membership keeps it from failing there.
+                            "portal.memberships": "{}",
+                        },
+                    }
+                },
+            )
+            undo.append(lambda: self.remove(f"/principals/{enc(id)}"))
+            item = self.automation(result["principal"])
+            databases = self.list_databases()
+            for holder in self.automation_holders(item):
+                self.sync_access(holder, {}, self.access(holder, databases), undo, s3=False)
+            # Publish against the team fence: a racing team deletion fails one side.
+            self.commit_team(role)
+            # Activation last: until here the principal's credential opens nothing.
+            for suffix, _ in AUTOMATION_ROLES.values():
+                self.management(
+                    f"/principals/{enc(id)}/principal-roles", "PUT", {"principalRole": {"name": id + suffix}}
+                )
+            return item, True
+
+    def reconcile_automation(self, id):
+        """Grant the databases created while this principal was being created. Idempotent."""
+        scope = self.automation_scope(id)
+        for holder in self.automation_holders(scope):
+            role = holder["memberships"][0]["role"]
+            for database in scope["databases"]:
+                try:
+                    self.management(
+                        f"/principal-roles/{enc(holder['id'])}/catalog-roles/{enc(database['id'])}",
+                        "PUT",
+                        {"catalogRole": {"name": role}},
+                    )
+                except ServiceError as exc:
+                    if exc.status != 409:
+                        raise
+        return scope
+
+    def delete_automation(self, id):
+        path = f"/principals/{enc(id)}"
+        try:
+            principal = self.require(path)
+        except ServiceError as exc:
+            if exc.status == 404:
+                return
+            raise
+        if not self.is_automation(principal):
+            raise ServiceError(404, "This automation principal no longer exists.")
+        # Persist intent first. The principal is the retry marker and goes last.
+        if principal["properties"].get("portal.deleting") != "true":
+            self.update_properties(path, {**principal["properties"], "portal.deleting": "true"})
+        for suffix, _ in AUTOMATION_ROLES.values():
+            self.remove(f"{path}/principal-roles/{enc(id + suffix)}")
+            self.remove(f"/principal-roles/{enc(id + suffix)}")
+        self.remove(path)
+
+    def reset_automation_secret(self, id):
+        # `reset` keeps the client ID and ends the previous secret at once.
+        return self.management(f"/principals/{enc(id)}/reset", "POST", {})["credentials"]
+
+    def principal_token(self, client_id, secret, role):
+        """A Polaris token that carries exactly one principal role of an automation principal."""
+        try:
+            response = self.http.post(
+                f"{self.url}/api/catalog/v1/oauth/tokens",
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": secret,
+                    "scope": f"PRINCIPAL_ROLE:{role}",
+                },
+                headers={"Polaris-Realm": "POLARIS"},
+            )
+        except httpx.HTTPError as exc:
+            raise ServiceError(503, "The data provider is unavailable.") from exc
+        if response.status_code in (400, 401, 403):
+            raise ServiceError(401, "The automation credential was refused.")
+        if response.is_error:
+            raise ServiceError(502, "The data provider could not issue a token.")
+        return response.json()

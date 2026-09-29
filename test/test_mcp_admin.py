@@ -30,11 +30,12 @@ TOOLS = {
     "list_databases", "create_database", "rename_database", "move_database", "delete_database", "get_database_connection",
     "browse_catalog", "list_users", "find_accounts", "create_user", "link_user", "update_user_access",
     "retry_user_setup", "delete_user", "list_shares", "revoke_share",
+    "list_automation_principals", "revoke_automation_principal",
 }
-DESTRUCTIVE = {"delete_team", "delete_database", "delete_user", "revoke_share"}
+DESTRUCTIVE = {"delete_team", "delete_database", "delete_user", "revoke_share", "revoke_automation_principal"}
 READS = {
     "get_overview", "list_teams", "list_databases", "get_database_connection", "browse_catalog",
-    "list_users", "find_accounts", "list_shares",
+    "list_users", "find_accounts", "list_shares", "list_automation_principals",
 }
 
 
@@ -177,6 +178,10 @@ def test_admin_lifecycle_creates_links_edits_and_deletes(admin, caplog):
     assert ok(admin, "delete_user", {"user": bob})["deleted"]
     refused(admin, "delete_user", {"user": bob}, "missing")  # MemoryPolaris's 404 text
     refused(admin, "revoke_share", {"share": "share-" + "a" * 32}, "share")
+    principal, _ = admin.provider.create_automation(team, "development", "dbt", {"id": bob, "name": "bob"})
+    assert [p["id"] for p in ok(admin, "list_automation_principals")["automationPrincipals"]] == [principal["id"]]
+    assert ok(admin, "revoke_automation_principal", {"principal": principal["id"]})["revoked"]
+    refused(admin, "revoke_automation_principal", {"principal": principal["id"]}, "no longer exists")
     refused(admin, "delete_team", {"team": team}, "databases first")
     assert ok(admin, "delete_database", {"database": database["id"], "confirm_name": "analytics_new"})["deleted"]
     assert ok(admin, "delete_team", {"team": team}) == {"deleted": True, "team": team}

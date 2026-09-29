@@ -7,6 +7,9 @@ Name = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,47}$")]
 TeamId = Annotated[str, Field(pattern=r"^team-[a-f0-9]{32}$")]
 DatabaseId = Annotated[str, Field(pattern=r"^db-[a-f0-9]{32}$")]
 ShareId = Annotated[str, Field(pattern=r"^share-[a-f0-9]{32}$")]
+AutomationId = Annotated[str, Field(pattern=r"^svc-[a-f0-9]{32}$")]
+# Extension ids name Keycloak clients (`ext-<id>`) and environment variables.
+ExtensionId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9]{1,23}$")]
 Environment = Literal["development", "acceptance", "production"]
 ENVIRONMENTS = ("development", "acceptance", "production")
 Role = Literal["reader", "writer", "admin", "bucket-admin"]
@@ -148,3 +151,12 @@ class ShareUpdate(Input):
 
     objects_valid = field_validator("objects")(share_objects)
     expiry_valid = field_validator("expires_at")(share_expiry)
+
+
+class AutomationInput(Input):
+    environment: Environment
+
+
+class TokenRequest(Input):
+    access: Literal["read", "write"]
+    purpose: str = Field(default="", max_length=120)

@@ -131,6 +131,15 @@ function renderTeams() {
   $('#search').oninput = e => { state.query = e.target.value; saveAdminRoute(true); table(); };
   $('#refresh').onclick = load;
   table();
+  renderAutomation();
+}
+// Service accounts of extension stacks (such as dbt). Team administrators enable them in the extension.
+function renderAutomation() {
+  const { automationPrincipals: items = [], extensions = [] } = state.data;
+  if (!items.length && !extensions.length) return;
+  const origin = id => extensions.find(e => e.id === id)?.origin;
+  $('#page-content').insertAdjacentHTML('beforeend', `<section class="panel"><div class="panel-heading"><div><h2>Extension service accounts <span class="number-badge">${items.length}</span></h2><p>Extensions such as dbt act for a team in one environment, with the team's write access there. Team administrators enable them in the extension; you can revoke them here.</p></div></div>${items.length ? `<div class="table-scroll"><table><thead><tr><th>Extension</th><th>Team</th><th>Environment</th><th>Enabled</th><th>Actions</th></tr></thead><tbody>${items.map(i => `<tr><td><strong>${esc(i.extension)}</strong><p class="subtle">${origin(i.extension) ? esc(origin(i.extension)) : 'Not registered'}</p></td><td>${esc(teamName(i.team) || i.team)}</td><td><span class="tag">${esc(i.environment)}</span></td><td>${date(i.createdAt)}<p class="subtle">${esc(i.createdBy || '—')}</p></td><td><div class="row-actions"><button class="text-button danger" data-revoke-automation="${esc(i.id)}">Revoke</button></div></td></tr>`).join('')}</tbody></table></div>` : `<div class="empty"><span class="empty-icon">${icon('key')}</span><h3>[ NO SERVICE ACCOUNTS ]</h3><p>Registered extensions: ${extensions.map(e => esc(e.id)).join(', ')}. Team administrators enable them per environment.</p></div>`}</section>`);
+  for (const b of document.querySelectorAll('[data-revoke-automation]')) { const item = items.find(i => i.id === b.dataset.revokeAutomation); b.onclick = () => confirmAction('Revoke service account', `${esc(item.extension)} can no longer act for ${esc(teamName(item.team) || item.team)} in ${esc(item.environment)}. Its running and scheduled work fails from now on.`, `/automation-principals/${item.id}`, 'Service account revoked.', 'Revoke'); }
 }
 async function renderExplorer() {
   $('#page-content').innerHTML = `<section class="panel explorer"><div class="panel-heading"><div><h2>All databases <span id="explorer-count" class="number-badge">…</span></h2><p>Expand a database or namespace to view its contents.</p></div><button class="icon-button" id="explorer-refresh" aria-label="Refresh catalog">${icon('refresh')}</button></div><div class="filters"><label class="search">${icon('search')}<input id="explorer-search" aria-label="Search databases" placeholder="Search databases…"></label><span class="tag">Portal administrator · read only</span></div><div id="explorer-tree" aria-live="polite" aria-busy="true"><p class="explorer-note">Loading databases…</p></div></section>`;
