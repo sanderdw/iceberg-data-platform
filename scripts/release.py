@@ -42,7 +42,7 @@ ROOT_FILES = (
     "pyproject.toml",
     "uv.lock",
 )
-SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", ".github", ".agents")
+SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", "contracts", ".github", ".agents")
 # Agent skills ship in the installation bundle at the same paths.
 SKILLS_DIR = ".agents/skills"
 # Extensionless files accepted in source directories.
@@ -53,8 +53,9 @@ IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv"}
 LOCAL_FILES = {"docs/conversation.md", "docs/dbaas-reference-architecture.drawio"}
 # Git-ignored personal notes; never scanned or released.
 LOCAL_DIRS = ("docs/local_only/",)
-# Tracked in git and published by the GitHub Pages workflow, but not part of the source release.
-TRACKED_UNRELEASED = ("presentation/",)
+# Tracked in git but not part of the core source release: the presentation is published by the
+# GitHub Pages workflow; extension stacks and their workflows are versioned and released on their own.
+TRACKED_UNRELEASED = ("presentation/", "stacks/", ".github/workflows/dbt-")
 
 
 def release_files(root=ROOT):
@@ -63,6 +64,7 @@ def release_files(root=ROOT):
         for path in (root / directory).rglob("*"):
             relative = path.relative_to(root)
             if (relative.as_posix() in LOCAL_FILES or relative.as_posix().startswith(LOCAL_DIRS)
+                    or relative.as_posix().startswith(TRACKED_UNRELEASED)
                     or any(part in IGNORED for part in relative.parts)):
                 continue
             if path.is_symlink():
