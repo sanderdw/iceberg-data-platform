@@ -1,10 +1,12 @@
 """Trusted metadata directory plus catalog requests made as the actual user."""
 
+import os
 import time
 from dataclasses import dataclass, field
 
 import httpx
 
+from server import extensions
 from server.models import DatabaseInput, Environment, ServiceError
 from server.polaris import PolarisProvider, enc
 from server.storage import RustFSStorage
@@ -359,7 +361,8 @@ class UserDirectory:
                 "properties": properties(loaded.get("properties", {})),
             }
         loaded = self.request(session, f"{path}/{kind}s/{enc(name)}")
-        return {"name": name, "namespace": namespace, **object_details(kind, loaded)}
+        return {"name": name, "namespace": namespace,
+                **object_details(kind, loaded, extensions.extensions(os.environ))}
 
     def preview_request(self, session, database, namespace, name, snapshot_id, limit):
         details = self.details(session, database, namespace, "table", name)

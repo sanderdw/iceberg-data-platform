@@ -1,12 +1,62 @@
 """Public catalog metadata projections. Provider config and credentials stay server-side."""
 
+import json
 import re
+from urllib.parse import urlsplit
 
 SENSITIVE = re.compile(
     r"secret|token|credential|password|access.key|private.key|authorization", re.IGNORECASE
 )
+PRODUCER = "iceberg-data-platform."
+QUALITY = {"pass", "warn", "fail"}
+
+
 def properties(values):
     return {str(k): str(v) for k, v in values.items() if not SENSITIVE.search(str(k))}
+
+
+def producer(values, extensions):
+    """The Bridge table-property conventions (contracts/bridge/v1/table-properties.md), made safe to show.
+
+    Anyone with write access sets these, so every value is capped and typed, lineage entries are
+    validated, and a link is kept only when its origin is a registered extension.
+    """
+    name = str(values.get(PRODUCER + "producer", "")).strip()
+    if not name:
+        return None
+
+    def text(key, limit=200):
+        value = values.get(PRODUCER + key)
+        return str(value)[:limit] if value not in (None, "") else None
+
+    link, extension = text("producer.url", 2000), None
+    if link:
+        parsed = urlsplit(link)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        extension = next((id for id, url in extensions.items() if url == origin), None)
+        if parsed.scheme not in ("http", "https") or not extension:
+            link = None
+    inputs = []
+    try:
+        raw = json.loads(values.get(PRODUCER + "lineage.inputs") or "[]")
+    except ValueError:
+        raw = []
+    for item in raw if isinstance(raw, list) else []:
+        if (isinstance(item, dict) and isinstance(item.get("database"), str) and isinstance(item.get("name"), str)
+                and isinstance(item.get("namespace"), list) and all(isinstance(p, str) for p in item["namespace"])):
+            inputs.append({"database": item["database"][:256], "namespace": [p[:256] for p in item["namespace"][:20]],
+                           "name": item["name"][:256]})
+        if len(inputs) == 50:
+            break
+    status = text("quality.status", 10)
+    return {
+        "name": name[:40], "version": text("producer.version", 80), "extension": extension, "url": link,
+        "runId": text("producer.run-id", 80), "runAt": text("producer.run-at", 40),
+        "revision": text("producer.source-revision", 80), "node": text("producer.node", 300),
+        "inputs": inputs, "inputsTruncated": values.get(PRODUCER + "lineage.inputs-truncated") == "true",
+        "quality": {"status": status, "summary": text("quality.summary"), "checkedAt": text("quality.checked-at", 40)}
+        if status in QUALITY else None,
+    }
 
 
 def identifier(value):
@@ -62,7 +112,7 @@ def columns(schema):
     return result
 
 
-def object_details(kind, loaded):
+def object_details(kind, loaded, extensions=None):
     metadata = loaded["metadata"]
     schemas = metadata.get("schemas", [])
     versions = metadata.get("versions", [])
@@ -77,6 +127,8 @@ def object_details(kind, loaded):
         "schemaId": schema_id,
         "columns": columns(schema),
         "properties": properties(metadata.get("properties", {})),
+        "comment": str(metadata.get("properties", {}).get("comment", ""))[:2000],
+        "producer": producer(metadata.get("properties", {}), extensions or {}),
     }
     if kind == "view":
         result.update(

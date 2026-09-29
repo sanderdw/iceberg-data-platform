@@ -6,6 +6,8 @@
 - New `bridge` service, and `scripts.setup --extension <id> --origin <url> --handshake <file>` to register an extension with its own Keycloak clients.
 - The user portal links to registered extensions. The administration portal lists extension service accounts on the Teams page and can revoke them, also through the new MCP tools `list_automation_principals` and `revoke_automation_principal`.
 - The Infrastructure page includes the containers of extension stacks.
+- **Where a table comes from:** the catalog shows a table's description (`comment`) and, for tables a pipeline describes with the Bridge table-property conventions, a **Produced by** card with the last run, revision, test outcome, upstream tables and a link back to the pipeline. Links open only for registered extensions.
+- New separately released **dbt stack** (`stacks/dbt`): dbt v2 pipelines per team, built by AI agents through its API and MCP server, with a pipeline viewer. See its README.
 
 ## 0.5.3 - 2026-09-24
 

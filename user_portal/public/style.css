@@ -282,6 +282,9 @@ header .nav-item { background: transparent; border: 0; border-radius: 0; padding
 header .nav-item:hover, header .nav-item[aria-current='page'] { color: var(--text-display); }
 header .nav-item[aria-current='page']::before { content: '['; }
 header .nav-item[aria-current='page']::after { content: ']'; }
+/* Links to extension stacks (PLATFORM_EXTENSIONS) look like the other sections, with an outward arrow. */
+header a.nav-item.extension-link { display: inline-flex; align-items: center; min-height: 44px; font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; text-decoration: none; }
+header a.nav-item.extension-link::after { content: ' ↗'; }
 #notebooks-page .saved:first-child { margin-top: 0; }
 .team-description { max-width: 720px; margin-bottom: 24px; overflow-wrap: anywhere; }
 #team-name { overflow-wrap: anywhere; min-width: 0; }
@@ -327,3 +330,15 @@ header .nav-item[aria-current='page']::after { content: ']'; }
   .guide-step { gap: 24px; }
   .database-shares { padding: 24px 0; }
 }
+
+/* "Produced by" card: Bridge table-property conventions (contracts/bridge/v1/table-properties.md). */
+.catalog-comment { color: var(--text-primary); margin-bottom: 16px; }
+.producer-card { display: grid; gap: 10px; justify-items: start; margin-bottom: 20px; padding: 16px 20px; border: 1px solid var(--border-visible); border-radius: 12px; background: var(--surface-raised); }
+.producer-card h3 { font: var(--small)/1.5 var(--mono); color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; }
+.producer-quality { font: var(--small)/1.5 var(--mono); padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border-visible); }
+.producer-quality.pass { border-color: var(--success); color: var(--success); }
+.producer-quality.warn { border-color: #d9a23b; color: #d9a23b; }
+.producer-quality.fail { border-color: var(--accent); color: var(--accent); }
+.producer-inputs { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font: var(--small)/1.5 var(--mono); }
+.producer-inputs .link-button { min-height: 0; padding: 0; border: 0; background: none; color: var(--text-primary); text-decoration: underline; font: inherit; cursor: pointer; }
+.producer-card .catalog-facts { width: 100%; }

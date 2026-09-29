@@ -22,6 +22,7 @@ The top menu has six sections, all scoped to the selected **Active team** and **
 - **Team overview:** the team's members and roles, its databases and your active notebooks.
 - **Databases:** team Administrators create, rename and delete the team's databases. Renaming keeps the catalog ID and connection settings. Deletion is immediate and removes all data and shares, so you must type the name to confirm it. If cleanup fails, use **Resume deletion**. Moving a database to another team is a platform-administrator action.
 - **Catalog:** browse namespaces, tables and views. **Details →** shows a table's schema, snapshots, branches and tags, partitioning, sort order and properties, or a view's SQL and versions. **Load preview** reads up to 100 rows from any snapshot with your own permissions. Everything here is read-only.
+  A table built by a pipeline, such as the dbt stack, shows its description and a **Produced by** card: the last run, the source revision, the outcome of its tests, links to its upstream tables and a link back to the pipeline. Registered extensions also appear in the top navigation.
 - **Notebooks:** open a database in marimo. Choose **Shared files** in the notebook selector to browse team notebooks and the examples.
 - **Data shares:** see [below](#data-shares).
 - **Getting started:** three ways to work with your data: the portal, [your own tools](#connect-from-your-computer) and an [AI agent](#connect-an-mcp-client). It includes the commands for this installation, filled in for a database of the active team.

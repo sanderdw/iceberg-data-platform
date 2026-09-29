@@ -84,6 +84,39 @@ async function inspectObject(db, ns, kind, name) {
   } catch (error) { if (version === browseVersion) { $('#objects').replaceChildren(element('p', error.message, 'catalog-empty')); notice(error.message, true); } }
 }
 
+/* Tables that a producer such as the dbt stack describes with the Bridge table-property conventions. */
+function producerCard(producer) {
+  const card = element('section', undefined, 'producer-card');
+  card.append(element('span', `Produced by ${producer.name}`, 'eyebrow'));
+  const quality = producer.quality ? `${producer.quality.status}${producer.quality.summary ? ' · ' + producer.quality.summary : ''}` : 'No tests recorded';
+  const status = element('span', quality, `producer-quality ${producer.quality ? producer.quality.status : 'none'}`);
+  card.append(status, facts([['Last run', producer.runAt ? timestamp(Date.parse(producer.runAt)) : null],
+    ['Revision', producer.revision ? producer.revision.slice(0, 12) : null], ['Node', producer.node], ['Version', producer.version]]));
+  if (producer.inputs.length) {
+    card.append(element('h3', 'Upstream tables'));
+    const list = element('ul', undefined, 'producer-inputs');
+    for (const input of producer.inputs) {
+      const known = [...(state.databases || []), ...(state.sharedDatabases || [])].find(d => d.id === input.database);
+      const label = `${known ? known.name : input.database} · ${[...input.namespace, input.name].join('.')}`;
+      const item = element('li');
+      if (known) {
+        const button = element('button', label, 'link-button'); button.type = 'button';
+        button.addEventListener('click', async () => { await browse(input.database, input.namespace); await inspectObject(input.database, input.namespace, 'table', input.name); });
+        item.append(button);
+      } else { item.append(element('span', label)); item.title = 'Not available in your active team and environment.'; }
+      list.append(item);
+    }
+    card.append(list);
+    if (producer.inputsTruncated) card.append(element('p', 'Showing the first 50 upstream tables.', 'hint'));
+  }
+  if (producer.url) {
+    const link = element('a', `Open pipeline in ${producer.extension || producer.name}`, 'button quiet');
+    link.href = producer.url; link.target = '_blank'; link.rel = 'noopener';
+    card.append(link);
+  }
+  return card;
+}
+
 function renderObjectDetails(detail, db, ns, name, version) {
   const host = $('#objects'), toolbar = element('div', undefined, 'catalog-actions');
   toolbar.append(element('span', detail.kind === 'table' ? 'APACHE ICEBERG TABLE' : 'APACHE ICEBERG VIEW', 'eyebrow'));
@@ -107,6 +140,8 @@ function renderObjectDetails(detail, db, ns, name, version) {
     tabButtons[next].focus(); tabButtons[next].click();
   });
   const overview = tab('Overview', p => {
+    if (detail.comment) p.append(element('p', detail.comment, 'catalog-comment'));
+    if (detail.producer) p.append(producerCard(detail.producer));
     const entries = [['Format version', detail.formatVersion], ['Schema ID', detail.schemaId], ['UUID', detail.uuid], ['Location', detail.location]];
     if (detail.kind === 'table') {
       entries.unshift(['Current snapshot', detail.currentSnapshotId], ['Last updated', timestamp(detail.updatedAt)]);
