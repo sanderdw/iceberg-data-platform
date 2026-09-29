@@ -154,6 +154,12 @@
     .rbac .code { font-family: "Space Mono", monospace; font-size: 11px; fill: var(--text-primary); }
     .rbac-teams line, .rbac-teams path { marker-end: url(#arr-rbac-teams); }
     .rbac text.cat { font-size: 14px; }
+    .rbac-share line, .rbac-share path { marker-end: url(#arr-share); }
+    .reveal table.versus { font-size: 0.72em; }
+    .reveal table.versus td { padding-top: 16px; padding-bottom: 16px; line-height: 1.4; }
+    .reveal table.versus th:first-child { width: 18%; }
+    .reveal table.versus th:not(:first-child) { width: 41%; }
+    .reveal table.versus td:first-child { color: var(--text-secondary); }
     /* Chrome: small quiet controls, thin progress, dim slide number */
     .reveal .progress { color: var(--text-secondary); height: 2px; }
     .reveal .controls { font-size: 5px; color: var(--text-disabled); opacity: 0.35; transition: opacity 200ms cubic-bezier(0.25, 0.1, 0.25, 1); }
@@ -780,6 +786,83 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
   </div>
   <div class="caption foot">12 participants · 3 teams · 6 catalogs · 18 catalog roles, 6 of them unused readers · 12 principals with 12 personal roles · 24 grants: 6 admin, 18 writer · 0 data shares · production and development are workspace filters, not privilege levels</div>
   <aside class="notes">Left is the Polaris model from the 1.7 access-control docs: privileges are granted to catalog roles, catalog roles to principal roles, principal roles to principals. Right is what the demo-company skill leaves behind for 12 participants on a fresh install; seats go round-robin, so grid-planning gets pool entries 1, 4, 7 and 10. The twist: the platform gives every user a personal principal role (create_user) and grants catalog roles to that, per catalog the team owns (sync_access). A team is also a principal role (save_team), but only as a record: nobody is granted it. Membership lives in the portal.memberships property and is turned into grants whenever it changes. Every database gets reader, writer and admin catalog roles (create_database); the skill never assigns reader. CATALOG_MANAGE_CONTENT already includes MANAGE_METADATA and table read and write, so in Polaris terms admin adds MANAGE_ACCESS. Creating databases and data shares as team admin is checked by the user portal, not by a Polaris privilege. platform-admin is a Keycloak role; the admin portal and its MCP server then act as Polaris service_admin.</aside>
+</section>
+
+<section>
+  <div class="label">03 · Platform · After the skill</div>
+  <h2>Data shares in Polaris terms: one catalog role, two ways in</h2>
+  <div class="arch rbac rbac-share">
+    <svg viewBox="0 0 1440 575" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="share-title">
+      <title id="share-title">noor-bakker of grid-planning shares the table synthetic.neighborhood_electricity in grid-capacity with the team outage-response and with a municipality. The share is one catalog role named share-… holding TABLE_READ_DATA on that table only. For the team, the catalog role is granted to the personal principal role of each of its four members. For the municipality, it is granted to a share principal role, assigned to a share principal with its own client ID and secret.</title>
+      <defs><marker id="arr-share" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#666666"/></marker></defs>
+
+      <text class="lbl" x="0" y="20">Polaris RBAC model</text>
+      <text class="lbl" x="340" y="20">Team share · outage-response</text>
+      <text class="lbl" x="1180" y="20">External share · a municipality</text>
+      <line class="plain" x1="305" y1="32" x2="305" y2="570"/>
+
+      <rect class="hi" x="0" y="40" width="260" height="56" rx="8"/><text class="hi" x="130" y="64" text-anchor="middle">Principal</text><text class="sub" x="130" y="84" text-anchor="middle">a person or a credential</text>
+      <rect class="hi" x="0" y="150" width="260" height="56" rx="8"/><text class="hi" x="130" y="174" text-anchor="middle">Principal role</text><text class="sub" x="130" y="194" text-anchor="middle">personal, or one per share</text>
+      <rect class="hi" x="0" y="290" width="260" height="56" rx="8"/><text class="hi" x="130" y="314" text-anchor="middle">Catalog role</text><text class="sub" x="130" y="334" text-anchor="middle">one per share</text>
+      <rect class="hi" x="0" y="380" width="260" height="76" rx="8"/><text class="hi" x="130" y="410" text-anchor="middle">Privilege</text><text class="sub" x="130" y="432" text-anchor="middle">one per shared object</text>
+      <rect class="hi" x="0" y="500" width="260" height="60" rx="8"/><text class="hi" x="130" y="525" text-anchor="middle">Securable object</text><text class="sub" x="130" y="545" text-anchor="middle">a table or a view</text>
+      <line x1="130" y1="96" x2="130" y2="150"/><text class="lbl" x="144" y="128">has</text>
+      <line x1="130" y1="206" x2="130" y2="290"/><text class="lbl" x="144" y="252">is granted</text>
+      <line x1="130" y1="346" x2="130" y2="380"/><text class="lbl" x="144" y="367">holds</text>
+      <line x1="130" y1="456" x2="130" y2="500"/><text class="lbl" x="144" y="482">on</text>
+
+      <rect x="340" y="40" width="125" height="56" rx="8"/><text x="402.5" y="64" text-anchor="middle">priya-raman</text><text class="sub" x="402.5" y="84" text-anchor="middle">portal-…</text>
+      <rect x="475" y="40" width="125" height="56" rx="8"/><text x="537.5" y="64" text-anchor="middle">tomas-novak</text><text class="sub" x="537.5" y="84" text-anchor="middle">portal-…</text>
+      <rect x="610" y="40" width="125" height="56" rx="8"/><text x="672.5" y="64" text-anchor="middle">emma-devries</text><text class="sub" x="672.5" y="84" text-anchor="middle">portal-…</text>
+      <rect x="745" y="40" width="125" height="56" rx="8"/><text x="807.5" y="64" text-anchor="middle">omar-farouk</text><text class="sub" x="807.5" y="84" text-anchor="middle">portal-…</text>
+      <line x1="402.5" y1="96" x2="402.5" y2="150"/><line x1="537.5" y1="96" x2="537.5" y2="150"/><line x1="672.5" y1="96" x2="672.5" y2="150"/><line x1="807.5" y1="96" x2="807.5" y2="150"/>
+      <rect x="340" y="150" width="125" height="56" rx="8"/><text x="402.5" y="174" text-anchor="middle">portal-…</text><text class="sub" x="402.5" y="194" text-anchor="middle">personal</text>
+      <rect x="475" y="150" width="125" height="56" rx="8"/><text x="537.5" y="174" text-anchor="middle">portal-…</text><text class="sub" x="537.5" y="194" text-anchor="middle">personal</text>
+      <rect x="610" y="150" width="125" height="56" rx="8"/><text x="672.5" y="174" text-anchor="middle">portal-…</text><text class="sub" x="672.5" y="194" text-anchor="middle">personal</text>
+      <rect x="745" y="150" width="125" height="56" rx="8"/><text x="807.5" y="174" text-anchor="middle">portal-…</text><text class="sub" x="807.5" y="194" text-anchor="middle">personal</text>
+      <line class="admin" x1="402.5" y1="206" x2="860" y2="290"/><line class="admin" x1="537.5" y1="206" x2="890" y2="290"/>
+      <line class="admin" x1="672.5" y1="206" x2="920" y2="290"/><line class="admin" x1="807.5" y1="206" x2="950" y2="290"/>
+      <text class="lbl" x="340" y="262">every member's own role</text>
+
+      <rect class="hi" x="820" y="290" width="300" height="56" rx="8"/><text class="hi" x="970" y="314" text-anchor="middle">share-…</text><text class="sub" x="970" y="334" text-anchor="middle">catalog role in grid-capacity</text>
+      <line x1="970" y1="346" x2="970" y2="380"/>
+      <rect x="820" y="380" width="300" height="76" rx="8"/><text class="code" x="970" y="404" text-anchor="middle">TABLE_READ_DATA</text><text class="sub" x="970" y="426" text-anchor="middle">one grant per shared table</text><text class="sub" x="970" y="444" text-anchor="middle">nothing to list, nothing to write</text>
+      <line x1="970" y1="456" x2="970" y2="500"/>
+      <rect class="hi" x="820" y="500" width="300" height="60" rx="8"/><text class="hi" x="970" y="525" text-anchor="middle">neighborhood_electricity</text><text class="sub" x="970" y="545" text-anchor="middle">synthetic · grid-capacity · production</text>
+
+      <rect class="out" x="340" y="380" width="450" height="76" rx="8"/><text x="565" y="410" text-anchor="middle">Access follows membership</text><text class="sub" x="565" y="432" text-anchor="middle">joiners get the grant, leavers lose it</text>
+      <rect class="out" x="340" y="500" width="450" height="60" rx="8"/><text x="565" y="525" text-anchor="middle">Owner roles unchanged</text><text class="sub" x="565" y="545" text-anchor="middle">shared by noor-bakker, admin of grid-planning</text>
+
+      <rect x="1180" y="40" width="260" height="56" rx="8"/><text x="1310" y="64" text-anchor="middle">share-…</text><text class="sub" x="1310" y="84" text-anchor="middle">client ID + secret, shown once</text>
+      <line x1="1310" y1="96" x2="1310" y2="150"/><text class="lbl" x="1324" y="128">activated last</text>
+      <rect x="1180" y="150" width="260" height="56" rx="8"/><text x="1310" y="174" text-anchor="middle">share-…</text><text class="sub" x="1310" y="194" text-anchor="middle">principal role of the share</text>
+      <line x1="1310" y1="206" x2="1090" y2="290"/>
+      <text class="lbl" x="1200" y="262">same catalog role</text>
+      <rect class="out" x="1180" y="380" width="260" height="76" rx="8"/><text x="1310" y="410" text-anchor="middle">Vended S3 credentials</text><text class="sub" x="1310" y="432" text-anchor="middle">read-only · table location only</text>
+      <rect class="out" x="1180" y="500" width="260" height="60" rx="8"/><text x="1310" y="525" text-anchor="middle">New secret · revoke</text><text class="sub" x="1310" y="545" text-anchor="middle">Polaris tokens end at once</text>
+    </svg>
+  </div>
+  <div class="caption foot">One share is three Polaris records named share-…: a catalog role, a principal role and a principal · to a team, an external party or both · the demo-company skill creates none: a team admin does, in the user portal</div>
+  <aside class="notes">Same example as the data sharing demo later on: the grid-planning admin shares one table with outage-response and with a municipality. create_share makes the catalog role with exactly one grant per object, TABLE_READ_DATA for a table or VIEW_READ_PROPERTIES for a view, and nothing on the namespace or catalog, so nobody can list. For the team, sync_team_shares grants that catalog role to each member's personal principal role, including people who join later, and removes it when they leave. The share principal of a team-only share never receives its principal role, so its secret opens nothing. For an external share, assigning the principal role to the principal is the very last step, after every check. New secret resets the principal: same client ID, the old secret dies at once. Revocation unassigns the external role first, then removes members' grants, the catalog role, the principal role and the principal. Storage credentials that were already vended stay valid until they expire.</aside>
+</section>
+
+<section>
+  <div class="label">03 · Platform · After the skill</div>
+  <h2>Team share versus external share</h2>
+  <table class="versus">
+    <thead><tr><th></th><th>Team share</th><th>External share</th></tr></thead>
+    <tbody>
+      <tr><td>Who reads</td><td>Every member of outage-response, now and in future</td><td>A municipality, or any party outside the platform</td></tr>
+      <tr><td>Identity</td><td>Their own Keycloak accounts</td><td>A <code>share-…</code> client ID and secret</td></tr>
+      <tr><td>Grant path</td><td>Share catalog role → each member's personal principal role</td><td>Share catalog role → share principal role → share principal</td></tr>
+      <tr><td>Where</td><td>User portal, notebooks, their own tools and AI agents</td><td>DuckDB, PyIceberg or any other Iceberg REST client</td></tr>
+      <tr><td>Credential</td><td>Nothing to hand out</td><td>Shown once and never stored · New secret keeps the client ID and ends the old one at once</td></tr>
+      <tr><td>Expiry and revoke</td><td colspan="2">Optional expiry, enforced every 30 seconds · revoking ends Polaris tokens and team grants at once · storage credentials already vended expire on their own</td></tr>
+      <tr><td>Limits</td><td colspan="2">At most 50 objects per share and 20 shares per database · recipients fixed at creation · managed by the owning team's administrators; the platform administrator can only revoke</td></tr>
+    </tbody>
+  </table>
+  <p class="secondary foot"><span class="dot"></span>One share can do both, because both paths end in the same catalog role.</p>
+  <aside class="notes">The team share is the internal route: nothing leaves the platform, and access is re-checked against Polaris on every request, so leaving outage-response ends it. The external share is the only way a credential leaves the platform; treat the secret like a password. A shared view is a definition, not a filter: the tables it reads are shared with it. A shared database cannot move to another team until its shares are revoked, so a new owner never inherits access it did not grant. Sources: create_share, sync_team_shares, rotate_share and delete_share in server/polaris.py, and SECURITY.md.</aside>
 </section>
 
 <section>
