@@ -1,0 +1,28 @@
+{
+  "fps": 30,
+  "duration": 60,
+  "bpm": 96,
+  "scenes": [
+    {"id": "hook", "start": 0, "end": 4},
+    {"id": "problem", "start": 4, "end": 9},
+    {"id": "notebook", "start": 9, "end": 16},
+    {"id": "evidence", "start": 16, "end": 22},
+    {"id": "meaning", "start": 22, "end": 31},
+    {"id": "diagram", "start": 31, "end": 39},
+    {"id": "ask", "start": 39, "end": 48},
+    {"id": "share", "start": 48, "end": 54},
+    {"id": "end", "start": 54, "end": 60}
+  ],
+  "cues": {
+    "blips": [0.5, 0.95, 1.35, 1.85],
+    "typing": [
+      {"start": 4.3, "end": 5.0},
+      {"start": 5.3, "end": 5.9},
+      {"start": 6.2, "end": 6.9},
+      {"start": 23.0, "end": 29.2},
+      {"start": 39.6, "end": 41.6}
+    ],
+    "lead_in": 52.75,
+    "resolve": 54
+  }
+}
