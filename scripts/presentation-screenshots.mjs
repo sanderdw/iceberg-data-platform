@@ -12,8 +12,9 @@ const OUT = 'presentation/screenshots', STATE = '.local/presentation/state.json'
 const RUSTFS = 'http://localhost:9001/rustfs/console/browser/', KEYCLOAK_USERS = env.KEYCLOAK_ORIGIN + '/admin/master/console/#/iceberg/users';
 
 // Fictional grid operator. Roles differ per team for sander, which the access dialog shows.
-// mila administers grid-planning: she creates a database herself and shares one table with a
-// municipality and with outage-response, where noor reads it without owning a database there.
+// mila administers grid-planning and creates ai-examples herself. sander publishes the flights data
+// product there with notebook 06: six tables and their semantic model. mila shares the model with a
+// research partner and with outage-response, where noor reads it without owning a database there.
 const TEAMS = [
   ['grid-planning', 'Capacity planning for the regional grid'],
   ['asset-management', 'Lifecycle of stations, cables and transformers'],
@@ -30,10 +31,11 @@ const USERS = [
   ['alex', 'Alex', 'Example', [['grid-planning', 'reader']]],
   ['mila', 'Mila', 'Example', [['grid-planning', 'admin']]],
 ];
-const DEMO_USER = 'sander', DEMO_TEAM = 'grid-planning', DEMO_DATABASE = 'smart-meter-readings';
-const TEAM_ADMIN = 'mila', SHARE = {name: 'municipality-heat-plan', recipient: 'Municipality of Example · heat transition team', description: 'Street-level consumption and solar production for the district heating plan', namespace: 'synthetic', table: 'neighborhood_electricity'};
-const TEAM_SHARE = {name: 'outage-street-load', team: 'outage-response', description: 'Street-level load to prioritise restoration'}, RECIPIENT = 'noor';
-const AI_DATABASE = {name: 'ai-examples', description: 'AI-ready data products built from the example notebooks'};
+const AI_DATABASE = {name: 'ai-examples', description: 'AI-ready data products with their semantic models'};
+const DEMO_USER = 'sander', DEMO_TEAM = 'grid-planning', DEMO_DATABASE = AI_DATABASE.name;
+const NOTEBOOK = '06 · Write an AI-ready flights product', NAMESPACE = 'ai_flights', TABLE = 'flights', MODEL = 'flights';
+const TEAM_ADMIN = 'mila', SHARE = {name: 'flights-research', recipient: 'University of Example · operations research', description: 'Synthetic flights with their semantic model, for delay research'};
+const TEAM_SHARE = {name: 'flights-product', team: 'outage-response', description: 'The flights data product with its agreed metrics'}, RECIPIENT = 'noor';
 
 // Passwords chosen at the forced first sign-in; kept outside git so the script can run again.
 const state = existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {users: {}};
@@ -116,11 +118,36 @@ async function openNamespace(page, namespace) {
   await page.locator('.object-row').filter({hasText: namespace}).getByRole('button').click();
   await page.locator('.object-row').filter({hasText: 'TABLE'}).first().waitFor();
 }
+// The flights table and the flights semantic model share a name, so a row is found by name and kind.
+const objectRow = (page, name, kind) => page.locator('.object-row').filter({hasText: kind}).filter({has: page.locator('strong').getByText(name, {exact: true})});
 async function openTable(page, namespace, table) {
   await openNamespace(page, namespace);
-  await page.locator('.object-row').filter({hasText: table}).getByRole('button').click();
+  await objectRow(page, table, 'Iceberg table').getByRole('button').click();
   await page.getByRole('tab', {name: 'Overview', exact: true}).waitFor();
   await expect(page.getByRole('tabpanel')).toContainText('Format version');
+}
+async function openModel(page, name) {
+  await objectRow(page, name, 'Semantic model').getByRole('button').click();
+  await page.getByRole('tab', {name: 'Diagram', exact: true}).waitFor();
+  await expect(page.getByRole('tabpanel')).toContainText('AI context');
+}
+// The whole diagram fits below the model's name once the page header scrolls away.
+async function showDiagram(page) {
+  await openTab(page, 'Diagram');
+  await page.locator('.sd-box').first().waitFor();
+  await page.locator('#namespace-title').evaluate(h => { h.scrollIntoView({block: 'start'}); scrollBy(0, -48); });
+}
+// The demo databases live in development; the portal remembers the last environment per session.
+async function useDevelopment(page) {
+  if (await page.locator('#environment').inputValue() === 'development') return;
+  await page.locator('#environment').selectOption('development');
+  await expect(page.locator('#environment')).toHaveValue('development');
+}
+// Selecting the model in the share form selects the six tables it reads as well.
+async function pickModel(page) {
+  await page.locator('.share-tree summary').filter({hasText: NAMESPACE}).click();
+  await page.locator('.share-tree .share-object').filter({hasText: 'Semantic model'}).filter({hasText: MODEL}).locator('input').check();
+  await expect(page.locator('.share-selection')).toContainText('SELECTED · 7');
 }
 const toPage = (page, name) => page.locator('#workspace-nav').getByRole('button', {name, exact: true}).click();
 const openTab = (page, name) => page.getByRole('tab', {name, exact: true}).click();
@@ -145,13 +172,13 @@ try {
   const admin = await newContext(), portal = await admin.newPage();
   await signIn(portal, env.PORTAL_ORIGIN, env.PLATFORM_ADMIN_USERNAME, state.admin || env.PLATFORM_ADMIN_PASSWORD, chosen => { state.admin = chosen; });
   await seed(admin);
-  const database = (await api(admin, 'GET', '/api/overview')).databases.find(d => d.name === DEMO_DATABASE && d.environment === 'development');
 
   // A team administrator creates a database from the user portal, without a portal administrator.
   const owner = await newContext(), sharing = await owner.newPage();
   sharing.setDefaultTimeout(30000);
   await signIn(sharing, env.USER_ORIGIN, TEAM_ADMIN, state.users[TEAM_ADMIN], chosen => { state.users[TEAM_ADMIN] = chosen; });
   await sharing.locator('#workspace-screen').waitFor();
+  await useDevelopment(sharing);
   await toPage(sharing, 'Databases');
   await sharing.locator('#new-database').click();
   await sharing.getByLabel('Database name', {exact: true}).fill(AI_DATABASE.name);
@@ -163,31 +190,35 @@ try {
     await form.getByRole('button', {name: 'Create database', exact: true}).click();
     await sharing.locator('#managed-databases').getByText(AI_DATABASE.name, {exact: true}).waitFor({timeout: 120000});
   }
+  const database = (await api(admin, 'GET', '/api/overview')).databases.find(d => d.name === DEMO_DATABASE && d.environment === 'development');
 
-  // Team workspace: notebooks first, so the catalog and the bucket have tables to show.
+  // Team workspace: the notebook first, so the catalog and the bucket have tables to show.
   const member = await newContext(), workspace = await member.newPage();
   workspace.setDefaultTimeout(30000);
   await signIn(workspace, env.USER_ORIGIN, DEMO_USER, state.users[DEMO_USER], chosen => { state.users[DEMO_USER] = chosen; });
   await workspace.locator('#workspace-screen').waitFor();
   await workspace.locator('#team').selectOption(await workspace.locator('#team option').filter({hasText: DEMO_TEAM}).getAttribute('value'));
+  await useDevelopment(workspace);
   await workspace.locator('#databases button').filter({hasText: DEMO_DATABASE}).first().click();
   await workspace.locator('.catalog-summary').waitFor();
   await shot(workspace, '08-user-catalog-empty');
 
-  // The notebooks create both example tables; later shots need them, so a first run never skips this.
+  // Notebook 06 publishes the flights tables and their semantic model; later shots need them, so a first run never skips this.
   const contents = await (await member.request.get(`${env.USER_ORIGIN}/api/contents?database=${database.id}`)).json();
-  if (!['synthetic', 'iceberg_v3'].every(name => contents.namespaces.some(ns => ns[0] === name))) {
-    await workspace.locator('#workspace-nav').getByRole('button', {name: 'Notebooks', exact: true}).click();
+  if (!contents.namespaces.some(ns => ns[0] === NAMESPACE) || need(41, 42)) {
+    await toPage(workspace, 'Notebooks');
     await workspace.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
-    await workspace.locator('#notebook-file').selectOption({label: '01 · Neighborhood data with PyIceberg'});
+    await workspace.locator('#notebook-file').selectOption({label: NOTEBOOK});
     await workspace.frameLocator('#frame-host iframe').locator('.cm-content').first().waitFor({timeout: 180000});
-    // With the row count, so the f-string in the cell's own code does not match.
-    await runNotebook(workspace, '01 · Neighborhood data with PyIceberg', /(Created and populated:|Table already contains) [\d,]+ rows/);
-    // No captures: the catalog and the bucket show the tables these notebooks create.
-    await runNotebook(workspace, '04 · Write Iceberg v3 with DuckDB', /deleted \d+ fault events/);
+    // With the count, so the f-string in the cell's own code does not match.
+    const notebook = await runNotebook(workspace, NOTEBOOK, /Published [\d,]+ flight instances/);
+    await toHeading(notebook, 'Publish an AI-ready flights data product');
+    await shot(workspace, '41-user-notebook-flights');
+    await toHeading(notebook, '3. Turn selected semantic rules into quality evidence');
+    await shot(workspace, '42-user-notebook-checks');
     await workspace.locator('#close-notebook').click();
     await workspace.locator('#editor').waitFor({state: 'hidden'});
-    await workspace.getByRole('navigation', {name: 'Workspace', exact: true}).getByRole('button', {name: 'Catalog', exact: true}).click();
+    await toPage(workspace, 'Catalog');
   }
 
   // Every route of the user portal, callable in the browser with the same session.
@@ -206,9 +237,9 @@ try {
   }
 
   // The same tables in the catalog browser, without a notebook.
-  await openNamespace(workspace, 'synthetic');
+  await openNamespace(workspace, NAMESPACE);
   await shot(workspace, '15-user-catalog-namespace');
-  await openTable(workspace, 'synthetic', 'neighborhood_electricity');
+  await openTable(workspace, NAMESPACE, TABLE);
   await shot(workspace, '16-user-table-overview');
   await openTab(workspace, 'Schema');
   await shot(workspace, '17-user-table-schema');
@@ -217,16 +248,23 @@ try {
   await workspace.getByRole('button', {name: 'Preview snapshot', exact: true}).last().click();
   await loadPreview(workspace);
   await shot(workspace, '19-user-table-preview');
-  await openTable(workspace, 'iceberg_v3', 'sensor_events');
-  await shot(workspace, '29-user-table-v3-overview');
-  await openTab(workspace, 'Preview');
-  await loadPreview(workspace);
-  await shot(workspace, '30-user-table-v3-preview');
+
+  // The meaning next to the tables: the semantic model notebook 06 stored in Polaris.
+  if (need(43, 44, 49)) {
+    await openNamespace(workspace, NAMESPACE);
+    await openModel(workspace, MODEL);
+    await shot(workspace, '43-user-model-overview');
+    await showDiagram(workspace);
+    await shot(workspace, '44-user-model-diagram');
+    await openTab(workspace, 'Metrics & relationships');
+    await expect(workspace.getByRole('tabpanel')).toContainText('on_time_arrival_pct');
+    await shot(workspace, '49-user-model-metrics');
+  }
 
   await signOut(member);
 
-  // A team administrator shares one table with an external party, without a portal administrator.
-  if (need(32, 33, 34, 35, 37, 38, 39, 40)) {
+  // A team administrator shares the semantic model with an external party, without a portal administrator.
+  if (need(32, 33, 34, 35, 37, 38, 39, 40, 50)) {
     await sharing.goto(env.USER_ORIGIN);
     await sharing.locator('#workspace-screen').waitFor();
     await toPage(sharing, 'Data shares');
@@ -238,8 +276,7 @@ try {
     await sharing.getByLabel('Recipient', {exact: true}).fill(SHARE.recipient);
     await sharing.getByLabel('Description').fill(SHARE.description);
     await sharing.getByLabel(/^Expires/).fill(`${new Date().getUTCFullYear() + 1}-12-31`);
-    await sharing.locator('.share-tree summary').filter({hasText: SHARE.namespace}).click();
-    await sharing.getByLabel(SHARE.table).check();
+    await pickModel(sharing);
     // Keep the database name above the share form in the capture.
     await sharing.locator('.database-shares').filter({hasText: DEMO_DATABASE}).first().evaluate(s => s.scrollIntoView({block: 'start'}));
     await shot(sharing, '32-user-share-form');
@@ -247,12 +284,13 @@ try {
     if (existing) { await sharing.getByRole('button', {name: 'Cancel', exact: true}).click(); await shareDatabase.getByRole('button', {name: 'New secret', exact: true}).first().click(); }
     else await sharing.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
     await sharing.locator('.share-issued').waitFor();
-    await sharing.locator('.share-issued h3').first().evaluate(h => h.scrollIntoView({block: 'start'}));
+    // The shared names, with the address a recipient loads the model from.
+    await sharing.locator('.share-issued').getByRole('heading', {name: 'Shared names', exact: true}).evaluate(h => h.scrollIntoView({block: 'center'}));
     await shot(sharing, '33-user-share-credential');
     await sharing.getByRole('button', {name: 'Done, I stored the secret', exact: true}).click();
     await shareDatabase.getByRole('region', {name: 'Data shares', exact: true}).waitFor();
 
-    // The same table for another team: its members read it with their own accounts, no credential.
+    // The same model for another team: its members read it with their own accounts, no credential.
     const teams = await (await owner.request.get(`${env.USER_ORIGIN}/api/share-teams`)).json();
     const shares = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares;
     await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).click();
@@ -261,8 +299,7 @@ try {
     await sharing.getByLabel('Recipient team', {exact: true}).selectOption(teams.find(t => t.name === TEAM_SHARE.team).id);
     await sharing.getByLabel('Externally', {exact: true}).uncheck();
     await sharing.getByLabel('Description').fill(TEAM_SHARE.description);
-    await sharing.locator('.share-tree summary').filter({hasText: SHARE.namespace}).click();
-    await sharing.getByLabel(SHARE.table).check();
+    await pickModel(sharing);
     await sharing.locator('.database-shares').filter({hasText: DEMO_DATABASE}).first().evaluate(s => s.scrollIntoView({block: 'start'}));
     await shot(sharing, '37-user-share-team-form');
     if (shares.some(s => s.name === TEAM_SHARE.name)) await sharing.getByRole('button', {name: 'Cancel', exact: true}).click();
@@ -274,7 +311,7 @@ try {
     const renewed = await owner.request.post(`${env.USER_ORIGIN}/api/shares/${share.id}/rotate`, {data: {}, headers: {'X-Portal-Request': '1'}});
     if (!renewed.ok()) throw new Error(`The pictured secret was not replaced: ${renewed.status()}`);
 
-    // noor's team owns no database in development, yet reads the shared table there.
+    // noor's team owns no database in development, yet reads the shared model and its tables there.
     const recipient = await newContext(), received = await recipient.newPage();
     received.setDefaultTimeout(30000);
     await signIn(received, env.USER_ORIGIN, RECIPIENT, state.users[RECIPIENT], chosen => { state.users[RECIPIENT] = chosen; });
@@ -286,9 +323,14 @@ try {
     await toPage(received, 'Catalog');
     await received.locator('#databases button').filter({hasText: DEMO_DATABASE}).first().click();
     await received.locator('#catalog-database-context').waitFor();
-    await received.locator('.object-row').filter({hasText: SHARE.namespace}).getByRole('button').click();
-    await received.locator('.object-row').filter({hasText: SHARE.table}).waitFor();
+    await received.locator('.object-row').filter({hasText: NAMESPACE}).getByRole('button').click();
+    await objectRow(received, MODEL, 'Semantic model').waitFor();
     await shot(received, '39-user-received-catalog');
+    if (need(50)) {
+      await openModel(received, MODEL);
+      await showDiagram(received);
+      await shot(received, '50-user-received-model-diagram');
+    }
     if (need(40)) {
       await toPage(received, 'Notebooks');
       await received.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
@@ -313,8 +355,8 @@ try {
     await shot(portal, name);
   }
   await portal.locator('[data-page="explorer"]').first().click();
-  for (const node of [DEMO_DATABASE, 'synthetic']) await portal.locator('details > summary').filter({hasText: node}).first().click();
-  await portal.locator('details').filter({hasText: 'neighborhood_electricity'}).first().waitFor();
+  for (const node of [DEMO_DATABASE, NAMESPACE]) await portal.locator('details > summary').filter({hasText: node}).first().click();
+  await portal.locator('details').filter({hasText: 'runways'}).first().waitFor();
   await portal.getByRole('heading', {name: 'All databases'}).evaluate(h => h.scrollIntoView({block: 'start'}));
   await shot(portal, '20-admin-explorer');
   // A dialog is small on a 2000 px page: same 4000×2500 image from a narrower viewport.
@@ -365,14 +407,12 @@ try {
   await rustfs.locator('#secretKey').fill(env.RUSTFS_SECRET_KEY);
   await rustfs.getByRole('button', {name: 'Login', exact: true}).click();
   await rustfs.waitForURL(url => !url.pathname.includes('login'));
-  await folder('synthetic/neighborhood_electricity/metadata/');
+  await folder(`${NAMESPACE}/${TABLE}/metadata/`);
   await shot(rustfs, '21-rustfs-metadata-files');
   await rustfs.getByRole('row').filter({hasText: '00001-'}).getByRole('button', {name: 'Preview', exact: true}).click();
   await rustfs.getByRole('dialog').getByText('"format-version"').waitFor();
   await rustfs.getByRole('dialog').getByRole('button').first().click(); // maximize
   await shot(rustfs, '22-rustfs-metadata-json');
-  await folder('iceberg_v3/sensor_events/data/');
-  await shot(rustfs, '31-rustfs-v3-puffin');
   await storage.close();
   console.log('PASS');
 } finally {
