@@ -24,7 +24,7 @@ import duckdb
 from user_portal.notebook.flights import generate_flights, load_semantics, quality_report, require_quality
 np.ones((32, 32)) @ np.ones((32, 32))
 pa.table({'value': [1, 2, 3]}).to_pandas()
-model, contract, _ = load_semantics('/app/user_portal/notebook/examples')
+model, contract = load_semantics('/app/user_portal/notebook/examples')
 with duckdb.connect(config={'threads': 2, 'memory_limit': '128MB'}) as connection:
     generate_flights(connection, model)
     require_quality(quality_report(connection, contract))

@@ -76,6 +76,7 @@ def main():
         content = p.explorer_contents(db["id"], ["analytics", "nested"])
         assert [t["name"] for t in content["tables"]] == ["events"]
         assert [v["name"] for v in content["views"]] == ["event_report"]
+        assert content["semanticModels"] == [] and parent["semanticModels"] == []
         roles = p.management(f"/catalogs/{db['id']}/catalog-roles")["roles"]
         assert not any(r["name"].startswith("portal-explorer-") for r in roles)
         print("PASS: portal explorer lists nested namespaces, tables and views; temporary roles removed")

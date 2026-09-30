@@ -187,6 +187,7 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
 .catalog-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px; margin: 24px 0; }
 .catalog-facts > div { min-width: 0; }
 .catalog-fact-wide { grid-column: 1 / -1; }
+.catalog-facts-text dd { white-space: pre-line; }
 .catalog-facts dt { color: var(--text-secondary); font: var(--small)/1.6 var(--mono); margin-bottom: 8px; }
 .catalog-facts dd { margin: 0; overflow-wrap: anywhere; }
 .catalog-search { display: block; max-width: 480px; margin: 24px 0; }
@@ -264,7 +265,7 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
 .share-object small { color: var(--text-secondary); }
 .share-object button { margin-left: auto; }
 .share-selection { margin-top: 16px; }
-.share-warning { margin: 16px 0 0; padding: 16px; border-left: 2px solid var(--accent); background: var(--surface); }
+.share-warning, .share-model-warning { margin: 16px 0 0; padding: 16px; border-left: 2px solid var(--accent); background: var(--surface); }
 .share-issued { padding: 24px 0; }
 .share-issued h3 { margin: 24px 0 16px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

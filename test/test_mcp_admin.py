@@ -144,7 +144,7 @@ def test_admin_lifecycle_creates_links_edits_and_deletes(admin, caplog):
     assert "s3-secret" not in str(connection)
     assert database["id"] in [d["id"] for d in ok(admin, "browse_catalog")["databases"]]
     contents = ok(admin, "browse_catalog", {"database": database["id"], "namespace": ["analytics"]})
-    assert contents == {"database": database["id"], "namespace": ["analytics"], "namespaces": [], "tables": [], "views": []}
+    assert contents == {"database": database["id"], "namespace": ["analytics"], "namespaces": [], "tables": [], "views": [], "semanticModels": []}
 
     admin.kc.accounts["ext"] = {"id": "ext", "username": "ext-name", "enabled": True, "email": "ext@example.test"}
     accounts = ok(admin, "find_accounts", {"username": "ext-name"})["accounts"]

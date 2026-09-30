@@ -3,14 +3,16 @@
 import os
 from pathlib import Path
 
+import httpx
 import pyarrow as pa
 from pyiceberg.catalog import load_catalog
 from pyiceberg.view import ViewVersion
 
-from scripts.smoke import stack_resources
+from scripts.smoke import stack_resources, token
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
 from user_portal import duckdb_extensions
 from user_portal.directory import UserDirectory
+from user_portal.notebook.semantic import SemanticModelError, SemanticModels
 from user_portal.preview import run_preview
 
 
@@ -88,6 +90,7 @@ def main():
                 "PASS: isolated process reads current and historical snapshots, nested values and 100-row limit",
                 flush=True,
             )
+            check_semantic_models(provider, directory, session, db, ns, writer["credentials"])
             provider.delete_user(reader["user"]["id"])
             users.remove(reader["user"]["id"])
             try:
@@ -99,6 +102,60 @@ def main():
             print("PASS: deleted user cannot prepare another preview", flush=True)
         finally:
             directory.close()
+
+
+def check_semantic_models(provider, directory, session, db, ns, credentials):
+    """A writer stores an Ossie model; the reader lists and opens it but cannot change it.
+
+    The model stays behind on purpose: the stack cleanup drops this database, which fails with
+    409 "Namespace is not empty" unless clear_namespace removes semantic models first.
+    """
+    model = {
+        "name": "Events",
+        "datasets": [
+            {
+                "name": "EVENTS",
+                "source": "lakehouse.analytics.nested.events",
+                "primary_key": ["id"],
+                "fields": [{"name": "id", "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "id"}]}}],
+            }
+        ],
+        "metrics": [
+            {"name": "events", "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "COUNT(*)"}]}}
+        ],
+    }
+    base = f"{provider.public_url}/api/catalog/polaris/v1/{db}/namespaces/{'%1F'.join(ns)}/semantic-models"
+    writer = SemanticModels(
+        httpx.Client(headers={"Authorization": f"Bearer {token(provider, credentials)}"}, timeout=15), base
+    )
+    if directory.semantic_models(session, db, ns):
+        raise AssertionError("Unexpected semantic model before publication")
+    assert writer.publish("events", model) == ("created", "1")
+    assert directory.semantic_models(session, db, ns) == [{"name": "events", "namespace": ns}]
+    assert directory.contents(session, db, ns)["semanticModels"][0]["name"] == "events"
+    detail = directory.details(session, db, ns, "semantic-model", "events")
+    assert detail["entityVersion"] == "1" and detail["specVersion"] == "0.2.0"
+    assert detail["models"][0]["datasets"][0]["table"] == {"namespace": ["analytics", "nested"], "name": "events"}
+    assert detail["models"][0]["metrics"][0]["expressions"][0]["expression"] == "COUNT(*)"
+    explored = provider.explorer_contents(db, ns)
+    assert explored["semanticModels"] == [{"name": "events", "namespace": ns}]
+    assert "COUNT(*)" not in str(explored), "The administration explorer must list model names only"
+    reader = SemanticModels(
+        httpx.Client(headers={"Authorization": f"Bearer {session.token}"}, timeout=15), base
+    )
+    assert reader.load("events")[0] == model
+    for change in (lambda: reader.update("events", model, "1"), lambda: reader.drop("events")):
+        try:
+            change()
+        except SemanticModelError:
+            pass
+        else:
+            raise AssertionError("Expected Polaris to refuse a reader changing a semantic model")
+    print(
+        "PASS: writer stores a semantic model, reader lists and opens it, Polaris refuses reader changes "
+        "and the administration explorer lists its name only",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
 
 from server.mcp_auth import MCP_MAX_BODY, KeycloakVerifier, protected_resource
 from server.models import DatabaseInput, TeamInput, UserInput
-from test.conftest import MemoryPolaris, members
+from test.conftest import SEMANTIC_MODEL, MemoryPolaris, members
 from test.test_oidc import ISSUER, issuer  # noqa: F401 - fixture
 from test.test_user_portal import SNAPSHOT, TABLE_METADATA, FakeRuntime
 from user_portal.app import create_app
@@ -75,6 +75,10 @@ def stack(issuer):  # noqa: F811 - pytest fixture
                               "default-namespace": ["analytics"],
                               "representations": [{"type": "sql", "dialect": "spark", "sql": "SELECT * FROM events"}]}],
             }})
+        if request.url.path.endswith("/semantic-models/revenue"):
+            return httpx.Response(200, json=SEMANTIC_MODEL)
+        if request.url.path.endswith("/semantic-models"):
+            return httpx.Response(200, json={"identifiers": [{"namespace": ["analytics"], "name": "revenue"}]})
         if request.url.path.endswith("/tables"):
             return httpx.Response(200, json={"identifiers": [{"namespace": ["analytics"], "name": "events"}]})
         if request.url.path.endswith("/views"):
@@ -201,6 +205,13 @@ def test_tools_use_the_callers_grants(stack, monkeypatch):
     assert "hidden-" not in text(result)
     result = call(stack, stack.token, "describe_view", {"database": database, "namespace": ["analytics"], "view": "report"})
     assert result.structured_content["versions"][0]["representations"][0]["sql"] == "SELECT * FROM events"
+    result = call(stack, stack.token, "list_semantic_models", {"database": database, "namespace": ["analytics"]})
+    assert result.structured_content["semanticModels"] == [{"name": "revenue", "namespace": ["analytics"]}]
+    result = call(stack, stack.token, "describe_semantic_model", {"database": database, "namespace": ["analytics"], "model": "revenue"})
+    model = result.structured_content["models"][0]
+    assert result.structured_content["entityVersion"] == "3"
+    assert model["metrics"][0]["expressions"] == [{"dialect": "ANSI_SQL", "expression": "COUNT(*)"}]
+    assert model["datasets"][0]["table"] == {"namespace": ["analytics"], "name": "events"}
     run = Mock(return_value={"columns": ["id"], "rows": [["1"]], "snapshotId": SNAPSHOT, "limit": 3})
     monkeypatch.setattr("user_portal.mcp_server.run_preview", run)
     result = call(stack, stack.token, "preview_rows", {"database": database, "namespace": ["analytics"], "table": "events", "limit": 3})
@@ -357,10 +368,11 @@ def test_streamable_http_round_trip_authenticates_each_request(stack):
     tools = getattr(tools, "tools", tools)
     assert sorted(t.name for t in tools) == sorted(
         ["list_databases", "list_namespaces", "list_tables", "describe_table", "describe_view", "preview_rows",
-         "create_database", "rename_database", "delete_database"]
+         "list_semantic_models", "describe_semantic_model", "create_database", "rename_database", "delete_database"]
     )
     assert all(t.annotations.read_only_hint for t in tools if t.name in {
         "list_databases", "list_namespaces", "list_tables", "describe_table", "describe_view", "preview_rows",
+        "list_semantic_models", "describe_semantic_model",
     })
     assert next(t for t in tools if t.name == "delete_database").annotations.destructive_hint
     assert not result.is_error, text(result)

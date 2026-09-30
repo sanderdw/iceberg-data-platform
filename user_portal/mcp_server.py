@@ -29,7 +29,11 @@ lists of path parts such as ["analytics", "nested"]; tables and views are addres
 database id, namespace list and name. Use list_namespaces to walk the tree, list_tables for
 the tables and views in one namespace, describe_table and describe_view for schemas,
 snapshots and view SQL, and preview_rows for up to 100 rendered rows at the current or a
-given snapshot. These catalog tools read with the user's Polaris grants and never run SQL.
+given snapshot. list_semantic_models and describe_semantic_model return the Apache Ossie
+semantic models stored next to the tables: datasets that map to tables, fields, relationships
+and metrics with their SQL expressions. Read them before writing SQL for a business question,
+so that metrics use the agreed definition. These catalog tools read with the user's Polaris
+grants and never run SQL.
 Only a current Administrator or Database + bucket administrator of a team may create,
 rename or delete its databases. create_database takes the owning team id and environment;
 rename_database and delete_database take the database id. Deletion immediately destroys
@@ -37,7 +41,7 @@ tables, views, stored files, the bucket and data shares, including in Production
 confirm_name equal to the current display name and can be retried if cleanup stops partway.
 Ask the user before a destructive call. list_databases also returns sharedDatabases: databases
 of other teams shared with one of the user's teams. They are read-only, the catalog tools show
-only their shared tables and views, and they cannot be renamed or deleted."""
+only their shared tables, views and semantic models, and they cannot be renamed or deleted."""
 
 Namespace = Annotated[
     list[Annotated[str, Field(min_length=1, max_length=256)]],
@@ -195,6 +199,26 @@ def create_mcp(directory, oidc, *, lock, previews):
         details = await query(directory.details, session, database, parts, "view", view)
         keep = ("name", "namespace", "uuid", "formatVersion", "location", "columns", "properties", "currentVersionId")
         return {**{k: details[k] for k in keep}, "versions": details["versions"][:5]}
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def list_semantic_models(database: DatabaseId, namespace: Namespace) -> dict[str, Any]:
+        """Names of the semantic models in one namespace; empty when the feature is off or not granted."""
+        parts = namespace_parts(namespace)
+        if not parts:
+            raise ToolError("Select a namespace.")
+        session, _ = await resolve(database, shared=True)
+        models = await query(directory.list_semantic_models, session, database, parts)
+        return {"database": database, "namespace": parts, "semanticModels": models}
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def describe_semantic_model(database: DatabaseId, namespace: Namespace, model: Name) -> dict[str, Any]:
+        """Datasets (with their source tables and fields), relationships and metrics of a semantic model."""
+        parts = namespace_parts(namespace, model)
+        if not parts:
+            raise ToolError("Select a namespace.")
+        session, _ = await resolve(database, shared=True)
+        details = await query(directory.details, session, database, parts, "semantic-model", model)
+        return {k: details[k] for k in ("name", "namespace", "specVersion", "entityVersion", "models")}
 
     @mcp.tool(annotations=READ_ONLY)
     async def preview_rows(

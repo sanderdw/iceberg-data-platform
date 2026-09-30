@@ -463,7 +463,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
     def details(
         request: Request,
         database: Annotated[str, Query(min_length=1, max_length=256)],
-        kind: Literal["database", "namespace", "table", "view"],
+        kind: Literal["database", "namespace", "table", "view", "semantic-model"],
         namespace: Annotated[list[str] | None, Query()] = None,
         name: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
     ):
@@ -471,7 +471,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         validate_namespace(parts)
         if kind != "database" and not parts:
             raise ServiceError(422, "Select a namespace.")
-        if kind in ("table", "view"):
+        if kind in ("table", "view", "semantic-model"):
             validate_namespace([name or ""])
         return directory.details(request.state.session, database, parts, kind, name)
 

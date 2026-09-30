@@ -50,7 +50,7 @@ Renaming a database or moving it to another team keeps its catalog ID, bucket an
 
 ## Data shares
 
-A data share gives another team, an external party, or both read access to selected tables and views of one database. The destinations are fixed at creation. A share has a stable `share-<uuid>` ID that names three Polaris records: a principal (the external credential), its principal role and a catalog role in the shared database.
+A data share gives another team, an external party, or both read access to selected tables, views and semantic models of one database. The destinations are fixed at creation. A share has a stable `share-<uuid>` ID that names three Polaris records: a principal (the external credential), its principal role and a catalog role in the shared database.
 
 - **Grants:** the catalog role holds exactly one grant per selected object: `TABLE_READ_DATA` on a table, `VIEW_READ_PROPERTIES` on a view. It holds nothing on namespaces or the catalog, so external clients load objects by their full names. For team shares, the catalog role is granted to each recipient member's principal role, including future members, and removed when a member leaves.
 - **Views are not filters.** The recipient's engine reads a view's underlying tables, so those tables must be shared too, and the recipient can read them in full. A share needs at least one table.

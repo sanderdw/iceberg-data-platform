@@ -21,7 +21,7 @@ The top menu has six sections, all scoped to the selected **Active team** and **
 
 - **Team overview:** the team's members and roles, its databases and your active notebooks.
 - **Databases:** team Administrators create, rename and delete the team's databases. Renaming keeps the catalog ID and connection settings. Deletion is immediate and removes all data and shares, so you must type the name to confirm it. If cleanup fails, use **Resume deletion**. Moving a database to another team is a platform-administrator action.
-- **Catalog:** browse namespaces, tables and views. **Details →** shows a table's schema, snapshots, branches and tags, partitioning, sort order and properties, or a view's SQL and versions. **Load preview** reads up to 100 rows from any snapshot with your own permissions. Everything here is read-only.
+- **Catalog:** browse namespaces, tables and views. **Details →** shows a table's schema, snapshots, branches and tags, partitioning, sort order and properties, or a view's SQL and versions. **Semantic models** are listed with them; see [Semantic models](#semantic-models). **Load preview** reads up to 100 rows from any snapshot with your own permissions. Everything here is read-only.
 - **Notebooks:** open a database in marimo. Choose **Shared files** in the notebook selector to browse team notebooks and the examples.
 - **Data shares:** see [below](#data-shares).
 - **Getting started:** three ways to work with your data: the portal, [your own tools](#connect-from-your-computer) and an [AI agent](#connect-an-mcp-client). It includes the commands for this installation, filled in for a database of the active team.
@@ -49,21 +49,32 @@ New filespaces receive these notebooks. Existing ones receive only the files the
 | 03 · Native DuckDB on Iceberg | Attaching Polaris directly in DuckDB: snapshots, SQL | No |
 | 04 · Write Iceberg v3 with DuckDB | Iceberg v3: variant, nanosecond timestamps, geometry, defaults, deletion vectors | Yes |
 | 05 · Read Iceberg v3 with DuckDB | Reading those v3 features, row lineage and time travel | No |
-| 06 · Write an AI-ready flights product | Publishing a synthetic data product with Apache Ossie semantics and quality checks | Yes |
-| 07 · Read an AI-ready flights product | Semantic joins, metrics and quality evidence | No |
+| 06 · Write an AI-ready flights product | Publishing synthetic flight tables after quality checks, and their Apache Ossie semantic model in Polaris | Yes |
+| 07 · Read an AI-ready flights product | Reading the semantic model from Polaris, checking the data against it, and answering questions with its joins and metrics; no local files | No |
 
 Run the write notebook before its reader.
+
+## Semantic models
+
+A semantic model says what the tables in a namespace mean: datasets that map to tables, their fields, the relationships between datasets and agreed metrics with their SQL. It follows the [Apache Ossie](https://github.com/apache/ossie) specification. Polaris 1.8 stores it in the namespace, next to the tables, and it never runs a metric.
+
+- **See them:** open a namespace in **Catalog**. Semantic models are listed after tables and views. **Details →** shows the overview, the datasets with their fields (**Open table →** jumps to the Iceberg table), the metrics and relationships, and the stored definition. Reading needs the Reader role.
+- **Create them:** run example notebook **06 · Write an AI-ready flights product**. It needs the Writer role; it publishes the flights tables and then their semantic model. Notebook **07** reads the model back with any role. Writers create, replace and remove models; an update is refused if someone else changed the model since you read it.
+- **Ask an AI agent:** the MCP tools `list_semantic_models` and `describe_semantic_model` return the same information.
+- **Share them:** a data share can include semantic models. Recipients see exactly the shared models in **Catalog** and read them with their own account or the share credential; they can't list other models or change any.
+
+Semantic models are a beta feature of Polaris. The platform switches them on; an administrator turns them off with `POLARIS_SEMANTIC_MODELS=false` in `.env`. The portal then simply lists none, and the notebook explains that they are switched off. Databases created before this version don't give the Reader role the new privileges. Grant `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ` to their `reader` catalog role to let readers see models.
 
 ## Data shares
 
 **Data shares** lists the shares of the active team's databases, plus the shares that other teams have shared with you. Only Administrators and Database + bucket administrators can manage shares.
 
-Choose **New data share** under a database, pick the tables and views, and optionally set an expiry. Then choose the recipient:
+Choose **New data share** under a database, pick the tables, views and semantic models, and optionally set an expiry. Then choose the recipient:
 
 - **Another team:** its current and future members get read-only access with their own accounts. The database appears in their **Catalog** and **Notebooks**, even if they own no databases.
 - **Externally:** the client ID and secret are shown once. **Copy DuckDB snippet** copies a runnable script. Send both over a secure channel. The recipient saves the script as `read_share_duckdb.py` and runs `uv run read_share_duckdb.py`.
 
-The recipient can read only the selected objects and can't list anything. A view shares only its definition, so you must add every table it reads, and the recipient can read those tables in full. **Edit** changes the selection or expiry, **New secret** replaces the secret, and **Revoke** ends access immediately. To change the recipients, revoke the share and create a new one. See [the resource model](../docs/CONTEXT.md#data-shares) for the details.
+The recipient can read only the selected objects and can't list anything. A view shares only its definition, so you must add every table it reads, and the recipient can read those tables in full. Selecting a semantic model selects the tables its datasets read; if you remove one, the form warns that the recipient can't query the model without it. External recipients load a shared model with a GET on the address shown with the credential. **Edit** changes the selection or expiry, **New secret** replaces the secret, and **Revoke** ends access immediately. To change the recipients, revoke the share and create a new one. See [the resource model](../docs/CONTEXT.md#data-shares) for the details.
 
 ## Connect from your computer
 
@@ -82,6 +93,8 @@ In **Catalog**, select a database and open **Connect from your computer**:
 | DBeaver | Create a DuckDB connection. Run `uv run iceberg_connect.py duckdb db-…` and add each printed line under **Connection settings › Initialization › Bootstrap queries**. |
 
 DuckDB attaches read-only. Add `--write` to write with your own permissions. DuckDB keeps the token it started with, and that token lasts one hour. After that, run the command again (or replace the `CREATE SECRET` line in DBeaver). `uv run iceberg_connect.py logout` revokes the sign-in.
+
+The helper turns off DuckDB's metadata-log lookup (`SET iceberg_use_metadata_log = false`). With the lookup on, a catalog clock that runs ahead of your computer makes the next write to a table fail with "Metadata-log exists but none of the entries were valid". Keep the platform host's clock in sync with NTP anyway.
 
 Keycloak, Polaris and RustFS listen on `127.0.0.1`, so out of the box this works only on the machine that runs the platform. The [quick-share skill](../docs/install.md#agent-skills) makes it work from anywhere: it publishes the catalog and S3 API on the user portal's address. The Getting started guide warns when the catalog address only works on the platform's own machine. The helper names the address it could not reach and tells the user to download it again.
 
@@ -115,7 +128,7 @@ The [administration guide](../docs/admin-guide.md#connect-an-mcp-client) also co
 
 On first use, the agent opens Keycloak in your browser; sign in with your own account. Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again.
 
-Tools: `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view` and `preview_rows`. Team administrators also get `create_database`, `rename_database` and `delete_database`, which requires `confirm_name`. Platform administrators can add the [administration endpoint](../docs/admin-guide.md#connect-an-mcp-client) as a second server.
+Tools: `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `list_semantic_models`, `describe_semantic_model` and `preview_rows`. The semantic-model tools return the datasets, relationships and metric definitions stored next to the tables, so an agent uses the agreed metrics. Team administrators also get `create_database`, `rename_database` and `delete_database`, which requires `confirm_name`. Platform administrators can add the [administration endpoint](../docs/admin-guide.md#connect-an-mcp-client) as a second server.
 
 ## Configuration
 

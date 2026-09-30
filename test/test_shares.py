@@ -421,3 +421,36 @@ def test_team_share_failed_creation_preserves_existing_access(stack):
         provider.create_share(share_input(db, name="second", external=False, recipientTeam=recipient), CREATOR)
     provider.fail = None
     assert share_state(provider) == before
+
+
+MODEL = {"kind": "semantic-model", "namespace": ["sales"], "name": "revenue"}
+
+
+def test_a_semantic_model_is_shared_with_its_own_read_grant_and_address(stack):
+    provider, db = stack
+    result = provider.create_share(share_input(db, objects=(TABLE, MODEL)), CREATOR)
+    id = result["share"]["id"]
+    assert provider.catalog_roles[db][id] == [
+        {"type": "table", "namespace": ["sales"], "tableName": "orders", "privilege": "TABLE_READ_DATA"},
+        {"type": "semantic-model", "namespace": ["sales"], "semanticModelName": "revenue",
+         "privilege": "SEMANTIC_MODEL_READ"},
+    ]
+    identifiers = {i["kind"]: i for i in result["connection"]["identifiers"]}
+    assert "url" not in identifiers["table"]
+    assert identifiers["semantic-model"]["url"] == (
+        f"http://localhost:8181/api/catalog/polaris/v1/{db}/namespaces/sales/semantic-models/revenue"
+    )
+    # Removing the model revokes only its grant; drift reports it by name like a table.
+    provider.update_share(id, ShareUpdate.model_validate({"objects": [TABLE]}))
+    assert [g["type"] for g in provider.catalog_roles[db][id]] == ["table"]
+    provider.update_share(id, ShareUpdate.model_validate({"objects": [TABLE, MODEL]}))
+    next(g for g in provider.catalog_roles[db][id] if g["type"] == "semantic-model")["semanticModelName"] = "renamed"
+    drifted = provider.list_shares(db, drift=True)[0]
+    assert [o["granted"] for o in drifted["objects"]] == [True, False]
+    assert [e["name"] for e in drifted["extraGrants"]] == ["renamed"]
+
+
+def test_a_share_with_only_a_semantic_model_is_refused(stack):
+    _, db = stack
+    with pytest.raises(ValueError, match="tables that the shared views and semantic models read"):
+        share_input(db, objects=(MODEL,))

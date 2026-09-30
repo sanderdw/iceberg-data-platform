@@ -13,14 +13,14 @@ Teams create, own and share their databases. People, notebooks and AI agents all
 
 ---
 
-![Iceberg Data Platform](docs/portal.png)
+[![Iceberg Data Platform](docs/portal.png)](https://www.youtube.com/watch?v=T8D3tp1hWQk "Apache Iceberg Data Platform - An open source lakehouse you actually own")
 
 ## What it does
 - **Administration portal:** manage teams, users with a role per team, databases and data shares, and browse every Polaris catalog.
 - **User portal:** sign in with Keycloak, pick a team and environment, and manage databases, browse catalogs, open notebooks and share data.
 - **Catalog details:** table schemas, snapshots, branches and tags, partitioning, view SQL and a 100-row preview, all with your own permissions.
-- **Data shares:** share selected tables and views with another team or with an external party, who gets a credential and a DuckDB script.
-- **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Seven example notebooks cover PyIceberg, DuckDB, Iceberg v3 and a semantic data product.
+- **Data shares:** share selected tables, views and semantic models with another team or with an external party, who gets a credential and a DuckDB script.
+- **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Seven example notebooks cover PyIceberg, DuckDB, Iceberg v3 and a data product whose semantic model lives in Polaris.
 - **MCP servers:** AI agents such as Claude Code sign in through Keycloak to explore data or administer the platform.
 
 This is a **educational local development platform**. Read [the security model](SECURITY.md) before deploying it elsewhere.

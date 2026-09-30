@@ -1,5 +1,6 @@
 """Public catalog metadata projections. Provider config and credentials stay server-side."""
 
+import json
 import re
 
 SENSITIVE = re.compile(
@@ -142,3 +143,133 @@ def object_details(kind, loaded):
         }
     )
     return result
+
+
+def text(value):
+    """Ossie documents are user-written: show only scalars and JSON for anything nested."""
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def dicts(value):
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
+def expressions(item):
+    found = item.get("expression")
+    if isinstance(found, dict):
+        found = found.get("dialects")
+    elif isinstance(found, str):
+        return [{"dialect": "", "expression": found}]
+    return [{"dialect": text(e.get("dialect")), "expression": text(e.get("expression"))} for e in dicts(found)]
+
+
+def ossie_models(payload):
+    """The semantic models in a stored document. Polaris keeps the model as a JSON string, and
+    clients differ in whether it is one model, a list of models or a whole Ossie document."""
+    if isinstance(payload, list):
+        return [m for item in payload for m in ossie_models(item)]
+    if not isinstance(payload, dict):
+        return []
+    if "datasets" in payload or "metrics" in payload:
+        return [payload]
+    return ossie_models(payload.get("semantic_model"))
+
+
+def dataset_target(source, namespace):
+    """The Iceberg table a dataset reads: `catalog.namespace….table`, `namespace.table` or `table`.
+
+    Three or more parts start with the catalog, so every part between it and the table is a
+    nested namespace level; one part means a table in the model's own namespace.
+    """
+    parts = [p for p in text(source).split(".") if p]
+    if not parts:
+        return None
+    levels = parts[1:-1] if len(parts) > 2 else parts[:-1]
+    return {"namespace": levels or list(namespace), "name": parts[-1]}
+
+
+def context_rows(value):
+    """AI context as label/value rows: Ossie uses an object such as {instructions, synonyms}."""
+    if value in (None, "", [], {}):
+        return []
+    if not isinstance(value, dict):
+        value = {"context": value}
+    return [
+        {"label": text(key).replace("_", " ").capitalize(),
+         "value": ", ".join(text(v) for v in item) if isinstance(item, list) else text(item)}
+        for key, item in value.items()
+    ]
+
+
+def semantic_model_details(name, namespace, loaded):
+    document = loaded.get("document") or {}
+    raw = document.get("semantic_model")
+    payload = raw
+    if isinstance(raw, str):
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            payload = None
+    models = []
+    for model in ossie_models(payload):
+        datasets = [
+            {
+                "name": text(d.get("name")),
+                "description": text(d.get("description")),
+                "source": text(d.get("source")),
+                "table": dataset_target(d.get("source"), namespace),
+                "primaryKey": [text(k) for k in d["primary_key"]] if isinstance(d.get("primary_key"), list) else [],
+                "fields": [
+                    {
+                        "name": text(f.get("name")),
+                        "description": text(f.get("description")),
+                        "datatype": text(f.get("datatype")),
+                        "dimension": bool(f.get("dimension")),
+                        "expressions": expressions(f),
+                    }
+                    for f in dicts(d.get("fields"))
+                ],
+            }
+            for d in dicts(model.get("datasets"))
+        ]
+        models.append(
+            {
+                "name": text(model.get("name")) or name,
+                "description": text(model.get("description")),
+                "aiContext": context_rows(model.get("ai_context")),
+                "datasets": datasets,
+                "relationships": [
+                    {
+                        "name": text(r.get("name")),
+                        "from": text(r.get("from")),
+                        "to": text(r.get("to")),
+                        "fromColumns": [text(c) for c in r.get("from_columns") or []],
+                        "toColumns": [text(c) for c in r.get("to_columns") or []],
+                    }
+                    for r in dicts(model.get("relationships"))
+                ],
+                "metrics": [
+                    {
+                        "name": text(m.get("name")),
+                        "description": text(m.get("description")),
+                        "datatype": text(m.get("datatype")),
+                        "expressions": expressions(m),
+                    }
+                    for m in dicts(model.get("metrics"))
+                ],
+            }
+        )
+    return {
+        "kind": "semantic-model",
+        "name": name,
+        "namespace": list(namespace),
+        "specVersion": text(document.get("version")),
+        "entityVersion": text(loaded.get("entity-version")),
+        "models": models,
+        # The stored text, pretty-printed when it is JSON, so users can copy exactly what Polaris holds.
+        "definition": json.dumps(payload, indent=2, ensure_ascii=False) if payload is not None else text(raw),
+    }

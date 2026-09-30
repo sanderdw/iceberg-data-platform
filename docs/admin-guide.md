@@ -40,7 +40,16 @@ Recipients outside this machine need addresses they can reach. Put Polaris and R
 
 ## Catalog browser
 
-The **Catalog** page browses all Polaris catalogs, namespaces, tables and views, including catalogs created outside the portal. It shows names only, never data, view SQL or credentials.
+The **Catalog** page browses all Polaris catalogs, namespaces, tables, views and semantic models, including catalogs created outside the portal. It shows names only, never data, view SQL, semantic model definitions or credentials.
+
+## Semantic models
+
+Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic models beside the tables they describe. The platform enables the beta feature with `ENABLE_SEMANTIC_MODELS` in `compose.yaml`. Set `POLARIS_SEMANTIC_MODELS=false` in `.env` and restart Polaris to turn it off. Polaris then answers 406 and the user portal lists no models.
+
+- **Access:** the Reader role of a new database gets `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ`. Writers and administrators already have `CATALOG_MANAGE_CONTENT`, which covers creating, replacing and dropping models. A database created before this version needs the two reader privileges granted to its `reader` catalog role.
+- **Deleting a database** removes its semantic models first. Polaris refuses to drop a namespace that still holds one.
+- **Where users find them:** **Catalog** in the user portal (the administration portal's **Catalog** lists their names only), the MCP tools `list_semantic_models` and `describe_semantic_model`, and example notebooks 06 (publish) and 07 (read).
+- **Beta:** the Polaris API may change in a later release. Check the [release notes](https://polaris.apache.org/releases/1.8.0/) before upgrading Polaris.
 
 ## Infrastructure
 
@@ -124,4 +133,6 @@ Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, in
 
 - Run one portal replica. Sessions are in memory and last at most eight hours, and a lock serializes changes.
 - Creations and moves roll back when Polaris or RustFS fails. Database deletion can always be resumed.
+- Polaris 1.8 does not create the PostgreSQL schema when it bootstraps, so `compose.yaml` names it (`currentSchema=public` in the JDBC URL). A different schema must exist before the first start.
+- List calls return pages when a client sends a `pageToken` (`LIST_PAGINATION_ENABLED`). Without a token the answer is complete, as the Iceberg REST specification requires, so DuckDB and PyIceberg see every table.
 - `docker compose down -v` deletes all platform data and resets the installation.

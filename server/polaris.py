@@ -29,13 +29,17 @@ ROLES = {
         "TABLE_READ_DATA",
         "VIEW_LIST",
         "VIEW_READ_PROPERTIES",
+        "SEMANTIC_MODEL_LIST",
+        "SEMANTIC_MODEL_READ",
     ],
     "writer": ["CATALOG_MANAGE_CONTENT"],
     "admin": ["CATALOG_MANAGE_CONTENT", "CATALOG_MANAGE_ACCESS", "CATALOG_MANAGE_METADATA"],
 }
 # One grant per shared object and nothing on the namespace or catalog: Polaris does
 # not filter listings, so any list privilege would reveal every other name.
-SHARE_PRIVILEGES = {"table": "TABLE_READ_DATA", "view": "VIEW_READ_PROPERTIES"}
+SHARE_PRIVILEGES = {"table": "TABLE_READ_DATA", "view": "VIEW_READ_PROPERTIES", "semantic-model": "SEMANTIC_MODEL_READ"}
+# The name field of a Polaris grant on one object of each kind.
+GRANT_NAMES = {"table": "tableName", "view": "viewName", "semantic-model": "semanticModelName"}
 MAX_SHARES = 20
 
 
@@ -55,7 +59,7 @@ def share_grant(o):
     return {
         "type": o["kind"],
         "namespace": o["namespace"],
-        f"{o['kind']}Name": o["name"],
+        GRANT_NAMES[o["kind"]]: o["name"],
         "privilege": SHARE_PRIVILEGES[o["kind"]],
     }
 
@@ -151,10 +155,13 @@ class PolarisProvider:
             except (ValueError, AttributeError):
                 pass
         if response.is_error:
-            status = response.status_code if response.status_code in (404, 409) else 502
+            status = response.status_code if response.status_code in (404, 406, 409, 503) else 502
             message = {
                 404: "Not found.",
+                406: "This feature is not enabled.",
                 409: "This name already exists or the data has changed. Refresh the page.",
+                # Polaris 1.8 answers 503 with Retry-After when authentication depends on a service that is down.
+                503: "The data provider is temporarily unavailable. Try again shortly.",
             }
             raise ServiceError(
                 status,
@@ -390,7 +397,10 @@ class PolarisProvider:
         role_path = f"{path}/catalog-roles/{role}"
         self.management(f"{path}/catalog-roles", "POST", {"catalogRole": {"name": role}})
         try:
-            for privilege in ("CATALOG_READ_PROPERTIES", "NAMESPACE_LIST", "TABLE_LIST", "VIEW_LIST"):
+            # Listing rights only, including semantic model names. The platform identity can already read more
+            # through catalog_admin, so the projection below, not these grants, keeps documents in the backend.
+            privileges = ("CATALOG_READ_PROPERTIES", "NAMESPACE_LIST", "TABLE_LIST", "VIEW_LIST", "SEMANTIC_MODEL_LIST")
+            for privilege in privileges:
                 self.management(
                     f"{role_path}/grants", "PUT", {"grant": {"type": "catalog", "privilege": privilege}}
                 )
@@ -417,13 +427,14 @@ class PolarisProvider:
             children = self.pages(
                 f"{prefix}/namespaces" + (f"?parent={encoded}" if namespace else ""), "namespaces"
             )
-            tables, views = [], []
+            tables, views, models = [], [], []
             if namespace:
                 path = f"{prefix}/namespaces/{encoded}"
                 tables = self.pages(f"{path}/tables", "identifiers")
                 views = self.pages(f"{path}/views", "identifiers")
+                models = self.semantic_models(prefix, encoded)
         # Only names and namespace identifiers leave the backend, never properties,
-        # table metadata, view SQL or vended storage credentials.
+        # table metadata, view SQL, semantic model documents or vended storage credentials.
         return {
             "database": database,
             "namespace": namespace,
@@ -433,6 +444,9 @@ class PolarisProvider:
             ),
             "views": sorted(
                 [{"name": v["name"], "namespace": v["namespace"]} for v in views], key=lambda v: v["name"]
+            ),
+            "semanticModels": sorted(
+                [{"name": m["name"], "namespace": m["namespace"]} for m in models], key=lambda m: m["name"]
             ),
         }
 
@@ -727,7 +741,7 @@ class PolarisProvider:
         self.remove(path)
 
     def pages(self, path, key):
-        values, token = [], None
+        values, seen, token = [], set(), None
         while True:
             query = f"pageToken={enc(token)}" if token else ""
             result = self.request(path + ("&" if "?" in path else "?") + query)
@@ -735,6 +749,23 @@ class PolarisProvider:
             token = result.get("next-page-token")
             if not token:
                 return values
+            if token in seen:
+                raise ServiceError(502, "The data provider returned invalid pagination.")
+            seen.add(token)
+
+    @staticmethod
+    def semantic_models_path(prefix, encoded):
+        """Semantic models live under Polaris's own API, beside the Iceberg REST prefix."""
+        return f"{prefix.replace('/catalog/v1/', '/catalog/polaris/v1/')}/namespaces/{encoded}/semantic-models"
+
+    def semantic_models(self, prefix, encoded):
+        """Names of a namespace's semantic models; none when Polaris lacks the extension (404) or has it off (406)."""
+        try:
+            return self.pages(self.semantic_models_path(prefix, encoded), "identifiers")
+        except ServiceError as exc:
+            if exc.status not in (404, 406):
+                raise
+            return []
 
     def clear_namespace(self, prefix, namespace):
         encoded = enc("\x1f".join(namespace))
@@ -744,6 +775,10 @@ class PolarisProvider:
         for kind in ("tables", "views"):
             for item in self.pages(f"{path}/{kind}", "identifiers"):
                 self.request(f"{path}/{kind}/{enc(item['name'])}", "DELETE")
+        # Polaris refuses to drop a namespace that still holds semantic models (409).
+        semantic = self.semantic_models_path(prefix, encoded)
+        for item in self.semantic_models(prefix, encoded):
+            self.request(f"{semantic}/{enc(item['name'])}", "DELETE")
         self.request(path, "DELETE")
 
     def delete_database(self, id, *, expected_team=None, expected_environment=None, expected_name=None):
@@ -864,7 +899,7 @@ class PolarisProvider:
                 {
                     "kind": g.get("type"),
                     "namespace": g.get("namespace", []),
-                    "name": g.get("tableName") or g.get("viewName") or "",
+                    "name": next((g[key] for key in GRANT_NAMES.values() if g.get(key)), ""),
                     "privilege": g["privilege"],
                 }
                 for g in actual
@@ -934,7 +969,9 @@ class PolarisProvider:
             self.management(f"{role_path}/grants", "PUT", {"grant": grant})
         except ServiceError as exc:
             if exc.status == 404:
-                raise ServiceError(404, "A selected table or view no longer exists. Refresh and try again.") from exc
+                raise ServiceError(
+                    404, "A selected table, view or semantic model no longer exists. Refresh and try again."
+                ) from exc
             raise
 
     def revoke_share_grant(self, role_path, grant):
@@ -970,7 +1007,13 @@ class PolarisProvider:
             "credential": f"{credentials['clientId']}:{credentials['clientSecret']}",
             # The credential cannot list namespaces or tables; these names are the contract.
             "identifiers": [
-                {"kind": o["kind"], "identifier": ".".join([*o["namespace"], o["name"]])}
+                {
+                    "kind": o["kind"], "identifier": ".".join([*o["namespace"], o["name"]]),
+                    # Semantic models live beside the Iceberg REST API; the recipient loads them by address.
+                    **({"url": f"{connection['uri']}/polaris/v1/{enc(connection['warehouse'])}/namespaces/"
+                               f"{enc(chr(31).join(o['namespace']))}/semantic-models/{enc(o['name'])}"}
+                       if o["kind"] == "semantic-model" else {}),
+                }
                 for o in json.loads(p["portal.objects"])
             ],
         }

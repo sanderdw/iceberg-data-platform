@@ -27,7 +27,8 @@ try {
       body = {id: 'notebook-1', database: database.id, environment, url: '/notebook-fixture', filesUrl: '/notebook-fixture'}; notebooks = [body];
     } else if (path === '/api/notebooks/notebook-1' && method === 'DELETE') { notebooks = []; body = {deleted: true}; }
     else if (path === '/notebook-fixture') return route.fulfill({contentType: 'text/html', body: '<p>Notebook fixture</p>'});
-    else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'readings', namespace: ['analytics']}], views: [{name: 'daily_energy', namespace: ['analytics']}]} : {namespaces: [['analytics']], tables: [], views: []};
+    else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'meters', namespace: ['analytics']}, {name: 'readings', namespace: ['analytics']}], views: [{name: 'daily_energy', namespace: ['analytics']}], semanticModels: [{name: 'energy_model', namespace: ['analytics']}]} : {namespaces: [['analytics']], tables: [], views: []};
+    else if (path === '/api/details' && url.searchParams.get('kind') === 'semantic-model') body = {kind: 'semantic-model', models: [{datasets: [{table: {namespace: ['analytics'], name: 'readings'}}, {table: {namespace: ['analytics'], name: 'meters'}}]}]};
     else if (path === '/api/details') body = {kind: url.searchParams.get('kind'), database: workspace().databases.find(db => db.id === url.searchParams.get('database')), catalogUri: 'https://catalog.example/api/catalog'};
     else if (path === '/api/team') body = {team: 'analytics', members: []};
     else if (path === '/api/share-teams') body = [{id: 'team-' + 'c'.repeat(32), name: 'Research'}];
@@ -109,9 +110,19 @@ try {
   await page.getByLabel('daily_energy').check();
   await expect(page.locator('.share-warning')).toContainText('not a row or column filter');
   await page.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
-  await expect(page.locator('#notice')).toContainText('Select the tables a shared view reads.');
+  await expect(page.locator('#notice')).toContainText('Select the tables that the shared views and semantic models read.');
   if (calls.length) throw new Error('A view-only share reached the API');
-  await page.getByLabel('readings').check();
+  // Selecting a semantic model selects the tables it reads; removing one of them warns.
+  await page.getByLabel('energy_model').check();
+  await expect(page.locator('#notice')).toContainText('Added 2 tables that energy_model reads.');
+  await expect(page.getByLabel('readings')).toBeChecked();
+  await expect(page.getByLabel('meters')).toBeChecked();
+  await expect(page.locator('.share-selection')).toContainText('SELECTED · 4');
+  await expect(page.locator('.share-model-warning')).toBeHidden();
+  await page.getByLabel('meters').uncheck();
+  await expect(page.locator('.share-model-warning')).toContainText('energy_model reads analytics.meters');
+  await page.getByLabel('energy_model').uncheck();
+  await expect(page.locator('.share-model-warning')).toBeHidden();
   await expect(page.locator('.share-selection')).toContainText('SELECTED · 2');
   await page.getByLabel('Share name').fill('Sensor Events');
   await page.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
@@ -262,7 +273,7 @@ print(json.dumps(outputs))
   await page.getByLabel('readings').check(); await page.getByLabel('daily_energy').check();
   const previousCalls = calls.length;
   await page.getByRole('button', {name: 'Create share and show credential', exact: true}).click();
-  await expect(page.locator('#notice')).toContainText('Select no more than 1 tables and views.');
+  await expect(page.locator('#notice')).toContainText('Select no more than 1 object.');
   expect(calls.length).toBe(previousCalls);
   await page.getByRole('button', {name: 'Cancel', exact: true}).click();
   await page.getByRole('button', {name: 'New data share', exact: true}).click();
@@ -342,5 +353,5 @@ print(json.dumps(outputs))
   await expect(page.locator('#team-shares img')).toHaveCount(0);
   await expect(page.getByRole('button', {name: 'New data share', exact: true})).toHaveCount(0);
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS: workspace navigation, share lifecycle, credentials, escaping, ownership across overview/databases/catalog/notebooks, duplicate database names, shared-only teams, read-only controls, route restoration, dark/light/mobile layouts');
+  console.log('PASS: workspace navigation, share lifecycle, credentials, escaping, ownership across overview/databases/catalog/notebooks, duplicate database names, shared-only teams, read-only controls, route restoration, dark/light/mobile layouts, semantic models add their tables to a share');
 } finally { await browser.close(); }

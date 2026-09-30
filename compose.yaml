@@ -3,7 +3,8 @@ name: iceberg-platform
 x-polaris-env: &polaris-env
   POLARIS_PERSISTENCE_TYPE: relational-jdbc
   POLARIS_PERSISTENCE_RELATIONAL_JDBC_DATABASE_TYPE: postgresql
-  QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/polaris
+  # Polaris 1.8 no longer creates the schema at bootstrap; it must exist and be named.
+  QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/polaris?currentSchema=public
   QUARKUS_DATASOURCE_USERNAME: polaris
   QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Run uv run python -m scripts.setup first}
   POLARIS_REALM_CONTEXT_REALMS: POLARIS
@@ -48,7 +49,7 @@ services:
     restart: unless-stopped
 
   polaris-bootstrap:
-    image: apache/polaris-admin-tool:1.7.0
+    image: apache/polaris-admin-tool:1.8.0
     environment: *polaris-env
     command: ["bootstrap", "--realm=POLARIS", "--credential=POLARIS,${POLARIS_CLIENT_ID},${POLARIS_CLIENT_SECRET}"]
     depends_on:
@@ -78,7 +79,7 @@ services:
     restart: unless-stopped
 
   polaris:
-    image: apache/polaris:1.7.0
+    image: apache/polaris:1.8.0
     networks:
       default:
         aliases:
@@ -89,6 +90,12 @@ services:
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
       POLARIS_AUTHENTICATION_TYPE: mixed
+      # Semantic models (Apache Ossie) are a beta feature in Polaris 1.8; set POLARIS_SEMANTIC_MODELS=false to turn them off.
+      # The quoted key is the property name itself: Polaris feature flags cannot be set through the mangled variable form.
+      'polaris.features."ENABLE_SEMANTIC_MODELS"': ${POLARIS_SEMANTIC_MODELS:-true}
+      # Clients that send a pageToken get pages, and both portals follow next-page-token. There is no page-size cap:
+      # clients that ignore continuation tokens (DuckDB, PyIceberg) would silently see only the first page.
+      'polaris.features."LIST_PAGINATION_ENABLED"': "true"
       QUARKUS_OIDC_TENANT_ENABLED: 'true'
       QUARKUS_OIDC_AUTH_SERVER_URL: http://keycloak:8080/realms/iceberg
       QUARKUS_OIDC_CLIENT_ID: polaris

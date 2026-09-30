@@ -111,11 +111,13 @@ def main():
             ("list_tables", {"database": "db-" + "0" * 32, "namespace": [namespace]}),
         ]))
         assert sorted(t.name for t in listed) == [
-            "create_database", "delete_database", "describe_table", "describe_view", "list_databases",
-            "list_namespaces", "list_tables", "preview_rows", "rename_database",
+            "create_database", "delete_database", "describe_semantic_model", "describe_table", "describe_view",
+            "list_databases", "list_namespaces", "list_semantic_models", "list_tables", "preview_rows",
+            "rename_database",
         ]
         assert all(t.annotations.read_only_hint for t in listed if t.name in {
-            "describe_table", "describe_view", "list_databases", "list_namespaces", "list_tables", "preview_rows",
+            "describe_semantic_model", "describe_table", "describe_view", "list_databases", "list_namespaces",
+            "list_semantic_models", "list_tables", "preview_rows",
         })
         assert next(t for t in listed if t.name == "delete_database").annotations.destructive_hint
         databases, namespaces, tables, described, preview, denied = results

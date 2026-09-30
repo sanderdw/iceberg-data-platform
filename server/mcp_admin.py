@@ -41,7 +41,7 @@ and never store or repeat it. delete_team, delete_database, delete_user and revo
 irreversible. delete_database destroys every table, view, storage object and data share of that
 database and requires confirm_name; delete_user revokes platform access but keeps the Keycloak
 account. Ask the administrator before any destructive call. browse_catalog lists namespaces,
-tables and views by name only."""
+tables, views and semantic models by name only."""
 
 # Free-text parameters stay unconstrained here and are validated by the API's own models,
 # whose messages name the field without echoing the submitted value.
@@ -168,7 +168,7 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
 
     @mcp.tool(annotations=READ_ONLY)
     async def browse_catalog(database: str | None = None, namespace: Namespace = []) -> dict[str, Any]:  # noqa: B006
-        """List every Polaris catalog, or the namespaces, tables and views inside one, by name only."""
+        """List every Polaris catalog, or the namespaces, tables, views and semantic models inside one, by name only."""
         if database is None:
             return {"databases": await query(provider.explorer_databases)}
         return await query(provider.explorer_contents, database, catalog_parts(database, namespace))

@@ -67,4 +67,4 @@ This creates `demo-admin`, `demo-writer`, `demo-reader` and `demo-outsider`, wit
 ## References
 
 - [Keycloak server administration](https://www.keycloak.org/docs/latest/server_admin/index.html)
-- [Polaris external identity providers](https://polaris.apache.org/releases/1.7.0/managing-security/external-idp/)
+- [Polaris external identity providers](https://polaris.apache.org/releases/1.8.0/managing-security/external-idp/)

@@ -10,7 +10,7 @@ Slides with a single screenshot show it as large as the stage allows. Slides wit
 
 After the intro, one slide sets out the principles (clean UX, API first, AI native, open source, loosely coupled), followed by the first use: the installer output, the Getting started pages, connecting an MCP client and the bundled agent skills. The installer, MCP and skill slides are text; the skill transcript is illustrative. The AI agent slides in the demo show the tools of both MCP endpoints as text, without a screenshot.
 
-The Iceberg introduction starts with a regular PostgreSQL table, then follows the references from the catalog to the rows, explains how a new batch becomes visible and shows that a v3 delete adds a small Puffin file. The storage screenshots are optional vertical slides below the file walkthrough and JSON example; follow the `↓ see the files` and `↓ see the real file` hints. Speaker notes include technical details and sources, using the [Polaris 1.7.0 documentation](https://polaris.apache.org/releases/1.7.0/) for Polaris behavior.
+The Iceberg introduction starts with a regular PostgreSQL table, then follows the references from the catalog to the rows, explains how a new batch becomes visible and shows that a v3 delete adds a small Puffin file. The storage screenshots are optional vertical slides below the file walkthrough and JSON example; follow the `↓ see the files` and `↓ see the real file` hints. Speaker notes include technical details and sources, using the [Polaris 1.8.0 documentation](https://polaris.apache.org/releases/1.8.0/) for Polaris behavior.
 
 Open `index.html` directly in a browser, or serve the folder:
 

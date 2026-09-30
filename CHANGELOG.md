@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Polaris 1.8.0 adds semantic models to the Catalog.** Explore datasets, fields, metrics and relationships alongside your tables, and use the models with AI agents.
+- Updated flight-data notebooks use semantic models stored in the platform, so you can explore and query the example data without local model files.
+- Data shares can include semantic models. Selecting a model also selects the tables it reads, and recipients read exactly the shared models, never list or change them.
+- Fixed an issue that could prevent a second write to a table when connecting with DuckDB from your own computer. Download the updated `iceberg_connect.py` helper from the portal.
+
 ## 0.5.3 - 2026-09-24
 
 - **Participants get going from a single slip.** The `demo-company` skill now also writes printable sign-in slips, one per participant. Each slip holds the user portal address with a QR code, the username and the one-time password.

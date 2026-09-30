@@ -95,7 +95,7 @@ function renderGuide() {
     ['Pick your team and environment', ['Active team and Environment at the top decide which databases you see. Your role in the team decides what you can change.']],
     ['Browse the catalog', ['Open a database to see its namespaces, tables and views: schema, snapshots and a preview of up to 100 rows.'], guideLink('Open the catalog', 'catalog')],
     ['Open a notebook', ['Start marimo on a database with your own permissions. The example notebooks 01–07 show PyIceberg and DuckDB. Files are shared by team and environment.'], guideLink('Go to notebooks', 'notebooks')],
-    ['Share data', ['Team administrators share tables and views with another team or an external party. Data shared with your team appears in your catalog, read-only.'], guideLink('View data shares', 'shares')],
+    ['Share data', ['Team administrators share tables, views and semantic models with another team or an external party. Data shared with your team appears in your catalog, read-only.'], guideLink('View data shares', 'shares')],
   ];
 
   const download = element('a', 'Download iceberg_connect.py', 'button quiet guide-start'); download.href = '/iceberg_connect.py'; download.download = 'iceberg_connect.py';

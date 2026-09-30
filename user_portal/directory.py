@@ -9,7 +9,7 @@ from server.models import DatabaseInput, Environment, ServiceError
 from server.polaris import PolarisProvider, enc
 from server.storage import RustFSStorage
 
-from .catalog import object_details, properties
+from .catalog import object_details, properties, semantic_model_details
 
 
 def validate_namespace(parts):
@@ -17,6 +17,15 @@ def validate_namespace(parts):
         not p or len(p) > 256 or p in (".", "..") or "\x1f" in p or "\0" in p for p in parts
     ):
         raise ServiceError(422, "Invalid namespace.")
+
+
+def shared_objects(info, kind, namespace):
+    """The objects of one kind that a share names in one namespace, sorted by name."""
+    return sorted(
+        [{"name": o["name"], "namespace": o["namespace"]} for o in info["sharedObjects"]
+         if o["kind"] == kind and o["namespace"] == namespace],
+        key=lambda o: o["name"],
+    )
 
 
 @dataclass
@@ -258,7 +267,12 @@ class UserDirectory:
         except httpx.HTTPError as exc:
             raise ServiceError(503, "The data provider is unavailable.") from exc
         if response.is_error:
-            status = response.status_code if response.status_code in (401, 403, 404) else 502
+            # 406: Polaris has this feature switched off. 503: it is temporarily unavailable, and retrying helps.
+            status = response.status_code if response.status_code in (401, 403, 404, 406, 503) else 502
+            if status == 503:
+                raise ServiceError(503, "The data provider is temporarily unavailable. Try again shortly.")
+            if status == 406:
+                raise ServiceError(406, "Semantic models are switched off in Polaris.")
             raise ServiceError(status, "This content is unavailable with your permissions.")
         return response.json()
 
@@ -298,6 +312,28 @@ class UserDirectory:
                 raise ServiceError(502, "The data provider returned invalid pagination.")
             seen.add(token)
 
+    def semantic_models(self, session, database, namespace):
+        """Semantic model names in a namespace; none when the feature is off or the role cannot list them."""
+        path = (
+            f"/api/catalog/polaris/v1/{enc(database)}/namespaces/{enc(chr(31).join(namespace))}/semantic-models"
+        )
+        try:
+            items = self.pages(session, path, "identifiers")
+        except ServiceError as exc:
+            if exc.status in (403, 404, 406):
+                return []
+            raise
+        return sorted(
+            [{"name": m["name"], "namespace": m["namespace"]} for m in items], key=lambda m: m["name"]
+        )
+
+    def list_semantic_models(self, session, database, namespace):
+        """The semantic models of one namespace, after the same access check as `contents`."""
+        info = self.database(session, database)
+        if info.get("shared"):
+            return shared_objects(info, "semantic-model", namespace)
+        return self.semantic_models(session, database, namespace)
+
     def contents(self, session, database, namespace):
         info = self.database(session, database)
         if info.get("shared"):
@@ -308,10 +344,10 @@ class UserDirectory:
             return {
                 "database": database, "namespace": namespace,
                 "namespaces": [list(parts) for parts in children],
-                **{kind + "s": sorted(
-                    [{"name": o["name"], "namespace": o["namespace"]} for o in objects
-                     if o["kind"] == kind and o["namespace"] == namespace], key=lambda o: o["name"]
-                ) for kind in ("table", "view")},
+                "tables": shared_objects(info, "table", namespace),
+                "views": shared_objects(info, "view", namespace),
+                # The share role cannot list: show exactly the models the share names.
+                "semanticModels": shared_objects(info, "semantic-model", namespace),
             }
         prefix = f"/api/catalog/v1/{enc(database)}"
         encoded = enc("\x1f".join(namespace))
@@ -324,6 +360,7 @@ class UserDirectory:
             "namespaces": sorted(children),
             "tables": [],
             "views": [],
+            "semanticModels": [],
         }
         if namespace:
             for kind in ("tables", "views"):
@@ -331,6 +368,7 @@ class UserDirectory:
                 result[kind] = sorted(
                     [{"name": t["name"], "namespace": t["namespace"]} for t in items], key=lambda t: t["name"]
                 )
+            result["semanticModels"] = self.semantic_models(session, database, namespace)
         return result
 
     def details(self, session, database, namespace, kind, name=None):
@@ -358,6 +396,11 @@ class UserDirectory:
                 "namespace": namespace,
                 "properties": properties(loaded.get("properties", {})),
             }
+        if kind == "semantic-model":
+            polaris = f"/api/catalog/polaris/v1/{enc(database)}/namespaces/{enc(chr(31).join(namespace))}"
+            return semantic_model_details(
+                name, namespace, self.request(session, f"{polaris}/semantic-models/{enc(name)}")
+            )
         loaded = self.request(session, f"{path}/{kind}s/{enc(name)}")
         return {"name": name, "namespace": namespace, **object_details(kind, loaded)}
 
