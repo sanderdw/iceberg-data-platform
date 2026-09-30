@@ -3,8 +3,8 @@ const KIND_LABELS = {table: 'Iceberg table', view: 'Iceberg view', 'semantic-mod
 const VIEW_WARNING = 'A view shares only its definition. The recipient’s engine reads the underlying tables with their access, so add every table the view reads. The recipient can then read those tables in full; a view is not a row or column filter.';
 const objectKey = o => JSON.stringify([o.kind, o.namespace, o.name]);
 // A semantic model describes tables; the recipient reads them with the same credential, so sharing it needs them too.
-const modelTableCache = new Map();
-function modelTables(db, model) {
+// Each share form keeps its own cache, so a model replaced since the last form is read again.
+function modelTables(modelTableCache, db, model) {
   const key = db.id + objectKey(model);
   if (!modelTableCache.has(key)) {
     const query = new URLSearchParams({database: db.id, kind: 'semantic-model', name: model.name}); model.namespace.forEach(part => query.append('namespace', part));
@@ -160,12 +160,20 @@ async function shareForm(host, db, share) {
   const modelWarning = element('p', '', 'share-model-warning'); modelWarning.setAttribute('role', 'note'); modelWarning.hidden = true;
   const checkbox = o => [...form.querySelectorAll('input[type=checkbox]')].find(b => b.dataset.objectKey === objectKey(o));
   // Selecting a model selects the tables it reads; removing one of them later shows what the recipient would miss.
-  async function added(o) {
+  // Submitting waits for pending selections, so a quick submit still sends the model's tables.
+  const modelTableCache = new Map(), pendingModels = new Set();
+  function added(o) {
     if (o?.kind !== 'semantic-model') return;
+    const pending = addModelTables(o).finally(() => pendingModels.delete(pending));
+    pendingModels.add(pending);
+  }
+  async function addModelTables(o) {
     try {
-      const tables = (await modelTables(db, o)).filter(t => !selected.has(objectKey(t)));
-      tables.forEach(t => { selected.set(objectKey(t), t); const box = checkbox(t); if (box) box.checked = true; });
-      if (tables.length) notice(`Added ${tables.length} ${tables.length === 1 ? 'table' : 'tables'} that ${o.name} reads.`);
+      const tables = await modelTables(modelTableCache, db, o);
+      if (!selected.has(objectKey(o))) return;
+      const missing = tables.filter(t => !selected.has(objectKey(t)));
+      missing.forEach(t => { selected.set(objectKey(t), t); const box = checkbox(t); if (box) box.checked = true; });
+      if (missing.length) notice(`Added ${missing.length} ${missing.length === 1 ? 'table' : 'tables'} that ${o.name} reads.`);
     } catch (error) { notice(`The tables of ${o.name} could not be read: ${error.message}`, true); }
     refresh();
   }
@@ -174,7 +182,7 @@ async function shareForm(host, db, share) {
     const version = ++modelCheck, models = objects.filter(o => o.kind === 'semantic-model');
     const missing = [];
     for (const model of models) {
-      try { (await modelTables(db, model)).filter(t => !selected.has(objectKey(t))).forEach(t => missing.push(`${model.name} reads ${objectPath(t)}`)); } catch {}
+      try { (await modelTables(modelTableCache, db, model)).filter(t => !selected.has(objectKey(t))).forEach(t => missing.push(`${model.name} reads ${objectPath(t)}`)); } catch {}
     }
     if (version !== modelCheck) return;
     modelWarning.textContent = `The recipient cannot query a semantic model without its tables. Not selected: ${missing.join('; ')}.`;
@@ -198,17 +206,20 @@ async function shareForm(host, db, share) {
   form.addEventListener('submit', event => {
     event.preventDefault();
     busy(save, async () => {
+      while (pendingModels.size) await Promise.all(pendingModels);
       const objects = [...selected.values()];
       if (!objects.length) throw new Error('Select at least one table.');
       if (objects.length > maxObjects) throw new Error(`Select no more than ${maxObjects} ${maxObjects === 1 ? "object" : "objects"}.`);
       if (!objects.some(o => o.kind === 'table')) throw new Error('Select the tables that the shared views and semantic models read.');
       const body = {recipient: recipient.value.trim(), description: description.value.trim(), objects, expiresAt: expiry.value ? `${expiry.value}T23:59:59Z` : null};
-      if (share) { await api(`/shares/${share.id}`, 'PATCH', body); notice('Share saved.'); await loadShares(host, db); }
+      // The API checks the models again; its warnings name tables the recipient would still miss.
+      const warned = result => result.warnings?.length ? ` ${result.warnings.join(' ')}` : '';
+      if (share) { const result = await api(`/shares/${share.id}`, 'PATCH', body); notice(`Share saved.${warned(result)}`); await loadShares(host, db); }
       else {
         if (!internal.checked && !external.checked) throw new Error('Choose another team, external sharing, or both.');
         const result = await api('/shares', 'POST', {...body, database: db.id, name: name.value, external: external.checked, recipientTeam: internal.checked ? team.value : null});
-        if (result.credentials) issued(host, db, result, 'Share created.');
-        else { notice('Share created. Recipient team members can read the selected objects with their own accounts.'); await loadShares(host, db); }
+        if (result.credentials) { issued(host, db, result, 'Share created.'); if (warned(result)) notice(`Share created.${warned(result)}`); }
+        else { notice(`Share created. Recipient team members can read the selected objects with their own accounts.${warned(result)}`); await loadShares(host, db); }
       }
     });
   });

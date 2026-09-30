@@ -36,7 +36,8 @@ def _(catalog, mo, namespace, shared_objects):
     _models = [(*o["namespace"], o["name"]) for o in shared_objects or [] if o["kind"] == "semantic-model"]
     _shared_models = (
         f"\n\n**Semantic models:** {_models}. Load one with "
-        "`SemanticModels.connect([namespace]).load(name)` from `user_portal.notebook.semantic`."
+        "`SemanticModels.connect(model[:-1]).load(model[-1])` from `user_portal.notebook.semantic`, "
+        "where `model` is one of these tuples."
         if _models else ""
     )
     mo.vstack(

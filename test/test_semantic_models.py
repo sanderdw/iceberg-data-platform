@@ -151,6 +151,28 @@ def test_a_shared_database_shows_exactly_the_models_its_share_names(users):  # n
     assert denied.value.status == 403 and not calls
 
 
+def test_a_renamed_shared_model_stays_in_the_recipients_catalog(users, monkeypatch):  # noqa: F811
+    # Polaris keeps the grant on the entity, so the model is still readable under its new name.
+    from server.models import ShareInput
+    from test.test_user_portal import share_body
+
+    provider = users.provider
+    _, _, recipient = users.teams
+    db = users.databases[0]
+    provider.create_share(ShareInput.model_validate(share_body(db, external=False, recipientTeam=recipient)), users.account)
+    listing = provider.list_shares
+
+    def renamed(*args, **kwargs):
+        return [{**s, "extraGrants": [{"kind": "semantic-model", "namespace": ["analytics"], "name": "renamed",
+                                       "privilege": "SEMANTIC_MODEL_READ"}]} for s in listing(*args, **kwargs)]
+
+    monkeypatch.setattr(provider, "list_shares", renamed)
+    promote(users, {recipient: "reader"})
+    login(users.client)
+    shared = next(d for d in users.client.get("/api/workspace").json()["databases"] if d["id"] == db)
+    assert {"kind": "semantic-model", "namespace": ["analytics"], "name": "renamed", "granted": True} in shared["sharedObjects"]
+
+
 def test_a_shared_model_opens_with_the_recipients_own_token(users):  # noqa: F811
     login(users.client)
     shared = {"shared": True, "sharedObjects": [
@@ -189,6 +211,27 @@ def test_sharing_a_model_warns_about_or_adds_the_tables_it_reads(users):  # noqa
     assert updated.json()["share"]["name"] == "partner"
     again = c.patch(f"/api/shares/{id}", json={"objects": [events, model]}, headers=JSON)
     assert again.json()["warnings"] == [] and again.json()["addedTables"] == []
+
+
+@pytest.mark.parametrize(("status", "created"), [(404, 201), (503, 503)])
+def test_a_missing_model_is_skipped_but_an_outage_fails_the_share(users, monkeypatch, status, created):  # noqa: F811
+    # Skipping an unavailable model would share it without the tables that includeModelTables adds.
+    c, db = users.client, users.databases[0]
+    login(c)
+    promote(users, {users.teams[0]: "admin"})
+    get = users.directory.http.get
+    monkeypatch.setattr(
+        users.directory.http,
+        "get",
+        lambda url, **kw: httpx.Response(status, headers={"Retry-After": "0"}) if "semantic-models" in url else get(url, **kw),
+    )
+    model = {"kind": "semantic-model", "namespace": ["analytics"], "name": "revenue"}
+    sessions = {"kind": "table", "namespace": ["analytics"], "name": "sessions"}
+    body = {"database": db, "name": "partner", "objects": [sessions, model]}
+    result = c.post("/api/shares", params={"includeModelTables": "true"}, json=body, headers=JSON)
+    assert result.status_code == created, result.text
+    if created == 201:
+        assert result.json()["addedTables"] == [] and result.json()["warnings"] == []
 
 
 def test_reader_role_can_list_and_read_models_and_only_writers_change_them():

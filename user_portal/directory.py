@@ -141,7 +141,7 @@ class UserDirectory:
                 received.setdefault(share["database"], []).extend(
                     [o for o in share["objects"] if o.get("granted")]
                     + [{"kind": g["kind"], "namespace": g["namespace"], "name": g["name"], "granted": True}
-                       for g in share.get("extraGrants", []) if g["kind"] in ("table", "view") and g["name"]]
+                       for g in share.get("extraGrants", []) if g["kind"] in ("table", "view", "semantic-model") and g["name"]]
                 )
                 recipient[share["database"]] = min(
                     recipient.get(share["database"], share["recipientTeam"]), share["recipientTeam"],
@@ -300,7 +300,8 @@ class UserDirectory:
 
         A model only describes tables; the recipient reads them with the same credential. With
         `add` the missing tables join the selection, as selecting a model does in the portal;
-        otherwise each one is a warning. A model that cannot be read is skipped, as in the portal.
+        otherwise each one is a warning. A model that is missing, hidden or switched off is skipped,
+        as in the portal; an unavailable provider fails the request, so a retry adds the tables.
         """
         objects = [o.model_dump() for o in data.objects]
         selected = {(o["kind"], tuple(o["namespace"]), o["name"]) for o in objects}
@@ -308,7 +309,9 @@ class UserDirectory:
         for model in [o for o in objects if o["kind"] == "semantic-model"]:
             try:
                 tables = self.semantic_model_tables(session, database, model["namespace"], model["name"])
-            except ServiceError:
+            except ServiceError as exc:
+                if exc.status not in (403, 404, 406):
+                    raise
                 continue
             for table in tables:
                 key = ("table", tuple(table["namespace"]), table["name"])

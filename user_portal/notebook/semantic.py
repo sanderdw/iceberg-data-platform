@@ -57,7 +57,7 @@ def explain(response, name):
     status = response.status_code
     messages = {
         403: "Your role may not do this. Reading needs the reader role; changing models needs a writer.",
-        406: "Semantic models are switched off in Polaris. An administrator enables ENABLE_SEMANTIC_MODELS.",
+        406: "Semantic models are switched off. An administrator sets POLARIS_SEMANTIC_MODELS=true in .env.",
         409: f"Semantic model {name!r} already exists or was changed by someone else.",
         400: f"Polaris rejected {name!r}. Names use letters, digits, hyphens and underscores.",
         401: "Your session expired. Reload the notebook from the portal.",
@@ -102,13 +102,16 @@ class SemanticModels:
         return response
 
     def names(self):
-        found, token = [], None
+        found, seen, token = [], set(), None
         while True:
             page = self.send("GET", params={"pageToken": token} if token else None).json()
             found += [i["name"] for i in page["identifiers"]]
             token = page.get("next-page-token")
             if not token:
                 return sorted(found)
+            if token in seen:
+                raise SemanticModelError("Polaris repeated a page of semantic models. Try again later.")
+            seen.add(token)
 
     def load(self, name):
         """The stored model and its entity version, or None when it does not exist."""
@@ -169,7 +172,7 @@ def bind_datasets(connection, model):
     """One temporary view per dataset, named like the dataset, over its Iceberg table."""
     for dataset in model["datasets"]:
         namespace, table = dataset_table(dataset)
-        refresh_table_credentials(connection, namespace, table, secret_name=f"model_{table}")
+        refresh_table_credentials(connection, namespace, table, secret_name=f"model_{dataset['name']}")
         connection.execute(
             f"CREATE OR REPLACE TEMP VIEW {quoted(dataset['name'])} AS SELECT * FROM {table_reference(namespace, table)}"
         )

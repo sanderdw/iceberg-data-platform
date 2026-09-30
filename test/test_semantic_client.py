@@ -107,6 +107,29 @@ def test_names_follow_continuation_tokens():
     assert models.names() == ["a", "b"]
 
 
+def test_a_repeated_page_token_fails_instead_of_looping():
+    def pages(request):
+        return httpx.Response(200, json={"identifiers": [{"namespace": ["sales"], "name": "a"}], "next-page-token": "same"})
+
+    with pytest.raises(SemanticModelError, match="repeated a page"):
+        models_for(pages).names()
+
+
+def test_datasets_on_tables_with_the_same_name_keep_their_own_credentials(monkeypatch):
+    secrets = []
+    monkeypatch.setattr(semantic, "refresh_table_credentials",
+                        lambda connection, namespace, table, *, secret_name: secrets.append(secret_name))
+    model = {"datasets": [{"name": "ORDERS", "source": "lakehouse.sales.orders"},
+                          {"name": "ARCHIVED", "source": "lakehouse.archive.orders"}]}
+
+    class Connection:
+        def execute(self, sql):
+            pass
+
+    semantic.bind_datasets(Connection(), model)
+    assert secrets == ["model_ORDERS", "model_ARCHIVED"]
+
+
 def test_names_with_special_characters_are_encoded_in_the_path():
     store = Store()
     assert models_for(store).load("a/b") is None
@@ -170,7 +193,7 @@ def test_password_mode_notebooks_keep_their_client_credentials_token(monkeypatch
     ("store", "message"),
     [
         (Store(role="reader"), "Your role may not"),
-        (Store(enabled=False), "switched off"),
+        (Store(enabled=False), "switched off. An administrator sets POLARIS_SEMANTIC_MODELS=true in .env"),
     ],
 )
 def test_errors_explain_the_cause_without_echoing_the_response(store, message):
