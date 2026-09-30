@@ -64,18 +64,18 @@ A semantic model says what the tables in a namespace mean: datasets that map to 
 - **Ask an AI agent:** the MCP tools `list_semantic_models` and `describe_semantic_model` return the same information, and `describe_semantic_model` with `include_definition` also returns the stored document.
 - **Share them:** a data share can include semantic models. Recipients see exactly the shared models in **Catalog** and read them with their own account or the share credential; they can't list other models or change any.
 
-Semantic models are a beta feature of Polaris. The platform switches them on; an administrator turns them off with `POLARIS_SEMANTIC_MODELS=false` in `.env`. The portal then simply lists none, and the notebook explains that they are switched off. Databases created before this version don't give the Reader role the new privileges. Grant `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ` to their `reader` catalog role to let readers see models.
+Semantic models are a beta feature of Polaris. The platform switches them on; an administrator can turn them off ([semantic models](../docs/admin-guide.md#semantic-models)). The portal then simply lists none, and the notebook explains that they are switched off.
 
 ## Data shares
 
-**Data shares** lists the shares of the active team's databases, plus the shares that other teams have shared with you. Only Administrators and Database + bucket administrators can manage shares.
+**Data shares** lists the shares of the active team's databases, plus the shares that other teams have shared with you. Only Administrators can manage shares.
 
 Choose **New data share** under a database, pick the tables, views and semantic models, and optionally set an expiry. Then choose the recipient:
 
 - **Another team:** its current and future members get read-only access with their own accounts. The database appears in their **Catalog** and **Notebooks**, even if they own no databases.
 - **Externally:** the client ID and secret are shown once. **Copy DuckDB snippet** copies a runnable script. Send both over a secure channel. The recipient saves the script as `read_share_duckdb.py` and runs `uv run read_share_duckdb.py`.
 
-The recipient can read only the selected objects and can't list anything. A view shares only its definition, so you must add every table it reads, and the recipient can read those tables in full. Selecting a semantic model selects the tables its datasets read; if you remove one, the form warns that the recipient can't query the model without it. External recipients load a shared model with a GET on the address shown with the credential. **Edit** changes the selection or expiry, **New secret** replaces the secret, and **Revoke** ends access immediately. To change the recipients, revoke the share and create a new one. See [the resource model](../docs/CONTEXT.md#data-shares) for the details.
+The recipient can read only the selected objects and can't list anything. A view shares only its definition, so you must add every table it reads, and the recipient can read those tables in full. Selecting a semantic model selects the tables its datasets read; if you remove one, the form warns that the recipient can't query the model without it, and saving names every table that is still missing. External recipients load a shared model with a GET on the address shown with the credential. **Edit** changes the selection or expiry, **New secret** replaces the secret, and **Revoke** ends access immediately. To change the recipients, revoke the share and create a new one. See [the resource model](../docs/CONTEXT.md#data-shares) for the details.
 
 ## Connect from your computer
 
@@ -129,7 +129,7 @@ The [administration guide](../docs/admin-guide.md#connect-an-mcp-client) also co
 
 On first use, the agent opens Keycloak in your browser; sign in with your own account. Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again.
 
-Tools: `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `list_semantic_models`, `describe_semantic_model` and `preview_rows`. The semantic-model tools return the datasets, relationships and metric definitions stored next to the tables, so an agent uses the agreed metrics. Team administrators also get `create_database`, `rename_database` and `delete_database`, which requires `confirm_name`.
+Tools: `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `list_semantic_models`, `describe_semantic_model` and `preview_rows`. The semantic-model tools are described under [semantic models](#semantic-models). Team administrators also get `create_database`, `rename_database` and `delete_database`, which requires `confirm_name`.
 
 Data shares: `list_shares` and `list_received_shares` show shares with their objects, and `list_share_teams` names the teams that can receive one. Team administrators also get `create_share`, `update_share`, `rotate_share_credential` and `delete_share`; `delete_share` requires `confirm_name`. By default, sharing a semantic model also shares the tables it reads, as in the portal. `create_share` for an external share and `rotate_share_credential` return the client secret once, so the agent sees it; hand it only to the recipient. Platform administrators can add the [administration endpoint](../docs/admin-guide.md#connect-an-mcp-client) as a second server.
 
@@ -142,7 +142,8 @@ These settings live in the shared `.env`:
 | `USER_PORT` | `3002` | Host port |
 | `PORTAL_LAN_IP` | - | Extra binding with `compose.users.lan.yaml` |
 | `MAX_NOTEBOOKS` | `8` | Maximum simultaneous notebook containers |
-| `NOTEBOOK_MEMORY` | `1g` | Memory limit per notebook |
+| `NOTEBOOK_MEMORY` | `2g` | Memory limit per notebook |
+| `POLARIS_SEMANTIC_MODELS` | `true` | Set to `false` to turn off semantic models in Polaris |
 | `USER_COOKIE_SECURE` | `false` | Set to `true` behind HTTPS |
 | `MCP_CALLBACK_PORT` | `3010` | OAuth callback port of MCP clients |
 | `POLARIS_PUBLIC_URL` | `http://localhost:8181` | Catalog address for `iceberg_connect.py` and external share recipients |

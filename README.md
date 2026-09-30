@@ -18,12 +18,12 @@ Teams create, own and share their databases. People, notebooks and AI agents all
 ## What it does
 - **Administration portal:** manage teams, users with a role per team, databases and data shares, and browse every Polaris catalog.
 - **User portal:** sign in with Keycloak, pick a team and environment, and manage databases, browse catalogs, open notebooks and share data.
-- **Catalog details:** table schemas, snapshots, branches and tags, partitioning, view SQL and a 100-row preview, all with your own permissions.
+- **Catalog details:** table schemas, snapshots, branches and tags, partitioning, view SQL and a 100-row preview, plus semantic models with a diagram of their datasets and relationships, all with your own permissions.
 - **Data shares:** share selected tables, views and semantic models with another team or with an external party, who gets a credential and a DuckDB script.
 - **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Seven example notebooks cover PyIceberg, DuckDB, Iceberg v3 and a data product whose semantic model lives in Polaris.
-- **MCP servers:** AI agents such as Claude Code sign in through Keycloak to explore data or administer the platform.
+- **MCP servers:** AI agents such as Claude Code sign in through Keycloak to explore data and semantic models, manage databases and data shares, or administer the platform.
 
-This is a **educational local development platform**. Read [the security model](SECURITY.md) before deploying it elsewhere.
+This is an **educational local development platform**. Read [the security model](SECURITY.md) before deploying it elsewhere.
 
 ## Quick start
 
@@ -39,7 +39,7 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/dow
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to open the platform to your network and to set up a demo company.
+The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to set up a demo company and to share the portals with a class over the internet.
 
 ### Run from source
 
@@ -64,18 +64,18 @@ Rerun the three Docker commands after source changes. Save your notebook work fi
 | Administration portal     | http://localhost:3000             | `platform-admin` + initial `PLATFORM_ADMIN_PASSWORD`                                                                         |
 | User portal               | http://localhost:3002             | Keycloak account created or linked by an administrator                                                                       |
 | API documentation         | `/docs` on either portal          | Portal session                                                                                                               |
-| User MCP server           | http://localhost:3002/mcp         | Keycloak sign-in through the`iceberg-mcp` client, your own permissions                                                       |
-| Administration MCP server | http://localhost:3000/mcp         | Keycloak sign-in through the`iceberg-mcp` client, `platform-admin` role                                                      |
+| User MCP server           | http://localhost:3002/mcp         | Keycloak sign-in through the `iceberg-mcp` client, your own permissions                                                       |
+| Administration MCP server | http://localhost:3000/mcp         | Keycloak sign-in through the `iceberg-mcp` client, `platform-admin` role                                                      |
 | Keycloak console          | http://localhost:8080/admin       | `admin` + `KEYCLOAK_ADMIN_PASSWORD`                                                                                          |
 | Polaris Iceberg REST API  | http://localhost:8181/api/catalog | Keycloak bearer token ([connect from your computer](user_portal/README.md#connect-from-your-computer)) or client credentials |
-| RustFS console            | http://localhost:9001             | Bucket-admin or local root credentials                                                                                       |
+| RustFS console            | http://localhost:9001             | `RUSTFS_ACCESS_KEY` + `RUSTFS_SECRET_KEY`                                                                                    |
 | pgAdmin                   | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD`                                                                                         |
 
-Credentials are in `.env`. All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [Keycloak configuration](docs/keycloak.md#configuration).
+Credentials are in `.env`. All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [deploying beyond localhost](SECURITY.md#deploying-beyond-localhost) or the [quick-share skill](docs/install.md#agent-skills).
 
 ### Connect an AI agent
 
-Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`. On the first tool call the agent opens Keycloak in your browser. Port 3010 must equal `MCP_CALLBACK_PORT` in `.env`. For Codex, GitHub Copilot, other clients and the tool lists, see [the user MCP server](user_portal/README.md#connect-an-mcp-client) and [the administration MCP server](docs/admin-guide.md#connect-an-mcp-client).
+Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`. On the first tool call the agent opens Keycloak in your browser. For Codex, GitHub Copilot, other clients and the tool lists, see [the user MCP server](user_portal/README.md#connect-an-mcp-client) and [the administration MCP server](docs/admin-guide.md#connect-an-mcp-client).
 
 ### First steps
 
@@ -91,6 +91,7 @@ Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) e
 - [Administration guide](docs/admin-guide.md)
 - [Keycloak identity and access](docs/keycloak.md)
 - [Resource model: users, teams, roles, databases, shares](docs/CONTEXT.md)
+- [Form validation rules](docs/form-validation.md)
 - [Architecture](docs/architecture.md)
 - [Security model](SECURITY.md)
 - [Contributing and tests](CONTRIBUTING.md)

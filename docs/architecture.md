@@ -28,7 +28,7 @@ flowchart LR
     style ThirdParty fill:#f59e0b1a,stroke:#f59e0b,stroke-width:2px,stroke-dasharray:6 4
 ```
 
-The third party never signs in to a portal. A team administrator hands over the share credential, and the recipient reads only the shared tables through Polaris and RustFS.
+The third party never signs in to a portal. A team administrator hands over the share credential, and the recipient reads only the shared tables, views and semantic models through Polaris and RustFS.
 
 ## Services
 
@@ -39,7 +39,7 @@ The third party never signs in to a portal. A team administrator hands over the 
 
 - **Keycloak** signs in people and MCP clients. **Polaris** holds all application metadata (teams, users, databases, shares) and enforces data permissions; see the [resource model](CONTEXT.md). There is no separate application database. Polaris also stores the Apache Ossie semantic models of each namespace (beta in Polaris 1.8, see [semantic models](../user_portal/README.md#semantic-models)).
 - **The user portal** joins the platform network and doesn't depend on the admin portal. Catalog browsing and notebooks use the signed-in user's own token. The portal uses its platform identity only for directory lookups and for the database and share actions of team administrators.
-- **Both portals** keep sessions in memory for up to eight hours and serve `/mcp` for MCP clients, which authenticate every request with their own bearer token.
+- **Both portals** keep sessions in memory ([deployment boundaries](keycloak.md#deployment-boundaries)) and serve `/mcp` for MCP clients, which authenticate every request with their own bearer token.
 
 ## Notebooks
 

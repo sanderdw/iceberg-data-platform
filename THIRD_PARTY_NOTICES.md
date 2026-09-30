@@ -17,6 +17,6 @@ included beside it as `OSSIE-NOTICE.txt`: Copyright 2026 The Apache Software Fou
 These files are bundled in the notebook image and copied into team workspaces.
 `flights.product.yaml`, the generator and notebooks are local demonstration additions.
 
-Python and npm dependencies are resolved from `uv.lock` and `package-lock.json`. Their upstream licenses remain applicable. Container images for Apache Polaris, PostgreSQL and RustFS are fetched separately by Compose and retain their own licenses and notices. Container images built here include the installed dependencies and their distribution metadata.
+Python and npm dependencies are resolved from `uv.lock` and `package-lock.json`. Their upstream licenses remain applicable. Container images for Apache Polaris and its admin tool, Keycloak, PostgreSQL, RustFS and pgAdmin, and for cloudflared and Caddy used by the quick-share skill, are fetched separately by Compose and retain their own licenses and notices. Container images built here include the installed dependencies and their distribution metadata.
 
 This repository does not redistribute the old presentation, its bundled reveal.js copy, personal Jupyter notebooks, private datasets, or saved credentials.

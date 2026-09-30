@@ -711,7 +711,7 @@ def test_share_requests_are_validated_and_csrf_protected(users):
     for values, message in (
         ({"recipient": "x" * 121}, "Recipient must be at most 120 characters."),
         ({"description": "x" * 281}, "Description must be at most 280 characters."),
-        ({"objects": []}, "Select between 1 and 50 tables and views, including at least one table."),
+        ({"objects": []}, "Select between 1 and 50 tables, views and semantic models, including at least one table."),
         ({"expiresAt": "not-a-date"}, "Choose a valid future expiry with a time zone, or leave it empty."),
     ):
         response = c.post("/api/shares", json=share_body(db, **values), headers=JSON)

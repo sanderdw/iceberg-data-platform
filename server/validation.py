@@ -44,7 +44,7 @@ def validation_message(errors, path):
             elif field == "memberships":
                 message = "Select between 1 and 100 teams, without duplicates."
             elif field == "objects":
-                message = "Select between 1 and 50 tables and views, including at least one table."
+                message = "Select between 1 and 50 tables, views and semantic models, including at least one table."
             elif field in ("team", "database", "subject"):
                 message = f"Select an existing {label.lower()}."
             elif field == "environment":

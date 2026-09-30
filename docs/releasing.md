@@ -25,7 +25,7 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
 
 ## Publish a stable release
 
-1. Update the version in `pyproject.toml`, `package.json`, both fields in `package-lock.json`, `uv.lock` (`uv lock`) and the API versions in `server/app.py` and `user_portal/app.py`. `npm run check:release` rejects any mismatch. Update `CHANGELOG.md` and the version in the install examples.
+1. Update the version in `pyproject.toml`, `package.json`, both fields in `package-lock.json`, `uv.lock` (`uv lock`) and the API versions in `server/app.py` and `user_portal/app.py`. `npm run check:release` rejects any mismatch. Update `CHANGELOG.md`, add the release notes in `docs/releases/X.Y.Z.md` and update the version in the install examples.
 2. Run the [checks](../CONTRIBUTING.md#tests) and the dependency audits:
 
    ```bash
@@ -47,6 +47,8 @@ The workflow rejects a tag that doesn't match the project version or isn't on `m
 2. builds the images on native AMD64 and ARM64
 3. publishes the GitHub release with the archives and `SHA256SUMS`
 4. confirms that the `latest` installer URLs serve the new version
+
+To check a release before merging, run **Actions → Release candidate → Run workflow**. It runs `npm run verify`, builds the source archive, scans it with Gitleaks and publishes nothing.
 
 Never move a published tag. Fix the cause and rerun the workflow instead.
 

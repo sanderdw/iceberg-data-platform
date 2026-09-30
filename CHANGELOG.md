@@ -1,14 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-09-30
 
-- **Polaris 1.8.0 adds semantic models to the Catalog.** Explore datasets, fields, metrics and relationships alongside your tables, and use the models with AI agents.
+- **Polaris 1.8.0 adds semantic models to the Catalog.** Explore datasets, fields, metrics and relationships alongside your tables, and use the models with AI agents. `describe_semantic_model` can also return the stored definition.
 - A semantic model's **Diagram** tab draws its datasets as tables and its relationships as lines between the join columns. Hover a dataset to follow its relationships, or select it to open the table.
-- **AI agents can manage data shares.** New MCP tools list outgoing and received shares, and let team administrators create, edit and revoke shares and replace their secrets. Sharing a semantic model adds the tables it reads, as the portal does. `describe_semantic_model` can also return the stored definition.
-- When a data share includes a semantic model but not the tables it reads, the API now warns about each missing table. Add `includeModelTables=true` to add those tables instead.
-- Updated flight-data notebooks use semantic models stored in the platform, so you can explore and query the example data without local model files.
-- Data shares can include semantic models. Selecting a model also selects the tables it reads, and recipients read exactly the shared models, never list or change them. When you save a share, the portal names any table a shared model reads that the share leaves out.
-- Fixed an issue that could prevent a second write to a table when connecting with DuckDB from your own computer. Download the updated `iceberg_connect.py` helper from the portal.
+- **Data shares can include semantic models.** Selecting a model also selects the tables it reads, and recipients read exactly the shared models, never list or change them. When a share leaves out a table that a shared model reads, the portal and the API name it. Add `includeModelTables=true` to the API call to add those tables instead.
+- **AI agents can manage data shares.** New MCP tools list outgoing and received shares, and let team administrators create, edit and revoke shares and replace their secrets. Sharing a semantic model through MCP adds the tables it reads.
+- The flight-data notebooks use semantic models stored in the platform: notebook 06 publishes the flights model, and notebook 07 reads it without local model files.
+- Notebooks get 2 GB of memory by default (`NOTEBOOK_MEMORY`).
+- Fixed: a second write to a table could fail when connecting with DuckDB from your own computer. Download the updated `iceberg_connect.py` helper from the portal.
 
 ## 0.5.3 - 2026-09-24
 

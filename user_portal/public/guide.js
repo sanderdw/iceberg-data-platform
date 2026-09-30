@@ -93,7 +93,7 @@ function renderGuide() {
 
   const portal = [
     ['Pick your team and environment', ['Active team and Environment at the top decide which databases you see. Your role in the team decides what you can change.']],
-    ['Browse the catalog', ['Open a database to see its namespaces, tables and views: schema, snapshots and a preview of up to 100 rows.'], guideLink('Open the catalog', 'catalog')],
+    ['Browse the catalog', ['Open a database to see its namespaces, tables, views and semantic models: schema, snapshots, a preview of up to 100 rows and a diagram of each model.'], guideLink('Open the catalog', 'catalog')],
     ['Open a notebook', ['Start marimo on a database with your own permissions. The example notebooks 01–07 show PyIceberg and DuckDB. Files are shared by team and environment.'], guideLink('Go to notebooks', 'notebooks')],
     ['Share data', ['Team administrators share tables, views and semantic models with another team or an external party. Data shared with your team appears in your catalog, read-only.'], guideLink('View data shares', 'shares')],
   ];
@@ -125,7 +125,7 @@ function renderGuide() {
       ...mcpRecipes('iceberg-user', `${location.origin}/mcp`).map(([label, code]) => guideCode(label, code))],
     ['Sign in', ['The agent opens Keycloak in your browser on first use, or when you run ', ['codex mcp login iceberg-user'], '. Sign in with your own account. Claude Code listens on port 3010 unless your administrator changed the platform’s MCP callback port.']],
     ['Ask', [manages
-      ? 'Describe what you want to know. The agent lists, describes and previews with your permissions, and as a team administrator it can also create, rename and delete databases.'
+      ? 'Describe what you want to know. The agent lists, describes and previews with your permissions, and as a team administrator it can also create, rename and delete databases and manage data shares.'
       : 'Describe what you want to know. The agent lists, describes and previews your data with your permissions.'], list],
   ] : keycloak;
 
