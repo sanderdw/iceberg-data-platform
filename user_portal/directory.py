@@ -4,10 +4,12 @@ import time
 from dataclasses import dataclass, field
 
 import httpx
+from pydantic import ValidationError
 
 from server.models import DatabaseInput, Environment, ServiceError
-from server.polaris import PolarisProvider, enc
+from server.polaris import MAX_SHARES, PolarisProvider, enc
 from server.storage import RustFSStorage
+from server.validation import validation_message
 
 from .catalog import object_details, properties, semantic_model_details
 
@@ -250,6 +252,107 @@ class UserDirectory:
         principal = self.metadata.require_share(id)
         self.share_database(session, principal["properties"]["portal.database"])
         return principal
+
+    def share_teams(self, session):
+        """Teams that the active team can share with: every other team."""
+        self.manage_team(session)
+        return [{"id": t["id"], "name": t["name"]} for t in self.metadata.list_teams() if t["id"] != session.team]
+
+    def received_shares(self, session):
+        """Shares received by the active team, or by every team of an MCP session, in every environment."""
+        profile = self.profile(session)
+        teams = {t["id"] for t in profile["teams"]}
+        if not session.all_teams and session.team not in teams:
+            raise ServiceError(403, "You are not a member of this team.")
+        recipients = teams if session.all_teams else {session.team}
+        databases = {d["id"]: d for d in self.metadata.list_databases()
+                     if d["status"] == "ready" and (session.all_teams or d["environment"] == session.environment)}
+        team_names = {t["id"]: t["name"] for t in self.metadata.list_teams()}
+        return [{"id": s["id"], "name": s["name"], "description": s["description"],
+                 "database": s["database"], "databaseName": databases[s["database"]]["name"],
+                 "environment": databases[s["database"]]["environment"], "recipientTeam": s["recipientTeam"],
+                 "ownerTeam": databases[s["database"]]["team"],
+                 "ownerTeamName": team_names.get(databases[s["database"]]["team"], databases[s["database"]]["team"]),
+                 "objects": s["objects"], "expiresAt": s["expiresAt"]}
+                for s in self.metadata.list_shares(drift=True)
+                if s.get("recipientTeam") in recipients and s["database"] in databases]
+
+    def outgoing_shares(self, session, database):
+        if self.database(session, database).get("shared"):
+            raise ServiceError(403, "Only the owning team can list outgoing shares.")
+        return {
+            "shares": self.metadata.list_shares(database, drift=True),
+            "limits": {"shares": MAX_SHARES, "objects": 50},
+        }
+
+    def semantic_model_tables(self, session, database, namespace, name):
+        """The Iceberg tables that a semantic model's datasets read, each once."""
+        detail = self.details(session, database, namespace, "semantic-model", name)
+        tables = {}
+        for dataset in (d for m in detail["models"] for d in m["datasets"]):
+            if dataset["table"]:
+                table = {"kind": "table", **dataset["table"]}
+                tables[(tuple(table["namespace"]), table["name"])] = table
+        return list(tables.values())
+
+    def model_tables(self, session, database, data, add):
+        """Check that the tables the selected semantic models read are selected too.
+
+        A model only describes tables; the recipient reads them with the same credential. With
+        `add` the missing tables join the selection, as selecting a model does in the portal;
+        otherwise each one is a warning. A model that cannot be read is skipped, as in the portal.
+        """
+        objects = [o.model_dump() for o in data.objects]
+        selected = {(o["kind"], tuple(o["namespace"]), o["name"]) for o in objects}
+        added, warnings = [], []
+        for model in [o for o in objects if o["kind"] == "semantic-model"]:
+            try:
+                tables = self.semantic_model_tables(session, database, model["namespace"], model["name"])
+            except ServiceError:
+                continue
+            for table in tables:
+                key = ("table", tuple(table["namespace"]), table["name"])
+                if key in selected:
+                    continue
+                path = ".".join([*table["namespace"], table["name"]])
+                if add:
+                    selected.add(key)
+                    objects.append(table)
+                    added.append(table)
+                else:
+                    warnings.append(f"{model['name']} reads {path}, which is not selected.")
+        if added:
+            try:
+                data = type(data).model_validate({**data.model_dump(by_alias=True, exclude_unset=True), "objects": objects})
+            except ValidationError as exc:
+                raise ServiceError(422, validation_message(exc.errors(), "/api/shares")) from None
+        return data, added, warnings
+
+    def create_share(self, session, data, *, include_model_tables=False):
+        database, user = self.share_database(session, data.database)
+        data, added, warnings = self.model_tables(session, data.database, data, include_model_tables)
+        created = self.metadata.create_share(data, user, expected_team=database["team"])
+        return {**created, "addedTables": added, "warnings": warnings}
+
+    def update_share(self, session, id, data, *, include_model_tables=False):
+        principal = self.share(session, id)
+        added, warnings = [], []
+        if data.objects is not None:
+            database = principal["properties"]["portal.database"]
+            data, added, warnings = self.model_tables(session, database, data, include_model_tables)
+        return {"share": self.metadata.update_share(id, data), "addedTables": added, "warnings": warnings}
+
+    def rotate_share(self, session, id):
+        self.share(session, id)
+        return self.metadata.rotate_share(id)
+
+    def delete_share(self, session, id, confirm_name=None):
+        principal = self.share(session, id)
+        name = principal["properties"]["portal.name"]
+        if confirm_name is not None and confirm_name != name:
+            raise ServiceError(422, "Type the share name exactly to confirm revoking it.")
+        self.metadata.delete_share(id)
+        return {"deleted": True, "id": id, "name": name}
 
     def request(self, session, path):
         if session.token_until <= time.monotonic():

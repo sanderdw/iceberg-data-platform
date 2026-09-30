@@ -3,6 +3,9 @@
 ## Unreleased
 
 - **Polaris 1.8.0 adds semantic models to the Catalog.** Explore datasets, fields, metrics and relationships alongside your tables, and use the models with AI agents.
+- A semantic model's **Diagram** tab draws its datasets as tables and its relationships as lines between the join columns. Hover a dataset to follow its relationships, or select it to open the table.
+- **AI agents can manage data shares.** New MCP tools list outgoing and received shares, and let team administrators create, edit and revoke shares and replace their secrets. Sharing a semantic model adds the tables it reads, as the portal does. `describe_semantic_model` can also return the stored definition.
+- When a data share includes a semantic model but not the tables it reads, the API now warns about each missing table. Add `includeModelTables=true` to add those tables instead.
 - Updated flight-data notebooks use semantic models stored in the platform, so you can explore and query the example data without local model files.
 - Data shares can include semantic models. Selecting a model also selects the tables it reads, and recipients read exactly the shared models, never list or change them.
 - Fixed an issue that could prevent a second write to a table when connecting with DuckDB from your own computer. Download the updated `iceberg_connect.py` helper from the portal.

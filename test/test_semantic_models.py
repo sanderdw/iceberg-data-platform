@@ -8,7 +8,7 @@ import pytest
 from server.models import ServiceError
 from server.polaris import ROLES, PolarisProvider
 from test.conftest import SEMANTIC_MODEL
-from test.test_user_portal import HEADERS, login, users  # noqa: F401 - fixture
+from test.test_user_portal import HEADERS, JSON, login, promote, users  # noqa: F401 - fixture
 from user_portal.catalog import semantic_model_details
 
 
@@ -163,6 +163,32 @@ def test_a_shared_model_opens_with_the_recipients_own_token(users):  # noqa: F81
     assert detail.status_code == 200 and detail.json()["models"][0]["name"] == "Analytics"
     assert users.calls[-1].url.path.endswith("/semantic-models/revenue")
     assert users.calls[-1].headers["Authorization"] == "Bearer actual-user-token"
+
+
+def test_sharing_a_model_warns_about_or_adds_the_tables_it_reads(users):  # noqa: F811
+    c, db = users.client, users.databases[0]
+    login(c)
+    promote(users, {users.teams[0]: "admin"})
+    model = {"kind": "semantic-model", "namespace": ["analytics"], "name": "revenue"}
+    events = {"kind": "table", "namespace": ["analytics"], "name": "events"}
+    other = {"kind": "table", "namespace": ["analytics"], "name": "sessions"}
+    body = {"database": db, "name": "partner", "objects": [other, model]}
+    created = c.post("/api/shares", json=body, headers=JSON)
+    assert created.status_code == 201, created.text
+    assert created.json()["warnings"] == ["revenue reads analytics.events, which is not selected."]
+    assert created.json()["addedTables"] == [] and events not in created.json()["share"]["objects"]
+    id = created.json()["share"]["id"]
+    # The API does what selecting a model does in the portal when asked to.
+    updated = c.patch(f"/api/shares/{id}", params={"includeModelTables": "true"}, json={"objects": [other, model]}, headers=JSON)
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["addedTables"] == [events] and updated.json()["warnings"] == []
+    assert {(o["kind"], o["name"]) for o in updated.json()["share"]["objects"]} == {
+        ("table", "events"), ("table", "sessions"), ("semantic-model", "revenue"),
+    }
+    # Other fields stay as they were: only the selection was supplied.
+    assert updated.json()["share"]["name"] == "partner"
+    again = c.patch(f"/api/shares/{id}", json={"objects": [events, model]}, headers=JSON)
+    assert again.json()["warnings"] == [] and again.json()["addedTables"] == []
 
 
 def test_reader_role_can_list_and_read_models_and_only_writers_change_them():

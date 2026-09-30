@@ -34,7 +34,6 @@ from server.models import (
     ShareInput,
     ShareUpdate,
 )
-from server.polaris import MAX_SHARES
 from server.validation import validation_message
 
 from .directory import UserDirectory, validate_namespace
@@ -662,55 +661,35 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
 
     @app.get("/api/share-teams")
     def share_teams(request: Request):
-        directory.manage_team(request.state.session)
-        return [{"id": t["id"], "name": t["name"]} for t in directory.metadata.list_teams()
-                if t["id"] != request.state.session.team]
+        return directory.share_teams(request.state.session)
 
     @app.get("/api/received-shares")
     def received_shares(request: Request):
-        session = request.state.session
-        profile = directory.profile(session)
-        if session.team not in {t["id"] for t in profile["teams"]}:
-            raise ServiceError(403, "You are not a member of this team.")
-        databases = {d["id"]: d for d in directory.metadata.list_databases()
-                     if d["environment"] == session.environment and d["status"] == "ready"}
-        team_names = {t["id"]: t["name"] for t in directory.metadata.list_teams()}
-        return [{"id": s["id"], "name": s["name"], "description": s["description"],
-                 "database": s["database"], "databaseName": databases[s["database"]]["name"],
-                 "ownerTeam": databases[s["database"]]["team"],
-                 "ownerTeamName": team_names.get(databases[s["database"]]["team"], databases[s["database"]]["team"]),
-                 "objects": s["objects"], "expiresAt": s["expiresAt"]}
-                for s in directory.metadata.list_shares(drift=True)
-                if s.get("recipientTeam") == session.team and s["database"] in databases]
+        return directory.received_shares(request.state.session)
 
     @app.get("/api/shares")
     def shares(request: Request, database: Annotated[str, Query(pattern=r"^db-[a-f0-9]{32}$")]):
-        if directory.database(request.state.session, database).get("shared"):
-            raise ServiceError(403, "Only the owning team can list outgoing shares.")
-        return {
-            "shares": directory.metadata.list_shares(database, drift=True),
-            "limits": {"shares": MAX_SHARES, "objects": 50},
-        }
+        return directory.outgoing_shares(request.state.session, database)
+
+    # A semantic model needs the tables it reads. The response warns about missing ones;
+    # `includeModelTables` adds them instead, as selecting a model does in the portal.
+    ModelTables = Annotated[bool, Query(alias="includeModelTables")]
 
     @app.post("/api/shares", status_code=201)
-    def create_share(data: ShareInput, request: Request):
-        database, user = directory.share_database(request.state.session, data.database)
-        return directory.metadata.create_share(data, user, expected_team=database["team"])
+    def create_share(data: ShareInput, request: Request, include_model_tables: ModelTables = False):
+        return directory.create_share(request.state.session, data, include_model_tables=include_model_tables)
 
     @app.patch("/api/shares/{id}")
-    def update_share(id: share_id, data: ShareUpdate, request: Request):
-        directory.share(request.state.session, id)
-        return {"share": directory.metadata.update_share(id, data)}
+    def update_share(id: share_id, data: ShareUpdate, request: Request, include_model_tables: ModelTables = False):
+        return directory.update_share(request.state.session, id, data, include_model_tables=include_model_tables)
 
     @app.post("/api/shares/{id}/rotate")
     def rotate_share(id: share_id, request: Request):
-        directory.share(request.state.session, id)
-        return directory.metadata.rotate_share(id)
+        return directory.rotate_share(request.state.session, id)
 
     @app.delete("/api/shares/{id}")
     def delete_share(id: share_id, request: Request):
-        directory.share(request.state.session, id)
-        directory.metadata.delete_share(id)
+        directory.delete_share(request.state.session, id)
         return {"deleted": True}
 
     @app.get("/iceberg_connect.py", include_in_schema=False)
@@ -731,6 +710,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         "app.js": "app.js",
         "docs.js": "docs.js",
         "catalog.js": "catalog.js",
+        "semantic.js": "semantic.js",
         "shares.js": "shares.js",
         "guide.js": "guide.js",
         "style.css": "style.css",

@@ -190,6 +190,11 @@ function expressionText(expressions) {
   return (expressions || []).map(e => (expressions.length > 1 && e.dialect ? `${e.dialect}: ` : '') + e.expression).join('\n');
 }
 
+async function openDataset(db, ns, dataset) {
+  if (dataset.table.namespace.join('\x1f') !== ns.join('\x1f')) await browse(db, dataset.table.namespace);
+  await inspectObject(db, dataset.table.namespace, 'table', dataset.table.name);
+}
+
 function renderSemanticModel(detail, db, ns, name) {
   const host = $('#objects'), toolbar = element('div', undefined, 'catalog-actions');
   toolbar.append(element('span', 'SEMANTIC MODEL · APACHE OSSIE', 'eyebrow'));
@@ -213,13 +218,19 @@ function renderSemanticModel(detail, db, ns, name) {
     });
     p.append(element('p', 'Semantic models describe what tables mean: fields, relationships and agreed metric definitions. Polaris stores and protects them; it never runs them. Example notebook 06 publishes one; notebook 07 reads it.', 'hint'));
   });
+  if (count('datasets')) tab('Diagram', p => {
+    models.forEach(m => {
+      if (models.length > 1) p.append(element('h3', m.name));
+      if (m.datasets.length) p.append(semanticDiagram(m, {onOpenTable: d => openDataset(db, ns, d)}));
+    });
+  });
   tab('Datasets & fields', p => {
     p.append(element('p', 'A dataset maps to an Iceberg table. Expressions are SQL in the named dialect.', 'hint'));
     if (!count('datasets')) p.append(element('p', 'No datasets.', 'catalog-empty'));
     models.forEach(m => m.datasets.forEach(d => {
       p.append(element('h3', d.name));
       p.append(facts([['Source', d.source], ['Primary key', d.primaryKey.join(', ')], ['Description', d.description]]));
-      if (d.table) p.append(action('Open table →', async () => { if (d.table.namespace.join('\x1f') !== ns.join('\x1f')) await browse(db, d.table.namespace); await inspectObject(db, d.table.namespace, 'table', d.table.name); }));
+      if (d.table) p.append(action('Open table →', () => openDataset(db, ns, d)));
       p.append(dataGrid(['Field', 'Type', 'Dimension', 'Expression', 'Description'], d.fields.map(f => [f.name, f.datatype, f.dimension ? 'Yes' : 'No', expressionText(f.expressions), f.description]), `Fields of ${d.name}`));
     }));
   });

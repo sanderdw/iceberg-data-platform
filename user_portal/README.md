@@ -21,7 +21,7 @@ The top menu has six sections, all scoped to the selected **Active team** and **
 
 - **Team overview:** the team's members and roles, its databases and your active notebooks.
 - **Databases:** team Administrators create, rename and delete the team's databases. Renaming keeps the catalog ID and connection settings. Deletion is immediate and removes all data and shares, so you must type the name to confirm it. If cleanup fails, use **Resume deletion**. Moving a database to another team is a platform-administrator action.
-- **Catalog:** browse namespaces, tables and views. **Details →** shows a table's schema, snapshots, branches and tags, partitioning, sort order and properties, or a view's SQL and versions. **Semantic models** are listed with them; see [Semantic models](#semantic-models). **Load preview** reads up to 100 rows from any snapshot with your own permissions. Everything here is read-only.
+- **Catalog:** browse namespaces, tables and views. **Details →** shows a table's schema, snapshots, branches and tags, partitioning, sort order and properties, or a view's SQL and versions. **Semantic models** are listed with them, with a diagram of their datasets and relationships; see [Semantic models](#semantic-models). **Load preview** reads up to 100 rows from any snapshot with your own permissions. Everything here is read-only.
 - **Notebooks:** open a database in marimo. Choose **Shared files** in the notebook selector to browse team notebooks and the examples.
 - **Data shares:** see [below](#data-shares).
 - **Getting started:** three ways to work with your data: the portal, [your own tools](#connect-from-your-computer) and an [AI agent](#connect-an-mcp-client). It includes the commands for this installation, filled in for a database of the active team.
@@ -60,7 +60,8 @@ A semantic model says what the tables in a namespace mean: datasets that map to 
 
 - **See them:** open a namespace in **Catalog**. Semantic models are listed after tables and views. **Details →** shows the overview, the datasets with their fields (**Open table →** jumps to the Iceberg table), the metrics and relationships, and the stored definition. Reading needs the Reader role.
 - **Create them:** run example notebook **06 · Write an AI-ready flights product**. It needs the Writer role; it publishes the flights tables and then their semantic model. Notebook **07** reads the model back with any role. Writers create, replace and remove models; an update is refused if someone else changed the model since you read it.
-- **Ask an AI agent:** the MCP tools `list_semantic_models` and `describe_semantic_model` return the same information.
+- **See the structure:** the **Diagram** tab draws each dataset as a table with its fields and each relationship as a line between the join columns. Hover a dataset to follow its relationships, or select it to open its table.
+- **Ask an AI agent:** the MCP tools `list_semantic_models` and `describe_semantic_model` return the same information, and `describe_semantic_model` with `include_definition` also returns the stored document.
 - **Share them:** a data share can include semantic models. Recipients see exactly the shared models in **Catalog** and read them with their own account or the share credential; they can't list other models or change any.
 
 Semantic models are a beta feature of Polaris. The platform switches them on; an administrator turns them off with `POLARIS_SEMANTIC_MODELS=false` in `.env`. The portal then simply lists none, and the notebook explains that they are switched off. Databases created before this version don't give the Reader role the new privileges. Grant `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ` to their `reader` catalog role to let readers see models.
@@ -128,7 +129,9 @@ The [administration guide](../docs/admin-guide.md#connect-an-mcp-client) also co
 
 On first use, the agent opens Keycloak in your browser; sign in with your own account. Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again.
 
-Tools: `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `list_semantic_models`, `describe_semantic_model` and `preview_rows`. The semantic-model tools return the datasets, relationships and metric definitions stored next to the tables, so an agent uses the agreed metrics. Team administrators also get `create_database`, `rename_database` and `delete_database`, which requires `confirm_name`. Platform administrators can add the [administration endpoint](../docs/admin-guide.md#connect-an-mcp-client) as a second server.
+Tools: `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `list_semantic_models`, `describe_semantic_model` and `preview_rows`. The semantic-model tools return the datasets, relationships and metric definitions stored next to the tables, so an agent uses the agreed metrics. Team administrators also get `create_database`, `rename_database` and `delete_database`, which requires `confirm_name`.
+
+Data shares: `list_shares` and `list_received_shares` show shares with their objects, and `list_share_teams` names the teams that can receive one. Team administrators also get `create_share`, `update_share`, `rotate_share_credential` and `delete_share`; `delete_share` requires `confirm_name`. By default, sharing a semantic model also shares the tables it reads, as in the portal. `create_share` for an external share and `rotate_share_credential` return the client secret once, so the agent sees it; hand it only to the recipient. Platform administrators can add the [administration endpoint](../docs/admin-guide.md#connect-an-mcp-client) as a second server.
 
 ## Configuration
 

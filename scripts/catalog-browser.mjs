@@ -22,7 +22,8 @@ const semantic = {
   models: [{
     name: 'Energy', description: '<img src=x onerror=alert(1)>Energy use per meter', aiContext: [{label: 'Instructions', value: 'Report kWh per meter.\nExclude test meters.'}, {label: 'Synonyms', value: 'power'}],
     datasets: [{name: 'READINGS', description: '', source: 'lakehouse.analytics.readings', table: {namespace: ['analytics'], name: 'readings'}, primaryKey: ['meter_id'],
-      fields: [{name: 'kwh', description: 'Energy', datatype: 'Decimal', dimension: false, expressions: [{dialect: 'ANSI_SQL', expression: 'kwh'}]}]}],
+      fields: [{name: 'kwh', description: 'Energy', datatype: 'Decimal', dimension: false, expressions: [{dialect: 'ANSI_SQL', expression: 'kwh'}]}]},
+      {name: 'METERS', description: '', source: '', table: null, primaryKey: ['id'], fields: [{name: 'id', description: '', datatype: 'Integer', dimension: true, expressions: []}]}],
     relationships: [{name: 'readings_meter', from: 'READINGS', to: 'METERS', fromColumns: ['meter_id'], toColumns: ['id']}],
     metrics: [{name: 'total_kwh', description: 'Sum of energy', datatype: 'Decimal', expressions: [{dialect: 'ANSI_SQL', expression: 'SUM(READINGS.kwh)'}]}],
   }],
@@ -147,6 +148,14 @@ try {
   await expect(page.locator('#namespace-title')).toHaveText('energy_model');
   expect(page.url()).toBe(modelUrl);
   await page.screenshot({path: 'test-results/catalog/semantic-dark.png', fullPage: true});
+  // The diagram draws each dataset as a box and each relationship as an edge between them.
+  await page.getByRole('tab', {name: 'Diagram', exact: true}).click();
+  await expect(page.locator('.sd-box')).toHaveCount(2);
+  await expect(page.locator('.sd-edge')).toHaveCount(1);
+  await expect(page.locator('.sd-box.sd-open')).toHaveCount(1);
+  await page.locator('.sd-box', {hasText: 'READINGS'}).hover();
+  await expect(page.locator('.sd-box.sd-on')).toHaveCount(2);
+  await page.screenshot({path: 'test-results/catalog/semantic-diagram-dark.png', fullPage: true});
   await page.getByRole('tab', {name: 'Datasets & fields', exact: true}).click();
   await expect(page.getByRole('region', {name: 'Fields of READINGS', exact: true})).toContainText('kwh');
   await page.getByRole('tab', {name: 'Metrics & relationships', exact: true}).click();
@@ -154,7 +163,7 @@ try {
   await expect(page.getByRole('tabpanel')).toContainText('meter_id → id');
   await page.getByRole('tab', {name: 'Definition', exact: true}).click();
   await expect(page.locator('.view-sql')).toContainText('"name": "Energy"');
-  for (const name of ['Overview', 'Datasets & fields', 'Metrics & relationships', 'Definition']) {
+  for (const name of ['Overview', 'Diagram', 'Datasets & fields', 'Metrics & relationships', 'Definition']) {
     await page.getByRole('tab', {name, exact: true}).click();
     await page.setViewportSize({width: 390, height: 844});
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error(`Mobile overflow in semantic ${name}`);
@@ -165,5 +174,5 @@ try {
   await expect(page.locator('#namespace-title')).toHaveText('readings');
   await expect(page.getByRole('tab', {name: 'Snapshots', exact: true})).toBeVisible();
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS: catalog navigation/filtering, connect panel only with OIDC, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts, semantic models listed, filtered, opened by URL and rendered as text');
+  console.log('PASS: catalog navigation/filtering, connect panel only with OIDC, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts, semantic models listed, filtered, opened by URL, rendered as text and drawn as a diagram');
 } finally { await browser.close(); }

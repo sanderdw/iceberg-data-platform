@@ -1,6 +1,7 @@
 """User MCP tools: catalog reads and administrator-scoped database management."""
 
 import time
+from datetime import datetime
 from typing import Annotated, Any
 
 from mcp.server.mcpserver.exceptions import ToolError
@@ -8,7 +9,17 @@ from mcp.types import ToolAnnotations
 from pydantic import Field, ValidationError
 
 from server.mcp_auth import call, current_access, mcp_server, run_locked
-from server.models import DatabaseId, DatabaseInput, DatabaseRename, Environment, ServiceError, TeamId
+from server.models import (
+    DatabaseId,
+    DatabaseInput,
+    DatabaseRename,
+    Environment,
+    ServiceError,
+    ShareInput,
+    ShareObject,
+    ShareUpdate,
+    TeamId,
+)
 from server.validation import validation_message
 
 from .directory import UserSession, validate_namespace
@@ -41,7 +52,18 @@ tables, views, stored files, the bucket and data shares, including in Production
 confirm_name equal to the current display name and can be retried if cleanup stops partway.
 Ask the user before a destructive call. list_databases also returns sharedDatabases: databases
 of other teams shared with one of the user's teams. They are read-only, the catalog tools show
-only their shared tables, views and semantic models, and they cannot be renamed or deleted."""
+only their shared tables, views and semantic models, and they cannot be renamed or deleted.
+Data shares give another team, an external party or both read access to selected tables,
+views and semantic models of a database. list_shares shows a database's outgoing shares and
+list_received_shares the shares received by the user's teams. Only a team administrator may
+create_share, update_share, rotate_share_credential or delete_share, and list_share_teams
+names the teams that can receive one. Views and semantic models share only their definition:
+the recipient reads the underlying tables with the same credential, so select those tables
+too. By default create_share and update_share add the tables that selected semantic models
+read and report them in addedTables. create_share of an external share and
+rotate_share_credential return a client secret once: hand it only to the intended recipient
+and never store it in notebooks, files or chat history. Rotation invalidates the old secret
+and delete_share revokes all access immediately, so ask the user first."""
 
 Namespace = Annotated[
     list[Annotated[str, Field(min_length=1, max_length=256)]],
@@ -54,6 +76,16 @@ Snapshot = Annotated[
 ]
 DatabaseName = Annotated[str, Field(description="3 to 48 lowercase letters, digits, hyphens or underscores, starting with a letter.")]
 Description = Annotated[str, Field(description="Up to 280 characters.")]
+ShareId = Annotated[str, Field(pattern=r"^share-[a-f0-9]{32}$", description="Share id (share-...) from list_shares.")]
+ShareObjects = Annotated[
+    list[ShareObject],
+    Field(min_length=1, max_length=50, description="Tables, views and semantic models to share; include at least one table."),
+]
+Recipient = Annotated[str, Field(description="Who receives the share, for your records; up to 120 characters.")]
+Expiry = Annotated[datetime | None, Field(description="ISO 8601 time at which access ends; never when omitted.")]
+ModelTables = Annotated[
+    bool, Field(description="Also select the tables that selected semantic models read, as the portal does.")
+]
 
 
 def validated(model, path, **fields):
@@ -211,14 +243,20 @@ def create_mcp(directory, oidc, *, lock, previews):
         return {"database": database, "namespace": parts, "semanticModels": models}
 
     @mcp.tool(annotations=READ_ONLY)
-    async def describe_semantic_model(database: DatabaseId, namespace: Namespace, model: Name) -> dict[str, Any]:
-        """Datasets (with their source tables and fields), relationships and metrics of a semantic model."""
+    async def describe_semantic_model(
+        database: DatabaseId, namespace: Namespace, model: Name, include_definition: bool = False
+    ) -> dict[str, Any]:
+        """Datasets (with their source tables and fields), relationships and metrics of a semantic model.
+
+        include_definition also returns the document exactly as Polaris stores it.
+        """
         parts = namespace_parts(namespace, model)
         if not parts:
             raise ToolError("Select a namespace.")
         session, _ = await resolve(database, shared=True)
         details = await query(directory.details, session, database, parts, "semantic-model", model)
-        return {k: details[k] for k in ("name", "namespace", "specVersion", "entityVersion", "models")}
+        keep = ("name", "namespace", "specVersion", "entityVersion", "models") + (("definition",) if include_definition else ())
+        return {k: details[k] for k in keep}
 
     @mcp.tool(annotations=READ_ONLY)
     async def preview_rows(
@@ -238,5 +276,93 @@ def create_mcp(directory, oidc, *, lock, previews):
             # Revocation while reading discards the result, as in the portal preview.
             await query(directory.details, session, database, parts, "table", table)
             return result
+
+    async def owned_share(database, share):
+        """A session for the share's owning database; the share must belong to it."""
+        session, _ = await resolve(database)
+        principal = await query(directory.share, session, share)
+        if principal["properties"]["portal.database"] != database:
+            raise ToolError("This share belongs to another database. Call list_shares first.")
+        return session
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def list_share_teams(database: DatabaseId) -> dict[str, Any]:
+        """Teams that can receive a share of this database: every team other than its owner."""
+        session, _ = await resolve(database)
+        return {"database": database, "teams": await query(directory.share_teams, session)}
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def list_shares(database: DatabaseId) -> dict[str, Any]:
+        """Outgoing data shares of a database, with the objects each one grants; never secrets."""
+        session, _ = await resolve(database)
+        return await query(directory.outgoing_shares, session, database)
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def list_received_shares() -> dict[str, Any]:
+        """Data shares received by any of your teams, in every environment, with their objects."""
+        session, _ = await resolve()
+        return {"shares": await query(directory.received_shares, session)}
+
+    @mcp.tool(annotations=CREATE)
+    async def create_share(
+        database: DatabaseId,
+        name: Name,
+        objects: ShareObjects,
+        external: bool = True,
+        recipient_team: TeamId | None = None,
+        recipient: Recipient = "",
+        description: Description = "",
+        expires_at: Expiry = None,
+        include_model_tables: ModelTables = True,
+    ) -> dict[str, Any]:
+        """Share selected objects of a database you administer with another team, externally, or both.
+
+        An external share returns its connection details and client secret once.
+        """
+        data = validated(
+            ShareInput, "/api/shares", database=database, name=name, objects=[o.model_dump() for o in objects],
+            external=external, recipientTeam=recipient_team, recipient=recipient, description=description,
+            expiresAt=expires_at,
+        )
+        session, _ = await resolve(database)
+        return await query(lambda: directory.create_share(session, data, include_model_tables=include_model_tables))
+
+    @mcp.tool(annotations=UPDATE)
+    async def update_share(
+        database: DatabaseId,
+        share: ShareId,
+        objects: ShareObjects | None = None,
+        recipient: Recipient | None = None,
+        description: Description | None = None,
+        expires_at: Expiry = None,
+        remove_expiry: bool = False,
+        include_model_tables: ModelTables = True,
+    ) -> dict[str, Any]:
+        """Change a share's objects, recipient, description or expiry; omitted fields stay as they are."""
+        if expires_at and remove_expiry:
+            raise ToolError("Give expires_at or remove_expiry, not both.")
+        fields = {"recipient": recipient, "description": description, "expiresAt": expires_at}
+        fields = {k: v for k, v in fields.items() if v is not None}
+        if objects is not None:
+            fields["objects"] = [o.model_dump() for o in objects]
+        if remove_expiry:
+            fields["expiresAt"] = None
+        if not fields:
+            raise ToolError("Nothing to change.")
+        data = validated(ShareUpdate, "/api/shares", **fields)
+        session = await owned_share(database, share)
+        return await query(lambda: directory.update_share(session, share, data, include_model_tables=include_model_tables))
+
+    @mcp.tool(annotations=DESTRUCTIVE)
+    async def rotate_share_credential(database: DatabaseId, share: ShareId) -> dict[str, Any]:
+        """Issue a new client secret for an external share; the old secret stops working at once."""
+        session = await owned_share(database, share)
+        return await query(directory.rotate_share, session, share)
+
+    @mcp.tool(annotations=DESTRUCTIVE)
+    async def delete_share(database: DatabaseId, share: ShareId, confirm_name: str) -> dict[str, Any]:
+        """Revoke a share: all access ends immediately. confirm_name must equal the share's name."""
+        session = await owned_share(database, share)
+        return await query(directory.delete_share, session, share, confirm_name)
 
     return mcp
