@@ -35,4 +35,18 @@ Seeding skips what already exists, and the passwords chosen at the forced first 
 
 Export to PDF: open `index.html?print-pdf` in Chrome and print to PDF.
 
+## Promo video
+
+`promo/` holds a 60 second promo about AI-ready data products: the flights notebook, its quality checks, the semantic model and its diagram, an agent answering with the agreed metric, and a data share of the model. `promo/iceberg-data-platform-promo.mp4` is the video with sound, and `promo/index.html` plays the same timeline live in the browser (space pauses, arrows skip). The closing slide of the deck links to the video.
+
+The page is rendered, not recorded. Every visual is a function of time, `timeline.json` holds the scene times and sound cues, and `data.json` holds the carrier numbers from notebook 07, so the agent scene shows real results. The soundtrack is synthesized from the same timeline by `scripts/promo-audio.py`, so the cuts and sounds stay in sync.
+
+```bash
+npm run presentation:screenshots -- --only 51,52,53   # diagram hover states, notebook 07 and data.json
+npm run promo:render                                 # soundtrack, 1800 frames, MP4 and poster.png
+node scripts/promo-render.mjs --stills 12,44         # single frames in .local/promo/stills
+```
+
+To swap in a produced music track, replace the audio stream: `ffmpeg -i promo/iceberg-data-platform-promo.mp4 -i music.mp3 -map 0:v -map 1:a -c:v copy -c:a aac -shortest out.mp4`.
+
 The deck is published at https://sanderdw.github.io/iceberg-data-platform/ by the `Pages` workflow on every push that touches this folder. The folder is excluded from source releases.

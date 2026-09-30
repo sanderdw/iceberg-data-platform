@@ -250,15 +250,42 @@ try {
   await shot(workspace, '19-user-table-preview');
 
   // The meaning next to the tables: the semantic model notebook 06 stored in Polaris.
-  if (need(43, 44, 49)) {
+  if (need(43, 44, 49, 51, 52)) {
     await openNamespace(workspace, NAMESPACE);
     await openModel(workspace, MODEL);
     await shot(workspace, '43-user-model-overview');
     await showDiagram(workspace);
     await shot(workspace, '44-user-model-diagram');
+    // Hovering a dataset follows its relationships; the promo video fades between these states.
+    const dataset = name => workspace.locator('.sd-box').filter({has: workspace.locator('.sd-name').getByText(name, {exact: true})});
+    await dataset('FLIGHT').hover();
+    await shot(workspace, '51-user-model-hover-flight');
+    await dataset('AIRPORT').hover();
+    await shot(workspace, '52-user-model-hover-airport');
+    await workspace.mouse.move(0, 0);
     await openTab(workspace, 'Metrics & relationships');
     await expect(workspace.getByRole('tabpanel')).toContainText('on_time_arrival_pct');
     await shot(workspace, '49-user-model-metrics');
+  }
+
+  // Notebook 07 answers a business question with the stored metric; the promo video shows its real numbers.
+  if (need(53)) {
+    await toPage(workspace, 'Notebooks');
+    await workspace.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
+    await workspace.locator('#notebook-file').selectOption({label: '07 · Read an AI-ready flights product'});
+    await workspace.frameLocator('#frame-host iframe').locator('.cm-content').first().waitFor({timeout: 180000});
+    const reader = await runNotebook(workspace, '07 · Read an AI-ready flights product', /Example prompt/);
+    await toHeading(reader, /Which carrier is most punctual/);
+    await shot(workspace, '53-user-notebook-carriers');
+    const carriers = await reader.locator('table').filter({hasText: 'scheduled_flights'}).filter({hasText: 'on_time_arrival_pct'}).first().evaluate(table => {
+      const [head, ...rows] = [...table.querySelectorAll('tr')].map(tr => [...tr.children].map(cell => cell.textContent.trim()));
+      return rows.map(row => Object.fromEntries(head.map((name, i) => [name, row[i]])));
+    });
+    mkdirSync('presentation/promo', {recursive: true});
+    writeFileSync('presentation/promo/data.json', JSON.stringify({source: '07 · Read an AI-ready flights product, section 4', carriers}, null, 2) + '\n');
+    console.log('presentation/promo/data.json');
+    await workspace.locator('#close-notebook').click();
+    await workspace.locator('#editor').waitFor({state: 'hidden'});
   }
 
   await signOut(member);
