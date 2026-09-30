@@ -145,6 +145,8 @@ def test_duckdb_sql_escapes_values_and_attaches_read_only_by_default():
     assert "ACCESS_DELEGATION_MODE 'vended_credentials'" in sql[-1] and sql[-1].endswith(", READ_ONLY);")
     writable = helper.duckdb_sql("db-1", "t", alias="sales", write=True).splitlines()
     assert "READ_ONLY" not in writable[-1] and " AS sales " in writable[-1]
+    for statements in (sql, writable):  # A catalog clock ahead of the client must not break writes.
+        assert statements.index("SET iceberg_use_metadata_log = false;") < len(statements) - 2
     with pytest.raises(ValueError, match="identifier"):
         helper.duckdb_sql("db-1", "t", alias="x; DROP")
 

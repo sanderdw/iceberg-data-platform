@@ -4,12 +4,14 @@ import time
 from dataclasses import dataclass, field
 
 import httpx
+from pydantic import ValidationError
 
 from server.models import DatabaseInput, Environment, ServiceError
-from server.polaris import PolarisProvider, enc
+from server.polaris import MAX_SHARES, PolarisProvider, enc
 from server.storage import RustFSStorage
+from server.validation import validation_message
 
-from .catalog import object_details, properties
+from .catalog import object_details, properties, semantic_model_details
 
 
 def validate_namespace(parts):
@@ -17,6 +19,15 @@ def validate_namespace(parts):
         not p or len(p) > 256 or p in (".", "..") or "\x1f" in p or "\0" in p for p in parts
     ):
         raise ServiceError(422, "Invalid namespace.")
+
+
+def shared_objects(info, kind, namespace):
+    """The objects of one kind that a share names in one namespace, sorted by name."""
+    return sorted(
+        [{"name": o["name"], "namespace": o["namespace"]} for o in info["sharedObjects"]
+         if o["kind"] == kind and o["namespace"] == namespace],
+        key=lambda o: o["name"],
+    )
 
 
 @dataclass
@@ -130,7 +141,7 @@ class UserDirectory:
                 received.setdefault(share["database"], []).extend(
                     [o for o in share["objects"] if o.get("granted")]
                     + [{"kind": g["kind"], "namespace": g["namespace"], "name": g["name"], "granted": True}
-                       for g in share.get("extraGrants", []) if g["kind"] in ("table", "view") and g["name"]]
+                       for g in share.get("extraGrants", []) if g["kind"] in ("table", "view", "semantic-model") and g["name"]]
                 )
                 recipient[share["database"]] = min(
                     recipient.get(share["database"], share["recipientTeam"]), share["recipientTeam"],
@@ -242,6 +253,110 @@ class UserDirectory:
         self.share_database(session, principal["properties"]["portal.database"])
         return principal
 
+    def share_teams(self, session):
+        """Teams that the active team can share with: every other team."""
+        self.manage_team(session)
+        return [{"id": t["id"], "name": t["name"]} for t in self.metadata.list_teams() if t["id"] != session.team]
+
+    def received_shares(self, session):
+        """Shares received by the active team, or by every team of an MCP session, in every environment."""
+        profile = self.profile(session)
+        teams = {t["id"] for t in profile["teams"]}
+        if not session.all_teams and session.team not in teams:
+            raise ServiceError(403, "You are not a member of this team.")
+        recipients = teams if session.all_teams else {session.team}
+        databases = {d["id"]: d for d in self.metadata.list_databases()
+                     if d["status"] == "ready" and (session.all_teams or d["environment"] == session.environment)}
+        team_names = {t["id"]: t["name"] for t in self.metadata.list_teams()}
+        return [{"id": s["id"], "name": s["name"], "description": s["description"],
+                 "database": s["database"], "databaseName": databases[s["database"]]["name"],
+                 "environment": databases[s["database"]]["environment"], "recipientTeam": s["recipientTeam"],
+                 "ownerTeam": databases[s["database"]]["team"],
+                 "ownerTeamName": team_names.get(databases[s["database"]]["team"], databases[s["database"]]["team"]),
+                 "objects": s["objects"], "expiresAt": s["expiresAt"]}
+                for s in self.metadata.list_shares(drift=True)
+                if s.get("recipientTeam") in recipients and s["database"] in databases]
+
+    def outgoing_shares(self, session, database):
+        if self.database(session, database).get("shared"):
+            raise ServiceError(403, "Only the owning team can list outgoing shares.")
+        return {
+            "shares": self.metadata.list_shares(database, drift=True),
+            "limits": {"shares": MAX_SHARES, "objects": 50},
+        }
+
+    def semantic_model_tables(self, session, database, namespace, name):
+        """The Iceberg tables that a semantic model's datasets read, each once."""
+        detail = self.details(session, database, namespace, "semantic-model", name)
+        tables = {}
+        for dataset in (d for m in detail["models"] for d in m["datasets"]):
+            if dataset["table"]:
+                table = {"kind": "table", **dataset["table"]}
+                tables[(tuple(table["namespace"]), table["name"])] = table
+        return list(tables.values())
+
+    def model_tables(self, session, database, data, add):
+        """Check that the tables the selected semantic models read are selected too.
+
+        A model only describes tables; the recipient reads them with the same credential. With
+        `add` the missing tables join the selection, as selecting a model does in the portal;
+        otherwise each one is a warning. A model that is missing, hidden or switched off is skipped,
+        as in the portal; an unavailable provider fails the request, so a retry adds the tables.
+        """
+        objects = [o.model_dump() for o in data.objects]
+        selected = {(o["kind"], tuple(o["namespace"]), o["name"]) for o in objects}
+        added, warnings = [], []
+        for model in [o for o in objects if o["kind"] == "semantic-model"]:
+            try:
+                tables = self.semantic_model_tables(session, database, model["namespace"], model["name"])
+            except ServiceError as exc:
+                if exc.status not in (403, 404, 406):
+                    raise
+                continue
+            for table in tables:
+                key = ("table", tuple(table["namespace"]), table["name"])
+                if key in selected:
+                    continue
+                path = ".".join([*table["namespace"], table["name"]])
+                if add:
+                    selected.add(key)
+                    objects.append(table)
+                    added.append(table)
+                else:
+                    warnings.append(f"{model['name']} reads {path}, which is not selected.")
+        if added:
+            try:
+                data = type(data).model_validate({**data.model_dump(by_alias=True, exclude_unset=True), "objects": objects})
+            except ValidationError as exc:
+                raise ServiceError(422, validation_message(exc.errors(), "/api/shares")) from None
+        return data, added, warnings
+
+    def create_share(self, session, data, *, include_model_tables=False):
+        database, user = self.share_database(session, data.database)
+        data, added, warnings = self.model_tables(session, data.database, data, include_model_tables)
+        created = self.metadata.create_share(data, user, expected_team=database["team"])
+        return {**created, "addedTables": added, "warnings": warnings}
+
+    def update_share(self, session, id, data, *, include_model_tables=False):
+        principal = self.share(session, id)
+        added, warnings = [], []
+        if data.objects is not None:
+            database = principal["properties"]["portal.database"]
+            data, added, warnings = self.model_tables(session, database, data, include_model_tables)
+        return {"share": self.metadata.update_share(id, data), "addedTables": added, "warnings": warnings}
+
+    def rotate_share(self, session, id):
+        self.share(session, id)
+        return self.metadata.rotate_share(id)
+
+    def delete_share(self, session, id, confirm_name=None):
+        principal = self.share(session, id)
+        name = principal["properties"]["portal.name"]
+        if confirm_name is not None and confirm_name != name:
+            raise ServiceError(422, "Type the share name exactly to confirm revoking it.")
+        self.metadata.delete_share(id)
+        return {"deleted": True, "id": id, "name": name}
+
     def request(self, session, path):
         if session.token_until <= time.monotonic():
             if session.oidc_subject:
@@ -258,7 +373,12 @@ class UserDirectory:
         except httpx.HTTPError as exc:
             raise ServiceError(503, "The data provider is unavailable.") from exc
         if response.is_error:
-            status = response.status_code if response.status_code in (401, 403, 404) else 502
+            # 406: Polaris has this feature switched off. 503: it is temporarily unavailable, and retrying helps.
+            status = response.status_code if response.status_code in (401, 403, 404, 406, 503) else 502
+            if status == 503:
+                raise ServiceError(503, "The data provider is temporarily unavailable. Try again shortly.")
+            if status == 406:
+                raise ServiceError(406, "Semantic models are switched off in Polaris.")
             raise ServiceError(status, "This content is unavailable with your permissions.")
         return response.json()
 
@@ -298,6 +418,28 @@ class UserDirectory:
                 raise ServiceError(502, "The data provider returned invalid pagination.")
             seen.add(token)
 
+    def semantic_models(self, session, database, namespace):
+        """Semantic model names in a namespace; none when the feature is off or the role cannot list them."""
+        path = (
+            f"/api/catalog/polaris/v1/{enc(database)}/namespaces/{enc(chr(31).join(namespace))}/semantic-models"
+        )
+        try:
+            items = self.pages(session, path, "identifiers")
+        except ServiceError as exc:
+            if exc.status in (403, 404, 406):
+                return []
+            raise
+        return sorted(
+            [{"name": m["name"], "namespace": m["namespace"]} for m in items], key=lambda m: m["name"]
+        )
+
+    def list_semantic_models(self, session, database, namespace):
+        """The semantic models of one namespace, after the same access check as `contents`."""
+        info = self.database(session, database)
+        if info.get("shared"):
+            return shared_objects(info, "semantic-model", namespace)
+        return self.semantic_models(session, database, namespace)
+
     def contents(self, session, database, namespace):
         info = self.database(session, database)
         if info.get("shared"):
@@ -308,10 +450,10 @@ class UserDirectory:
             return {
                 "database": database, "namespace": namespace,
                 "namespaces": [list(parts) for parts in children],
-                **{kind + "s": sorted(
-                    [{"name": o["name"], "namespace": o["namespace"]} for o in objects
-                     if o["kind"] == kind and o["namespace"] == namespace], key=lambda o: o["name"]
-                ) for kind in ("table", "view")},
+                "tables": shared_objects(info, "table", namespace),
+                "views": shared_objects(info, "view", namespace),
+                # The share role cannot list: show exactly the models the share names.
+                "semanticModels": shared_objects(info, "semantic-model", namespace),
             }
         prefix = f"/api/catalog/v1/{enc(database)}"
         encoded = enc("\x1f".join(namespace))
@@ -324,6 +466,7 @@ class UserDirectory:
             "namespaces": sorted(children),
             "tables": [],
             "views": [],
+            "semanticModels": [],
         }
         if namespace:
             for kind in ("tables", "views"):
@@ -331,6 +474,7 @@ class UserDirectory:
                 result[kind] = sorted(
                     [{"name": t["name"], "namespace": t["namespace"]} for t in items], key=lambda t: t["name"]
                 )
+            result["semanticModels"] = self.semantic_models(session, database, namespace)
         return result
 
     def details(self, session, database, namespace, kind, name=None):
@@ -358,6 +502,11 @@ class UserDirectory:
                 "namespace": namespace,
                 "properties": properties(loaded.get("properties", {})),
             }
+        if kind == "semantic-model":
+            polaris = f"/api/catalog/polaris/v1/{enc(database)}/namespaces/{enc(chr(31).join(namespace))}"
+            return semantic_model_details(
+                name, namespace, self.request(session, f"{polaris}/semantic-models/{enc(name)}")
+            )
         loaded = self.request(session, f"{path}/{kind}s/{enc(name)}")
         return {"name": name, "namespace": namespace, **object_details(kind, loaded)}
 

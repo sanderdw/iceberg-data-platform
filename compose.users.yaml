@@ -31,7 +31,7 @@ services:
       RUSTFS_CONTAINER: iceberg-platform-rustfs-1
       NOTEBOOK_IMAGE: iceberg-user-notebook:0.1.0
       MAX_NOTEBOOKS: ${MAX_NOTEBOOKS:-8}
-      NOTEBOOK_MEMORY: ${NOTEBOOK_MEMORY:-1g}
+      NOTEBOOK_MEMORY: ${NOTEBOOK_MEMORY:-2g}
     ports:
       - "127.0.0.1:${USER_PORT:-3002}:3002"
     volumes:

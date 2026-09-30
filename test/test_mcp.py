@@ -20,7 +20,7 @@ from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
 
 from server.mcp_auth import MCP_MAX_BODY, KeycloakVerifier, protected_resource
 from server.models import DatabaseInput, TeamInput, UserInput
-from test.conftest import MemoryPolaris, members
+from test.conftest import SEMANTIC_MODEL, MemoryPolaris, members
 from test.test_oidc import ISSUER, issuer  # noqa: F401 - fixture
 from test.test_user_portal import SNAPSHOT, TABLE_METADATA, FakeRuntime
 from user_portal.app import create_app
@@ -75,6 +75,10 @@ def stack(issuer):  # noqa: F811 - pytest fixture
                               "default-namespace": ["analytics"],
                               "representations": [{"type": "sql", "dialect": "spark", "sql": "SELECT * FROM events"}]}],
             }})
+        if request.url.path.endswith("/semantic-models/revenue"):
+            return httpx.Response(200, json=SEMANTIC_MODEL)
+        if request.url.path.endswith("/semantic-models"):
+            return httpx.Response(200, json={"identifiers": [{"namespace": ["analytics"], "name": "revenue"}]})
         if request.url.path.endswith("/tables"):
             return httpx.Response(200, json={"identifiers": [{"namespace": ["analytics"], "name": "events"}]})
         if request.url.path.endswith("/views"):
@@ -201,6 +205,18 @@ def test_tools_use_the_callers_grants(stack, monkeypatch):
     assert "hidden-" not in text(result)
     result = call(stack, stack.token, "describe_view", {"database": database, "namespace": ["analytics"], "view": "report"})
     assert result.structured_content["versions"][0]["representations"][0]["sql"] == "SELECT * FROM events"
+    result = call(stack, stack.token, "list_semantic_models", {"database": database, "namespace": ["analytics"]})
+    assert result.structured_content["semanticModels"] == [{"name": "revenue", "namespace": ["analytics"]}]
+    result = call(stack, stack.token, "describe_semantic_model", {"database": database, "namespace": ["analytics"], "model": "revenue"})
+    model = result.structured_content["models"][0]
+    assert result.structured_content["entityVersion"] == "3"
+    assert model["metrics"][0]["expressions"] == [{"dialect": "ANSI_SQL", "expression": "COUNT(*)"}]
+    assert model["datasets"][0]["table"] == {"namespace": ["analytics"], "name": "events"}
+    assert "definition" not in result.structured_content
+    result = call(stack, stack.token, "describe_semantic_model", {
+        "database": database, "namespace": ["analytics"], "model": "revenue", "include_definition": True,
+    })
+    assert '"EVENTS"' in result.structured_content["definition"]
     run = Mock(return_value={"columns": ["id"], "rows": [["1"]], "snapshotId": SNAPSHOT, "limit": 3})
     monkeypatch.setattr("user_portal.mcp_server.run_preview", run)
     result = call(stack, stack.token, "preview_rows", {"database": database, "namespace": ["analytics"], "table": "events", "limit": 3})
@@ -341,6 +357,72 @@ def test_renamed_shared_object_stays_visible_under_its_new_name(stack):
     assert result.structured_content["tables"] == [{"name": "events_v2", "namespace": ["analytics"]}]
 
 
+def test_share_tools_manage_the_whole_lifecycle_for_administrators(stack):
+    team, other = stack.teams
+    database = stack.databases[0]
+    model = {"kind": "semantic-model", "namespace": ["analytics"], "name": "revenue"}
+    sessions = {"kind": "table", "namespace": ["analytics"], "name": "sessions"}
+    arguments = {"database": database, "name": "partner", "objects": [sessions, model], "recipient_team": other}
+    refused = call(stack, stack.token, "create_share", arguments)
+    assert refused.is_error and "Only team administrators" in text(refused)
+    stack.provider.update_memberships(stack.account["id"], {team: "admin"})
+    teams = call(stack, stack.token, "list_share_teams", {"database": database}).structured_content["teams"]
+    assert [t["id"] for t in teams] == [other]
+    created = call(stack, stack.token, "create_share", arguments)
+    assert not created.is_error, text(created)
+    result = created.structured_content
+    # Selecting a model selects the tables it reads, as in the portal.
+    assert result["addedTables"] == [{"kind": "table", "namespace": ["analytics"], "name": "events"}]
+    assert {o["name"] for o in result["share"]["objects"]} == {"events", "sessions", "revenue"}
+    secret = result["credentials"]["clientSecret"]
+    id = result["share"]["id"]
+    listed = call(stack, stack.token, "list_shares", {"database": database})
+    assert [s["id"] for s in listed.structured_content["shares"]] == [id] and secret not in text(listed)
+    assert any(o["kind"] == "semantic-model" for o in listed.structured_content["shares"][0]["objects"])
+    updated = call(stack, stack.token, "update_share", {
+        "database": database, "share": id, "objects": [sessions, model], "include_model_tables": False,
+        "description": "Revenue model",
+    })
+    assert not updated.is_error, text(updated)
+    assert updated.structured_content["warnings"] == ["revenue reads analytics.events, which is not selected."]
+    assert updated.structured_content["share"]["description"] == "Revenue model"
+    assert call(stack, stack.token, "update_share", {"database": database, "share": id}).is_error
+    elsewhere = call(stack, stack.token, "rotate_share_credential", {"database": stack.databases[1], "share": id})
+    assert elsewhere.is_error and "not available to you" in text(elsewhere)
+    rotated = call(stack, stack.token, "rotate_share_credential", {"database": database, "share": id})
+    assert not rotated.is_error, text(rotated)
+    assert rotated.structured_content["credentials"]["clientSecret"] != secret
+    refused = call(stack, stack.token, "delete_share", {"database": database, "share": id, "confirm_name": "other"})
+    assert refused.is_error and "exactly" in text(refused)
+    deleted = call(stack, stack.token, "delete_share", {"database": database, "share": id, "confirm_name": "partner"})
+    assert not deleted.is_error, text(deleted)
+    assert call(stack, stack.token, "list_shares", {"database": database}).structured_content["shares"] == []
+
+
+def test_received_shares_cover_every_team_and_owners_alone_manage_them(stack):
+    from test.test_shares import CREATOR, share_input
+
+    team, owner = stack.teams
+    database = stack.databases[1]
+    model = {"kind": "semantic-model", "namespace": ["analytics"], "name": "revenue"}
+    events = {"kind": "table", "namespace": ["analytics"], "name": "events"}
+    share = stack.provider.create_share(
+        share_input(database, objects=[events, model], recipientTeam=team), CREATOR
+    )["share"]
+    received = call(stack, stack.token, "list_received_shares", {})
+    assert not received.is_error, text(received)
+    [found] = received.structured_content["shares"]
+    assert (found["id"], found["recipientTeam"], found["ownerTeam"]) == (share["id"], team, owner)
+    assert model in [{k: o[k] for k in ("kind", "namespace", "name")} for o in found["objects"]]
+    assert "clientId" not in found
+    for name, arguments in [
+        ("list_shares", {"database": database}),
+        ("delete_share", {"database": database, "share": share["id"], "confirm_name": share["name"]}),
+    ]:
+        refused = call(stack, stack.token, name, arguments)
+        assert refused.is_error and "read-only" in text(refused), (name, text(refused))
+
+
 def test_streamable_http_round_trip_authenticates_each_request(stack):
     async def run():
         async with stack.app.router.lifespan_context(stack.app):
@@ -357,11 +439,15 @@ def test_streamable_http_round_trip_authenticates_each_request(stack):
     tools = getattr(tools, "tools", tools)
     assert sorted(t.name for t in tools) == sorted(
         ["list_databases", "list_namespaces", "list_tables", "describe_table", "describe_view", "preview_rows",
-         "create_database", "rename_database", "delete_database"]
+         "list_semantic_models", "describe_semantic_model", "create_database", "rename_database", "delete_database",
+         "list_share_teams", "list_shares", "list_received_shares", "create_share", "update_share",
+         "rotate_share_credential", "delete_share"]
     )
     assert all(t.annotations.read_only_hint for t in tools if t.name in {
         "list_databases", "list_namespaces", "list_tables", "describe_table", "describe_view", "preview_rows",
+        "list_semantic_models", "describe_semantic_model", "list_share_teams", "list_shares", "list_received_shares",
     })
-    assert next(t for t in tools if t.name == "delete_database").annotations.destructive_hint
+    assert all(next(t for t in tools if t.name == name).annotations.destructive_hint
+               for name in ("delete_database", "rotate_share_credential", "delete_share"))
     assert not result.is_error, text(result)
     assert [d["id"] for d in result.structured_content["databases"]] == stack.databases[:1]

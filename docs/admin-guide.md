@@ -23,10 +23,9 @@ You can set up teams, databases and users in three ways: in the portal, through 
 
 | Role | Portal label | Access to every database of that team |
 | --- | --- | --- |
-| `reader` | Read | Read namespaces, tables, views and data |
+| `reader` | Read | Read namespaces, tables, views, semantic models and data |
 | `writer` | Read & write | Also create and write namespaces, tables and views |
 | `admin` | Administrator | Also manage catalog access, databases and data shares |
-| `bucket-admin` | Database + bucket administration | Administrator plus direct S3 credentials for the team's buckets |
 
 The portal's user management uses the `iceberg-provisioner` service account in the `iceberg` realm. For anything else, use the Keycloak console at http://localhost:8080/admin: sign in as `admin` and select the **iceberg** realm. You grant portal administration there by assigning the `iceberg-admin` client role `platform-admin`. **Revoke** refuses accounts that have this role.
 
@@ -36,11 +35,20 @@ Lists refresh every 30 seconds while visible. Navigation and filters are kept in
 
 Team administrators create data shares in the [user portal](../user_portal/README.md#data-shares). The **Data shares** page lists every share with its database, team, objects, expiry and creator, and you can revoke any of them there. A database that has shares can't be moved until they are revoked.
 
-Recipients outside this machine need addresses they can reach. Put Polaris and RustFS behind your own TLS reverse proxy. Expose only `/api/catalog` of Polaris and only the S3 API of RustFS. Then set `POLARIS_PUBLIC_URL` and `S3_ENDPOINT` in `.env` and restart. The administration portal then points the storage of existing databases at the new `S3_ENDPOINT`. For a temporary class or demo, the [quick-share skill](install.md#agent-skills) does all of this through Cloudflare quick tunnels. Read [the security model](../SECURITY.md) first.
+Recipients outside this machine need addresses they can reach: see [deploying beyond localhost](../SECURITY.md#deploying-beyond-localhost). For a temporary class or demo, the [quick-share skill](install.md#agent-skills) sets this up through Cloudflare quick tunnels.
 
 ## Catalog browser
 
-The **Catalog** page browses all Polaris catalogs, namespaces, tables and views, including catalogs created outside the portal. It shows names only, never data, view SQL or credentials.
+The **Catalog** page browses all Polaris catalogs, namespaces, tables, views and semantic models, including catalogs created outside the portal. It shows names only, never data, view SQL, semantic model definitions or credentials.
+
+## Semantic models
+
+Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic models beside the tables they describe. The platform enables the beta feature with `ENABLE_SEMANTIC_MODELS` in `compose.yaml`. Set `POLARIS_SEMANTIC_MODELS=false` in `.env` and restart Polaris to turn it off. Polaris then answers 406 and the user portal lists no models.
+
+- **Access:** the Reader role of a new database gets `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ`. Writers and administrators already have `CATALOG_MANAGE_CONTENT`, which covers creating, replacing and dropping models.
+- **Deleting a database** removes its semantic models first. Polaris refuses to drop a namespace that still holds one.
+- **Where users find them:** **Catalog** in the user portal (the administration portal's **Catalog** lists their names only), the MCP tools `list_semantic_models` and `describe_semantic_model`, and example notebooks 06 (publish) and 07 (read).
+- **Beta:** the Polaris API may change in a later release. Check the [release notes](https://polaris.apache.org/releases/1.8.0/) before upgrading Polaris.
 
 ## Infrastructure
 
@@ -100,6 +108,8 @@ curl -b 'portal_session=<cookie>' -H 'Content-Type: application/json' -H 'X-Port
   -d '{"name": "marketing"}' http://localhost:3000/api/teams
 ```
 
+The table lists the main endpoints; `/docs` has all of them, including Keycloak account management.
+
 | Method | Path | Action |
 | --- | --- | --- |
 | GET / POST / DELETE | `/api/session` | Read session / sign in / sign out |
@@ -122,6 +132,8 @@ Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, in
 
 ## Operations
 
-- Run one portal replica. Sessions are in memory and last at most eight hours, and a lock serializes changes.
+- Run one portal replica; see [deployment boundaries](keycloak.md#deployment-boundaries).
 - Creations and moves roll back when Polaris or RustFS fails. Database deletion can always be resumed.
-- `docker compose down -v` deletes all platform data and resets the installation.
+- Polaris 1.8 does not create the PostgreSQL schema when it bootstraps, so `compose.yaml` names it (`currentSchema=public` in the JDBC URL). A different schema must exist before the first start.
+- List calls return pages when a client sends a `pageToken` (`LIST_PAGINATION_ENABLED`). Without a token the answer is complete, as the Iceberg REST specification requires, so DuckDB and PyIceberg see every table.
+- To stop the platform or reset all data, see [stop and preserve data](install.md#stop-and-preserve-data).

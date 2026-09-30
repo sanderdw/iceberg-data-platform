@@ -1,4 +1,5 @@
 import copy
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -17,6 +18,47 @@ def members(teams, role="reader"):
     """Memberships payload; `role` is one role for all teams or a {team: role} mapping."""
     roles = role if isinstance(role, dict) else dict.fromkeys(teams, role)
     return [{"team": team, "role": roles[team]} for team in teams]
+
+
+# What Polaris 1.8 returns for GET .../semantic-models/{name}: the model is a JSON string inside `document`.
+SEMANTIC_MODEL = {
+    "document": {
+        "version": "0.2.0",
+        # A whole Ossie document: its version and a list with one model.
+        "semantic_model": json.dumps({"version": "0.2.0", "semantic_model": [
+            {
+                "name": "Analytics",
+                "description": "Events and their meaning",
+                "ai_context": {"instructions": "Count events per user.\nIgnore test users.", "synonyms": ["activity"]},
+                "datasets": [
+                    {
+                        "name": "EVENTS",
+                        "source": "lakehouse.analytics.events",
+                        "primary_key": ["id"],
+                        "fields": [
+                            {
+                                "name": "id",
+                                "datatype": "Integer",
+                                "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "id"}]},
+                            }
+                        ],
+                    }
+                ],
+                "relationships": [
+                    {"name": "events_to_users", "from": "EVENTS", "to": "USERS", "from_columns": ["user_id"], "to_columns": ["id"]}
+                ],
+                "metrics": [
+                    {
+                        "name": "event_count",
+                        "datatype": "Integer",
+                        "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "COUNT(*)"}]},
+                    }
+                ],
+            }
+        ]}),
+    },
+    "entity-version": "3",
+}
 
 
 class MemoryPolaris(PolarisProvider):
@@ -106,7 +148,8 @@ class MemoryPolaris(PolarisProvider):
         self.missing.add((tuple(namespace), name))
         for grants in (g for roles in self.catalog_roles.values() for g in roles.values()):
             grants[:] = [
-                g for g in grants if (g.get("tableName") or g.get("viewName"), g.get("namespace")) != (name, namespace)
+                g for g in grants
+                if (g.get("tableName") or g.get("viewName") or g.get("semanticModelName"), g.get("namespace")) != (name, namespace)
             ]
 
     def securables(self, parts, method, body):
@@ -132,7 +175,7 @@ class MemoryPolaris(PolarisProvider):
             if method == "GET":
                 return {"grants": copy.deepcopy(roles[parts[3]])}
             grant = copy.deepcopy(body["grant"])
-            name = grant.get("tableName") or grant.get("viewName")
+            name = grant.get("tableName") or grant.get("viewName") or grant.get("semanticModelName")
             if name and (tuple(grant["namespace"]), name) in self.missing:
                 raise ServiceError(404, "missing")
             if method == "PUT" and grant not in roles[parts[3]]:

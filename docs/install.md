@@ -42,7 +42,7 @@ The skills that use the platform's MCP server explain how to connect each agent.
   - The other address serves the administration portal and sign-in.
   - A gateway keeps the Keycloak administration console, the Polaris management API and the RustFS console off the internet.
   - The addresses are random, public and change whenever the tunnels restart, so end the session with the skill's undo.
-- [`demo-company`](../.agents/skills/demo-company/SKILL.md) sets up a fictional Energy, Webshop or Retail company for a class or training through the [administration MCP server](admin-guide.md#connect-an-mcp-client). It asks how many participants there are (up to 48) and creates one account per participant. The accounts are spread over up to 6 teams of about 4 people, each person in one team, and each team gets its own databases. Each team has one team admin and the others are writers, so every participant can work hands-on. It ends with a numbered list of every username and one-time password, plus a printable page of sign-in slips, one per participant, with the portal address, a QR code and their credentials. Connect the agent to the administration MCP server first; the skill explains how.
+- [`demo-company`](../.agents/skills/demo-company/SKILL.md) sets up a fictional Energy, Webshop or Retail company for a class or training through the [administration MCP server](admin-guide.md#connect-an-mcp-client). It creates one account for each of up to 48 participants in teams of about 4, each with its own databases, gives the platform administrator read-only access to every team, and ends with a printable page of sign-in slips. Connect the agent to the administration MCP server first; the skill explains how.
 
 The skills are updated with the installer. Keep your own changes in a copy under another name.
 
@@ -51,7 +51,7 @@ The skills are updated with the installer. Keep your own changes in a copy under
 Replace `latest/download` with `download/vX.Y.Z`. The bundle, Compose files and images are all pinned to that version:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.5.3/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.6.0/install.sh | sh
 ```
 
 ## Test a branch

@@ -10,20 +10,22 @@ This skill fills an installation with a believable fictional company, sized for 
 - up to 6 teams of about 4 people, each person in exactly one team
 - 2 databases per team (one production, one development)
 - in each team: one team admin, everyone else a writer (no read-only accounts, so every participant can create tables and run notebooks)
+- the platform administrator: read-only access to every team, so the trainer can follow all databases in the user portal
 
 Everything goes through the administration portal's MCP server, the same API the portal uses, so the result behaves exactly like data an administrator entered by hand.
 
 ## Rules
 
 - **One account per participant.** Create exactly as many demo accounts as the class has participants. The trainer uses the platform administrator account and does not count as a participant.
-- **One team per person.** Every `create_user` call gets exactly one membership. Never add a demo user to a second team, and never call `update_user_access` to add teams.
+- **One team per person.** Every `create_user` call gets exactly one membership. Never add a demo user to a second team, and never call `update_user_access` to add teams to a demo user.
 - **Roles are `admin` or `writer` only.** Never `reader`, because trainees must be able to work hands-on. Never `bucket-admin`.
+- **The platform administrator reads everything.** Their own platform user is the only exception to the rules above: it gets `reader` in every blueprint team (step 5) and never counts as a participant.
 - Only create teams and databases from the chosen blueprint, and people from the people pool. Never rename, move or delete existing teams, databases or users unless the user explicitly asks for cleanup.
 - These accounts are fictional demo accounts, and the user asked for their passwords. Collecting each `identity.temporaryPassword` into the summary below is the purpose of this skill. Show the passwords in that summary and in the credentials file; do not copy them anywhere else.
 
 ## 1. Check the MCP connection
 
-You need the tools of the administration MCP server: `get_overview`, `create_team`, `create_database`, `create_user`, `find_accounts`, `list_users` and `retry_user_setup`. Your agent may show them with a prefix, usually the server name (`iceberg-admin`). Call `get_overview` once. It must succeed and report the provider online.
+You need the tools of the administration MCP server: `get_overview`, `create_team`, `create_database`, `create_user`, `find_accounts`, `link_user`, `list_users`, `update_user_access` and `retry_user_setup`. Your agent may show them with a prefix, usually the server name (`iceberg-admin`). Call `get_overview` once. It must succeed and report the provider online.
 
 If the tools are missing, stop and tell the user how to connect. Pick the recipe for the agent you are running in, and fill in the administration address. `<URL>` is `PORTAL_ORIGIN` from `.env` plus `/mcp`, by default `http://localhost:3000/mcp`; after the quick-share skill, the administration tunnel address.
 
@@ -81,7 +83,7 @@ Show the plan in one short table (team, members, roles) and continue without wai
 Before planning, compare with `get_overview` (teams, databases, users). Running the skill again with a bigger class must only add what is missing:
 - **Team** with a blueprint name exists: reuse its id.
 - **Database** with the same name, team and environment exists: skip it.
-- **Members:** platform users who already belong to one of the blueprint's teams count as participants and as members of that team. Only create `N` minus that number of new accounts. They are listed in the summary as "existing, password unchanged". If they already number `N` or more, create nothing, and say so.
+- **Members:** platform users other than the platform administrator's own user who already belong to one of the blueprint's teams count as participants and as members of that team. Only create `N` minus that number of new accounts. They are listed in the summary as "existing, password unchanged". If they already number `N` or more, create nothing, and say so.
 - **Usernames:** a pool username that exists as a platform user outside these teams is skipped. Before each `create_user`, call `find_accounts(username)` and skip the person if an account with that name exists. Never link an existing account.
 
 ## 4. Create
@@ -99,7 +101,18 @@ If `create_user` reports an incomplete setup:
 
 Report any other error and continue with the next object. Never retry a failed create in a loop. At the end, the number of demo accounts in the blueprint's teams must equal `N`. If it doesn't, say how many are missing and why.
 
-## 5. Summary
+## 5. Give the platform administrator read access
+
+Portal administration grants no data access, so give the administrator's own Keycloak account a platform user with `reader` in every blueprint team that exists now. The trainer then sees every demo database in the user portal (switch the active team to browse each one) and can read all tables, but can't change anything.
+
+1. The account is `PLATFORM_ADMIN_USERNAME` from `.env` (default `platform-admin`). Call `find_accounts(<username>)`.
+2. **Not linked yet:** `link_user(username=<username>, name=<username>, memberships=[{"team": <team id>, "role": "reader"}, …])` with one membership per blueprint team. Its password stays the same, so there is nothing to add to the summary.
+3. **Already linked:** find its user in `list_users` (the user named `<username>`). Call `update_user_access(user=<portal-… id>, memberships=…)` with all of its current memberships plus `reader` in each blueprint team it isn't in yet. Never lower a role it already holds in a team.
+4. If the account can't be found or its user isn't in `list_users`, report it and continue.
+
+This also runs when the skill runs again for a bigger class, so new teams are added.
+
+## 6. Summary
 
 Print the summary in your reply, then write the same content to `demo-company-<domain>-credentials.md` in the installation directory (the folder with `.env`). On macOS and Linux, run `chmod 600` on that file.
 
@@ -126,7 +139,7 @@ Databases: <name> (production), <name> (development)
 - Use the actual portal addresses: `PORTAL_ORIGIN` and `USER_ORIGIN` from `.env`, such as the tunnel addresses after the quick-share skill.
 - Number the rows across all teams from 1 to N, so the trainer can hand out one line per participant.
 - Keep this format exactly: the slips script below reads it.
-- End with counts: participants, teams, databases and users created or reused, plus any problems.
+- End with counts: participants, teams, databases and users created or reused, whether the platform administrator has read access to every team, plus any problems.
 
 Then make the printable sign-in slips, one per participant:
 ```sh
@@ -136,16 +149,18 @@ It writes `demo-company-<domain>-slips.html` next to the credentials file, reada
 
 Tell the user both files hold live passwords and should be deleted once the accounts have been handed out.
 
-## 6. Next steps to suggest
+## 7. Next steps to suggest
 
+- The trainer signs in to the user portal with the platform administrator account to follow every team, read-only.
 - Hand out the slips. Each participant signs in to the user portal and sees their own team's databases. Writers can create tables and run notebooks; the team admin can also create databases and data shares. Getting started in the portal (`/#guide`) walks them through the browser, their own tools (DuckDB via `iceberg_connect.py`) and AI agents.
 - For participants outside this machine's network, run the quick-share skill first or afterwards. Until then the addresses on the slips only work on this machine.
 - The new databases are empty. Tables come from the example notebooks in the user portal: on Notebooks, open a database and pick an example in the notebook picker, or from participants' own tools via `iceberg_connect.py`. The admin MCP server cannot create tables.
-- Data shares between teams are created in the user portal by a team admin.
+- Data shares between teams are created by a team admin, in the user portal or through the user portal's MCP server.
 
 ## Cleanup (only when the user asks)
 
 Deleting is irreversible. Confirm with the user first and list exactly what will go. Then work from the blueprint:
-1. `delete_user` for each user whose only team is a blueprint team. Their Keycloak accounts stay and can be removed in the Keycloak console.
+1. `delete_user` for each user whose only team is a blueprint team, except the platform administrator's own user. Their Keycloak accounts stay and can be removed in the Keycloak console.
+   - For the platform administrator's user, call `update_user_access` with only its teams outside the blueprint. If it has none, it can't be deleted while its account holds `platform-admin`, and a team can't be deleted while it's a user's last team. Keep that one blueprint team, and tell the user.
 2. `delete_database(database, confirm_name=<name>)` for each blueprint database. This destroys all its tables and shares.
 3. `delete_team` for each blueprint team.

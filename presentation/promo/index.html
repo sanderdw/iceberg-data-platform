@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI-Ready Data Products</title>
+  <meta name="description" content="A 60 second promo of the Iceberg Data Platform: publish an AI-ready data product, see its semantic model, ask an agent and share it.">
+  <style>
+    /* Fonts: Doto (display), Space Grotesk (body), Space Mono (labels, data). Bundled with the deck, OFL licensed. */
+    @font-face { font-family: "Doto"; src: url("../fonts/doto.ttf") format("truetype"); font-weight: 400 700; font-display: block; }
+    @font-face { font-family: "Space Grotesk"; src: url("../fonts/space-grotesk.ttf") format("truetype"); font-weight: 300 700; font-display: block; }
+    @font-face { font-family: "Space Mono"; src: url("../fonts/space-mono.ttf") format("truetype"); font-weight: 400; font-display: block; }
+
+    /* Nothing design tokens, dark mode only: the video is always OLED black. */
+    :root {
+      --black: #000000; --surface: #111111; --surface-raised: #1A1A1A;
+      --border: #222222; --border-visible: #333333;
+      --text-disabled: #666666; --text-secondary: #999999; --text-primary: #E8E8E8; --text-display: #FFFFFF;
+      --accent: #D71921; --success: #4A9E5C;
+      --grotesk: "Space Grotesk", system-ui, sans-serif; --mono: "Space Mono", ui-monospace, monospace; --doto: "Doto", "Space Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--black); overflow: hidden; }
+    body { font-family: var(--grotesk); color: var(--text-primary); font-synthesis: none; }
+
+    /* A fixed 1920×1080 stage, scaled to fit the window with letterboxing. */
+    #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden; background: var(--black); }
+    .grid { position: absolute; inset: 0; background-image: radial-gradient(circle, #262626 1.4px, transparent 1.5px); background-size: 24px 24px; }
+    .scene { position: absolute; inset: 0; opacity: 0; }
+
+    /* Chrome that stays on screen */
+    .chrome { position: absolute; left: 80px; right: 80px; top: 48px; display: flex; justify-content: space-between; font-family: var(--mono); font-size: 18px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); z-index: 5; }
+    .progress { position: absolute; left: 80px; right: 80px; bottom: 44px; height: 2px; background: var(--border); z-index: 5; }
+    .progress i { display: block; height: 100%; width: 0; background: var(--text-secondary); }
+
+    .label { font-family: var(--mono); font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); }
+    h1, h2, p { margin: 0; font-weight: 500; }
+    .doto { font-family: var(--doto); font-weight: 700; color: var(--text-display); letter-spacing: -0.02em; line-height: 1; }
+
+    /* Screenshot scenes: text column on the left, a framed camera on the right */
+    .copy { position: absolute; left: 80px; top: 200px; width: 540px; }
+    .copy h2 { font-size: 60px; line-height: 1.08; letter-spacing: -0.02em; color: var(--text-display); margin: 28px 0 32px; }
+    .copy p { font-size: 26px; line-height: 1.45; color: var(--text-secondary); font-weight: 400; }
+    .panel { position: absolute; left: 680px; top: 170px; width: 1160px; height: 725px; border: 1px solid var(--border-visible); border-radius: 12px; overflow: hidden; background: var(--black); }
+    .panel img { position: absolute; left: 0; top: 0; width: 2000px; height: 1250px; transform-origin: 0 0; }
+    .stats { display: grid; gap: 28px; margin-top: 48px; }
+    .stat .n { font-family: var(--doto); font-weight: 700; font-size: 84px; line-height: 1; color: var(--text-display); }
+    .stat .n.ok { color: var(--success); }
+    .stat .k { font-family: var(--mono); font-size: 18px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); margin-top: 8px; }
+
+    /* Hook and problem */
+    #hook h1 { position: absolute; left: 80px; top: 330px; font-size: 172px; }
+    #hook h1 span { opacity: 0; }
+    #problem .qs { position: absolute; left: 80px; top: 230px; font-size: 96px; line-height: 1.18; letter-spacing: -0.02em; color: var(--text-display); }
+    #problem .qs div { height: 114px; white-space: pre; }
+    #problem .caret { display: inline-block; width: 6px; height: 84px; background: var(--text-display); vertical-align: -10px; margin-left: 6px; }
+    #problem .claim { position: absolute; left: 80px; top: 690px; font-size: 48px; color: var(--text-display); opacity: 0; }
+
+    /* Meaning: the stored document types in */
+    #meaning pre { position: absolute; left: 680px; top: 170px; width: 1160px; height: 725px; margin: 0; padding: 40px 48px; border: 1px solid var(--border-visible); border-radius: 12px; background: var(--surface); font-family: var(--mono); font-size: 23px; line-height: 1.6; color: var(--text-disabled); white-space: pre; overflow: hidden; }
+    #meaning pre .k { color: var(--text-display); }
+    #meaning pre .s { color: var(--text-primary); }
+
+    /* Diagram: a wide camera under a one-line header */
+    #diagram .head { position: absolute; left: 80px; top: 150px; right: 80px; display: flex; align-items: baseline; gap: 40px; }
+    #diagram .head h2 { font-size: 60px; letter-spacing: -0.02em; color: var(--text-display); }
+    #diagram .head p { margin-left: auto; font-size: 24px; color: var(--text-secondary); font-weight: 400; }
+    #diagram .panel { left: 80px; top: 270px; width: 1760px; height: 720px; }
+
+    /* Ask: an agent session in a terminal pane */
+    #ask .term { position: absolute; left: 680px; top: 170px; width: 1160px; height: 725px; border: 1px solid var(--border-visible); border-radius: 12px; background: var(--surface); padding: 36px 48px; font-family: var(--mono); font-size: 22px; line-height: 1.55; color: var(--text-secondary); }
+    #ask .bar { font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-disabled); padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+    #ask .who { margin-top: 20px; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-disabled); }
+    #ask .prompt { color: var(--text-display); font-size: 26px; min-height: 42px; white-space: pre; margin-top: 4px; }
+    #ask .step { margin-top: 8px; opacity: 0; color: var(--text-primary); }
+    #ask .step.who { margin-top: 28px; color: var(--text-disabled); }
+    #ask .step b { font-weight: 400; color: var(--text-display); }
+    #ask .rows { margin-top: 26px; display: grid; gap: 16px; }
+    #ask .row { display: grid; grid-template-columns: 290px 1fr 120px; align-items: center; gap: 20px; opacity: 0; color: var(--text-primary); }
+    #ask .row .track { height: 14px; background: var(--border); border-radius: 2px; }
+    #ask .row .fill { height: 100%; width: 0; background: var(--text-display); border-radius: 2px; }
+    #ask .row.top .fill { background: var(--accent); }
+    #ask .row .v { text-align: right; color: var(--text-display); }
+    #ask .answer { margin-top: 34px; padding-top: 22px; border-top: 1px solid var(--border); color: var(--text-primary); white-space: normal; }
+    #ask .foot { position: absolute; left: 48px; right: 48px; bottom: 30px; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-disabled); opacity: 0; }
+
+    /* Share: two captures in the same camera */
+    #share .panel img { opacity: 0; }
+
+    /* End card */
+    #end h1 { position: absolute; left: 80px; top: 190px; font-size: 150px; line-height: 1.08; }
+    #end .lede { position: absolute; left: 80px; top: 560px; font-size: 34px; color: var(--text-primary); font-weight: 400; }
+    #end .cmd { position: absolute; left: 80px; top: 650px; padding: 22px 32px; border: 1px solid var(--border-visible); border-radius: 8px; background: var(--surface); font-family: var(--mono); font-size: 24px; color: var(--text-display); }
+    #end .cmd span { color: var(--text-disabled); }
+    #end .meta { position: absolute; left: 80px; top: 800px; display: grid; gap: 14px; }
+    #end .repo { font-size: 34px; color: var(--text-display); }
+    #end .stack { font-family: var(--mono); font-size: 18px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); }
+
+    /* Live playback only: quiet controls under the stage */
+    .controls { position: fixed; left: 16px; right: 16px; bottom: 12px; display: flex; gap: 16px; align-items: center; font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-disabled); z-index: 10; }
+    .controls a { color: var(--text-secondary); text-decoration: underline; text-decoration-color: var(--text-disabled); text-underline-offset: 4px; margin-left: auto; }
+    .controls button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--text-secondary); background: none; border: 1px solid var(--border-visible); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+    body.render .controls { display: none; }
+  </style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid" id="grid"></div>
+  <div class="chrome"><span>Iceberg Data Platform</span><span id="chrome-right">AI-ready data products</span></div>
+
+  <section class="scene" id="hook">
+    <h1 class="doto" aria-label="Tables are not enough."></h1>
+  </section>
+
+  <section class="scene" id="problem">
+    <div class="qs"><div></div><div></div><div></div></div>
+    <p class="claim">An AI agent has to know what the data means.</p>
+  </section>
+
+  <section class="scene" id="notebook">
+    <div class="copy">
+      <div class="label">01 · Build</div>
+      <h2>A team builds a data product.</h2>
+      <p>In a notebook in the browser, the team creates 12,000 flights and stores them as Apache Iceberg tables, an open format that any data tool can read.</p>
+      <div class="stats">
+        <div class="stat"><div class="n" data-count="12000">0</div><div class="k">Synthetic flights</div></div>
+        <div class="stat"><div class="n" data-count="6">0</div><div class="k">Iceberg tables</div></div>
+      </div>
+    </div>
+    <div class="panel"><img src="../screenshots/41-user-notebook-flights.png" alt=""></div>
+  </section>
+
+  <section class="scene" id="evidence">
+    <div class="copy">
+      <div class="label">02 · Check</div>
+      <h2>Nothing is published unless it passes.</h2>
+      <p>Before a single table is written, the data is checked: every ID unique, every join valid, every time and place plausible.</p>
+      <div class="stats">
+        <div class="stat"><div class="n" data-count="11">0</div><div class="k">Quality checks</div></div>
+        <div class="stat"><div class="n ok">0</div><div class="k">Violations</div></div>
+      </div>
+    </div>
+    <div class="panel"><img src="../screenshots/42-user-notebook-checks.png" alt=""></div>
+  </section>
+
+  <section class="scene" id="meaning">
+    <div class="copy">
+      <div class="label">03 · Semantic model</div>
+      <h2>The meaning goes into a semantic model.</h2>
+      <p>It follows Apache Ossie, an open standard for semantic models: what one row means, how the tables join, and agreed metrics such as on-time arrival. The catalog stores it next to the tables.</p>
+    </div>
+    <pre></pre>
+  </section>
+
+  <section class="scene" id="diagram">
+    <div class="head"><span class="label">04 · See it</span><h2>See how the data fits together.</h2><p>Drawn from the semantic model.</p></div>
+    <div class="panel">
+      <img src="../screenshots/44-user-model-diagram.png" alt="">
+      <img src="../screenshots/51-user-model-hover-flight.png" alt="">
+      <img src="../screenshots/52-user-model-hover-airport.png" alt="">
+    </div>
+  </section>
+
+  <section class="scene" id="ask">
+    <div class="copy">
+      <div class="label">05 · Conversational BI</div>
+      <h2>Ask your data a question in plain language.</h2>
+      <p>An AI agent reads the semantic model first. So every answer uses the agreed definition, not the agent's own guess.</p>
+    </div>
+    <div class="term">
+      <div class="bar">Conversational BI · AI agent on the catalog</div>
+      <div class="who">You</div>
+      <div class="prompt"></div>
+      <div class="step who">Agent</div>
+      <div class="step">Looks up “punctual” in the flights semantic model.</div>
+      <div class="step">Agreed metric: <b>on-time arrival</b>, arrived less than 15 minutes late. Canceled and diverted flights don't count.</div>
+      <div class="rows" id="rows"></div>
+      <div class="step answer"></div>
+      <div class="foot">Illustrative conversation · real numbers from the published synthetic data</div>
+    </div>
+  </section>
+
+  <section class="scene" id="share">
+    <div class="copy">
+      <div class="label">06 · Share</div>
+      <h2>Share it, meaning included.</h2>
+      <p>Another team or an outside partner reads the same tables and the same semantic model. No copies to maintain, and access can be revoked at any time.</p>
+    </div>
+    <div class="panel">
+      <img src="../screenshots/32-user-share-form.png" alt="">
+      <img src="../screenshots/50-user-received-model-diagram.png" alt="">
+    </div>
+  </section>
+
+  <section class="scene" id="end">
+    <h1 class="doto">Open.<br>Yours to run.</h1>
+    <p class="lede">Iceberg Data Platform is open source. Install it on your own machine with one command.</p>
+    <div class="cmd"><span>$</span> curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh</div>
+    <div class="meta">
+      <div class="repo">github.com/sanderdw/iceberg-data-platform</div>
+      <div class="stack">Apache Iceberg · Apache Polaris · Keycloak · marimo · DuckDB · Apache-2.0</div>
+    </div>
+  </section>
+
+  <div class="progress"><i id="progress"></i></div>
+</div>
+
+<div class="controls"><button id="play" type="button">Pause</button><span id="clock">0:00</span><span>Space pauses · arrows skip</span><a href="iceberg-data-platform-promo.mp4">MP4 with sound ↗</a></div>
+
+<script>
+// Every visual is a pure function of t, so the renderer can step frame by frame.
+const $ = s => document.querySelector(s);
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, p) => a + (b - a) * p;
+// cubic-bezier(0.25, 0.1, 0.25, 1), the deck's easing
+function ease(x) {
+  const bx = t => 3 * (1 - t) ** 2 * t * 0.25 + 3 * (1 - t) * t * t * 0.25 + t ** 3;
+  const by = t => 3 * (1 - t) ** 2 * t * 0.1 + 3 * (1 - t) * t * t * 1 + t ** 3;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 24; i++) { const mid = (lo + hi) / 2; if (bx(mid) < x) lo = mid; else hi = mid; }
+  return by((lo + hi) / 2);
+}
+const span = (t, a, b) => ease(clamp((t - a) / (b - a)));
+// A deterministic pseudo-random value per index, for the dot-matrix build.
+const hash = i => { const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); };
+
+let timeline, scenes = {};
+
+// A camera over a 2000×1250 capture: crop is {x, y, w} in CSS pixels of the capture.
+function camera(img, panel, crop, opacity = 1) {
+  const s = panel.clientWidth / crop.w;
+  img.style.transform = `translate(${-crop.x * s}px, ${-crop.y * s}px) scale(${s})`;
+  img.style.opacity = opacity;
+}
+const mix = (a, b, p) => ({x: lerp(a.x, b.x, p), y: lerp(a.y, b.y, p), w: lerp(a.w, b.w, p)});
+const count = (el, value, p) => { el.textContent = Math.round(value * p).toLocaleString('en-US'); };
+
+// Scene entry and exit: a short fade and a small rise for the copy.
+function visibility(el, t, s, first, last) {
+  const fin = first ? 1 : span(t, s.start, s.start + 0.35), fout = last ? 1 : 1 - span(t, s.end - 0.35, s.end);
+  const v = t >= s.start && t < s.end ? Math.min(fin, fout) : 0;
+  el.style.opacity = v;
+  el.style.visibility = v > 0 ? 'visible' : 'hidden';
+  return v;
+}
+function rise(el, t, start) { const p = span(t, start, start + 0.6); el.style.transform = `translateY(${(1 - p) * 16}px)`; el.style.opacity = p; }
+
+const HOOK = [['Tables', 0.5], ['are', 0.95], ['not', 1.35], ['enough.', 1.85]];
+const QUESTIONS = ['Which metric?', 'Which join?', 'Which grain?'];
+const MODEL = [
+  ['{', ''],
+  ['  <k>"name"</k>: <s>"Flights"</s>,', ''],
+  ['  <k>"description"</k>: <s>"One row in FLIGHT per scheduled flight"</s>,', ''],
+  ['  <k>"datasets"</k>: [{ <k>"name"</k>: <s>"FLIGHT"</s>,', ''],
+  ['    <k>"source"</k>: <s>"lakehouse.ai_flights.flights"</s>,', ''],
+  ['    <k>"primary_key"</k>: [<s>"id"</s>] }, …],', ''],
+  ['  <k>"relationships"</k>: [{ <k>"name"</k>: <s>"flight_route"</s>,', ''],
+  ['    <k>"from_columns"</k>: [<s>"route_id"</s>], <k>"to"</k>: <s>"ROUTE"</s> }, …],', ''],
+  ['  <k>"metrics"</k>: [{ <k>"name"</k>: <s>"on_time_arrival_pct"</s>,', ''],
+  ['    <k>"description"</k>: <s>"Arrival delay &lt; 15 minutes among</s>', ''],
+  ['      <s>noncanceled, nondiverted flights. Unit: percent."</s> }, …],', ''],
+  ['  <k>"ai_context"</k>: { <k>"instructions"</k>:', ''],
+  ['    <s>"Never join RUNWAY into a flight aggregate …</s>', ''],
+  ['     <s>State the denominator, units and exclusions."</s> }', ''],
+  ['}', ''],
+];
+
+function build(data) {
+  const h1 = $('#hook h1');
+  HOOK.forEach(([word], w) => {
+    if (w === 2) h1.append(document.createElement('br'));
+    [...word].forEach(ch => { const s = document.createElement('span'); s.textContent = ch; s.dataset.word = w; h1.append(s); });
+    h1.append(' ');
+  });
+  // Plain text per line, with the markup kept aside, so typing can cut at any character.
+  scenes.model = MODEL.map(([html]) => {
+    const tmp = document.createElement('div'); tmp.innerHTML = html.replace(/<k>/g, '<span class="k">').replace(/<s>/g, '<span class="s">').replace(/<\/[ks]>/g, '</span>');
+    return {html: tmp.innerHTML, text: tmp.textContent};
+  });
+  scenes.modelChars = scenes.model.reduce((n, l) => n + l.text.length + 1, 0);
+  const rows = $('#rows'), top = Math.max(...data.carriers.map(c => +c.on_time_arrival_pct));
+  data.carriers.forEach(c => {
+    const row = document.createElement('div'); row.className = 'row' + (+c.on_time_arrival_pct === top ? ' top' : '');
+    row.innerHTML = `<span></span><div class="track"><div class="fill"></div></div><span class="v"></span>`;
+    row.children[0].textContent = c.carrier; row.dataset.value = c.on_time_arrival_pct;
+    rows.append(row);
+  });
+  const lead = data.carriers.find(c => +c.on_time_arrival_pct === top);
+  $('#ask .answer').textContent = `${lead.carrier} was the most punctual: ${lead.on_time_arrival_pct}% of its ${(+lead.eligible_arrivals).toLocaleString('en-US')} counted arrivals were on time.`;
+}
+
+// Cuts the model's markup after n visible characters.
+function typedHtml(line, n) {
+  if (n >= line.text.length) return line.html;
+  const tmp = document.createElement('div'); tmp.innerHTML = line.html;
+  let left = n;
+  const walk = node => {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType === 3) { if (left <= 0) child.remove(); else { child.textContent = child.textContent.slice(0, left); left -= child.textContent.length; } }
+      else { walk(child); if (!child.textContent) child.remove(); }
+    }
+  };
+  walk(tmp); return tmp.innerHTML;
+}
+
+function seek(t) {
+  const S = Object.fromEntries(timeline.scenes.map(s => [s.id, s])), D = timeline.duration;
+  $('#progress').style.width = `${clamp(t / D) * 100}%`;
+  $('#grid').style.opacity = t < S.problem.end ? 1 : t >= S.end.start ? span(t, S.end.start, S.end.start + 0.6) : 0.35;
+
+  // Hook: each word builds dot by dot.
+  const hook = S.hook;
+  if (visibility($('#hook'), t, hook, true)) {
+    $('#hook h1').querySelectorAll('span').forEach((s, i) => { const at = HOOK[s.dataset.word][1] + hash(i) * 0.28; s.style.opacity = t >= at ? 1 : 0; });
+  }
+
+  // Problem: three questions type in, then the claim.
+  const pr = S.problem;
+  if (visibility($('#problem'), t, pr)) {
+    const windows = timeline.cues.typing.slice(0, 3);
+    $('#problem .qs').querySelectorAll('div').forEach((line, i) => {
+      const w = windows[i], p = clamp((t - w.start) / (w.end - w.start)), n = Math.round(QUESTIONS[i].length * p);
+      const typing = t >= w.start && (i === 2 ? t < pr.start + 3.6 : t < windows[i + 1].start);
+      line.innerHTML = ''; line.append(QUESTIONS[i].slice(0, n));
+      if (typing && Math.floor(t * 3) % 2 === 0) { const c = document.createElement('span'); c.className = 'caret'; line.append(c); }
+      line.style.color = t > pr.start + 3.2 ? 'var(--text-disabled)' : 'var(--text-display)';
+    });
+    rise($('#problem .claim'), t, pr.start + 3.3);
+  }
+
+  // 01 Notebook: pan into the notebook, counters run up.
+  const nb = S.notebook;
+  if (visibility($('#notebook'), t, nb)) {
+    const p = span(t, nb.start, nb.end);
+    camera($('#notebook img'), $('#notebook .panel'), mix({x: 440, y: 150, w: 1480}, {x: 610, y: 175, w: 1130}, p));
+    rise($('#notebook .copy'), t, nb.start + 0.1);
+    $('#notebook').querySelectorAll('[data-count]').forEach((el, i) => count(el, +el.dataset.count, span(t, nb.start + 1.2 + i * 0.5, nb.start + 3.2 + i * 0.5)));
+  }
+
+  // 02 Evidence: zoom on the checks table.
+  const ev = S.evidence;
+  if (visibility($('#evidence'), t, ev)) {
+    const p = span(t, ev.start + 0.4, ev.end - 0.8);
+    camera($('#evidence img'), $('#evidence .panel'), mix({x: 470, y: 150, w: 1400}, {x: 600, y: 330, w: 660}, p));
+    rise($('#evidence .copy'), t, ev.start + 0.1);
+    count($('#evidence [data-count]'), 11, span(t, ev.start + 1.0, ev.start + 2.8));
+  }
+
+  // 03 Meaning: the stored document types in.
+  const me = S.meaning;
+  if (visibility($('#meaning'), t, me)) {
+    rise($('#meaning .copy'), t, me.start + 0.1);
+    const w = timeline.cues.typing[3], shown = Math.round(scenes.modelChars * clamp((t - w.start) / (w.end - w.start)));
+    let left = shown;
+    $('#meaning pre').innerHTML = scenes.model.map(line => { const n = clamp(left, 0, line.text.length); left -= line.text.length + 1; return typedHtml(line, n); }).join('\n');
+  }
+
+  // 04 Diagram: the model, then FLIGHT's joins, then AIRPORT's.
+  const dg = S.diagram;
+  if (visibility($('#diagram'), t, dg)) {
+    const [base, flight, airport] = $('#diagram .panel').querySelectorAll('img'), crop = mix({x: 452, y: 646, w: 1400}, {x: 470, y: 660, w: 1330}, span(t, dg.start, dg.end));
+    camera(base, $('#diagram .panel'), crop);
+    camera(flight, $('#diagram .panel'), crop, span(t, dg.start + 2.4, dg.start + 2.9) * (1 - span(t, dg.start + 5.0, dg.start + 5.5)));
+    camera(airport, $('#diagram .panel'), crop, span(t, dg.start + 5.0, dg.start + 5.5));
+    rise($('#diagram .head'), t, dg.start + 0.1);
+  }
+
+  // 05 Ask: prompt, tool call, then the answer with the stored metric.
+  const ak = S.ask;
+  if (visibility($('#ask'), t, ak)) {
+    rise($('#ask .copy'), t, ak.start + 0.1);
+    const w = timeline.cues.typing[4], prompt = 'Which airline was most punctual in January 2026?';
+    $('#ask .prompt').textContent = prompt.slice(0, Math.round(prompt.length * clamp((t - w.start) / (w.end - w.start))));
+    $('#ask').querySelectorAll('.step:not(.answer)').forEach((el, i) => rise(el, t, w.end + 0.3 + i * 0.6));
+    rise($('#ask .answer'), t, w.end + 4.2);
+    const rows = [...$('#ask').querySelectorAll('.row')];
+    rows.forEach((row, i) => {
+      const at = w.end + 2.4 + i * 0.35, p = span(t, at, at + 1.2);
+      rise(row, t, at);
+      row.querySelector('.fill').style.width = `${+row.dataset.value * p}%`;
+      row.querySelector('.v').textContent = `${(+row.dataset.value * p).toFixed(2)}%`;
+    });
+    rise($('#ask .foot'), t, w.end + 4.8);
+  }
+
+  // 06 Share: the form with the model selected, then what the recipient sees.
+  const sh = S.share;
+  if (visibility($('#share'), t, sh)) {
+    rise($('#share .copy'), t, sh.start + 0.1);
+    const [form, received] = $('#share .panel').querySelectorAll('img'), swap = span(t, sh.start + 2.9, sh.start + 3.3);
+    camera(form, $('#share .panel'), mix({x: 140, y: 520, w: 900}, {x: 140, y: 690, w: 900}, span(t, sh.start, sh.start + 3)), 1 - swap);
+    camera(received, $('#share .panel'), mix({x: 440, y: 190, w: 1440}, {x: 452, y: 250, w: 1400}, span(t, sh.start + 3, sh.end)), swap);
+  }
+
+  // End card
+  const en = S.end;
+  if (visibility($('#end'), t, en, false, true)) {
+    rise($('#end h1'), t, en.start + 0.2);
+    rise($('#end .lede'), t, en.start + 0.8);
+    rise($('#end .cmd'), t, en.start + 1.4);
+    rise($('#end .meta'), t, en.start + 2.0);
+  }
+  $('#chrome-right').textContent = t >= en.start ? 'Open source · Apache-2.0' : 'AI-ready data products';
+}
+
+// Letterbox: the largest scale that fits, centred.
+function fit() {
+  const k = Math.min(innerWidth / 1920, innerHeight / 1080), st = $('#stage');
+  st.style.left = `${(innerWidth - 1920 * k) / 2}px`; st.style.top = `${(innerHeight - 1080 * k) / 2}px`; st.style.transform = `scale(${k})`;
+}
+
+window.promoReady = (async () => {
+  const [tl, data] = await Promise.all(['timeline.json', 'data.json'].map(async f => (await fetch(f)).json()));
+  timeline = tl; build(data);
+  await document.fonts.ready;
+  await Promise.all([...document.images].map(img => img.decode()));
+  fit(); addEventListener('resize', fit);
+  window.seek = seek;
+  seek(0);
+  if (new URLSearchParams(location.search).has('render')) { document.body.classList.add('render'); return true; }
+  // Live playback, looping, with play/pause and skip.
+  let origin = performance.now(), paused = false, at = 0;
+  const clock = $('#clock'), play = $('#play');
+  const toggle = () => { paused = !paused; play.textContent = paused ? 'Play' : 'Pause'; origin = performance.now() - at * 1000; };
+  play.addEventListener('click', toggle);
+  addEventListener('keydown', e => {
+    if (e.key === ' ') { e.preventDefault(); toggle(); }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { at = clamp(at + (e.key === 'ArrowRight' ? 2 : -2), 0, timeline.duration - 0.01); origin = performance.now() - at * 1000; seek(at); }
+  });
+  const loop = now => {
+    if (!paused) { at = ((now - origin) / 1000) % timeline.duration; seek(at); }
+    clock.textContent = `0:${String(Math.floor(at)).padStart(2, '0')}`;
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+  return true;
+})();
+</script>
+</body>
+</html>

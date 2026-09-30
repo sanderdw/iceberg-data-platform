@@ -1,5 +1,6 @@
 """Read a shared table with only the share credential; everything else must stay closed."""
 
+import json
 import os
 
 import boto3
@@ -94,6 +95,35 @@ def main():
         foreign = httpx.get(f"{p.url}/api/catalog/v1/{other}/namespaces/sales/tables/elsewhere", headers=bearer)
         assert foreign.status_code == 403, foreign.status_code
         print("PASS: other tables, listings, writes and other databases are forbidden")
+
+        # A semantic model is shared by name like a table: the credential reads exactly that model.
+        models = f"{p.url}/api/catalog/polaris/v1/{db}/namespaces/sales/semantic-models"
+        document = {"version": "0.2.0", "semantic_model": json.dumps(
+            {"version": "0.2.0", "semantic_model": [{"name": "Sales", "datasets": [
+                {"name": "ORDERS", "source": "lakehouse.sales.orders", "primary_key": ["id"], "fields": []}]}]})}
+        owner_token = {"Authorization": f"Bearer {token(p, admin['credentials'])}"}
+        for model in ("sales", "private"):
+            created = httpx.post(models, json={"name": model, "document": document}, headers=owner_token)
+            assert created.status_code == 200, created.status_code
+        closed = {"load": httpx.get(models + "/sales", headers=bearer).status_code}
+        model_object = {"kind": "semantic-model", "namespace": ["sales"], "name": "sales"}
+        updated = p.update_share(id, ShareUpdate.model_validate({"objects": [*objects, model_object]}))
+        assert [o["name"] for o in updated["objects"] if o["kind"] == "semantic-model"] == ["sales"]
+        attempts = {
+            "load shared": httpx.get(models + "/sales", headers=bearer),
+            "load other": httpx.get(models + "/private", headers=bearer),
+            "list": httpx.get(models, headers=bearer),
+            "create": httpx.post(models, json={"name": "other", "document": document}, headers=bearer),
+            "update": httpx.put(models + "/sales", json={"document": document, "entity-version": "1"}, headers=bearer),
+            "drop": httpx.delete(models + "/sales", headers=bearer),
+        }
+        statuses = {k: r.status_code for k, r in attempts.items()}
+        assert closed == {"load": 403} and statuses == {**dict.fromkeys(attempts, 403), "load shared": 200}, (closed, statuses)
+        assert json.loads(attempts["load shared"].json()["document"]["semantic_model"])["semantic_model"][0]["name"] == "Sales"
+        p.update_share(id, ShareUpdate.model_validate({"objects": objects}))
+        assert httpx.get(models + "/sales", headers=bearer).status_code == 403
+        print("PASS: a shared semantic model is readable by name only; other models, listing and changes are refused, "
+              "and removing it from the share revokes it")
 
         loaded = httpx.get(
             f"{p.url}/api/catalog/v1/{db}/namespaces/sales/tables/orders",

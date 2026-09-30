@@ -30,7 +30,7 @@ async function restoreRoute() {
     const db = params.get('database');
     if (db && state.databases.some(d => d.id === db)) {
       await browse(db, params.getAll('namespace'));
-      if (['table', 'view'].includes(params.get('kind')) && params.get('name')) await inspectObject(db, namespace, params.get('kind'), params.get('name'));
+      if (['table', 'view', 'semantic-model'].includes(params.get('kind')) && params.get('name')) await inspectObject(db, namespace, params.get('kind'), params.get('name'));
     } else clearBrowser();
     const notebook = state.notebooks.find(n => n.id === params.get('notebook'));
     if (notebook) {
@@ -82,7 +82,7 @@ function applyTheme(theme) {
 try { applyTheme(localStorage.getItem('iceberg-theme') === 'light' ? 'light' : 'dark'); } catch { applyTheme('dark'); }
 $('#theme-toggle').addEventListener('click', () => { const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; applyTheme(theme); try { localStorage.setItem('iceberg-theme', theme); } catch {} });
 function symbol(kind) {
-  const paths = {database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>', namespace: '<path d="m12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 17l10 5 10-5"/>', table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/>', view: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'};
+  const paths = {database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>', namespace: '<path d="m12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 17l10 5 10-5"/>', table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/>', view: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>', 'semantic-model': '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7 8.2l4 7.6M17 8.2l-4 7.6"/>'};
   const e = element('span', undefined, 'object-icon');
   e.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[kind]}</svg>`;
   return e;
@@ -108,7 +108,7 @@ function databaseGroups(items, getDatabase, renderItems) {
 function renderDatabaseContext(host, db) {
   host.hidden = !db?.shared;
   host.replaceChildren();
-  if (db?.shared) host.append(element('span', 'Shared · Read-only', 'shared-badge'), element('span', `Owned by ${databaseOwner(db)} · Only shared tables and views are available.`));
+  if (db?.shared) host.append(element('span', 'Shared · Read-only', 'shared-badge'), element('span', `Owned by ${databaseOwner(db)} · Only shared tables, views and semantic models are available.`));
 }
 function renderNotebookContext(notebook) {
   const db = state.databases.find(d => d.id === notebook.database);
@@ -311,6 +311,7 @@ function renderListing(db, ns, detail, result) {
     result.namespaces.forEach(parts => row(parts.at(-1), 'Namespace', 'namespace', 'Open →', () => browse(db, parts)));
     result.tables.forEach(t => row(t.name, 'Iceberg table', 'table', 'Details →', () => inspectObject(db, ns, 'table', t.name)));
     result.views.forEach(v => row(v.name, 'Iceberg view', 'view', 'Details →', () => inspectObject(db, ns, 'view', v.name)));
+    (result.semanticModels || []).forEach(m => row(m.name, 'Semantic model', 'semantic-model', 'Details →', () => inspectObject(db, ns, 'semantic-model', m.name)));
     renderCatalogListing(detail, result, rows);
     $('#objects').dataset.listing = JSON.stringify([detail, result]);
 }

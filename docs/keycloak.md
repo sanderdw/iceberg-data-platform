@@ -6,9 +6,9 @@ Keycloak handles sign-in for both portals, notebook tokens for Polaris and MCP c
 
 `scripts.setup` derives `PORTAL_ORIGIN`, `USER_ORIGIN`, `KEYCLOAK_ORIGIN` and `OIDC_ISSUER` from `PORT`, `USER_PORT` and `KEYCLOAK_PORT`. Set the ports before the first setup. If you change a port later, you must also update the origins and the client redirect and logout URIs in Keycloak, because an existing realm is never re-imported. Issuer and redirect origins must match exactly, so use `localhost`.
 
-Keycloak access beyond localhost needs HTTPS and matching issuer and redirect URLs. The optional `.lan.yaml` Compose files only change host bindings.
+Keycloak access beyond localhost needs HTTPS and matching issuer and redirect URLs; see [deploying beyond localhost](../SECURITY.md#deploying-beyond-localhost). For a class or demo, the [quick-share skill](install.md#agent-skills) sets this up.
 
-To run a portal directly from source, stop its Compose service (`portal` or `users`) and run `uv run python -m server` or `uv run --group users python -m user_portal`. Both read the generated `.env`.
+To run a portal directly from source, see [contributing](../CONTRIBUTING.md).
 
 ## Authentication and data access
 
@@ -67,4 +67,4 @@ This creates `demo-admin`, `demo-writer`, `demo-reader` and `demo-outsider`, wit
 ## References
 
 - [Keycloak server administration](https://www.keycloak.org/docs/latest/server_admin/index.html)
-- [Polaris external identity providers](https://polaris.apache.org/releases/1.7.0/managing-security/external-idp/)
+- [Polaris external identity providers](https://polaris.apache.org/releases/1.8.0/managing-security/external-idp/)

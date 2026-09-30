@@ -82,7 +82,7 @@ def identifier_part(value):
 
 
 class ShareObject(Input):
-    kind: Literal["table", "view"]
+    kind: Literal["table", "view", "semantic-model"]
     namespace: list[Annotated[str, Field(min_length=1, max_length=256)]] = Field(min_length=1, max_length=20)
     name: str = Field(min_length=1, max_length=256)
 
@@ -102,10 +102,10 @@ def share_objects(value):
         return value
     keys = [(o.kind, tuple(o.namespace), o.name) for o in value]
     if len(set(keys)) != len(keys):
-        raise ValueError("Select each table or view only once.")
-    # A view is only a definition: the recipient's engine reads its tables with the same credential.
+        raise ValueError("Select each table, view or semantic model only once.")
+    # Views and semantic models only describe data: the recipient reads their tables with the same credential.
     if not any(o.kind == "table" for o in value):
-        raise ValueError("Select the tables a shared view reads.")
+        raise ValueError("Select the tables that the shared views and semantic models read.")
     return sorted(value, key=lambda o: (o.namespace, o.name, o.kind))
 
 

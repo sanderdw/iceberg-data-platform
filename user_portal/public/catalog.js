@@ -45,6 +45,8 @@ function connectPanel(db) {
 function renderCatalogListing(detail, contents, rows) {
   const host = $('#objects'), summary = element('section', undefined, 'catalog-summary');
   const entries = [['Namespaces', contents.namespaces.length], ['Tables', contents.tables.length], ['Views', contents.views.length]];
+  // Semantic models belong to namespaces; the database root never has any.
+  if (detail.kind !== 'database') entries.push(['Semantic models', (contents.semanticModels || []).length]);
   if (detail.kind === 'database') {
     const db = detail.database;
     entries.unshift(['Database', db.name], ['Environment', envNames[db.environment]], ['Owner team', databaseOwner(db)]);
@@ -60,7 +62,7 @@ function renderCatalogListing(detail, contents, rows) {
     const props = element('details', undefined, 'catalog-disclosure'); props.append(element('summary', 'Namespace properties'), propertyGrid(detail.properties)); summary.append(props);
   }
   const searchLabel = element('label', 'Filter objects', 'catalog-search');
-  const search = element('input'); search.type = 'search'; search.placeholder = 'Find a namespace, table or view'; searchLabel.append(search);
+  const search = element('input'); search.type = 'search'; search.placeholder = 'Find a namespace, table, view or semantic model'; searchLabel.append(search);
   const list = element('div'); list.append(...rows);
   const empty = element('p', rows.length ? 'No matching objects.' : 'This namespace is empty.', 'catalog-empty'); empty.hidden = rows.length > 0;
   search.addEventListener('input', () => { let visible = 0; rows.forEach(row => { row.hidden = !row.querySelector('.object-label').textContent.toLowerCase().includes(search.value.toLowerCase()); if (!row.hidden) visible++; }); empty.hidden = visible > 0; });
@@ -84,15 +86,13 @@ async function inspectObject(db, ns, kind, name) {
   } catch (error) { if (version === browseVersion) { $('#objects').replaceChildren(element('p', error.message, 'catalog-empty')); notice(error.message, true); } }
 }
 
-function renderObjectDetails(detail, db, ns, name, version) {
-  const host = $('#objects'), toolbar = element('div', undefined, 'catalog-actions');
-  toolbar.append(element('span', detail.kind === 'table' ? 'APACHE ICEBERG TABLE' : 'APACHE ICEBERG VIEW', 'eyebrow'));
-  toolbar.append(action('Copy identifier', async () => { await navigator.clipboard.writeText([db, ...ns, name].map(p => '"' + p.replaceAll('"', '""') + '"').join('.')); notice('Identifier copied.'); }));
-  const tabs = element('div', undefined, 'catalog-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', `${detail.kind} details`);
+/* Accessible tab strip shared by the object detail views. */
+function makeTabs(label) {
+  const tabs = element('div', undefined, 'catalog-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', `${label} details`);
   const panel = element('section', undefined, 'catalog-panel'); panel.id = 'catalog-tab-panel'; panel.setAttribute('role', 'tabpanel'); panel.tabIndex = 0;
   const tabButtons = [];
-  function tab(label, render) {
-    const button = element('button', label, 'quiet'); button.type = 'button'; button.id = `tab-${tabButtons.length}`;
+  function tab(name, render) {
+    const button = element('button', name, 'quiet'); button.type = 'button'; button.id = `tab-${tabButtons.length}`;
     button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', panel.id);
     const select = () => {
       tabButtons.forEach(b => { b.setAttribute('aria-selected', String(b === button)); b.tabIndex = b === button ? 0 : -1; });
@@ -106,6 +106,15 @@ function renderObjectDetails(detail, db, ns, name, version) {
     event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabButtons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabButtons.length) % tabButtons.length;
     tabButtons[next].focus(); tabButtons[next].click();
   });
+  return {tabs, panel, tab};
+}
+
+function renderObjectDetails(detail, db, ns, name, version) {
+  if (detail.kind === 'semantic-model') return renderSemanticModel(detail, db, ns, name);
+  const host = $('#objects'), toolbar = element('div', undefined, 'catalog-actions');
+  toolbar.append(element('span', detail.kind === 'table' ? 'APACHE ICEBERG TABLE' : 'APACHE ICEBERG VIEW', 'eyebrow'));
+  toolbar.append(action('Copy identifier', async () => { await navigator.clipboard.writeText([db, ...ns, name].map(p => '"' + p.replaceAll('"', '""') + '"').join('.')); notice('Identifier copied.'); }));
+  const {tabs, panel, tab} = makeTabs(detail.kind);
   const overview = tab('Overview', p => {
     const entries = [['Format version', detail.formatVersion], ['Schema ID', detail.schemaId], ['UUID', detail.uuid], ['Location', detail.location]];
     if (detail.kind === 'table') {
@@ -173,5 +182,68 @@ function renderObjectDetails(detail, db, ns, name, version) {
     });
   }
   tab('Properties', p => p.append(propertyGrid(detail.properties)));
+  host.replaceChildren(toolbar, tabs, panel); overview();
+}
+
+/* Apache Ossie semantic models stored in Polaris. Read-only here; example notebook 06 publishes one. */
+function expressionText(expressions) {
+  return (expressions || []).map(e => (expressions.length > 1 && e.dialect ? `${e.dialect}: ` : '') + e.expression).join('\n');
+}
+
+async function openDataset(db, ns, dataset) {
+  if (dataset.table.namespace.join('\x1f') !== ns.join('\x1f')) await browse(db, dataset.table.namespace);
+  await inspectObject(db, dataset.table.namespace, 'table', dataset.table.name);
+}
+
+function renderSemanticModel(detail, db, ns, name) {
+  const host = $('#objects'), toolbar = element('div', undefined, 'catalog-actions');
+  toolbar.append(element('span', 'SEMANTIC MODEL · APACHE OSSIE', 'eyebrow'));
+  // The Polaris name, as notebooks and MCP tools address it; a model is not a SQL relation.
+  toolbar.append(action('Copy name', async () => { await navigator.clipboard.writeText([db, ...ns, name].join('.')); notice('Name copied.'); }));
+  const {tabs, panel, tab} = makeTabs(detail.kind);
+  const models = detail.models || [];
+  const count = key => models.reduce((sum, m) => sum + m[key].length, 0);
+  const overview = tab('Overview', p => {
+    p.append(facts([['Ossie spec version', detail.specVersion], ['Entity version', detail.entityVersion], ['Datasets', count('datasets')], ['Metrics', count('metrics')], ['Relationships', count('relationships')]]));
+    if (!models.length) p.append(element('p', 'This document holds no datasets or metrics that the portal can show. See the Definition tab for exactly what is stored.', 'hint'));
+    models.forEach(m => {
+      p.append(element('h3', m.name));
+      if (m.description) p.append(element('p', m.description));
+      if (m.aiContext.length) {
+        // Instructions are prose with line breaks; give each entry the full width.
+        const context = facts(m.aiContext.map(c => [c.label, c.value])); context.classList.add('catalog-facts-text');
+        context.querySelectorAll(':scope > div').forEach(item => item.classList.add('catalog-fact-wide'));
+        p.append(element('h3', 'AI context'), context);
+      }
+    });
+    p.append(element('p', 'Semantic models describe what tables mean: fields, relationships and agreed metric definitions. Polaris stores and protects them; it never runs them. Example notebook 06 publishes one; notebook 07 reads it.', 'hint'));
+  });
+  if (count('datasets')) tab('Diagram', p => {
+    models.forEach(m => {
+      if (models.length > 1) p.append(element('h3', m.name));
+      if (m.datasets.length) p.append(semanticDiagram(m, {onOpenTable: d => openDataset(db, ns, d)}));
+    });
+  });
+  tab('Datasets & fields', p => {
+    p.append(element('p', 'A dataset maps to an Iceberg table. Expressions are SQL in the named dialect.', 'hint'));
+    if (!count('datasets')) p.append(element('p', 'No datasets.', 'catalog-empty'));
+    models.forEach(m => m.datasets.forEach(d => {
+      p.append(element('h3', d.name));
+      p.append(facts([['Source', d.source], ['Primary key', d.primaryKey.join(', ')], ['Description', d.description]]));
+      if (d.table) p.append(action('Open table →', () => openDataset(db, ns, d)));
+      p.append(dataGrid(['Field', 'Type', 'Dimension', 'Expression', 'Description'], d.fields.map(f => [f.name, f.datatype, f.dimension ? 'Yes' : 'No', expressionText(f.expressions), f.description]), `Fields of ${d.name}`));
+    }));
+  });
+  tab('Metrics & relationships', p => {
+    p.append(element('h3', 'Metrics'));
+    p.append(dataGrid(['Metric', 'Type', 'Expression', 'Description'], models.flatMap(m => m.metrics.map(x => [x.name, x.datatype, expressionText(x.expressions), x.description])), 'Metrics'));
+    p.append(element('h3', 'Relationships'));
+    p.append(dataGrid(['Name', 'From', 'To', 'Columns'], models.flatMap(m => m.relationships.map(r => [r.name, r.from, r.to, `${r.fromColumns.join(', ')} → ${r.toColumns.join(', ')}`])), 'Relationships'));
+  });
+  tab('Definition', p => {
+    const box = element('pre', detail.definition, 'view-sql'), buttons = element('div', undefined, 'share-actions');
+    buttons.append(copyButton('Copy', detail.definition, 'Definition copied.'));
+    p.append(element('p', 'The document exactly as Polaris stores it.', 'hint'), box, buttons);
+  });
   host.replaceChildren(toolbar, tabs, panel); overview();
 }

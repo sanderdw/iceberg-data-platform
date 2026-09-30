@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
-from test.conftest import MemoryPolaris, members
+from test.conftest import SEMANTIC_MODEL, MemoryPolaris, members
 from user_portal.app import COOKIE, create_app
 from user_portal.directory import UserDirectory
 from user_portal.runtime import Workspace, filespace_key
@@ -165,6 +165,10 @@ def users():
                     "properties": {"owner": "analytics", "password": "hidden-password"},
                 },
             )
+        if request.url.path.endswith("/semantic-models/revenue"):
+            return httpx.Response(200, json=SEMANTIC_MODEL)
+        if request.url.path.endswith("/semantic-models"):
+            return httpx.Response(200, json={"identifiers": [{"namespace": ["analytics"], "name": "revenue"}]})
         if request.url.path.endswith("/tables"):
             return httpx.Response(200, json={"identifiers": [{"namespace": ["analytics"], "name": "events"}]})
         if request.url.path.endswith("/views"):
@@ -227,6 +231,7 @@ def test_catalog_details_use_user_identity_and_project_metadata(users):
     assert view["versions"][0]["representations"] == [{"dialect": "spark", "sql": "SELECT * FROM events"}]
     assert "snapshots" not in view
     assert c.get("/catalog.js").status_code == 200
+    assert c.get("/semantic.js").status_code == 200
     assert c.get("/guide.js").status_code == 200
 
 
@@ -343,7 +348,7 @@ def test_team_switch_and_database_access(users):
     assert result.status_code == 200
     assert result.json()["tables"][0]["name"] == "events"
     assert result.json()["views"][0]["name"] == "report"
-    assert len(users.calls) == 4  # OAuth, namespaces, tables, views; all as user.
+    assert len(users.calls) == 5  # OAuth, namespaces, tables, views, semantic models; all as user.
 
 
 @pytest.mark.parametrize("role", ["reader", "writer"])
@@ -698,7 +703,7 @@ def test_share_requests_are_validated_and_csrf_protected(users):
     assert c.post("/api/shares", json=share_body(db)).status_code == 403
     assert c.post("/api/shares", json=share_body(db), headers={**JSON, "Origin": "http://evil.test"}).status_code == 403
     view_only = c.post("/api/shares", json={**share_body(db), "objects": share_body(db)["objects"][1:]}, headers=JSON)
-    assert (view_only.status_code, view_only.json()["error"]) == (422, "Select the tables a shared view reads.")
+    assert (view_only.status_code, view_only.json()["error"]) == (422, "Select the tables that the shared views and semantic models read.")
     invalid_name = c.post("/api/shares", json=share_body(db, name="Sensor Events", expiresAt=None), headers=JSON)
     assert (invalid_name.status_code, invalid_name.json()["error"]) == (
         422, "Share name must use 3–48 lowercase letters, digits, hyphens or underscores, starting with a letter."
@@ -706,7 +711,7 @@ def test_share_requests_are_validated_and_csrf_protected(users):
     for values, message in (
         ({"recipient": "x" * 121}, "Recipient must be at most 120 characters."),
         ({"description": "x" * 281}, "Description must be at most 280 characters."),
-        ({"objects": []}, "Select between 1 and 50 tables and views, including at least one table."),
+        ({"objects": []}, "Select between 1 and 50 tables, views and semantic models, including at least one table."),
         ({"expiresAt": "not-a-date"}, "Choose a valid future expiry with a time zone, or leave it empty."),
     ):
         response = c.post("/api/shares", json=share_body(db, **values), headers=JSON)
@@ -768,7 +773,7 @@ def test_internal_shares_are_visible_only_to_recipient_team_and_environment(user
     assert {t['id'] for t in c.get('/api/share-teams').json()} == {second, third}
     response = c.post('/api/shares', json=share_body(db, external=False, recipientTeam=second), headers=JSON)
     assert response.status_code == 201, response.text
-    assert set(response.json()) == {'share'}
+    assert set(response.json()) == {'share', 'addedTables', 'warnings'}
     id = response.json()['share']['id']
     assert c.get('/api/received-shares').json() == []
     c.patch('/api/team', json={'team': second}, headers=JSON)

@@ -1,6 +1,6 @@
 """SQL implementation of Ossie's flights example, not a general ontology compiler."""
 
-import hashlib
+import re
 from pathlib import Path
 
 import yaml
@@ -24,12 +24,10 @@ def identifier(value):
 def load_semantics(directory):
     """Read the copies beside the notebook, including the user's local edits."""
     directory = Path(directory)
-    model_text = (directory / "flights.yaml").read_text()
-    contract_text = (directory / "flights.product.yaml").read_text()
-    return yaml.safe_load(model_text), yaml.safe_load(contract_text), {
-        "ontology_sha256": hashlib.sha256(model_text.encode()).hexdigest(),
-        "contract_sha256": hashlib.sha256(contract_text.encode()).hexdigest(),
-    }
+    return (
+        yaml.safe_load((directory / "flights.yaml").read_text()),
+        yaml.safe_load((directory / "flights.product.yaml").read_text()),
+    )
 
 
 def datasets(model):
@@ -38,6 +36,78 @@ def datasets(model):
 
 def table_name(dataset):
     return dataset["source"].split(".")[-1].lower()
+
+
+# Keys and joins are the ones notebook 07 teaches and `quality_report` checks; the YAML lists fields only.
+PRIMARY_KEYS = {
+    "FLIGHT": ["id"], "ROUTE": ["id"], "AIRPORT": ["code"], "CARRIER": ["code"],
+    "AIRCRAFT": ["tail_nr"], "RUNWAY": ["airport_code", "designator"],
+}
+RELATIONSHIPS = [
+    ("flight_route", "FLIGHT", "ROUTE", ["route_id"], ["id"]),
+    ("flight_carrier", "FLIGHT", "CARRIER", ["carrier_code"], ["code"]),
+    ("flight_aircraft", "FLIGHT", "AIRCRAFT", ["tail_nr"], ["tail_nr"]),
+    ("aircraft_carrier", "AIRCRAFT", "CARRIER", ["carrier_code"], ["code"]),
+    ("route_departure_airport", "ROUTE", "AIRPORT", ["orig_airport_code"], ["code"]),
+    ("route_destination_airport", "ROUTE", "AIRPORT", ["dest_airport_code"], ["code"]),
+    ("runway_airport", "RUNWAY", "AIRPORT", ["airport_code"], ["code"]),
+]
+
+
+def semantic_model(model, contract, namespace, catalog="lakehouse"):
+    """The flights product as one Apache Ossie semantic model, ready to store in Polaris.
+
+    Datasets point at the Iceberg tables notebook 06 publishes, the relationships state the joins,
+    the metrics carry the agreed SQL with dataset names instead of aliases, and the AI context
+    holds the product facts. Notebook 07 needs nothing else: it reads this model from Polaris.
+    """
+    found = datasets(model)
+    columns = {d["name"]: {f["name"] for f in d["fields"]} for d in found}
+    for key in ((name, column) for name, cols in PRIMARY_KEYS.items() for column in cols):
+        if key[1] not in columns.get(key[0], ()):
+            raise ValueError(f"{key[0]} has no field {key[1]}.")
+    for name, source, target, source_columns, target_columns in RELATIONSHIPS:
+        if not set(source_columns) <= columns[source] or not set(target_columns) <= columns[target]:
+            raise ValueError(f"Relationship {name} uses a field that is not mapped.")
+    return {
+        "name": model["name"],
+        "description": f"{model['description']} {contract['grain']}",
+        "ai_context": {
+            "instructions": "\n".join(
+                [
+                    f"Time: {contract['time_convention']}",
+                    f"Missing values: {' '.join(contract['null_policy'].split())}",
+                    f"Owner: {contract['owner']}. Refresh: {contract['refresh']}",
+                    f"Classification: {contract['classification']}",
+                    *contract["ai_guidance"],
+                ]
+            )
+        },
+        "datasets": [
+            {
+                "name": d["name"],
+                "source": ".".join([catalog, *namespace, table_name(d)]),
+                **({"description": d["description"]} if d.get("description") else {}),
+                "primary_key": PRIMARY_KEYS[d["name"]],
+                "fields": [{"name": f["name"], "expression": f["expression"]} for f in d["fields"]],
+            }
+            for d in found
+        ],
+        "relationships": [
+            {"name": name, "from": source, "to": target, "from_columns": source_columns, "to_columns": target_columns}
+            for name, source, target, source_columns, target_columns in RELATIONSHIPS
+        ],
+        "metrics": [
+            {
+                "name": name,
+                "description": f"{metric['description']} Unit: {metric['unit']}.",
+                "expression": {
+                    "dialects": [{"dialect": "ANSI_SQL", "expression": re.sub(r"\bf\.", "FLIGHT.", metric["sql"])}]
+                },
+            }
+            for name, metric in contract["metrics"].items()
+        ],
+    }
 
 
 def generate_flights(connection, model, row_count=12000):
@@ -170,7 +240,7 @@ def require_quality(report):
         raise ValueError("Flights product quality checks failed: " + "; ".join(failed))
 
 
-def publish_flights(connection, model, namespace, fingerprints):
+def publish_flights(connection, model, namespace):
     """Publish validated local views using native DuckDB CREATE/INSERT statements.
 
     Preflight ownership across all tables before replacing any. Each table is a
@@ -200,8 +270,6 @@ def publish_flights(connection, model, namespace, fingerprints):
         ddl = ", ".join(f"{identifier(c[0])} {c[1]}" for c in columns)
         properties = {
             "format-version": "2", EXAMPLE_PROPERTY: EXAMPLE,
-            "flights.ontology-sha256": fingerprints["ontology_sha256"],
-            "flights.contract-sha256": fingerprints["contract_sha256"],
             "comment": "Synthetic Ossie flights demo. UTC timestamps; distances in miles; delays in minutes.",
         }
         options = ", ".join(f"{sql_literal(k)} = {sql_literal(v)}" for k, v in properties.items())
@@ -212,14 +280,3 @@ def publish_flights(connection, model, namespace, fingerprints):
         results.append({"dataset": dataset["name"], "table": reference, "rows": count})
     return results
 
-
-def bind_flights(connection, model, namespace, fingerprints):
-    """Read the same six Iceberg tables directly through views; retain table-scoped secrets."""
-    for dataset in datasets(model):
-        name = table_name(dataset)
-        reference = table_reference(namespace, name)
-        properties = dict(connection.execute(f"SELECT key, value FROM iceberg_table_properties({reference})").fetchall())
-        if any(properties.get(f"flights.{key.replace('_', '-')}") != value for key, value in fingerprints.items()):
-            raise ValueError("Local semantics differ from the published product. Run notebook 06 with these YAML files.")
-        refresh_table_credentials(connection, namespace, name, secret_name=f"flights_{name}")
-        connection.execute(f"CREATE OR REPLACE TEMP VIEW {identifier(dataset['name'])} AS SELECT * FROM {reference}")

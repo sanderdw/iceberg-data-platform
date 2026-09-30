@@ -1,6 +1,21 @@
-/* Data shares: team administrators hand selected tables and views with teams and external parties. */
+/* Data shares: team administrators hand selected tables, views and semantic models to teams and external parties. */
+const KIND_LABELS = {table: 'Iceberg table', view: 'Iceberg view', 'semantic-model': 'Semantic model'};
 const VIEW_WARNING = 'A view shares only its definition. The recipient’s engine reads the underlying tables with their access, so add every table the view reads. The recipient can then read those tables in full; a view is not a row or column filter.';
 const objectKey = o => JSON.stringify([o.kind, o.namespace, o.name]);
+// A semantic model describes tables; the recipient reads them with the same credential, so sharing it needs them too.
+// Each share form keeps its own cache, so a model replaced since the last form is read again.
+function modelTables(modelTableCache, db, model) {
+  const key = db.id + objectKey(model);
+  if (!modelTableCache.has(key)) {
+    const query = new URLSearchParams({database: db.id, kind: 'semantic-model', name: model.name}); model.namespace.forEach(part => query.append('namespace', part));
+    modelTableCache.set(key, api(`/details?${query}`).then(detail => {
+      const seen = new Map();
+      detail.models.flatMap(m => m.datasets).forEach(d => { if (d.table) { const t = {kind: 'table', namespace: d.table.namespace, name: d.table.name}; seen.set(objectKey(t), t); } });
+      return [...seen.values()];
+    }).catch(error => { modelTableCache.delete(key); throw error; }));
+  }
+  return modelTableCache.get(key);
+}
 const objectPath = o => [...o.namespace, o.name].join('.');
 function canShare() { return ['admin', 'bucket-admin'].includes(state?.activeRole); }
 function field(label, input) { const wrap = element('label', label); wrap.append(input); return wrap; }
@@ -29,7 +44,7 @@ async function loadReceivedShares(host) {
     const shares = await api('/received-shares');
     if (!host.isConnected) return;
     host.replaceChildren(element('h3', 'Shared with this team'), element('p', 'These databases are available in Catalog and Notebooks. Shared objects are read-only.', 'hint'));
-    host.append(shares.length ? dataGrid(['Share / database', 'Owner team', 'Catalog ID', 'Tables and views', 'Expires'], shares.map(s => [s.name + ' / ' + s.databaseName, s.ownerTeamName || s.ownerTeam, s.database, s.objects.map(o => objectPath(o) + (o.granted ? '' : ' (unavailable)')).join(', '), s.expiresAt || 'Never']), 'Received data shares') : element('p', 'No data shares received in this environment.', 'catalog-empty'));
+    host.append(shares.length ? dataGrid(['Share / database', 'Owner team', 'Catalog ID', 'Shared objects', 'Expires'], shares.map(s => [s.name + ' / ' + s.databaseName, s.ownerTeamName || s.ownerTeam, s.database, s.objects.map(o => objectPath(o) + (o.granted ? '' : ' (unavailable)')).join(', '), s.expiresAt || 'Never']), 'Received data shares') : element('p', 'No data shares received in this environment.', 'catalog-empty'));
   } catch (error) { host.replaceChildren(element('p', error.message, 'catalog-empty')); }
 }
 
@@ -54,7 +69,7 @@ async function loadShares(host, db, background = false) {
 }
 
 function renderShares(host, db, result) {
-  const intro = element('p', 'Share selected tables and views with another team, externally, or both. Team members use their own accounts; external recipients receive a separate credential.', 'hint');
+  const intro = element('p', 'Share selected tables, views and semantic models with another team, externally, or both. Team members use their own accounts; external recipients receive a separate credential.', 'hint');
   const create = action('New data share', async () => shareForm(host, db)); create.classList.remove('quiet');
   create.disabled = !canShare() || result.shares.length >= result.limits.shares;
   if (canShare() && create.disabled) create.title = 'This database has reached its data share limit.';
@@ -70,7 +85,7 @@ function renderShares(host, db, result) {
     const name = element('div'); name.append(element('strong', share.name), element('small', [share.recipientTeam ? `Team: ${share.recipientTeamName || share.recipientTeam}` : '', share.external !== false ? `External: ${share.recipient || '—'}` : ''].filter(Boolean).join(' · ')));
     return [name, objects, share.expiresAt ? `${share.expiresAt.slice(0, 10)} · end of day UTC` : 'Never', `${share.createdBy || '—'} · ${timestamp(share.createdAt)}`, actions];
   });
-  const list = rows.length ? dataGrid(['Share / recipient', 'Tables and views', 'Expires', 'Created', ''], rows, 'Data shares') : element('p', 'Nothing in this database is shared.', 'catalog-empty');
+  const list = rows.length ? dataGrid(['Share / recipient', 'Shared objects', 'Expires', 'Created', ''], rows, 'Data shares') : element('p', 'Nothing in this database is shared.', 'catalog-empty');
   host.replaceChildren(intro, create, list);
   host.dataset.shares = JSON.stringify(result);
   if (!canShare()) host.querySelectorAll('button').forEach(button => {
@@ -94,8 +109,8 @@ function objectPicker(db, selected, onChange) {
   const tree = element('div', undefined, 'share-tree');
   function choice(o) {
     const label = element('label', undefined, 'share-object'), box = element('input'); box.type = 'checkbox'; box.checked = selected.has(objectKey(o)); box.dataset.objectKey = objectKey(o);
-    box.addEventListener('change', () => { if (box.checked) selected.set(objectKey(o), o); else selected.delete(objectKey(o)); onChange(); });
-    label.append(box, symbol(o.kind), element('span', o.name), element('small', o.kind === 'table' ? 'Iceberg table' : 'Iceberg view')); return label;
+    box.addEventListener('change', () => { if (box.checked) selected.set(objectKey(o), o); else selected.delete(objectKey(o)); onChange(box.checked ? o : null); });
+    label.append(box, symbol(o.kind), element('span', o.name), element('small', KIND_LABELS[o.kind])); return label;
   }
   async function fill(host, ns) {
     host.replaceChildren(element('p', 'Loading…', 'hint'));
@@ -105,6 +120,7 @@ function objectPicker(db, selected, onChange) {
       contents.namespaces.forEach(parts => { const branch = element('details'), body = element('div'); branch.append(element('summary', parts.at(-1)), body); branch.addEventListener('toggle', () => { if (branch.open && !body.childElementCount) fill(body, parts); }); nodes.push(branch); });
       contents.tables.forEach(t => nodes.push(choice({kind: 'table', namespace: ns, name: t.name})));
       contents.views.forEach(v => nodes.push(choice({kind: 'view', namespace: ns, name: v.name})));
+      (contents.semanticModels || []).forEach(m => nodes.push(choice({kind: 'semantic-model', namespace: ns, name: m.name})));
       host.replaceChildren(...(nodes.length ? nodes : [element('p', 'Empty.', 'hint')]));
     } catch (error) { host.replaceChildren(element('p', error.message, 'hint')); }
   }
@@ -141,34 +157,69 @@ async function shareForm(host, db, share) {
   const expiry = element('input'); expiry.type = 'date'; expiry.value = share?.expiresAt ? share.expiresAt.slice(0, 10) : '';
   expiry.min = new Date().toISOString().slice(0, 10);
   const chosen = element('div', undefined, 'share-selection'), warning = element('p', VIEW_WARNING, 'share-warning'); warning.setAttribute('role', 'note');
+  const modelWarning = element('p', '', 'share-model-warning'); modelWarning.setAttribute('role', 'note'); modelWarning.hidden = true;
+  const checkbox = o => [...form.querySelectorAll('input[type=checkbox]')].find(b => b.dataset.objectKey === objectKey(o));
+  // Selecting a model selects the tables it reads; removing one of them later shows what the recipient would miss.
+  // Submitting waits for pending selections, so a quick submit still sends the model's tables.
+  const modelTableCache = new Map(), pendingModels = new Set();
+  function added(o) {
+    if (o?.kind !== 'semantic-model') return;
+    const pending = addModelTables(o).finally(() => pendingModels.delete(pending));
+    pendingModels.add(pending);
+  }
+  async function addModelTables(o) {
+    try {
+      const tables = await modelTables(modelTableCache, db, o);
+      if (!selected.has(objectKey(o))) return;
+      const missing = tables.filter(t => !selected.has(objectKey(t)));
+      missing.forEach(t => { selected.set(objectKey(t), t); const box = checkbox(t); if (box) box.checked = true; });
+      if (missing.length) notice(`Added ${missing.length} ${missing.length === 1 ? 'table' : 'tables'} that ${o.name} reads.`);
+    } catch (error) { notice(`The tables of ${o.name} could not be read: ${error.message}`, true); }
+    refresh();
+  }
+  let modelCheck = 0;
+  async function checkModels(objects) {
+    const version = ++modelCheck, models = objects.filter(o => o.kind === 'semantic-model');
+    const missing = [];
+    for (const model of models) {
+      try { (await modelTables(modelTableCache, db, model)).filter(t => !selected.has(objectKey(t))).forEach(t => missing.push(`${model.name} reads ${objectPath(t)}`)); } catch {}
+    }
+    if (version !== modelCheck) return;
+    modelWarning.textContent = `The recipient cannot query a semantic model without its tables. Not selected: ${missing.join('; ')}.`;
+    modelWarning.hidden = !missing.length;
+  }
   const save = element('button', share ? 'Save share' : 'Create share and show credential'); save.type = 'submit';
   function refresh() {
     const objects = [...selected.values()].sort((a, b) => objectPath(a).localeCompare(objectPath(b)));
     chosen.replaceChildren(element('div', `SELECTED · ${objects.length}`, 'eyebrow'), ...objects.map(o => {
       const row = element('div', undefined, 'share-object'), remove = element('button', 'Remove', 'ghost'); remove.type = 'button';
-      remove.addEventListener('click', () => { selected.delete(objectKey(o)); const box = [...form.querySelectorAll('input[type=checkbox]')].find(b => b.dataset.objectKey === objectKey(o)); if (box) box.checked = false; refresh(); });
+      remove.addEventListener('click', () => { selected.delete(objectKey(o)); const box = checkbox(o); if (box) box.checked = false; refresh(); });
       row.append(symbol(o.kind), element('span', objectPath(o)), remove); return row;
     }));
     warning.hidden = !objects.some(o => o.kind === 'view');
+    checkModels(objects);
   }
-  const picker = element('fieldset'); picker.append(element('legend', 'Tables and views'), element('p', `Select up to ${maxObjects} objects, including at least one table. The recipient can read exactly these objects and cannot list anything else. Share tables and views by their full name.`, 'hint'), objectPicker(db, selected, refresh), chosen, warning);
+  const picker = element('fieldset'); picker.append(element('legend', 'Tables, views and semantic models'), element('p', `Select up to ${maxObjects} objects, including at least one table. The recipient can read exactly these objects and cannot list anything else. Selecting a semantic model also selects the tables it reads.`, 'hint'), objectPicker(db, selected, o => { refresh(); added(o); }), chosen, warning, modelWarning);
   const cancel = element('button', 'Cancel', 'quiet'); cancel.type = 'button'; cancel.addEventListener('click', () => loadShares(host, db));
   const buttons = element('div', undefined, 'share-actions'); buttons.append(save, cancel);
   form.append(element('h3', share ? `Edit ${share.name}` : 'New data share'), nameField, audience, field('Recipient', recipient), field('Description', description), field('Expires at the end of this UTC day (optional)', expiry), picker, buttons);
   form.addEventListener('submit', event => {
     event.preventDefault();
     busy(save, async () => {
+      while (pendingModels.size) await Promise.all(pendingModels);
       const objects = [...selected.values()];
       if (!objects.length) throw new Error('Select at least one table.');
-      if (objects.length > maxObjects) throw new Error(`Select no more than ${maxObjects} tables and views.`);
-      if (!objects.some(o => o.kind === 'table')) throw new Error('Select the tables a shared view reads.');
+      if (objects.length > maxObjects) throw new Error(`Select no more than ${maxObjects} ${maxObjects === 1 ? "object" : "objects"}.`);
+      if (!objects.some(o => o.kind === 'table')) throw new Error('Select the tables that the shared views and semantic models read.');
       const body = {recipient: recipient.value.trim(), description: description.value.trim(), objects, expiresAt: expiry.value ? `${expiry.value}T23:59:59Z` : null};
-      if (share) { await api(`/shares/${share.id}`, 'PATCH', body); notice('Share saved.'); await loadShares(host, db); }
+      // The API checks the models again; its warnings name tables the recipient would still miss.
+      const warned = result => result.warnings?.length ? ` ${result.warnings.join(' ')}` : '';
+      if (share) { const result = await api(`/shares/${share.id}`, 'PATCH', body); notice(`Share saved.${warned(result)}`); await loadShares(host, db); }
       else {
         if (!internal.checked && !external.checked) throw new Error('Choose another team, external sharing, or both.');
         const result = await api('/shares', 'POST', {...body, database: db.id, name: name.value, external: external.checked, recipientTeam: internal.checked ? team.value : null});
-        if (result.credentials) issued(host, db, result, 'Share created.');
-        else { notice('Share created. Recipient team members can read the selected objects with their own accounts.'); await loadShares(host, db); }
+        if (result.credentials) { issued(host, db, result, 'Share created.'); if (warned(result)) notice(`Share created.${warned(result)}`); }
+        else { notice(`Share created. Recipient team members can read the selected objects with their own accounts.${warned(result)}`); await loadShares(host, db); }
       }
     });
   });
@@ -182,7 +233,7 @@ function duckdbSnippet(share, credentials, connection) {
   const identifier = value => '"' + value.replaceAll('"', '""') + '"';
   // DuckDB represents nested Iceberg namespaces as one dotted schema name.
   const reference = ['shared', table.namespace.join('.'), table.name].map(identifier).join('.');
-  const sharedObjects = share.objects.map(o => `# ${o.kind === 'table' ? 'Table' : 'View'}: ${JSON.stringify(objectPath(o))}`).join('\n');
+  const sharedObjects = share.objects.map(o => `# ${({table: 'Table', view: 'View', 'semantic-model': 'Semantic model'})[o.kind]}: ${JSON.stringify(objectPath(o))}${o.kind === 'semantic-model' ? ' (Polaris REST, see the portal)' : ''}`).join('\n');
   return `# /// script
 # requires-python = ">=3.10"
 # dependencies = [
@@ -241,7 +292,7 @@ function issued(host, db, result, message) {
   const {share, credentials, connection} = result, panel = element('section', undefined, 'share-issued'), snippet = duckdbSnippet(share, credentials, connection);
   panel.append(element('h3', `Credential for ${share.name}`), element('p', 'This secret is shown once. Send it to the recipient over a secure channel; replace it with “New secret” if it is lost or leaked.', 'share-warning'));
   panel.append(facts([['Client ID', credentials.clientId], ['Client secret', credentials.clientSecret], ['Catalog URI', connection.uri], ['Catalog / warehouse', connection.warehouse], ['Token endpoint', connection.oauth2ServerUri], ['Scope', connection.scope], ['Storage endpoint', connection.s3Endpoint]]));
-  panel.append(element('h3', 'Shared names'), element('p', 'The credential cannot list namespaces or tables. The recipient loads these names directly.', 'hint'), dataGrid(['Kind', 'Identifier'], connection.identifiers.map(i => [i.kind, i.identifier]), 'Shared identifiers'));
+  panel.append(element('h3', 'Shared names'), element('p', 'The credential cannot list namespaces, tables or semantic models. The recipient loads these names directly; a semantic model with a GET on its address, using a token from the token endpoint.', 'hint'), dataGrid(['Kind', 'Identifier', 'Address'], connection.identifiers.map(i => [KIND_LABELS[i.kind] || i.kind, i.identifier, i.url || '']), 'Shared identifiers'));
   const done = action('Done, I stored the secret', async () => loadShares(host, db)); done.classList.remove('quiet');
   const buttons = element('div', undefined, 'share-actions'); buttons.append(copyButton('Copy credential', connection.credential, 'Credential copied.'), copyButton('Copy DuckDB snippet', snippet, 'Snippet copied.'), done);
   panel.append(buttons); host.replaceChildren(panel); notice(message);

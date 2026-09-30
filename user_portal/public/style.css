@@ -187,6 +187,7 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
 .catalog-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px; margin: 24px 0; }
 .catalog-facts > div { min-width: 0; }
 .catalog-fact-wide { grid-column: 1 / -1; }
+.catalog-facts-text dd { white-space: pre-line; }
 .catalog-facts dt { color: var(--text-secondary); font: var(--small)/1.6 var(--mono); margin-bottom: 8px; }
 .catalog-facts dd { margin: 0; overflow-wrap: anywhere; }
 .catalog-search { display: block; max-width: 480px; margin: 24px 0; }
@@ -264,9 +265,39 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
 .share-object small { color: var(--text-secondary); }
 .share-object button { margin-left: auto; }
 .share-selection { margin-top: 16px; }
-.share-warning { margin: 16px 0 0; padding: 16px; border-left: 2px solid var(--accent); background: var(--surface); }
+.share-warning, .share-model-warning { margin: 16px 0 0; padding: 16px; border-left: 2px solid var(--accent); background: var(--surface); }
 .share-issued { padding: 24px 0; }
 .share-issued h3 { margin: 24px 0 16px; }
+/* Semantic model diagram (semantic.js): SVG styled only through classes, as the CSP forbids inline styles. */
+.semantic-diagram { margin: 16px 0 32px; }
+.sd-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
+.sd-toolbar .hint { margin: 0; }
+.sd-canvas { overflow: auto; max-height: 720px; background: var(--surface); border: 1px solid var(--border-visible); }
+/* Undo the icon defaults of the global svg rule; the width and height attributes give the natural size. */
+.sd-canvas svg { display: block; width: auto; height: auto; stroke: none; stroke-width: 1; }
+.sd-fit .sd-canvas svg { max-width: 100%; }
+.sd-frame { fill: var(--black); stroke: var(--border-visible); }
+.sd-head { fill: var(--surface-raised); stroke: var(--border-visible); }
+.semantic-diagram text { font: 12px var(--mono); fill: var(--text-primary); }
+.semantic-diagram .sd-name { font: 600 13px var(--body); fill: var(--text-display); }
+.semantic-diagram .sd-source, .semantic-diagram .sd-type, .semantic-diagram .sd-more { font-size: 11px; fill: var(--text-secondary); }
+.semantic-diagram .sd-type { text-anchor: end; }
+.semantic-diagram .sd-tag { font-size: 10px; fill: var(--text-secondary); }
+.semantic-diagram .sd-key { fill: var(--accent); }
+.sd-rule { stroke: var(--border); }
+.sd-joined .sd-column { fill: var(--text-display); font-weight: 700; }
+.sd-open { cursor: pointer; }
+.sd-open:hover .sd-head, .sd-open:focus-visible .sd-head { fill: var(--border-visible); }
+.sd-open:focus { outline: none; }
+.sd-open:focus-visible .sd-frame { stroke: var(--text-display); stroke-width: 2; }
+.sd-edge { fill: none; stroke: var(--text-secondary); stroke-width: 1.5; }
+.sd-hit { fill: none; stroke: transparent; stroke-width: 12; }
+.sd-marker path { fill: none; stroke: var(--text-secondary); stroke-width: 1.5; }
+.sd-marker-on path, .sd-on .sd-edge { stroke: var(--accent); }
+.sd-on .sd-edge { stroke-width: 2; }
+.sd-box, .sd-link { transition: opacity .15s; }
+.sd-focus .sd-box:not(.sd-on), .sd-focus .sd-link:not(.sd-on) { opacity: .3; }
+.sd-on .sd-frame { stroke: var(--text-primary); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 700px) {
   .catalog-facts { grid-template-columns: minmax(0, 1fr); gap: 16px; }

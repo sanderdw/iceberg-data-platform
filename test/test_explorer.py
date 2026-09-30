@@ -54,6 +54,9 @@ def test_nested_namespace_pagination_and_temporary_read_only_role(portal):
             assert query["parent"] == ["analytics\x1fnested.dot"]
             return {"namespaces": [["analytics", "nested.dot", "child"]]}
         assert "/analytics%1Fnested.dot/" in url.path
+        if url.path.endswith("/semantic-models"):
+            assert url.path.startswith("/api/catalog/polaris/v1/external/")
+            return {"identifiers": [{"name": "revenue", "namespace": ["analytics", "nested.dot"], "document": "hidden"}]}
         if url.path.endswith("/tables"):
             if "pageToken" not in query:
                 return {
@@ -74,14 +77,32 @@ def test_nested_namespace_pagination_and_temporary_read_only_role(portal):
     assert result.status_code == 200, result.text
     assert [t["name"] for t in result.json()["tables"]] == ["first", "second"]
     assert result.json()["views"][0]["name"] == "report"
-    assert len(paths) == 4
+    assert result.json()["semanticModels"] == [{"name": "revenue", "namespace": ["analytics", "nested.dot"]}]
+    assert len(paths) == 5
     assert "hidden" not in result.text
     grants = [body["grant"]["privilege"] for _, method, body in p.events if body and "grant" in body]
-    assert set(grants) == {"CATALOG_READ_PROPERTIES", "NAMESPACE_LIST", "TABLE_LIST", "VIEW_LIST"}
+    # The temporary role only adds listing rights, semantic model names included.
+    assert set(grants) == {"CATALOG_READ_PROPERTIES", "NAMESPACE_LIST", "TABLE_LIST", "VIEW_LIST", "SEMANTIC_MODEL_LIST"}
     assert any(
         path.startswith("/principal-roles/service_admin/") and method == "PUT" for path, method, _ in p.events
     )
     assert p.events[-1][1] == "DELETE" and "/catalog-roles/portal-explorer-" in p.events[-1][0]
+
+
+@pytest.mark.parametrize("status", [404, 406])
+def test_explorer_lists_no_models_when_polaris_has_the_feature_off(portal, status):
+    p = portal.provider
+    p.resources["catalogs"]["external"] = {"name": "external", "properties": {}}
+
+    def request(path, method="GET", body=None, retry=True):
+        if "/semantic-models" in path:
+            raise ServiceError(status, "off")
+        return {"namespaces": [], "identifiers": [{"name": "events", "namespace": ["analytics"]}]}
+
+    p.request = request
+    result = portal.client.get("/api/admin/explorer/contents?database=external&namespace=analytics")
+    assert result.status_code == 200
+    assert result.json()["semanticModels"] == [] and result.json()["tables"][0]["name"] == "events"
 
 
 def test_explorer_failure_removes_its_role(portal):

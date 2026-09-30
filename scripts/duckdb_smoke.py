@@ -113,12 +113,13 @@ def run(name):
     spec.loader.exec_module(notebook)
     return notebook.app.run()[1]
 
-for attempt in range(2):
+for expected in ('created', 'updated'):
     written = run('06_duckdb_flights_write.py')
     counts = {r['dataset']: r['rows'] for r in written['published']}
     assert counts == {'FLIGHT': 12000, 'AIRPORT': 8, 'CARRIER': 3, 'AIRCRAFT': 120, 'ROUTE': 56, 'RUNWAY': 16}
+    assert written['model_action'] == expected, written['model_action']
     written['lakehouse'].close()
-print('PASS: native DuckDB publishes all six Ossie datasets twice without duplicate flights')
+print('PASS: native DuckDB publishes all six Ossie datasets and their semantic model twice without duplicate flights')
 """
 
 FLIGHTS_READ_CODE = """
@@ -133,6 +134,7 @@ assert read['overview'].iloc[0]['scheduled_flights'] == 12000
 assert read['airport_delays']['scheduled_flights'].sum() == 12000
 assert read['carrier_performance']['eligible_arrivals'].sum() == 11587
 assert read['join_cardinality'].iloc[0]['runway_join_rows'] == 24000
+assert len(read['checks']) == 13 and all(c['violations'] == 0 for c in read['checks'])
 try:
     read['lakehouse'].execute('DELETE FROM lakehouse.ai_flights.flights')
 except duckdb.Error:
@@ -140,18 +142,31 @@ except duckdb.Error:
 else:
     raise AssertionError('Expected the read-only attachment to reject writes')
 read['lakehouse'].close()
+print('PASS: reader takes the semantic model from Polaris, checks keys and joins, and answers with its metrics')
+"""
 
-from user_portal.notebook.flights import bind_flights
-from user_portal.notebook.duckdb_connection import connect_duckdb
-connection = connect_duckdb(['ai_flights'], 'flights')
-try:
-    bind_flights(connection, read['model'], ['ai_flights'], {'ontology_sha256': 'changed'})
-except ValueError as error:
-    assert 'semantics differ' in str(error)
-else:
-    raise AssertionError('Expected semantic version mismatch to be detected')
-connection.close()
-print('PASS: reader queries all six Iceberg tables, verifies semantics and rejects a mismatched ontology')
+FLIGHTS_SEMANTIC_READ_CODE = """
+import json
+
+from user_portal.notebook.semantic import SemanticModelError, SemanticModels
+
+models = SemanticModels.connect(['ai_flights'])
+assert models.names() == ['flights']
+stored, version = models.load('flights')
+raw = models.client.get(models.base + '/flights').json()['document']
+ossie = json.loads(raw['semantic_model'])
+assert raw['version'] == ossie['version'] == '0.2.0.dev0' and ossie['semantic_model'] == [stored], raw['version']
+assert [d['name'] for d in stored['datasets']] == ['RUNWAY', 'AIRCRAFT', 'AIRPORT', 'FLIGHT', 'CARRIER', 'ROUTE']
+assert models.load('missing') is None
+for change in (lambda: models.create('other', stored), lambda: models.update('flights', stored, version), lambda: models.drop('flights')):
+    try:
+        change()
+    except SemanticModelError as error:
+        assert 'role' in str(error), error
+    else:
+        raise AssertionError('Expected Polaris to refuse a reader changing a semantic model')
+assert models.names() == ['flights']
+print('PASS: a reader lists and reads the semantic model but Polaris refuses every change')
 """
 
 
@@ -191,7 +206,13 @@ def main(*, flights_only=False):
                 os.environ.get("RUSTFS_CONTAINER", "iceberg-platform-rustfs-1"), aliases=["rustfs"]
             )
             checks = [] if flights_only else [(CODE, reader), (V3_READER_CODE, reader), (V3_CODE, writer)]
-            checks.extend([(FLIGHTS_WRITE_CODE, writer), (FLIGHTS_READ_CODE, reader)])
+            checks.extend(
+                [
+                    (FLIGHTS_WRITE_CODE, writer),
+                    (FLIGHTS_READ_CODE, reader),
+                    (FLIGHTS_SEMANTIC_READ_CODE, reader),
+                ]
+            )
             for code, account in checks:
                 run_notebook(daemon, network, database, account, code)
         finally:

@@ -11,19 +11,22 @@ def _():
 
     from user_portal.notebook.display import plain_table
     from user_portal.notebook.duckdb_connection import connect_duckdb
-    from user_portal.notebook.flights import bind_flights, load_semantics, quality_report, require_quality
+    from user_portal.notebook.semantic import SemanticModels, bind_datasets, joins, metric_sql, model_checks
 
     NAMESPACE = ["ai_flights"]
+    MODEL_NAME = "flights"
     return (
+        MODEL_NAME,
         NAMESPACE,
-        plt,
-        bind_flights,
+        SemanticModels,
+        bind_datasets,
         connect_duckdb,
-        load_semantics,
+        joins,
+        metric_sql,
         mo,
-        quality_report,
-        require_quality,
+        model_checks,
         plain_table,
+        plt,
     )
 
 
@@ -31,68 +34,101 @@ def _():
 def _(mo):
     mo.md("""
     # From flight records to an AI-ready data product
-    **Example 7 of 7 · Native DuckDB SQL on Iceberg**
+    **Example 7 of 7 · Semantic model and Iceberg tables from Polaris**
 
     Run **06 · Write an AI-ready flights product** first in the same database.
-    This notebook uses a read-only catalog attachment and your own permissions.
-    Queries scan the Iceberg tables directly; only their results become dataframes
-    for display. No AI service, API key or external data download is needed.
+    This notebook needs no local files: everything comes from Polaris, with your own
+    permissions. The **semantic model** says what the tables mean; the **Iceberg tables**
+    hold the rows. DuckDB attaches the catalog read-only and scans the tables directly.
+    No AI service, API key or external data download is needed.
 
-    The story: **discover the meaning → verify the evidence → ask a precise
+    The story: **discover the meaning → verify it against the data → ask a precise
     question → show the SQL and its limits**. Every result below is synthetic.
     """)
 
 
 @app.cell
-def _(load_semantics, mo):
-    model, product, fingerprints = load_semantics(mo.notebook_dir())
+def _(MODEL_NAME, NAMESPACE, SemanticModels):
+    with SemanticModels.connect(NAMESPACE) as _models:
+        _found = _models.load(MODEL_NAME)
+    if _found is None:
+        raise RuntimeError("There is no flights semantic model in this namespace yet. Run notebook 06 first.")
+    flights_model, model_version = _found
+    return flights_model, model_version
+
+
+@app.cell(hide_code=True)
+def _(MODEL_NAME, NAMESPACE, flights_model, mo, model_version):
     mo.md(f"""
-    ## 1. Discover the product
-    **{product["name"]} · version {product["version"]}**
+    ## 1. Discover the meaning
+    **{flights_model["name"]}** · semantic model `{".".join([*NAMESPACE, MODEL_NAME])}`,
+    entity version {model_version}
 
-    {product["grain"]}
+    {flights_model["description"]}
 
-    **Owner:** {product["owner"]}  
-    **Refresh:** {product["refresh"]}  
-    **Time:** {product["time_convention"]}
+    The model maps each dataset to an Iceberg table, names its key, states the joins
+    between datasets and carries the agreed metrics. Its AI context:
 
-    `flights.yaml` is the unchanged [Apache Ossie model](https://github.com/apache/ossie).
-    `flights.product.yaml` adds the demo's metric policies, SQL checks and AI guidance.
-    This example translates selected definitions into explicit SQL; it does not run
-    an Ossie compiler or generate SQL with an LLM.
+    {"  \n".join(flights_model["ai_context"]["instructions"].splitlines())}
     """)
-    return fingerprints, model, product
 
 
 @app.cell
-def _(mo, model, plain_table):
-    semantic_terms = [
-        {
-            "concept": _concept["concept"],
-            "relationship": _rel["name"],
-            "meaning": " / ".join(_rel.get("verbalizes", [])),
-            "derived definition": " / ".join(_rel.get("derived_by", [])),
-        }
-        for _concept in model["ontology"]
-        if _concept["concept"] in {"Airport", "Route", "Flight"}
-        for _rel in _concept.get("relationships", [])
-        if _rel["name"] in {"departure", "destination", "route", "departure_delay", "average_departure_delay"}
-    ]
-    plain_table(semantic_terms)
-    return (semantic_terms,)
+def _(flights_model, mo, plain_table):
+    mo.vstack(
+        [
+            plain_table(
+                [
+                    {"dataset": _d["name"], "Iceberg table": _d["source"],
+                     "primary key": ", ".join(_d["primary_key"]), "fields": len(_d["fields"])}
+                    for _d in flights_model["datasets"]
+                ],
+                label="Datasets",
+            ),
+            plain_table(
+                [
+                    {"relationship": _r["name"], "join": f"{_r['from']}.{', '.join(_r['from_columns'])} → "
+                     f"{_r['to']}.{', '.join(_r['to_columns'])}"}
+                    for _r in flights_model["relationships"]
+                ],
+                label="Relationships (many to one)",
+            ),
+            plain_table(
+                [
+                    {"metric": _m["name"], "SQL": _m["expression"]["dialects"][0]["expression"],
+                     "definition": _m["description"]}
+                    for _m in flights_model["metrics"]
+                ],
+                label="Metrics",
+            ),
+        ]
+    )
 
 
 @app.cell
-def _(NAMESPACE, bind_flights, connect_duckdb, fingerprints, model):
+def _(NAMESPACE, bind_datasets, connect_duckdb, flights_model):
+    # Each dataset becomes a view named like the dataset, over the table the model points at.
     lakehouse = connect_duckdb(NAMESPACE, "flights")
-    bind_flights(lakehouse, model, NAMESPACE, fingerprints)
+    bind_datasets(lakehouse, flights_model)
     return (lakehouse,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("""
+    ## 2. Verify the meaning against the data
+    A model is only useful if the data honors it. These checks come from the model itself:
+    every primary key must be unique, and every relationship must find its target row.
+    The notebook stops if one fails.
+    """)
+
+
 @app.cell
-def _(lakehouse, mo, product, quality_report, require_quality, plain_table):
-    checks = quality_report(lakehouse, product)
-    require_quality(checks)
+def _(flights_model, lakehouse, model_checks, plain_table):
+    checks = model_checks(lakehouse, flights_model)
+    _failed = [_c["check"] for _c in checks if _c["violations"]]
+    if _failed:
+        raise ValueError("The data does not match its semantic model: " + "; ".join(_failed))
     plain_table(checks)
     return (checks,)
 
@@ -120,34 +156,33 @@ def _(checks, lakehouse, mo, plain_table):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md("""
-    ## 2. “Which departure airports have the highest average departure delay?”
-    Ossie defines `Airport.average_departure_delay` through
-    `Flight.route.departure`. Follow `FLIGHT.route_id → ROUTE.id →
-    ROUTE.orig_airport_code → AIRPORT.code`. Using the destination column would
-    answer a different question. Unique dimension keys keep one joined row per flight.
-
-    `Delay` extends `NrMinutes`: report **minutes**, preserve negative (early)
-    departures and let `AVG` ignore missing delays on canceled flights. This uses
-    the full published date range. Display the number of observations with the mean.
+    ## 3. “Which departure airports have the highest average departure delay?”
+    The model answers two things. The join: follow `flight_route` and then
+    `route_departure_airport`; `route_destination_airport` would answer a different
+    question. The metric: `average_departure_delay` in minutes, where `AVG` ignores
+    the missing delays of canceled flights. Both relationships are many to one, so every
+    flight stays one row. The SQL below is assembled from the stored model.
     """)
 
 
 @app.cell
-def _(lakehouse, mo, product, plain_table):
-    airport_delays = mo.sql(
-        f"""
-        SELECT a.code AS departure_airport, a.name,
-               count(*) AS scheduled_flights, count(f.dep_delay) AS observed_departures,
-               round({product["metrics"]["average_departure_delay"]["sql"]}, 2) AS average_delay_minutes
-        FROM FLIGHT f
-        JOIN ROUTE r ON f.route_id = r.id
-        JOIN AIRPORT a ON r.orig_airport_code = a.code
-        GROUP BY a.code, a.name
-        ORDER BY average_delay_minutes DESC, departure_airport
-    """,
-        engine=lakehouse,
-        output=False,
-    )
+def _(flights_model, joins, metric_sql, mo):
+    airport_delay_sql = f"""
+    SELECT AIRPORT.code AS departure_airport, AIRPORT.name,
+           count(*) AS scheduled_flights, count(FLIGHT.dep_delay) AS observed_departures,
+           round({metric_sql(flights_model, "average_departure_delay")}, 2) AS average_delay_minutes
+    FROM FLIGHT
+    {joins(flights_model, "flight_route", "route_departure_airport")}
+    GROUP BY AIRPORT.code, AIRPORT.name
+    ORDER BY average_delay_minutes DESC, departure_airport
+    """
+    mo.md(f"```sql{airport_delay_sql}```")
+    return (airport_delay_sql,)
+
+
+@app.cell
+def _(airport_delay_sql, lakehouse, mo, plain_table):
+    airport_delays = mo.sql(airport_delay_sql, engine=lakehouse, output=False)
     plain_table(airport_delays)
     return (airport_delays,)
 
@@ -166,25 +201,25 @@ def _(airport_delays, mo, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md("""
-    ## 3. “Which carrier is most punctual?” needs a policy
-    Our demo defines on-time arrival as **arrival delay < 15 minutes**, among
-    **noncanceled, nondiverted** flights. This is an additional product policy, not
-    an Ossie definition. Cancellation rate uses **all scheduled flights** instead.
-    The SQL expressions are read from `flights.product.yaml` so the displayed
-    definition and executed calculation travel together.
+    ## 4. “Which carrier is most punctual?” needs a policy
+    The stored `on_time_arrival_pct` is a product policy: **arrival delay < 15 minutes**
+    among **noncanceled, nondiverted** flights. `cancellation_pct` uses **all scheduled
+    flights** instead. Both expressions come from Polaris, so the definition you read
+    and the calculation you run are the same text.
     """)
 
 
 @app.cell
-def _(lakehouse, mo, product, plain_table):
+def _(flights_model, joins, lakehouse, metric_sql, mo, plain_table):
     carrier_performance = mo.sql(
         f"""
-        SELECT c.name AS carrier, count(*) AS scheduled_flights,
-               count(*) FILTER (WHERE NOT f.cancelled AND NOT f.diverted) AS eligible_arrivals,
-               round({product["metrics"]["on_time_arrival_pct"]["sql"]}, 2) AS on_time_arrival_pct,
-               round({product["metrics"]["cancellation_pct"]["sql"]}, 2) AS cancellation_pct
-        FROM FLIGHT f JOIN CARRIER c ON f.carrier_code = c.code
-        GROUP BY c.name ORDER BY on_time_arrival_pct DESC, carrier
+        SELECT CARRIER.name AS carrier, count(*) AS scheduled_flights,
+               count(*) FILTER (WHERE NOT FLIGHT.cancelled AND NOT FLIGHT.diverted) AS eligible_arrivals,
+               round({metric_sql(flights_model, "on_time_arrival_pct")}, 2) AS on_time_arrival_pct,
+               round({metric_sql(flights_model, "cancellation_pct")}, 2) AS cancellation_pct
+        FROM FLIGHT
+        {joins(flights_model, "flight_carrier")}
+        GROUP BY CARRIER.name ORDER BY on_time_arrival_pct DESC, carrier
     """,
         engine=lakehouse,
         output=False,
@@ -218,23 +253,24 @@ def _(lakehouse, mo, plain_table):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md("""
-    ## 4. A valid join can still produce the wrong metric
-    An airport has multiple runways. Joining them into a flight aggregation
-    multiplies each flight. An AI consumer needs the relationship cardinality as
-    well as matching column names. The first join below preserves the flight grain;
-    the runway join demonstrates the fan-out to avoid.
+    ## 5. A valid join can still produce the wrong metric
+    The model's `runway_airport` relationship points from RUNWAY to AIRPORT: many runways
+    per airport. Joining runways into a flight aggregate goes against that direction and
+    multiplies each flight. Column names match either way; only the relationship tells
+    them apart. The first count follows the model, the second shows the fan-out to avoid.
     """)
 
 
 @app.cell
-def _(lakehouse, mo, plain_table):
+def _(flights_model, joins, lakehouse, mo, plain_table):
     join_cardinality = mo.sql(
-        """
+        f"""
         SELECT (SELECT count(*) FROM FLIGHT) AS flight_instances,
-               (SELECT count(*) FROM FLIGHT f JOIN ROUTE r ON f.route_id = r.id
-                   JOIN AIRPORT a ON r.orig_airport_code = a.code) AS correct_join_rows,
-               (SELECT count(*) FROM FLIGHT f JOIN ROUTE r ON f.route_id = r.id
-                   JOIN RUNWAY w ON r.orig_airport_code = w.airport_code) AS runway_join_rows
+               (SELECT count(*) FROM FLIGHT
+                   {joins(flights_model, "flight_route", "route_departure_airport")}) AS correct_join_rows,
+               (SELECT count(*) FROM FLIGHT
+                   {joins(flights_model, "flight_route")}
+                   JOIN RUNWAY ON ROUTE.orig_airport_code = RUNWAY.airport_code) AS runway_join_rows
     """,
         engine=lakehouse,
         output=False,
@@ -244,23 +280,19 @@ def _(lakehouse, mo, plain_table):
 
 
 @app.cell(hide_code=True)
-def _(mo, product):
-    _guidance = "\n".join("- " + _item for _item in product["ai_guidance"])
-    mo.md(f"""
-    ## 5. Context to give an AI consumer
-    Provide the ontology and product contract alongside the permitted table names.
-    Ask the consumer to show its selected definitions and SQL before interpreting results.
+def _(mo):
+    mo.md("""
+    ## 6. The same meaning for an AI agent
+    An agent with the platform's MCP server calls `describe_semantic_model` and gets this
+    model: datasets, relationships, metrics and AI context, with the user's own permissions.
+    Ask it to show the definitions and SQL it picked before interpreting results.
 
-    {_guidance}
+    **Example prompt:** “Use the flights semantic model in ai_flights to compare carriers'
+    on-time arrival percentages for January 2026. State the grain, UTC time window,
+    denominator and exclusions; show the SQL and label the result synthetic.”
 
-    **Example prompt:** “Using the supplied flights ontology and product contract,
-    compare carriers' on-time arrival percentages for January 2026. State the grain,
-    UTC time window, denominator and exclusions; show SQL and label the result synthetic.”
-
-    The hashes checked at connection time tie these local YAML files to the table
-    metadata. Reconnect after another publication to see fresh snapshots. A complete
-    product would also publish its semantic files in a discoverable registry and
-    define operational ownership, freshness targets and versioned releases.
+    Reconnect after another publication to see fresh snapshots. A complete product would
+    also define operational ownership, freshness targets and versioned releases.
     """)
 
 

@@ -23,7 +23,7 @@ Managed records carry `portal.managed-by=iceberg-portal-v2`.
 
 ## Users
 
-A user signs in through Keycloak and is linked by exact issuer and subject to a Polaris principal with a stable `portal-<uuid>` ID. Usernames are 3–48 characters. They start with a lowercase letter and contain lowercase letters, digits, `_` or `-`. Application users are not PostgreSQL login roles.
+A user signs in through Keycloak and is linked by exact issuer and subject to a Polaris principal with a stable `portal-<uuid>` ID. Usernames follow the [form validation rules](form-validation.md). Application users are not PostgreSQL login roles.
 
 ## Teams and roles
 
@@ -31,12 +31,11 @@ A team has a stable `team-<uuid>` ID, a unique name and an optional description.
 
 | Role | Catalog role | Access |
 | --- | --- | --- |
-| `reader` | `reader` | Read metadata and table data |
+| `reader` | `reader` | Read metadata, table data and semantic models |
 | `writer` | `writer` | Also create and write namespaces, tables and views |
 | `admin` | `admin` | Also manage catalog access, the team's databases and data shares |
-| `bucket-admin` | `admin` | Also direct S3 credentials, whose policy covers the buckets of the teams where the user holds this role |
 
-Effective access is the union across all of a user's teams. The active team and environment only select what the portal and notebooks show. Changing memberships or roles, or moving a database, synchronizes the affected grants and bucket policies.
+Effective access is the union across all of a user's teams. The active team and environment only select what the portal and notebooks show. Changing memberships or roles, or moving a database, synchronizes the affected grants.
 
 For example, a user who is `writer` in `analytics` and `reader` in `operations` can write to the databases of `analytics` and read those of `operations`. If a database moves from `operations` to `analytics`, that user can then write to it.
 
@@ -50,10 +49,11 @@ Renaming a database or moving it to another team keeps its catalog ID, bucket an
 
 ## Data shares
 
-A data share gives another team, an external party, or both read access to selected tables and views of one database. The destinations are fixed at creation. A share has a stable `share-<uuid>` ID that names three Polaris records: a principal (the external credential), its principal role and a catalog role in the shared database.
+A data share gives another team, an external party, or both read access to selected tables, views and semantic models of one database. The destinations are fixed at creation. A share has a stable `share-<uuid>` ID that names three Polaris records: a principal (the external credential), its principal role and a catalog role in the shared database.
 
-- **Grants:** the catalog role holds exactly one grant per selected object: `TABLE_READ_DATA` on a table, `VIEW_READ_PROPERTIES` on a view. It holds nothing on namespaces or the catalog, so external clients load objects by their full names. For team shares, the catalog role is granted to each recipient member's principal role, including future members, and removed when a member leaves.
+- **Grants:** the catalog role holds exactly one grant per selected object: `TABLE_READ_DATA` on a table, `VIEW_READ_PROPERTIES` on a view, `SEMANTIC_MODEL_READ` on a semantic model. It holds nothing on namespaces or the catalog, so external clients load objects by their full names. For team shares, the catalog role is granted to each recipient member's principal role, including future members, and removed when a member leaves.
 - **Views are not filters.** The recipient's engine reads a view's underlying tables, so those tables must be shared too, and the recipient can read them in full. A share needs at least one table.
+- **Semantic models need their tables.** A shared model is only useful with the tables it reads. The portal and the MCP tools add those tables when you select a model. The API names each missing table in `warnings`, and `includeModelTables=true` adds them instead.
 - **Limits and drift:** a share holds at most 50 objects, and a database at most 20 shares. Grants follow the object itself, not its name, so a renamed object stays shared, while a dropped and recreated one does not. The portal shows the difference, and saving the share again fixes it.
-- **Ownership:** a share belongs to its database. Every current Administrator or Database + bucket administrator of the owning team can manage it. A shared database can't move to another team until its shares are revoked.
+- **Ownership:** a share belongs to its database. Every current Administrator of the owning team can manage it. A shared database can't move to another team until its shares are revoked.
 - **Secret and expiry:** the client secret is shown once and never stored. **New secret** ends the previous one immediately. Revocation and expiry end issued tokens at once. The user gateway enforces expiry every 30 seconds, and every share listing enforces it too.

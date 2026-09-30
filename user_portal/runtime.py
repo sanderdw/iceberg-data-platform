@@ -85,7 +85,7 @@ class NotebookRuntime:
         self.polaris = env.get("POLARIS_CONTAINER", "iceberg-platform-polaris-1")
         self.rustfs = env.get("RUSTFS_CONTAINER", "iceberg-platform-rustfs-1")
         self.limit = int(env.get("MAX_NOTEBOOKS", "8"))
-        self.memory = env.get("NOTEBOOK_MEMORY", "1g")
+        self.memory = env.get("NOTEBOOK_MEMORY", "2g")
         self.workspaces = {}
 
     def cleanup_network(self, network):

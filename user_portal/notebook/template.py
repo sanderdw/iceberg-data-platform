@@ -33,10 +33,17 @@ def _(catalog, mo, namespace, shared_objects):
         namespaces = sorted({tuple(o["namespace"]) for o in shared_objects})
         tables = [(*o["namespace"], o["name"]) for o in shared_objects if o["kind"] == "table"]
         views = [(*o["namespace"], o["name"]) for o in shared_objects if o["kind"] == "view"]
+    _models = [(*o["namespace"], o["name"]) for o in shared_objects or [] if o["kind"] == "semantic-model"]
+    _shared_models = (
+        f"\n\n**Semantic models:** {_models}. Load one with "
+        "`SemanticModels.connect(model[:-1]).load(model[-1])` from `user_portal.notebook.semantic`, "
+        "where `model` is one of these tuples."
+        if _models else ""
+    )
     mo.vstack(
         [
             mo.md("## Available objects"),
-            mo.md(f"**Namespaces:** {namespaces}\n\n**Tables:** {tables}\n\n**Views:** {views}"),
+            mo.md(f"**Namespaces:** {namespaces}\n\n**Tables:** {tables}\n\n**Views:** {views}{_shared_models}"),
         ]
     )
 
