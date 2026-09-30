@@ -15,6 +15,104 @@ the platform repository), Iceberg REST and S3, so the platform and this stack up
 | MCP | `http://localhost:3004/mcp` (Keycloak sign-in through the `ext-dbt-mcp` client) |
 | Viewer | `http://localhost:3004` (pipelines, runs, schedules, docs) |
 
+## Architecture
+
+The stack reaches the platform core only through the Extension Bridge (highlighted), Iceberg REST and S3.
+
+```mermaid
+flowchart LR
+    subgraph Clients["Clients"]
+        Agent["AI agent (MCP)"]
+        Browser["Person (viewer)"]
+    end
+
+    subgraph Core["Iceberg Data Platform core"]
+      KC["Keycloak<br/>iceberg-mcp / ext-dbt-mcp clients"]
+        Polaris["Polaris<br/>Iceberg REST catalog"]
+        S3["RustFS<br/>S3 storage"]
+      Portal["User portal MCP<br/>localhost:3002/mcp<br/>catalog and table tools"]
+    end
+
+    subgraph Bridge["Platform Extension Bridge v1 (/bridge/v1)"]
+      Disc["GET / : discovery<br/>contractVersion"]
+      Me["GET /me<br/>teams, roles, databases"]
+      AP["/teams/{team}/automation-principals<br/>list / enable / revoke"]
+      Scope["GET /automation-principals/{id}<br/>scope"]
+      Tok["POST /automation-principals/{id}/tokens<br/>1h Polaris token (read | write)"]
+    end
+
+    subgraph Dbt["dbt stack (Compose project iceberg-dbt)"]
+      DP["dbt-portal MCP<br/>localhost:3004/mcp<br/>pipeline tools + viewer"]
+        Git[("Git repos + run store")]
+        L["dbt-launcher<br/>only Docker socket"]
+        R["runner container<br/>dbt v2 + DuckDB<br/>no internet, read-only"]
+    end
+
+    Agent -- "MCP connection" --> Portal
+    Agent -- "MCP connection" --> DP
+    Browser -- "session" --> DP
+    Portal -. "links to" .-> DP
+    Agent -. "PKCE sign-in" .-> KC
+
+    DP -- "client_credentials<br/>(service token)" --> KC
+    DP == "user token forwarded" ==> Me
+    DP == "user token forwarded" ==> AP
+    DP == "contract check" ==> Disc
+    DP == "service token" ==> Scope
+    DP == "service token" ==> Tok
+    DP --- Git
+
+    DP -- "archive + run token" --> L
+    L -- "starts, private 'launch' network" --> R
+    R -- "Iceberg REST<br/>+ table properties publish" --> Polaris
+    R -- "vended, table-scoped creds" --> S3
+    Polaris -. "vends credentials" .-> S3
+
+    classDef bridge fill:#ffcc00,stroke:#b38f00,stroke-width:3px,color:#000
+    classDef core fill:#e8f0fe,stroke:#4a6fa5,color:#000
+    classDef dbt fill:#e9f7ef,stroke:#2e7d4f,color:#000
+    class Disc,Me,AP,Scope,Tok bridge
+    class KC,Polaris,S3,Portal core
+    class DP,Git,L,R dbt
+    style Bridge fill:#fff8d6,stroke:#b38f00,stroke-width:3px
+```
+
+A build, step by step:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Agent (MCP)
+    participant DP as dbt-portal
+    participant KC as Keycloak
+    participant B as Extension Bridge v1
+    participant L as dbt-launcher
+    participant R as Runner
+    participant P as Polaris + S3
+
+    A->>DP: build(project, environment) + user token
+    DP->>B: GET /me (user token)
+    B-->>DP: teams, roles, databases
+    Note over DP: Services checks the role (writer/admin)
+    DP->>KC: client_credentials
+    KC-->>DP: service token
+    rect rgb(255, 240, 180)
+    Note over DP,B: Bridge: the stack's only way into the platform
+    DP->>B: GET /bridge/v1 (discovery, contract range check)
+    DP->>B: GET /automation-principals (find the team's active principal)
+    DP->>B: GET /automation-principals/{id} (scope: catalogs)
+    DP->>B: POST /automation-principals/{id}/tokens {access: write}
+    B-->>DP: 1-hour Polaris token
+    end
+    DP->>L: POST /runs (staged archive + token)
+    L->>R: start isolated container (DBT_ENV_SECRET_POLARIS_TOKEN)
+    R->>P: Iceberg REST commits + vended S3 writes
+    R->>P: stamp producer, lineage, quality and docs properties
+    R-->>L: exit code + artifacts
+    DP->>L: poll /runs/{id}
+    DP-->>A: run status, nodes, tests
+```
+
 ## How it works
 
 - **Projects** belong to a team and are Git repositories kept by this stack. `main` is protected:
@@ -59,13 +157,36 @@ Then a team administrator enables dbt for an environment, either through an agen
 
 ## Connect an AI agent
 
+Register both the user portal MCP and the dbt MCP. Use the user portal tools to discover
+the team's databases and tables, and the dbt tools to build and manage pipelines.
+
 ```bash
-claude mcp add --transport http --callback-port 3010 --client-id ext-dbt-mcp dbt http://localhost:3004/mcp
+claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-user http://localhost:3002/mcp
+claude mcp add --transport http --client-id ext-dbt-mcp --callback-port 3010 dbt http://localhost:3004/mcp
 ```
 
-On the first tool call the agent opens Keycloak in your browser. The tools act with your team
-roles. [`skills/dbt-platform/SKILL.md`](skills/dbt-platform/SKILL.md) teaches an agent the platform's
-conventions.
+For GitHub Copilot in VS Code, add both servers to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "iceberg-user": {
+      "type": "http",
+      "url": "http://localhost:3002/mcp",
+      "oauth": { "clientId": "iceberg-mcp" }
+    },
+    "dbt": {
+      "type": "http",
+      "url": "http://localhost:3004/mcp",
+      "oauth": { "clientId": "ext-dbt-mcp" }
+    }
+  }
+}
+```
+
+On first use, each server opens its Keycloak sign-in flow. Both act with the signed-in user's
+permissions. [`skills/dbt-platform/SKILL.md`](skills/dbt-platform/SKILL.md) teaches an agent the
+platform's conventions.
 
 ## Project conventions
 
