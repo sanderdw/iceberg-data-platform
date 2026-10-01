@@ -271,6 +271,9 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
         contents[filename] = (root / filename).read_bytes()
     # Connect your own tools; its defaults match a local installation.
     contents["iceberg_connect.py"] = (root / "user_portal/client/iceberg_connect.py").read_bytes()
+    # Orientation for coding agents started in the installation directory; Claude Code reads CLAUDE.md only.
+    contents["AGENTS.md"] = (root / "user_portal/client/AGENTS.md").read_bytes()
+    contents["CLAUDE.md"] = b"@AGENTS.md\n"
     # Conversational BI, installed only when asked for: pinned to its own release, or to this preview's build.
     contents.update(conversationalbi_bundle(root, extension_image_tag)[1])
     # Getting-started skills for coding agents, opened in the installation directory.

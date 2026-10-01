@@ -148,13 +148,16 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
     assert {"conversationalbi/compose.yaml", "conversationalbi/scripts/setup.py"} <= set(files)
     assert "pgadmin/servers.json" in files
     assert files["iceberg_connect.py"] == (release_tree / "user_portal/client/iceberg_connect.py").read_bytes()
+    assert files["AGENTS.md"] == (release_tree / "user_portal/client/AGENTS.md").read_bytes()
+    assert files["CLAUDE.md"] == b"@AGENTS.md\n"
     skills = sorted(path.relative_to(release_tree).as_posix()
                     for path in (release_tree / ".agents/skills").rglob("*") if path.is_file())
     assert {".agents/skills/quick-share/SKILL.md", ".agents/skills/quick-share/assets/Caddyfile",
-            ".agents/skills/demo-company/SKILL.md", ".agents/skills/demo-company/references/retail.md"} <= set(skills)
+            ".agents/skills/demo-company/SKILL.md", ".agents/skills/demo-company/references/retail.md",
+            ".agents/skills/semantic-model/SKILL.md", ".agents/skills/semantic-model/scripts/semantic_model.py"} <= set(skills)
     assert all(files[name] == (release_tree / name).read_bytes() for name in skills)
     # Claude Code finds each skill through a pointer with the same name and description.
-    for skill in ("quick-share", "demo-company"):
+    for skill in ("quick-share", "demo-company", "semantic-model"):
         pointer = files[f".claude/skills/{skill}/SKILL.md"].decode()
         original = (release_tree / f".agents/skills/{skill}/SKILL.md").read_text()
         assert pointer.split("---\n", 2)[1] == original.split("---\n", 2)[1]

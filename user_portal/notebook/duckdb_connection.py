@@ -149,6 +149,8 @@ def connect_duckdb(namespace, table, *, read_only=True, missing_ok=False):
             settings["extension_directory"] = directory
         connection = duckdb.connect(config=settings)
         connection.execute("LOAD httpfs; LOAD iceberg;")
+        # Semantic models state their dates in UTC; CAST(timestamptz AS DATE) follows the session's zone.
+        connection.execute("SET TimeZone = 'UTC'")
         connection.execute(f"CREATE SECRET polaris (TYPE iceberg, TOKEN {sql_literal(token)})")
         if vended:
             _storage_secret(connection, *vended)

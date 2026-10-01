@@ -1,12 +1,16 @@
+"""Governed queries compiled from Ossie models; mirrors extensions/conversationalbi/tests/test_semantic.py."""
+
+import datetime
+import decimal
 import json
 
 import pytest
 from pydantic import ValidationError
 
-from conversationalbi.errors import CbiError
-from conversationalbi.semantic import compiler, expressions, ossie
-from conversationalbi.semantic.compiler import QuerySpec, compile_query
-from tests import flights
+from test import semantic_flights as flights
+from user_portal.semantic import compiler, expressions, ossie, worker
+from user_portal.semantic.compiler import QuerySpec, compile_query
+from user_portal.semantic.errors import SemanticError
 
 
 def spec(**kwargs):
@@ -53,12 +57,12 @@ def test_accepts_every_envelope_shape(wrap):
 
 def test_rejects_models_it_cannot_trust():
     base = {"datasets": [{"name": "A", "source": "lakehouse.ns.a", "primary_key": ["id"], "fields": []}]}
-    with pytest.raises(CbiError, match="unsupported name"):
+    with pytest.raises(SemanticError, match="unsupported name"):
         ossie.parse({**base, "metrics": [{"name": "x; drop", "expression": "count(*)"}]}, ["ns"])
-    with pytest.raises(CbiError, match="does not define"):
+    with pytest.raises(SemanticError, match="does not define"):
         ossie.parse({**base, "relationships": [{"name": "r", "from": "A", "to": "B", "from_columns": ["b"],
                                                 "to_columns": ["id"]}]}, ["ns"])
-    with pytest.raises(CbiError, match="no datasets"):
+    with pytest.raises(SemanticError, match="no datasets"):
         ossie.parse({"document": {"semantic_model": "not json"}}, ["ns"])
 
 
@@ -70,10 +74,10 @@ def test_rejects_models_it_cannot_trust():
 ])
 def test_rejects_models_too_large_to_plan(key, count, item):
     base = {"datasets": [{"name": "A", "source": "ns.a", "fields": []}]}
-    with pytest.raises(CbiError, match=f"has {count} {key}"):
+    with pytest.raises(SemanticError, match=f"has {count} {key}"):
         ossie.parse({**base, key: [item(i) for i in range(count)]}, ["ns"])
     fields = [{"name": f"f{i}", "expression": f"f{i}"} for i in range(ossie.MAX_FIELDS + 1)]
-    with pytest.raises(CbiError, match="fields in dataset 'A'"):
+    with pytest.raises(SemanticError, match="fields in dataset 'A'"):
         ossie.parse({"datasets": [{"name": "A", "source": "ns.a", "fields": fields}]}, ["ns"])
 
 
@@ -102,7 +106,7 @@ def test_allows_scalar_and_aggregate_sql(sql):
     "sum(x) FROM t", "*", "query('SELECT 1')", "a -> 'x'", "read_parquet('s3://other/bucket')",
 ])
 def test_refuses_anything_else(sql):
-    with pytest.raises(CbiError) as exc:
+    with pytest.raises(SemanticError) as exc:
         expressions.parse(sql)
     assert exc.value.code == "unsafe_expression"
 
@@ -143,7 +147,7 @@ def test_shortest_unique_path_wins():
 
 def test_ambiguous_paths_need_via_and_can_use_both():
     model = flights.model()
-    with pytest.raises(CbiError) as exc:
+    with pytest.raises(SemanticError) as exc:
         compile_query(model, flights.schemas(model), spec(
             metrics=["average_departure_delay"], dimensions=[{"field": "AIRPORT.name"}]))
     assert exc.value.code == "ambiguous_join"
@@ -166,7 +170,7 @@ def test_ambiguous_paths_need_via_and_can_use_both():
 
 def test_refuses_a_fan_out():
     model = flights.model()
-    with pytest.raises(CbiError) as exc:
+    with pytest.raises(SemanticError) as exc:
         compile_query(model, flights.schemas(model), spec(
             metrics=["average_departure_delay"], dimensions=[{"field": "RUNWAY.length"}]))
     assert exc.value.code == "fan_out"
@@ -183,7 +187,7 @@ def test_time_grain_and_typed_filters():
     assert "HAVING" in compiled.sql and compiled.params[-1] == 0
     rows = run(compiled)
     assert rows and all(str(r[0]) <= "2026-01-14" for r in rows)
-    with pytest.raises(CbiError) as exc:
+    with pytest.raises(SemanticError) as exc:
         compile_query(model, flights.schemas(model), spec(
             metrics=["on_time_arrival_pct"], dimensions=[{"field": "CARRIER.name", "grain": "month"}]))
     assert exc.value.code == "invalid_grain"
@@ -205,7 +209,7 @@ def test_values_never_become_sql():
 ])
 def test_names_must_exist(kwargs, code):
     model = flights.model()
-    with pytest.raises(CbiError) as exc:
+    with pytest.raises(SemanticError) as exc:
         compile_query(model, flights.schemas(model), spec(**kwargs))
     assert exc.value.code == code
 
@@ -223,7 +227,7 @@ def test_an_unsafe_metric_from_a_shared_model_is_refused():
     inner = json.loads(flights.ENVELOPE["document"]["semantic_model"])["semantic_model"][0]
     inner["metrics"].append({"name": "leak", "expression": "max(getenv('HOME'))"})
     model = ossie.parse(inner, ["ai_flights"])
-    with pytest.raises(CbiError) as exc:
+    with pytest.raises(SemanticError) as exc:
         compile_query(model, flights.schemas(model), spec(metrics=["leak"]))
     assert exc.value.code == "unsafe_expression"
 
@@ -234,3 +238,39 @@ def test_reachable_dimensions_for_describe():
     assert found["CARRIER.name"]["path"] == ["flight_carrier"]
     assert found["AIRPORT.name"]["ambiguous"] is True
     assert "RUNWAY.length" not in found
+
+
+def test_flagged_dimensions_limit_what_a_query_may_group_by():
+    model = ossie.parse(flights.stored(flagged=True), ["ai_flights"])
+    schemas = flights.schemas(model)
+    weekly = compile_query(model, schemas, QuerySpec(
+        metrics=["cancellation_pct"], dimensions=[{"field": "FLIGHT.date", "grain": "week"}]))
+    rows = flights.local().execute(weekly.sql, weekly.params).fetchall()
+    assert rows and all(0 <= pct <= 100 for _, pct in rows)
+    # A measure is not a dimension once the model flags its dimensions.
+    with pytest.raises(SemanticError, match="no dimension 'dep_delay'"):
+        compile_query(model, schemas, QuerySpec(metrics=["cancellation_pct"], dimensions=[{"field": "FLIGHT.dep_delay"}]))
+
+
+def test_plain_values_stay_exact_in_a_browser():
+    assert worker.plain(2**60) == str(2**60) and worker.plain(42) == 42
+    assert worker.plain(decimal.Decimal("12.50")) == 12.5
+    assert worker.plain(decimal.Decimal("1" * 20)) == "1" * 20
+    assert worker.plain(float("nan")) is None
+    assert worker.plain(datetime.date(2026, 1, 2)) == "2026-01-02"
+
+
+def test_execute_reports_truncation():
+    result = worker.execute(flights.local(), 'SELECT id FROM "FLIGHT" ORDER BY id', [], 5)
+    assert len(result["rows"]) == 5 and result["truncated"] and result["columns"][0]["name"] == "id"
+
+
+def test_a_locked_session_cannot_read_local_files_and_answers_in_utc():
+    connection = worker.connect()
+    worker.lock(connection)
+    assert worker.execute(connection, "SELECT current_setting('TimeZone')", [], 1)["rows"] == [["UTC"]]
+    assert worker.execute(connection, "SELECT TIMESTAMPTZ '2026-09-30 23:30:00+00'::DATE", [], 1)["rows"] == [["2026-09-30"]]
+    with pytest.raises(Exception, match="disabled"):
+        connection.execute("SELECT * FROM read_csv('/etc/passwd')")
+    with pytest.raises(Exception, match="configuration"):
+        connection.execute("SET disabled_filesystems = ''")

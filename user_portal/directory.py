@@ -14,6 +14,8 @@ from server.storage import RustFSStorage
 from server.validation import validation_message
 
 from .catalog import object_details, properties, semantic_model_details
+from .semantic import compiler, ossie, rules
+from .semantic.errors import SemanticError
 
 
 def validate_namespace(parts):
@@ -357,29 +359,39 @@ class UserDirectory:
         return {"deleted": True, "id": id, "name": name}
 
     def request(self, session, path):
+        return self.send(session, "GET", path)
+
+    def send(self, session, method, path, body=None):
+        """One catalog request as the user. Polaris's own messages are never passed on: they can echo input."""
         if session.token_until <= time.monotonic():
             if session.oidc_subject:
                 raise ServiceError(401, "Your Keycloak session expired. Sign in again.")
             session.token, session.token_until = self.authenticate(session.client_id, session.secret)
+        headers = {"Authorization": f"Bearer {session.token}", "Polaris-Realm": "POLARIS"}
         try:
-            response = self.http.get(
-                self.url + path,
-                headers={
-                    "Authorization": f"Bearer {session.token}",
-                    "Polaris-Realm": "POLARIS",
-                },
-            )
+            if method == "GET":
+                response = self.http.get(self.url + path, headers=headers)
+            else:
+                response = self.http.request(method, self.url + path, json=body, headers=headers)
         except httpx.HTTPError as exc:
             raise ServiceError(503, "The data provider is unavailable.") from exc
         if response.is_error:
             # 406: Polaris has this feature switched off. 503: it is temporarily unavailable, and retrying helps.
-            status = response.status_code if response.status_code in (401, 403, 404, 406, 503) else 502
+            # 400 and 409 only answer changes: a rejected document, or a newer version than the one read.
+            known = (401, 403, 404, 406, 503) + ((400, 409) if method != "GET" else ())
+            status = response.status_code if response.status_code in known else 502
             if status == 503:
                 raise ServiceError(503, "The data provider is temporarily unavailable. Try again shortly.")
             if status == 406:
                 raise ServiceError(406, "Semantic models are switched off in Polaris.")
+            if status == 400:
+                raise ServiceError(400, "The catalog rejected this request. Names use letters, digits, - and _.")
+            if status == 409:
+                raise ServiceError(409, "Someone changed this object meanwhile. Read it again and retry.")
+            if status == 403 and method != "GET":
+                raise ServiceError(403, "Your role may not change this. Changing semantic models needs the Writer role.")
             raise ServiceError(status, "This content is unavailable with your permissions.")
-        return response.json()
+        return response.json() if response.content else {}
 
     def login_oidc(self, claims, token, lifetime, session_id):
         mapping = claims.get("polaris", {})
@@ -509,6 +521,93 @@ class UserDirectory:
         loaded = self.request(session, f"{path}/{kind}s/{enc(name)}")
         return {"name": name, "namespace": namespace,
                 **object_details(kind, loaded, extensions.extensions(os.environ))}
+
+    def semantic_model_path(self, database, namespace, name=None):
+        path = f"/api/catalog/polaris/v1/{enc(database)}/namespaces/{enc(chr(31).join(namespace))}/semantic-models"
+        return path + (f"/{enc(name)}" if name else "")
+
+    def load_semantic_model(self, session, database, namespace, name):
+        """The model as Polaris stores it, after the same access check as `details`."""
+        info = self.database(session, database)
+        if info.get("shared") and not any(
+            o["kind"] == "semantic-model" and o["namespace"] == namespace and o["name"] == name
+            for o in info["sharedObjects"]
+        ):
+            raise ServiceError(403, "This object is not shared with your active team.")
+        return self.request(session, self.semantic_model_path(database, namespace, name))
+
+    def publish_semantic_model(self, session, database, namespace, name, model, entity_version=None):
+        """Create a model, or replace the version the caller read; Polaris checks the Writer role."""
+        model, warnings = rules.validate(model)
+        document = rules.document(model)
+        try:
+            current = self.request(session, self.semantic_model_path(database, namespace, name))
+        except ServiceError as exc:
+            if exc.status != 404:
+                raise
+            current = None
+        if current is None:
+            if entity_version is not None:
+                raise ServiceError(404, f"There is no semantic model {name!r} to replace. Leave out entity_version.")
+            created = self.send(session, "POST", self.semantic_model_path(database, namespace),
+                                {"name": name, "document": document})
+            action, version = "created", created.get("entity-version")
+        else:
+            stored = current.get("entity-version")
+            if entity_version is None or str(entity_version) != str(stored):
+                raise ServiceError(409, f"Semantic model {name!r} exists at version {stored}. Read it with "
+                                        "describe_semantic_model, and pass that entityVersion to replace it.")
+            updated = self.send(session, "PUT", self.semantic_model_path(database, namespace, name),
+                                {"document": document, "entity-version": stored})
+            action, version = "updated", updated.get("entity-version")
+        return {"action": action, "name": name, "namespace": namespace, "entityVersion": version,
+                "warnings": warnings}
+
+    def delete_semantic_model(self, session, database, namespace, name, confirm_name):
+        if confirm_name != name:
+            raise ServiceError(422, "Type the semantic model's name exactly to confirm deleting it.")
+        self.send(session, "DELETE", self.semantic_model_path(database, namespace, name))
+        return {"deleted": True, "name": name, "namespace": namespace}
+
+    def semantic_query_guide(self, session, database, namespace, name):
+        """What query_semantic_model can answer: each metric's dataset and the dimensions reachable from it."""
+        try:
+            model = ossie.parse(self.load_semantic_model(session, database, namespace, name), tuple(namespace))
+        except SemanticError as exc:
+            return {"metrics": {}, "dimensions": {}, "problems": [str(exc)]}
+        homes, problems = {}, []
+        for metric in model.metrics:
+            try:
+                homes[metric.name] = compiler.metric_home(model, metric, compiler.expressions.parse(metric.expression))
+            except SemanticError as exc:
+                problems.append(f"Metric {metric.name}: {exc}")
+        return {"metrics": homes,
+                "dimensions": {home: compiler.reachable(model, home) for home in sorted({h for h in homes.values() if h})},
+                "problems": problems}
+
+    def semantic_query_job(self, session, database, namespace, name, spec, max_rows=200):
+        """Compile a governed query from the stored model, to run as the user in a worker process."""
+        loaded = self.load_semantic_model(session, database, namespace, name)
+        model = ossie.parse(loaded, tuple(namespace))
+        schemas, unreadable = {}, []
+        for dataset in model.datasets:
+            try:
+                table = self.details(session, database, list(dataset.namespace), "table", dataset.table)
+            except ServiceError as exc:
+                if exc.status not in (403, 404):
+                    raise
+                unreadable.append(".".join([*dataset.namespace, dataset.table]))
+                continue
+            schemas[dataset.name] = {c["name"]: c["type"] for c in table["columns"] if "." not in c["name"]}
+        compiled = compiler.compile_query(model, schemas, spec, max_rows)
+        missing = sorted({".".join([*b["namespace"], b["table"]]) for b in compiled.bindings} & set(unreadable))
+        if missing:
+            raise SemanticError(403, "A table this query needs is missing or not readable with your permissions: "
+                                     + ", ".join(missing) + ".", "table_not_readable", {"tables": missing})
+        job = {"uri": self.url + "/api/catalog", "warehouse": database, "token": session.token,
+               "s3Endpoint": self.s3_endpoint, "bindings": compiled.bindings, "sql": compiled.sql,
+               "params": compiled.params, "limit": compiled.limit}
+        return model, compiled, job
 
     def preview_request(self, session, database, namespace, name, snapshot_id, limit):
         details = self.details(session, database, namespace, "table", name)

@@ -131,6 +131,7 @@ Summarize:
   - GitHub Copilot: change `url` in `.vscode/mcp.json` or `~/.copilot/mcp-config.json`.
   - Claude Code: `claude mcp remove iceberg-admin`, then `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-admin <ADMIN_URL>/mcp`.
   - Other agents: change the server URL in their MCP settings.
+  - These registrations stop working when the session ends; the Undo below switches them back to localhost.
 - `iceberg_connect.py` has the sign-in and catalog addresses built in. Anyone who downloaded it before the share downloads it again from the user portal; the helper says so when it cannot reach an old address.
 - The addresses stop working when a tunnel stops, Docker restarts or the host sleeps. Run this skill again for new addresses. Keep the host awake during the session.
 - End the session with "Undo". Until then the platform stays reachable from the internet, and localhost sign-in does not work.
@@ -144,4 +145,11 @@ Summarize:
    - `--admin-origins http://localhost:<PORT>`
    - `--user-origins http://localhost:<USER_PORT>`
    - `--old-issuer` set to the tunnel issuer from step 2.
-5. Tell the user that sign-in works at `http://localhost:<PORT>` and `http://localhost:<USER_PORT>` again. The restart already pointed the databases' storage back at `S3_ENDPOINT` from the restored `.env`. MCP clients and `iceberg_connect.py` need their localhost addresses back.
+5. Tell the user that sign-in works at `http://localhost:<PORT>` and `http://localhost:<USER_PORT>` again. The restart already pointed the databases' storage back at `S3_ENDPOINT` from the restored `.env`.
+6. Point coding agents back at localhost. The tunnel addresses no longer exist, so an MCP server still registered with one fails to connect (`ENOTFOUND …trycloudflare.com`). For each server the user registered during the session, `iceberg-admin` at `http://localhost:<PORT>/mcp` and `iceberg-user` at `http://localhost:<USER_PORT>/mcp`:
+   - Codex: set `url` under `[mcp_servers.iceberg-admin]` (or `iceberg-user`) in `~/.codex/config.toml` back to the localhost address, then run `codex mcp login iceberg-admin`.
+   - GitHub Copilot: set `url` in `.vscode/mcp.json` or `~/.copilot/mcp-config.json` back to the localhost address.
+   - Claude Code: `claude mcp remove iceberg-admin`, then `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-admin http://localhost:<PORT>/mcp`. Do the same for `iceberg-user` with `http://localhost:<USER_PORT>/mcp`.
+   - Other agents: change the server URL in their MCP settings.
+   Then start a new agent session and sign in again.
+7. `iceberg_connect.py` downloaded during the session carries the tunnel addresses. Use the copy in the installation folder, or download it again from `http://localhost:<USER_PORT>`.

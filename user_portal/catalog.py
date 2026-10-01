@@ -218,6 +218,17 @@ def expressions(item):
     return [{"dialect": text(e.get("dialect")), "expression": text(e.get("expression"))} for e in dicts(found)]
 
 
+def dimension(field):
+    """Ossie marks a dimension with an object, `{"is_time": bool}`; older documents wrote `true`.
+
+    Returns (is a dimension, is a time dimension).
+    """
+    value = field.get("dimension")
+    if isinstance(value, dict):
+        return True, value.get("is_time") is True
+    return value is True, False
+
+
 def ossie_models(payload):
     """The semantic models in a stored document. Polaris keeps the model as a JSON string, and
     clients differ in whether it is one model, a list of models or a whole Ossie document."""
@@ -279,7 +290,8 @@ def semantic_model_details(name, namespace, loaded):
                         "name": text(f.get("name")),
                         "description": text(f.get("description")),
                         "datatype": text(f.get("datatype")),
-                        "dimension": bool(f.get("dimension")),
+                        "dimension": dimension(f)[0],
+                        "timeDimension": dimension(f)[1],
                         "expressions": expressions(f),
                     }
                     for f in dicts(d.get("fields"))

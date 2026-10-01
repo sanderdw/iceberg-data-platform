@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Governed queries for every AI agent:** the user portal's MCP server has `query_semantic_model`. An agent names a model's metrics, dimensions (with an optional time grain) and filters; the portal compiles the model's own SQL, joins only along its relationships and runs it read-only, with the signed-in user's permissions, in a sandboxed DuckDB process. It shares Conversational BI's query engine (`user_portal/semantic`), so it needs neither the extension nor an LLM key. `describe_semantic_model` now also lists what each metric can be split by.
+- **Write semantic models through MCP:** `publish_semantic_model` validates a model and creates it, or replaces the version the caller read (`entity_version`), so a teammate's change is never overwritten unseen. It warns about metrics governed queries would refuse. `delete_semantic_model` requires `confirm_name`. Both need the Writer role.
+- **Ossie dimensions:** fields marked `"dimension": {"is_time": true|false}`, as the Ossie specification defines it, show as dimensions in the Catalog, with time dimensions marked separately; the older `true` still works. The flights example (notebook 06) now marks its dimensions. Conversational BI reads the object form too.
+- **UTC everywhere:** `iceberg_connect.py` (DuckDB CLI, DBeaver, Python), notebooks and table previews set the DuckDB time zone to UTC, so a date cast from a timestamp is the same on every computer.
+- **Agent guidance in the installation folder:** an `AGENTS.md` (with a `CLAUDE.md` pointer) explains `iceberg_connect.py`, the MCP servers and semantic models, and the new `semantic-model` skill builds a model with you: it interviews you about the questions the model must answer, profiles the data, checks every question and metric against the real tables, and publishes after your approval.
+- **quick-share's undo** now lists how to point each coding agent's MCP registrations back at localhost.
+
 ## 0.7.0 - 2026-10-01
 
 - **Extension Bridge contract 0.1.0:** a versioned interface (`contracts/bridge`, `/bridge/v1`) through which separately released extensions, such as the new Conversational BI, use the platform. It provides the signed-in user's teams and databases, and service accounts per team and environment that only team administrators enable. Extensions receive one-hour catalog tokens, never secrets or storage keys. Team shares a team received reach the read role of that team's extension service accounts in the same environment, never the write role (capability `shared-data`). See [extensions](docs/extensions.md).

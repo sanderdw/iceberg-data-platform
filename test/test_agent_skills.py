@@ -41,7 +41,7 @@ def class_plan(participants, teams):
     return members
 
 
-@pytest.mark.parametrize("name", ["quick-share", "demo-company"])
+@pytest.mark.parametrize("name", ["quick-share", "demo-company", "semantic-model"])
 def test_skill_frontmatter_names_its_folder(name):
     meta = frontmatter(SKILLS / name / "SKILL.md")
     assert meta["name"] == name
@@ -97,9 +97,12 @@ def test_skill_files_are_linked_from_the_skill():
     for asset in (*(SKILLS / "quick-share/assets").iterdir(), *(SKILLS / "quick-share/scripts").glob("*.py")):
         assert asset.name in skill
     assert "demo-company/scripts/slips.py" in skill
+    skill = (SKILLS / "semantic-model/SKILL.md").read_text()
+    for path in (*(SKILLS / "semantic-model/references").iterdir(), *(SKILLS / "semantic-model/scripts").glob("*.py")):
+        assert f"({path.parent.name}/{path.name})" in skill
 
 
-@pytest.mark.parametrize("name", ["quick-share", "demo-company"])
+@pytest.mark.parametrize("name", ["quick-share", "demo-company", "semantic-model"])
 def test_skills_work_in_any_coding_agent(name):
     skill = (SKILLS / name / "SKILL.md").read_text()
     # No agent-specific tool names; every Claude Code recipe sits next to the Codex and Copilot ones.
@@ -244,3 +247,106 @@ def test_slips_follow_the_shared_address_and_escape_text(slips, tmp_path):
         assert output.stat().st_mode & 0o777 == 0o600
     assert not list(tmp_path.glob("*.tmp"))
     assert 'data-url="https://class.example"' in output.read_text()
+
+
+@pytest.fixture
+def semantic_model():
+    spec = importlib.util.spec_from_file_location("semantic_model", SKILLS / "semantic-model/scripts/semantic_model.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def expression(sql):
+    return {"dialects": [{"dialect": "ANSI_SQL", "expression": sql}]}
+
+
+def shop_model():
+    def field(name, **extra):
+        return {"name": name, "description": f"The {name}.", "expression": expression(name), **extra}
+
+    return {
+        "name": "shop", "description": "Orders. One row in PURCHASE per order.",
+        "ai_context": {"instructions": "Time: UTC.\nGrain: one row per order.\nMissing values: none.\n"
+                                       "Owner: Sales. Refresh: nightly.\nClassification: internal."},
+        "datasets": [
+            {"name": "LINE", "source": "lakehouse.shop.lines", "description": "An order line.", "primary_key": ["line_id"],
+             "fields": [field("line_id"), field("order_id"), field("amount")]},
+            {"name": "PURCHASE", "source": "lakehouse.shop.orders", "description": "An order.", "primary_key": ["order_id"],
+             "fields": [field("order_id"), field("customer_id"), field("status", dimension={"is_time": False})]},
+            {"name": "CUSTOMER", "source": "lakehouse.shop.customers", "description": "A customer.",
+             "primary_key": ["customer_id"], "fields": [field("customer_id"), field("country")]},
+        ],
+        "relationships": [
+            {"name": "line_purchase", "from": "LINE", "to": "PURCHASE", "from_columns": ["order_id"], "to_columns": ["order_id"]},
+            {"name": "purchase_customer", "from": "PURCHASE", "to": "CUSTOMER",
+             "from_columns": ["customer_id"], "to_columns": ["customer_id"]},
+        ],
+        "metrics": [{"name": "revenue", "description": "Sum of line amounts. Unit: euro.",
+                     "expression": expression("sum(LINE.amount)")}],
+    }
+
+
+def test_semantic_model_check_accepts_a_complete_model(semantic_model):
+    columns = {"LINE": {"line_id", "order_id", "amount"}, "PURCHASE": {"order_id", "customer_id", "status"},
+               "CUSTOMER": {"customer_id", "country"}}
+    assert semantic_model.check_structure(shop_model(), columns) == ([], [])
+
+
+def test_semantic_model_check_reports_what_blocks_publishing(semantic_model):
+    model = shop_model()
+    model["ai_context"]["instructions"] = "Time: UTC."
+    model["datasets"][1]["fields"][2]["dimension"] = True
+    model["datasets"][2]["fields"][1]["description"] = ""
+    model["relationships"][0]["to_columns"] = ["id"]
+    model["metrics"].append({"name": "orders", "description": "Orders.", "expression": expression("count(*)")})
+    errors, warnings = semantic_model.check_structure(model, {"CUSTOMER": {"customer_id"}})
+    assert errors == [
+        'Field PURCHASE.status: write dimension as {"is_time": true|false} or leave it out.',
+        "Field CUSTOMER.country is not a column of the table.",
+        "Relationship line_purchase: PURCHASE.id is not a field.",
+    ]
+    assert "Field CUSTOMER.country has no description." in warnings
+    assert "ai_context.instructions does not mention 'grain'." in warnings
+    assert "Metric orders: end the description with its unit, for example 'Unit: percent.'" in warnings
+
+
+def test_semantic_model_metrics_join_from_the_first_dataset_they_name(semantic_model):
+    model = shop_model()
+    sql = semantic_model.metric_query(model, {"expression": expression("sum(LINE.amount) / count(DISTINCT CUSTOMER.country)")})
+    assert sql == ('SELECT sum(LINE.amount) / count(DISTINCT CUSTOMER.country) FROM "LINE"\n'
+                   'JOIN "PURCHASE" ON "LINE"."order_id" = "PURCHASE"."order_id"\n'
+                   'JOIN "CUSTOMER" ON "PURCHASE"."customer_id" = "CUSTOMER"."customer_id"')
+    # Joins also run against the direction of a relationship.
+    assert semantic_model.join_path(model, "CUSTOMER", ["PURCHASE"]) == [
+        'JOIN "PURCHASE" ON "CUSTOMER"."customer_id" = "PURCHASE"."customer_id"']
+    with pytest.raises(ValueError, match="names no dataset"):
+        semantic_model.metric_query(model, {"expression": expression("count(*)")})
+
+
+def test_semantic_model_questions_and_documents(semantic_model):
+    assert semantic_model.parse_questions("-- Q: How many?\nSELECT 1;\n\n-- Q: Which?\nSELECT\n  2\n-- Q: empty\n") == [
+        ("How many?", "SELECT 1"), ("Which?", "SELECT\n  2")]
+    model = shop_model()
+    document = semantic_model.Models.document(model)
+    assert document["version"] == semantic_model.SPEC_VERSION
+    assert semantic_model.first_model(document) == model
+    assert semantic_model.first_model({"version": "0.2.0", "semantic_model": [model]}) == model
+    assert semantic_model.table_reference(["sales", "eu"], "orders") == '"lakehouse"."sales.eu"."orders"'
+
+
+@pytest.mark.parametrize("change", [
+    lambda m: m,
+    lambda m: m.update(description=""),
+    lambda m: m["ai_context"].update(instructions="Time: UTC."),
+    lambda m: m["datasets"][1]["fields"][2].update(dimension=True),
+    lambda m: m["datasets"][0].update(primary_key=["nope"]),
+    lambda m: m["relationships"][0].update(to_columns=["id"]),
+    lambda m: m["metrics"].append({"name": "revenue", "description": "Again.", "expression": expression("count(*)")}),
+])
+def test_semantic_model_skill_and_portal_validate_alike(semantic_model, change):
+    from user_portal.semantic import rules
+
+    model = shop_model()
+    change(model)
+    assert semantic_model.check_structure(model) == rules.check_structure(model)

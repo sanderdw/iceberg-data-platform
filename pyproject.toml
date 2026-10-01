@@ -17,12 +17,16 @@ dependencies = [
 
 [dependency-groups]
 oidc = ["Authlib==1.8.0", "httpx2>=2.13.1"]
-mcp = ["mcp>=2.2.0,<3"]
+mcp = [
+    "mcp>=2.2.0,<3",
+    "sqlglot>=30.21.0",
+]
 dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.16.8", "httpx2>=2.13.1"]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "pandas>=3.0.6", "ipykernel>=7.3.0", "matplotlib>=3.11.2"]
 users = [
     "docker==7.2.0",
     "duckdb==1.5.5",
+    "pytz>=2026.4",
 ]
 notebook = [
     "altair>=6.3.0",

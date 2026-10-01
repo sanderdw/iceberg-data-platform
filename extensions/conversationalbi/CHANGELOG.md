@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fields marked with Apache Ossie's dimension object (`"dimension": {"is_time": true|false}`) count as
+  dimensions; before, only the older boolean form did, so spec-conform models offered every field.
+
 ## 0.1.0 - 2026-10-01
 
 - First version of Conversational BI for the Iceberg Data Platform, on Extension Bridge contract 0.1.

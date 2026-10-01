@@ -10,7 +10,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
-from ..errors import CbiError
+from .errors import SemanticError
 
 NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 # Dialects in order of preference: the engine is DuckDB, whose SQL is close to ANSI.
@@ -130,16 +130,16 @@ def names(kind, items):
     seen = set()
     for item in items:
         if not NAME.match(item.name):
-            raise CbiError(422, f"The semantic model has a {kind} with an unsupported name: {item.name[:60]!r}.",
+            raise SemanticError(422, f"The semantic model has a {kind} with an unsupported name: {item.name[:60]!r}.",
                            "invalid_model")
         if item.name in seen:
-            raise CbiError(422, f"The semantic model names {kind} {item.name!r} twice.", "invalid_model")
+            raise SemanticError(422, f"The semantic model names {kind} {item.name!r} twice.", "invalid_model")
         seen.add(item.name)
 
 
 def limit(kind, items, most):
     if len(items) > most:
-        raise CbiError(422, f"The semantic model has {len(items)} {kind}; Conversational BI reads at most {most}.",
+        raise SemanticError(422, f"The semantic model has {len(items)} {kind}; Conversational BI reads at most {most}.",
                        "invalid_model")
 
 
@@ -165,7 +165,7 @@ def parse(loaded, namespace):
             raw = None
     model = first_model(raw)
     if model is None:
-        raise CbiError(422, "The stored semantic model has no datasets.", "invalid_model")
+        raise SemanticError(422, "The stored semantic model has no datasets.", "invalid_model")
     limit("datasets", dicts(model.get("datasets")), MAX_DATASETS)
     limit("relationships", dicts(model.get("relationships")), MAX_RELATIONSHIPS)
     limit("metrics", dicts(model.get("metrics")), MAX_METRICS)
@@ -174,7 +174,7 @@ def parse(loaded, namespace):
         limit(f"fields in dataset {text(d.get('name'))[:60]!r}", dicts(d.get("fields")), MAX_FIELDS)
         target = dataset_target(d.get("source"), namespace)
         if target is None:
-            raise CbiError(422, f"Dataset {text(d.get('name'))[:60]!r} has no source table.", "invalid_model")
+            raise SemanticError(422, f"Dataset {text(d.get('name'))[:60]!r} has no source table.", "invalid_model")
         fields = tuple(
             Field(name=text(f.get("name")), expression=expression(f, text(f.get("name"))),
                   description=text(f.get("description"), 2000), datatype=text(f.get("datatype"), 60),
@@ -205,9 +205,9 @@ def parse(loaded, namespace):
     by_name = {d.name for d in datasets}
     for r in relationships:
         if r.source not in by_name or r.target not in by_name:
-            raise CbiError(422, f"Relationship {r.name!r} joins a dataset the model does not define.", "invalid_model")
+            raise SemanticError(422, f"Relationship {r.name!r} joins a dataset the model does not define.", "invalid_model")
         if not r.source_columns or len(r.source_columns) != len(r.target_columns):
-            raise CbiError(422, f"Relationship {r.name!r} needs matching from_columns and to_columns.",
+            raise SemanticError(422, f"Relationship {r.name!r} needs matching from_columns and to_columns.",
                            "invalid_model")
     text_instructions, synonyms = instructions(model.get("ai_context"))
     return Model(name=text(model.get("name"), 200), description=text(model.get("description"), 4000),
