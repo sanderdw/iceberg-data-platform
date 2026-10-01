@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from server.models import DatabaseInput, ShareInput, TeamInput, UserInput
 from server.polaris import PolarisProvider
 from server.storage import RustFSStorage
+from user_portal import duckdb_extensions
 
 NAMESPACE = ["ai_flights"]
 MODEL = "flights"
@@ -142,6 +143,11 @@ def main():
             provider.delete_team(partner)
             print(f"Removed team {args.partner!r} with its databases and shares.")
             return
+        # DuckDB here never downloads extensions on demand. Install them the way the notebook image
+        # does, so a clean machine or CI runner works too.
+        os.environ.setdefault("DUCKDB_EXTENSION_DIRECTORY", str(Path.home() / ".duckdb" / "extensions"))
+        Path(os.environ["DUCKDB_EXTENSION_DIRECTORY"]).mkdir(parents=True, exist_ok=True)
+        duckdb_extensions.main()
         partner = team_named(provider, args.partner, create=True)
         recipient = team_named(provider, args.recipient)
         database = database_named(provider, partner, args.database, args.environment, create=True)

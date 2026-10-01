@@ -259,7 +259,10 @@ def assert_cbi_installed(result, env, model):
     assert len(registrations) == 1 and registrations[0] < first_up
     assert "PLATFORM_EXTENSIONS=conversationalbi=http://localhost:3007" in (target / ".env").read_text()
     for name in (".env", ".env.bridge", "llm.env"):
-        assert (cbi / name).stat().st_mode & 0o777 == 0o600
+        assert (cbi / name).is_file()
+        # Windows has no POSIX modes; the real setup runs in a Linux container.
+        if sys.platform != "win32":
+            assert (cbi / name).stat().st_mode & 0o777 == 0o600
     setup = next(args for args in commands if args[0] == "run" and args[-1].endswith("conversationalbi/scripts/setup.py"))
     assert [setup[i + 1] for i, arg in enumerate(setup) if arg == "-e"] == list(CBI_VARIABLES)
     output = result.stdout.split("is running.")[1]
