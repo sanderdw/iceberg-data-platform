@@ -89,6 +89,27 @@ def test_dimensions_follow_the_ossie_object_and_accept_the_old_boolean(dimension
     assert (shown["dimension"], shown["timeDimension"]) == flags
 
 
+@pytest.mark.parametrize(("dimension", "datatype", "time"), [
+    ({}, "DateTimeTz", True),  # without is_time, a temporal datatype makes it a time dimension
+    ({}, "Time", True),
+    ({}, "String", False),
+    ({"is_time": False}, "Date", False),  # an explicit is_time wins
+])
+def test_time_dimensions_follow_the_ossie_datatype(dimension, datatype, time):
+    field = {"name": "f", "dimension": dimension, "datatype": datatype}
+    loaded = {"document": {"semantic_model": json.dumps({"datasets": [{"name": "D", "source": "t", "fields": [field]}]})}}
+    assert semantic_model_details("m", [], loaded)["models"][0]["datasets"][0]["fields"][0]["timeDimension"] is time
+
+
+def test_fields_and_metrics_show_their_synonyms():
+    model = {"datasets": [{"name": "D", "source": "t", "fields": [
+                 {"name": "f", "ai_context": {"synonyms": ["eff", 3]}}, {"name": "g", "ai_context": "text"}]}],
+             "metrics": [{"name": "m", "ai_context": {"synonyms": ["em"]}}]}
+    shown = semantic_model_details("m", [], {"document": {"semantic_model": json.dumps(model)}})["models"][0]
+    assert [f["synonyms"] for f in shown["datasets"][0]["fields"]] == [["eff"], []]
+    assert shown["metrics"][0]["synonyms"] == ["em"]
+
+
 @pytest.mark.parametrize("stored", ["not json", "[1, 2]", "42", "null", '{"semantic_model": 7}'])
 def test_projection_survives_documents_it_cannot_read(stored):
     detail = semantic_model_details("m", ["ns"], {"document": {"version": "1", "semantic_model": stored}})

@@ -114,7 +114,14 @@ def instructions(context):
     if not isinstance(context, dict):
         return "", {}
     synonyms = context.get("synonyms") if isinstance(context.get("synonyms"), dict) else {}
-    return text(context.get("instructions"), 8000), synonyms
+    return text(context.get("instructions"), 8000), dict(synonyms)
+
+
+def entity_synonyms(item):
+    """Ossie's synonyms of one field or metric: a list of strings in its own `ai_context`."""
+    context = item.get("ai_context")
+    found = context.get("synonyms") if isinstance(context, dict) else None
+    return [text(s, 200) for s in found[:20] if isinstance(s, str)] if isinstance(found, list) else []
 
 
 def dataset_target(source, namespace):
@@ -210,6 +217,12 @@ def parse(loaded, namespace):
             raise SemanticError(422, f"Relationship {r.name!r} needs matching from_columns and to_columns.",
                            "invalid_model")
     text_instructions, synonyms = instructions(model.get("ai_context"))
+    # Per-entity synonyms join the model-level map, keyed as agents name them: DATASET.field or metric.
+    entities = [(f"{text(d.get('name'))}.{text(f.get('name'))}", f)
+                for d in dicts(model.get("datasets")) for f in dicts(d.get("fields"))]
+    for key, item in [*entities, *((text(m.get("name")), m) for m in dicts(model.get("metrics")))]:
+        if found := entity_synonyms(item):
+            synonyms.setdefault(key, found)
     return Model(name=text(model.get("name"), 200), description=text(model.get("description"), 4000),
                  instructions=text_instructions, datasets=tuple(datasets), relationships=relationships,
                  metrics=metrics, synonyms=synonyms)

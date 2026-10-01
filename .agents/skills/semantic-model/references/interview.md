@@ -18,7 +18,8 @@ Vague words in the questions ("doing well", "active", "recent", "customer", "rev
 - "What is one row in <table>?" (one order, one order line, one event, one daily snapshot)
 - "Which column or columns identify a row?" Suggest a candidate key from the profile. For an event log without a key, agree how to count events and distinct entities.
 - "Which entity do people mean by <term>?" When the same thing has several identifiers (account, user, device, IP address), decide which one counts and how reliable it is.
-- For several tables: "How do these tables join, and can a join multiply rows?" (one-to-many, several rows per key, history tables)
+- For several tables: "How do these tables join, and can a join multiply rows?" (one-to-many, several rows per key, history tables). For each join, confirm which side is "one" and that its key is unique: the relationship points from the many side to that key.
+- "What does this join mean?" Its answer names the relationship. When one table is reached in two ways (departure and arrival airport, buyer and seller), each way gets its own relationship and name.
 
 ## Round 3: time
 
@@ -32,7 +33,7 @@ For every number the questions ask for:
 - formula, numerator and denominator
 - unit (count, percent, minutes, euro)
 - exclusions (test data, cancelled, internal users) and how NULL counts
-- synonyms people use for it ("check-ins", "pings", "heartbeats")
+- synonyms people use for it ("check-ins", "pings", "heartbeats"); they go in the metric's or field's `ai_context.synonyms`
 - whether it is an agreed company definition or a working definition; say which in the description
 
 Also ask what the codes and categories in the low-cardinality columns mean, and which values belong together.
@@ -66,4 +67,5 @@ Publish only when all of these hold, or the user explicitly accepts the exceptio
 5. **Instructions cover the basics.** Time (zone and meaning), Grain, Missing values, Owner and Refresh, Classification, plus how to answer the typical questions, the default time window and the pitfalls found in the interview.
 6. **Relative time is defined.** "Recent", "last days" and similar words map to a window and an end point.
 7. **Sensitive data is marked.** Columns with personal or confidential data say so in their description, and the instructions say how answers may use them.
-8. **Dimensions are marked.** Columns people group or filter by have `dimension`, time columns with `"is_time": true`.
+8. **Dimensions are marked.** Columns people group or filter by, identifiers included, have `dimension`; time columns with `"is_time": true` and, when derived, a `Date`, `DateTime` or `DateTimeTz` datatype.
+9. **Governed queries answer the questions.** After publishing, `describe_semantic_model` reports no `queryable.problems`, and every interview question runs through `query_semantic_model` with the same answer as the check, or the instructions say why it can't.

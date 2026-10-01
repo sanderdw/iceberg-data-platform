@@ -218,15 +218,27 @@ def expressions(item):
     return [{"dialect": text(e.get("dialect")), "expression": text(e.get("expression"))} for e in dicts(found)]
 
 
+TIME_DATATYPES = ("Date", "Time", "DateTime", "DateTimeTz")
+
+
 def dimension(field):
     """Ossie marks a dimension with an object, `{"is_time": bool}`; older documents wrote `true`.
+    Without `is_time`, a temporal `datatype` makes it a time dimension, as the specification says.
 
     Returns (is a dimension, is a time dimension).
     """
     value = field.get("dimension")
     if isinstance(value, dict):
-        return True, value.get("is_time") is True
+        is_time = value.get("is_time")
+        return True, is_time if isinstance(is_time, bool) else field.get("datatype") in TIME_DATATYPES
     return value is True, False
+
+
+def synonyms(item):
+    """Ossie's synonyms of one field or metric, from its own `ai_context`."""
+    context = item.get("ai_context")
+    found = context.get("synonyms") if isinstance(context, dict) else None
+    return [text(s) for s in found if isinstance(s, str)] if isinstance(found, list) else []
 
 
 def ossie_models(payload):
@@ -292,6 +304,7 @@ def semantic_model_details(name, namespace, loaded):
                         "datatype": text(f.get("datatype")),
                         "dimension": dimension(f)[0],
                         "timeDimension": dimension(f)[1],
+                        "synonyms": synonyms(f),
                         "expressions": expressions(f),
                     }
                     for f in dicts(d.get("fields"))
@@ -320,6 +333,7 @@ def semantic_model_details(name, namespace, loaded):
                         "name": text(m.get("name")),
                         "description": text(m.get("description")),
                         "datatype": text(m.get("datatype")),
+                        "synonyms": synonyms(m),
                         "expressions": expressions(m),
                     }
                     for m in dicts(model.get("metrics"))

@@ -111,18 +111,19 @@ def main():
             ("list_tables", {"database": "db-" + "0" * 32, "namespace": [namespace]}),
         ]))
         assert sorted(t.name for t in listed) == [
-            "create_database", "create_share", "delete_database", "delete_share", "describe_semantic_model",
-            "describe_table", "describe_view", "list_databases", "list_namespaces", "list_received_shares",
-            "list_semantic_models", "list_share_teams", "list_shares", "list_tables", "preview_rows",
-            "rename_database", "rotate_share_credential", "update_share",
+            "create_database", "create_share", "delete_database", "delete_semantic_model", "delete_share",
+            "describe_semantic_model", "describe_table", "describe_view", "list_databases", "list_namespaces",
+            "list_received_shares", "list_semantic_models", "list_share_teams", "list_shares", "list_tables",
+            "preview_rows", "publish_semantic_model", "query_semantic_model", "rename_database",
+            "rotate_share_credential", "update_share",
         ]
         assert all(t.annotations.read_only_hint for t in listed if t.name in {
             "describe_semantic_model", "describe_table", "describe_view", "list_databases", "list_namespaces",
             "list_received_shares", "list_semantic_models", "list_share_teams", "list_shares", "list_tables",
-            "preview_rows",
+            "preview_rows", "query_semantic_model",
         })
         assert all(next(t for t in listed if t.name == name).annotations.destructive_hint
-                   for name in ("delete_database", "delete_share", "rotate_share_credential"))
+                   for name in ("delete_database", "delete_semantic_model", "delete_share", "rotate_share_credential"))
         databases, namespaces, tables, described, preview, denied = results
         assert [d["name"] for d in databases.structured_content["databases"]] == ["demo-demo"], text(databases)
         assert [namespace] in namespaces.structured_content["namespaces"], text(namespaces)

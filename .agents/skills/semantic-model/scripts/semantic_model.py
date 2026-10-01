@@ -39,6 +39,11 @@ NAME = re.compile(r"[A-Za-z0-9_-]+")
 # Lines the instructions should cover, as in the flights example; matched case-insensitively.
 INSTRUCTION_TOPICS = ("time", "grain", "missing values", "owner", "refresh", "classification")
 TIME_TYPES = ("timestamp", "date", "time")
+# Ossie's logical datatypes. A dimension without is_time is a time dimension when its datatype is temporal;
+# only dates and timestamps can be grouped by day, week or month.
+DATATYPES = ("String", "Integer", "Decimal", "Float", "Boolean", "Date", "Time", "DateTime", "DateTimeTz", "Opaque")
+TIME_DATATYPES = ("Date", "Time", "DateTime", "DateTimeTz")
+GRAIN_DATATYPES = ("Date", "DateTime", "DateTimeTz")
 UNGOVERNED = re.compile(r"\(\s*select\b|\b(from|timezone|read_\w+|iceberg_scan)\s*\(", re.IGNORECASE)
 DRAFT_INSTRUCTIONS = """\
 Time: TODO time zone and what each date or timestamp means.
@@ -139,7 +144,7 @@ def check_structure(model, columns=None):
     datasets = model.get("datasets") or []
     if not datasets:
         errors.append("The model has no datasets.")
-    fields = {}
+    fields, keys = {}, {}
     for dataset in datasets:
         name = dataset.get("name", "")
         if not name or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
@@ -162,10 +167,18 @@ def check_structure(model, columns=None):
                 errors.append(f"Field {label} has no {DIALECT} expression.")
             if not str(field.get("description", "")).strip():
                 warnings.append(f"Field {label} has no description.")
-            dimension = field.get("dimension")
-            if dimension is not None and not (isinstance(dimension, dict) and isinstance(dimension.get("is_time"), bool)):
-                errors.append(f"Field {label}: write dimension as {{\"is_time\": true|false}} or leave it out.")
-        for key in dataset.get("primary_key") or []:
+            dimension, datatype = field.get("dimension"), field.get("datatype")
+            if dimension is not None and not (isinstance(dimension, dict)
+                                              and isinstance(dimension.get("is_time", False), bool)):
+                errors.append(f"Field {label}: write dimension as {{\"is_time\": true|false}}, {{}} or leave it out.")
+            if datatype is not None and datatype not in DATATYPES:
+                errors.append(f"Field {label}: datatype {datatype!r} is not an Ossie datatype ({', '.join(DATATYPES)}).")
+            elif isinstance(dimension, dict) and dimension.get("is_time", datatype in TIME_DATATYPES) is True \
+                    and sql_of(field) != field.get("name") and datatype not in GRAIN_DATATYPES:
+                warnings.append(f"Field {label} is a derived time dimension without a date or timestamp datatype, so "
+                                "governed queries cannot group it by day, week or month. Add \"datatype\": \"Date\".")
+        keys[name] = dataset.get("primary_key") or []
+        for key in keys[name]:
             if key not in fields[name]:
                 errors.append(f"Primary key {name}.{key} is not a field.")
         if columns and name in columns:
@@ -178,6 +191,7 @@ def check_structure(model, columns=None):
         if source not in fields or target not in fields:
             errors.append(f"Relationship {label} joins unknown datasets {source} -> {target}.")
             continue
+        before = len(errors)
         sources, targets = relationship.get("from_columns") or [], relationship.get("to_columns") or []
         if not sources or len(sources) != len(targets):
             errors.append(f"Relationship {label} needs from_columns and to_columns of the same length.")
@@ -187,6 +201,10 @@ def check_structure(model, columns=None):
         for column in targets:
             if column not in fields[target]:
                 errors.append(f"Relationship {label}: {target}.{column} is not a field.")
+        if len(errors) == before and set(targets) != set(keys.get(target) or ()):
+            warnings.append(f"Relationship {label}: {target}.{'+'.join(map(str, targets))} is not the whole primary key "
+                            f"of {target}, so governed queries do not join along it. Point it from the many side to "
+                            "the one side's primary key.")
     metrics = model.get("metrics") or []
     if not metrics:
         warnings.append("The model has no metrics; agents will invent their own definitions.")
@@ -198,6 +216,8 @@ def check_structure(model, columns=None):
         seen.add(label)
         if not sql_of(metric):
             errors.append(f"Metric {label} has no {DIALECT} expression.")
+        if metric.get("datatype") is not None and metric.get("datatype") not in DATATYPES:
+            errors.append(f"Metric {label}: datatype {metric.get('datatype')!r} is not an Ossie datatype.")
         description = str(metric.get("description", ""))
         if not description.strip():
             errors.append(f"Metric {label} has no description.")
@@ -443,6 +463,17 @@ def profile(ic, database, namespace, tables):
                 print("  values: " + ", ".join(f"{'NULL' if v is None else repr(v)} ({n:,})" for v, n in top))
 
 
+def ossie_datatype(iceberg_type):
+    """The Ossie datatype of an Iceberg column type, or None for types Ossie has no word for."""
+    kind = iceberg_type.lower().split("(")[0]
+    if kind.startswith("timestamptz"):
+        return "DateTimeTz"
+    if kind.startswith("timestamp"):
+        return "DateTime"
+    return {"string": "String", "uuid": "String", "int": "Integer", "long": "Integer", "float": "Float",
+            "double": "Float", "decimal": "Decimal", "boolean": "Boolean", "date": "Date", "time": "Time"}.get(kind)
+
+
 def draft(ic, database, namespace, tables, name):
     catalog = ic.catalog(database)
     datasets = []
@@ -452,6 +483,8 @@ def draft(ic, database, namespace, tables, name):
         for column in schema.fields:
             field = {"name": column.name, "description": column.doc or "TODO",
                      "expression": {"dialects": [{"dialect": DIALECT, "expression": column.name}]}}
+            if datatype := ossie_datatype(str(column.field_type)):
+                field["datatype"] = datatype
             if str(column.field_type).lower().startswith(TIME_TYPES):
                 field["dimension"] = {"is_time": True}
             fields.append(field)

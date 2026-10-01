@@ -16,6 +16,11 @@ DIALECT = "ANSI_SQL"
 MAX_DOCUMENT = 1_000_000
 INSTRUCTION_TOPICS = ("time", "grain", "missing values", "owner", "refresh", "classification")
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# Ossie's logical datatypes. A dimension without is_time is a time dimension when its datatype is temporal;
+# only dates and timestamps can be grouped by day, week or month.
+DATATYPES = ("String", "Integer", "Decimal", "Float", "Boolean", "Date", "Time", "DateTime", "DateTimeTz", "Opaque")
+TIME_DATATYPES = ("Date", "Time", "DateTime", "DateTimeTz")
+GRAIN_DATATYPES = ("Date", "DateTime", "DateTimeTz")
 
 
 def dicts(value):
@@ -88,7 +93,7 @@ def check_structure(model, columns=None):
     datasets = dicts(model.get("datasets"))
     if not datasets:
         errors.append("The model has no datasets.")
-    fields = {}
+    fields, keys = {}, {}
     for dataset in datasets:
         name = dataset.get("name")
         if not isinstance(name, str) or not IDENTIFIER.fullmatch(name):
@@ -111,11 +116,19 @@ def check_structure(model, columns=None):
                 errors.append(f"Field {label} has no {DIALECT} expression.")
             if not text(field.get("description")):
                 warnings.append(f"Field {label} has no description.")
-            dimension = field.get("dimension")
-            if dimension is not None and not (isinstance(dimension, dict) and isinstance(dimension.get("is_time"), bool)):
-                errors.append(f"Field {label}: write dimension as {{\"is_time\": true|false}} or leave it out.")
+            dimension, datatype = field.get("dimension"), field.get("datatype")
+            if dimension is not None and not (isinstance(dimension, dict)
+                                              and isinstance(dimension.get("is_time", False), bool)):
+                errors.append(f"Field {label}: write dimension as {{\"is_time\": true|false}}, {{}} or leave it out.")
+            if datatype is not None and datatype not in DATATYPES:
+                errors.append(f"Field {label}: datatype {datatype!r} is not an Ossie datatype ({', '.join(DATATYPES)}).")
+            elif isinstance(dimension, dict) and dimension.get("is_time", datatype in TIME_DATATYPES) is True \
+                    and sql_of(field) != field.get("name") and datatype not in GRAIN_DATATYPES:
+                warnings.append(f"Field {label} is a derived time dimension without a date or timestamp datatype, so "
+                                "governed queries cannot group it by day, week or month. Add \"datatype\": \"Date\".")
         key = dataset.get("primary_key")
-        for column in key if isinstance(key, list) else []:
+        keys[name] = key if isinstance(key, list) else []
+        for column in keys[name]:
             if column not in fields[name]:
                 errors.append(f"Primary key {name}.{column} is not a field.")
         if columns and name in columns:
@@ -128,6 +141,7 @@ def check_structure(model, columns=None):
         if source not in fields or target not in fields:
             errors.append(f"Relationship {label} joins unknown datasets {source} -> {target}.")
             continue
+        before = len(errors)
         sources, targets = relationship.get("from_columns") or [], relationship.get("to_columns") or []
         if not isinstance(sources, list) or not isinstance(targets, list) or not sources or len(sources) != len(targets):
             errors.append(f"Relationship {label} needs from_columns and to_columns of the same length.")
@@ -138,6 +152,10 @@ def check_structure(model, columns=None):
         for column in targets:
             if column not in fields[target]:
                 errors.append(f"Relationship {label}: {target}.{column} is not a field.")
+        if len(errors) == before and set(targets) != set(keys.get(target) or ()):
+            warnings.append(f"Relationship {label}: {target}.{'+'.join(map(str, targets))} is not the whole primary key "
+                            f"of {target}, so governed queries do not join along it. Point it from the many side to "
+                            "the one side's primary key.")
     metrics = dicts(model.get("metrics"))
     if not metrics:
         warnings.append("The model has no metrics; agents will invent their own definitions.")
@@ -149,6 +167,8 @@ def check_structure(model, columns=None):
         seen.add(label)
         if not sql_of(metric):
             errors.append(f"Metric {label} has no {DIALECT} expression.")
+        if metric.get("datatype") is not None and metric.get("datatype") not in DATATYPES:
+            errors.append(f"Metric {label}: datatype {metric.get('datatype')!r} is not an Ossie datatype.")
         description = text(metric.get("description"))
         if not description:
             errors.append(f"Metric {label} has no description.")

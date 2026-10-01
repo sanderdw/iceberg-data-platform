@@ -88,13 +88,13 @@ Notes:
 
 ## 3. Semantic models
 
-A semantic model makes tables answerable: it states the grain, the joins, the agreed metrics with their SQL and the rules an AI must follow. For a business question, read the models of the namespace first (`list_semantic_models`, `describe_semantic_model`), then **answer with `query_semantic_model`**: name the metrics, the dimensions to split by (a time dimension can take a `day`, `week` or `month` grain) and filters, for example:
+A semantic model makes tables answerable: it states the grain, the joins, the agreed metrics with their SQL and the rules an AI must follow. For a business question, read the models of the namespace first (`list_semantic_models`, `describe_semantic_model`), then **answer with `query_semantic_model`**: name the metrics, the dimensions to split by (a time dimension can take a `day`, `week`, `month`, `quarter` or `year` grain; `via` picks the relationship when a dataset can be reached in several ways) and filters, for example:
 
 ```json
 {"database": "db-…", "namespace": ["sales"], "model": "orders", "metrics": ["revenue"],
- "dimensions": [{"field": "PURCHASE.ordered_at", "grain": "day"}],
+ "dimensions": [{"field": "PURCHASE.order_date", "grain": "day"}],
  "filters": [{"field": "PURCHASE.status", "op": "!=", "value": "cancelled"},
-             {"field": "PURCHASE.ordered_at", "op": ">=", "value": "2026-09-24"}]}
+             {"field": "PURCHASE.order_date", "op": ">=", "value": "2026-09-24"}]}
 ```
 
 It compiles the model's own SQL and joins, reads with the person's permissions and returns the rows with the metric definitions and the SQL it ran. Write your own SQL only when no model covers the question, and never redefine a metric the model has. All dates are UTC.

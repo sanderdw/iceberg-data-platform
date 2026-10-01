@@ -302,7 +302,7 @@ def test_semantic_model_check_reports_what_blocks_publishing(semantic_model):
     model["metrics"].append({"name": "orders", "description": "Orders.", "expression": expression("count(*)")})
     errors, warnings = semantic_model.check_structure(model, {"CUSTOMER": {"customer_id"}})
     assert errors == [
-        'Field PURCHASE.status: write dimension as {"is_time": true|false} or leave it out.',
+        'Field PURCHASE.status: write dimension as {"is_time": true|false}, {} or leave it out.',
         "Field CUSTOMER.country is not a column of the table.",
         "Relationship line_purchase: PURCHASE.id is not a field.",
     ]
@@ -335,6 +335,30 @@ def test_semantic_model_questions_and_documents(semantic_model):
     assert semantic_model.table_reference(["sales", "eu"], "orders") == '"lakehouse"."sales.eu"."orders"'
 
 
+def test_semantic_model_check_follows_ossie_and_governed_queries(semantic_model):
+    model = shop_model()
+    purchase = model["datasets"][1]["fields"]
+    purchase[2].update(dimension={}, datatype="String")
+    purchase.append({"name": "day", "description": "Order day.", "expression": expression("CAST(ordered_at AS DATE)"),
+                     "dimension": {}, "datatype": "Date", "ai_context": {"synonyms": ["order date"]}})
+    model["metrics"][0]["datatype"] = "Decimal"
+    assert semantic_model.check_structure(model) == ([], [])
+
+    purchase[3]["datatype"] = "Time"
+    purchase[2]["datatype"] = "varchar"
+    # Against the join direction: CUSTOMER is the one side, and customer_id is not PURCHASE's key.
+    model["relationships"][1].update({"from": "CUSTOMER", "to": "PURCHASE"})
+    errors, warnings = semantic_model.check_structure(model)
+    assert errors == [("Field PURCHASE.status: datatype 'varchar' is not an Ossie datatype (String, Integer, Decimal, "
+                       "Float, Boolean, Date, Time, DateTime, DateTimeTz, Opaque).")]
+    assert warnings == [
+        ("Field PURCHASE.day is a derived time dimension without a date or timestamp datatype, so governed queries "
+         'cannot group it by day, week or month. Add "datatype": "Date".'),
+        ("Relationship purchase_customer: PURCHASE.customer_id is not the whole primary key of PURCHASE, so governed "
+         "queries do not join along it. Point it from the many side to the one side's primary key."),
+    ]
+
+
 @pytest.mark.parametrize("change", [
     lambda m: m,
     lambda m: m.update(description=""),
@@ -342,6 +366,13 @@ def test_semantic_model_questions_and_documents(semantic_model):
     lambda m: m["datasets"][1]["fields"][2].update(dimension=True),
     lambda m: m["datasets"][0].update(primary_key=["nope"]),
     lambda m: m["relationships"][0].update(to_columns=["id"]),
+    lambda m: m["relationships"][0].update(from_columns=["line_id"], to_columns=["customer_id"]),
+    lambda m: m["datasets"][1]["fields"][2].update(dimension={}),
+    lambda m: m["datasets"][1]["fields"][2].update(datatype="varchar"),
+    lambda m: m["metrics"][0].update(datatype="money"),
+    lambda m: m["datasets"][1]["fields"].append(
+        {"name": "day", "description": "Day.", "expression": expression("CAST(ordered_at AS DATE)"),
+         "dimension": {"is_time": True}}),
     lambda m: m["metrics"].append({"name": "revenue", "description": "Again.", "expression": expression("count(*)")}),
 ])
 def test_semantic_model_skill_and_portal_validate_alike(semantic_model, change):

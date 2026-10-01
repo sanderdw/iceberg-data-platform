@@ -5,7 +5,7 @@ description: Create, improve or update an Apache Ossie semantic model for tables
 
 # Semantic models for Iceberg Data Platform
 
-A semantic model tells people and AI agents what tables mean: datasets mapped to Iceberg tables, their fields, the joins between them, agreed metrics with their SQL, and instructions for using them. It follows [Apache Ossie](https://github.com/apache/ossie). Polaris stores it in a namespace, next to the tables, and never runs it. The portal's Catalog shows it, the MCP tool `describe_semantic_model` returns it and Conversational BI answers from it.
+A semantic model tells people and AI agents what tables mean: datasets mapped to Iceberg tables, their fields, the joins between them, agreed metrics with their SQL, and instructions for using them. It follows [Apache Ossie](https://github.com/apache/ossie). Polaris stores it in a namespace, next to the tables, and never runs it. The portal's Catalog shows it, the MCP tool `describe_semantic_model` returns it, and AI agents answer from it with `query_semantic_model` and Conversational BI. Both compile the model's own SQL and join only along its relationships, so the model decides what can be asked.
 
 A model is only as good as the questions it was built for. This skill therefore **starts with an interview** and does not publish until every question the user gave runs against the real data and the user has approved the result.
 
@@ -65,24 +65,28 @@ Follow [references/interview.md](references/interview.md). In short:
 
 Skip what the profile and the user already settled. Stop the interview when every question in the list can be mapped to fields and metrics.
 
+Map each question the way an agent will ask it: metrics of **one** dataset, split by dimensions and narrowed by filters, where every dimension is in that dataset or in one it looks up along a relationship. A question that combines numbers from two datasets (orders per customer *and* customers per country) becomes two queries; say so in the instructions.
+
 ## 5. Draft
 
 1. `SM draft <db> <namespace> <table> [<table> …] --name <name> > semantic-models/<namespace>/<name>.json` writes a skeleton: one dataset per table, one field per column, time columns marked as time dimensions, and `TODO` where meaning is needed.
 2. Fill it in from the interview, following [references/model-format.md](references/model-format.md):
    - model `description` with the grain ("One row in PURCHASE per …")
-   - every dataset and field `description`; mark the columns people filter or group by as `dimension: {"is_time": false}` and time columns as `{"is_time": true}`
+   - every dataset and field `description`; mark the columns people filter or group by as `dimension: {"is_time": false}` and time columns as `{"is_time": true}`. Once a dataset marks any field, only marked fields can be grouped or filtered, so mark every column a question needs, identifiers included
+   - a `datatype` for every derived field (`Date`, `DateTime`, `DateTimeTz`, `Integer`, `Decimal`, `String`, …); a derived time field needs `Date`, `DateTime` or `DateTimeTz` to be grouped by day, week or month
    - `primary_key` per dataset (leave empty only for event logs without a key, and say so in the instructions)
-   - `relationships` for every join the questions need
+   - `relationships` for every join the questions need, from the many side (`from`, such as `FLIGHT`) to the one side (`to`, such as `AIRPORT`), with `to_columns` exactly the target's `primary_key`. Governed queries never join the other way, because that would repeat rows and inflate metrics. Name each relationship after its role (`departure_airport`, `arrival_airport`): when a dataset can be reached in several ways, agents pick the path by that name (`via`)
    - `metrics` for every number a question asks for, written with dataset names (`PURCHASE.amount`), each description ending with its unit. Keep them timeless aggregates over one dataset's columns: governed queries refuse subqueries, so "last 7 days" is a filter at question time, not a metric
    - time columns as time dimensions, so questions can group them by day, week or month
-   - `ai_context.instructions`: one line each for Time, Grain, Missing values, Owner and Refresh, Classification, then how to answer the user's typical questions and which pitfalls to avoid
-3. Write `semantic-models/<namespace>/<name>.questions.sql`: one query per interview question, each after a `-- Q: <question>` line, using the dataset names as tables and the model's metric expressions.
+   - `ai_context.instructions`: one line each for Time, Grain, Missing values, Owner and Refresh, Classification, then how to answer the user's typical questions, which `via` means what when there are several paths, and which pitfalls to avoid
+   - the synonyms from the interview in the `ai_context.synonyms` list of their metric or field, and the interview questions in the model's `ai_context.examples` list
+3. Write `semantic-models/<namespace>/<name>.questions.sql`: one query per interview question, each after a `-- Q: <question>` line, using the dataset names as tables and the model's metric expressions. Under the `-- Q:` line, add the governed call as a comment, for example `-- query_semantic_model: {"metrics": ["revenue"], "dimensions": [{"field": "PURCHASE.order_date", "grain": "month"}]}`, so step 8 can replay it.
 
 ## 6. Check against the quality bar
 
 Run `SM check <db> <namespace> semantic-models/<namespace>/<name>.json --questions semantic-models/<namespace>/<name>.questions.sql`.
 
-It validates the structure and that every field is a real column, then runs, read-only and in UTC, every field and metric, the primary-key and relationship checks, and every question, showing up to 10 result rows each. Fix every `error` and `FAIL` and every `TODO`. Then go through the quality bar in [references/interview.md](references/interview.md#quality-bar); a `warning` is acceptable only when the user agrees.
+It validates the structure and that every field is a real column, then runs, read-only and in UTC, every field and metric, the primary-key and relationship checks, and every question, showing up to 10 result rows each. Fix every `error` and `FAIL` and every `TODO`. Treat the warnings about relationships that don't end on a primary key and about time fields without a date or timestamp `datatype` as errors: governed queries cannot use those joins and grains. Then go through the quality bar in [references/interview.md](references/interview.md#quality-bar); a `warning` is acceptable only when the user agrees.
 
 ## 7. Review with the user
 
@@ -96,9 +100,9 @@ Ask for approval or corrections. Return to step 4 or 5 until the user approves. 
 ## 8. Publish and verify
 
 1. `SM publish <db> <namespace> semantic-models/<namespace>/<name>.json --name <name> --questions semantic-models/<namespace>/<name>.questions.sql` runs the checks again and creates or replaces the model. If someone changed the model since it was read, it stops; run `show`, merge, and publish again.
-   - Through MCP instead: `publish_semantic_model` with the model, after `SM check` passed. To replace a model, pass the `entityVersion` that `describe_semantic_model` returned; a newer version is refused. Show the user the `warnings` it returns.
-2. Verify with `describe_semantic_model` (or the portal's **Catalog**, where the **Diagram** tab draws the joins). Its `queryable` part lists, per metric, the dimensions it can be split by.
-3. Ask two or three interview questions through `query_semantic_model` (metrics, dimensions with an optional time grain, filters) and compare the answers with the check's. This is how chat agents will answer them.
+   - Through MCP instead: `publish_semantic_model` with the model, after `SM check` passed. To replace a model, pass the `entityVersion` that `describe_semantic_model` returned as `entity_version`; a newer version is refused. Show the user the `warnings` it returns.
+2. Verify with `describe_semantic_model` (or the portal's **Catalog**, where the **Diagram** tab draws the joins). Its `queryable` part has `metrics` (the dataset each metric counts), `dimensions` (per such dataset, every field a query can split or filter by, with its join `path`, or the `via` options when it is `ambiguous`) and `problems`. `problems` must be empty, and every dimension a question needs must be listed under its metric's dataset.
+3. Replay **every** interview question through `query_semantic_model` with the call from the questions file (metrics, dimensions with an optional `day`, `week`, `month`, `quarter` or `year` grain, `via` where needed, and filters) and compare the answers with the check's. This is how chat agents will answer them. Fix the model when a question can't be asked this way, or, with the user's agreement, write the limit into the instructions.
 4. Finish with one line per question the model now answers, and where the work files are.
 
 If publishing answers that semantic models are switched off, an administrator sets `POLARIS_SEMANTIC_MODELS=true` in `.env`. A role error means the user needs the Writer role in the database's team.

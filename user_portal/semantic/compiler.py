@@ -33,6 +33,9 @@ TIME_TYPES = ("date", "timestamp", "timestamptz", "timestamp_ns", "timestamptz_n
 DUCKDB_TYPES = {"string": "VARCHAR", "int": "INTEGER", "long": "BIGINT", "float": "FLOAT", "double": "DOUBLE",
                 "boolean": "BOOLEAN", "date": "DATE", "timestamp": "TIMESTAMP", "timestamptz": "TIMESTAMPTZ",
                 "timestamp_ns": "TIMESTAMP_NS", "timestamptz_ns": "TIMESTAMPTZ", "uuid": "UUID", "time": "TIME"}
+# Ossie's logical datatypes as the Iceberg types this module reads; Iceberg names pass through.
+OSSIE_TYPES = {"datetime": "timestamp", "datetimetz": "timestamptz", "integer": "long", "float": "double",
+               "decimal": "double", "opaque": ""}
 MAX_DEPTH = 4
 UNIT = re.compile(r"\bUnit:\s*([^.;\n]{1,40})", re.IGNORECASE)
 
@@ -212,7 +215,8 @@ def field_type(dataset, field, schemas):
     columns = schemas.get(dataset.name, {})
     if field.expression in columns:
         return columns[field.expression]
-    return (field.datatype or "").lower() or None
+    declared = (field.datatype or "").lower()
+    return OSSIE_TYPES.get(declared, declared) or None
 
 
 def resolve_field(model, ref):

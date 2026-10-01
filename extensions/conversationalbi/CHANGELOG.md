@@ -4,6 +4,9 @@
 
 - Fields marked with Apache Ossie's dimension object (`"dimension": {"is_time": true|false}`) count as
   dimensions; before, only the older boolean form did, so spec-conform models offered every field.
+- Ossie's logical datatypes (`Date`, `DateTime`, `DateTimeTz`, `Integer`, `Decimal`, …) on derived fields
+  give them a time grain and typed filter values. Synonyms in a field's or metric's `ai_context` reach the
+  agent next to the model-level ones.
 
 ## 0.1.0 - 2026-10-01
 

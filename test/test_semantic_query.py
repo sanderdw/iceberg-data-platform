@@ -193,6 +193,37 @@ def test_time_grain_and_typed_filters():
     assert exc.value.code == "invalid_grain"
 
 
+def flights_with(*fields, metric_context=None):
+    """The flights model with extra FLIGHT fields; it flags no dimensions, so every field is one."""
+    inner = json.loads(flights.ENVELOPE["document"]["semantic_model"])["semantic_model"][0]
+    next(d for d in inner["datasets"] if d["name"] == "FLIGHT")["fields"].extend(fields)
+    if metric_context:
+        next(m for m in inner["metrics"] if m["name"] == "cancellation_pct")["ai_context"] = metric_context
+    return inner
+
+
+@pytest.mark.parametrize("datatype", ["Date", "DateTime", "DateTimeTz"])
+def test_ossie_datatypes_give_derived_fields_a_grain_and_typed_filters(datatype):
+    model = ossie.parse(flights_with(
+        {"name": "departed", "expression": "CAST(scheduled_departure AS TIMESTAMP)", "datatype": datatype},
+        {"name": "delay_quarters", "expression": "CAST(dep_delay / 15 AS BIGINT)", "datatype": "Integer"},
+    ), ["ai_flights"])
+    compiled = compile_query(model, flights.schemas(model), spec(
+        metrics=["cancellation_pct"], dimensions=[{"field": "FLIGHT.departed", "grain": "month"}],
+        filters=[{"field": "FLIGHT.delay_quarters", "op": ">=", "value": 0}]))
+    assert "date_trunc('month'" in compiled.sql and ">= CAST(? AS BIGINT)" in compiled.sql
+    assert run(compiled)
+
+
+def test_synonyms_of_fields_and_metrics_join_the_model_map():
+    inner = flights_with({"name": "late", "expression": "dep_delay > 15", "datatype": "Boolean",
+                          "ai_context": {"synonyms": ["delayed", 7]}},
+                         metric_context={"synonyms": ["cancel rate"]})
+    inner["ai_context"]["synonyms"] = {"flight": ["trip"]}
+    assert ossie.parse(inner, ["ai_flights"]).synonyms == {
+        "flight": ["trip"], "FLIGHT.late": ["delayed"], "cancellation_pct": ["cancel rate"]}
+
+
 def test_values_never_become_sql():
     model = flights.model()
     compiled = compile_query(model, flights.schemas(model), spec(
