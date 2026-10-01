@@ -21,7 +21,7 @@ Below, `SM` means `uv run .agents/skills/semantic-model/scripts/semantic_model.p
 - **Never guess business meaning.** Grain, keys, time zones, metric definitions, exclusions and data sensitivity come from the user. The data can suggest an answer; the user confirms it.
 - **Ask in rounds.** Use your agent's question tool if it has one (for example `ask_user`, `vscode/askQuestions` or `AskUserQuestion`), otherwise ask in chat and stop until the user replies. At most four questions per round, each with your suggested answer when the profile supports one.
 - **Read before you write.** Writing needs the Writer role in the database's team. Publishing replaces a model of the same name, so show the user what changes first.
-- **Never print or store tokens.** The script signs in by itself. If it reports that the user is not signed in, ask the user to run `uv run iceberg_connect.py login` and approve the code in their browser.
+- **Never print or store tokens.** The script signs in by itself (step 1).
 - **Keep work files.** Save the model as `semantic-models/<namespace>/<name>.json` and the questions as `semantic-models/<namespace>/<name>.questions.sql` in the working folder, so the model can be reviewed and rebuilt later.
 
 ## 1. Connect
@@ -77,7 +77,6 @@ Map each question the way an agent will ask it: metrics of **one** dataset, spli
    - `primary_key` per dataset (leave empty only for event logs without a key, and say so in the instructions)
    - `relationships` for every join the questions need, from the many side (`from`, such as `FLIGHT`) to the one side (`to`, such as `AIRPORT`), with `to_columns` exactly the target's `primary_key`. Governed queries never join the other way, because that would repeat rows and inflate metrics. Name each relationship after its role (`departure_airport`, `arrival_airport`): when a dataset can be reached in several ways, agents pick the path by that name (`via`)
    - `metrics` for every number a question asks for, written with dataset names (`PURCHASE.amount`), each description ending with its unit. Keep them timeless aggregates over one dataset's columns: governed queries refuse subqueries, so "last 7 days" is a filter at question time, not a metric
-   - time columns as time dimensions, so questions can group them by day, week or month
    - `ai_context.instructions`: one line each for Time, Grain, Missing values, Owner and Refresh, Classification, then how to answer the user's typical questions, which `via` means what when there are several paths, and which pitfalls to avoid
    - the synonyms from the interview in the `ai_context.synonyms` list of their metric or field, and the interview questions in the model's `ai_context.examples` list
 3. Write `semantic-models/<namespace>/<name>.questions.sql`: one query per interview question, each after a `-- Q: <question>` line, using the dataset names as tables and the model's metric expressions. Under the `-- Q:` line, add the governed call as a comment, for example `-- query_semantic_model: {"metrics": ["revenue"], "dimensions": [{"field": "PURCHASE.order_date", "grain": "month"}]}`, so step 8 can replay it.

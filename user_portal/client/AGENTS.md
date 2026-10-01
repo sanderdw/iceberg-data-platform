@@ -82,7 +82,7 @@ Register a server in your agent (replace `iceberg-user` and the address for the 
 
 Notes:
 - The MCP tools work with the person's grants and never run free-form SQL. `query_semantic_model` answers business questions from a model's agreed metrics; use `iceberg_connect.py` for anything else and for writing data.
-- `publish_semantic_model` stores a model (Writer role). To replace one, pass the `entityVersion` that `describe_semantic_model` returned. Build and check models with the semantic-model skill below first.
+- `publish_semantic_model` stores a model (Writer role). To replace one, pass the `entityVersion` that `describe_semantic_model` returned as `entity_version`. Build and check models with the semantic-model skill below first.
 - Claude Code's callback port must equal `MCP_CALLBACK_PORT` in `.env` (3010 by default).
 - An MCP server that "failed to connect" with `ENOTFOUND` usually points at an address that no longer exists, such as an ended quick-share tunnel. Register it again with the current address.
 

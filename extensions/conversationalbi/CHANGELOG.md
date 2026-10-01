@@ -1,13 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- Fields marked with Apache Ossie's dimension object (`"dimension": {"is_time": true|false}`) count as
-  dimensions; before, only the older boolean form did, so spec-conform models offered every field.
-- Ossie's logical datatypes (`Date`, `DateTime`, `DateTimeTz`, `Integer`, `Decimal`, …) on derived fields
-  give them a time grain and typed filter values. Synonyms in a field's or metric's `ai_context` reach the
-  agent next to the model-level ones.
-
 ## 0.1.0 - 2026-10-01
 
 - First version of Conversational BI for the Iceberg Data Platform, on Extension Bridge contract 0.1.
@@ -21,7 +13,9 @@
   the gateway reads. A model that cannot start leaves the chat explaining what is missing, while
   the API and MCP server keep working.
 - Governed queries compiled from Apache Ossie semantic models: metrics by dimensions, time grains
-  and typed filters, fan-out-safe joins and `via` for ambiguous paths.
+  and typed filters, fan-out-safe joins and `via` for ambiguous paths. It reads Ossie's dimension
+  markers and datatypes, so derived date and timestamp fields take a time grain, and passes the
+  synonyms of the model, its fields and metrics to the agent.
 - Your teams' models and models shared with your teams (Bridge capability `shared-data`).
 - Read-only: queries run in disposable DuckDB processes with one read token of the team's
   automation principal.

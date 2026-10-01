@@ -1,6 +1,6 @@
 # Interview and quality bar
 
-The interview turns tables into shared meaning. Ask in rounds of at most four questions. With each question, offer the answer the profile suggests, so the user confirms or corrects instead of starting from nothing. Write the answers down as you go; they become descriptions, metrics and instructions.
+The interview turns tables into shared meaning. Ask in rounds, as the skill's rules say, and offer the answer the profile suggests, so the user confirms or corrects instead of starting from nothing. Write the answers down as you go; they become descriptions, metrics and instructions.
 
 ## Round 1: the questions the model must answer
 
