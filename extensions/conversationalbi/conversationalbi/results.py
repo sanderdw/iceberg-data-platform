@@ -1,7 +1,8 @@
 """Query results kept briefly in memory, so charts and tables load rows by id instead of from the LLM.
 
 A result belongs to the person who asked for it and names the model it came from; reading it
-again re-checks that the person can still read that model.
+again re-checks that the person can still read that model and the tables in its guard, which is
+never returned to clients.
 """
 
 import secrets
@@ -21,7 +22,7 @@ class ResultStore:
         for key in [k for k, v in self._items.items() if v["until"] <= now]:
             del self._items[key]
 
-    def put(self, owner, result):
+    def put(self, owner, result, guard=None):
         self._expire()
         mine = [k for k, v in self._items.items() if v["owner"] == owner]
         for key in mine[: max(0, len(mine) - self.per_owner + 1)]:
@@ -29,7 +30,8 @@ class ResultStore:
         while len(self._items) >= self.capacity:
             self._items.popitem(last=False)
         id = "res-" + secrets.token_hex(12)
-        self._items[id] = {"owner": owner, "until": time.monotonic() + self.ttl, "result": {**result, "id": id}}
+        self._items[id] = {"owner": owner, "until": time.monotonic() + self.ttl, "result": {**result, "id": id},
+                           "guard": guard or {"shared": False}}
         return id
 
     def get(self, owner, id):
@@ -38,3 +40,7 @@ class ResultStore:
         if item is None or item["owner"] != owner:
             return None
         return item["result"]
+
+    def guard(self, owner, id):
+        item = self._items.get(id)
+        return item["guard"] if item is not None and item["owner"] == owner else {"shared": False}

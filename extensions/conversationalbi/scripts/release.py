@@ -2,11 +2,13 @@
 
   uv run python -m scripts.release              # check versions, files and secrets
   uv run python -m scripts.release --tag conversationalbi-v0.1.0 --build
+  uv run python -m scripts.release --channel refs/heads/main   # release names for a Git ref (in Actions)
 """
 
 import argparse
 import gzip
 import io
+import os
 import re
 import subprocess
 import tarfile
@@ -72,11 +74,33 @@ def build(root, version, files):
     return output
 
 
+def channel(ref, version, run_id, attempt):
+    """A conversationalbi-vX.Y.Z tag is a release; a branch is a preview with its own image and release tags."""
+    if ref == f"refs/tags/conversationalbi-v{version}":
+        return {"version": version, "preview": "false", "image_tag": version,
+                "release_tag": f"conversationalbi-v{version}", "slug": ""}
+    if not ref.startswith("refs/heads/"):
+        raise SystemExit(f"Run this workflow on a branch or on tag conversationalbi-v{version}, not {ref}")
+    # The same names as the platform's branch previews, so one branch's images line up.
+    slug = re.sub(r"[^a-z0-9._-]", "-", ref.removeprefix("refs/heads/").lower())[:60].strip("-.")
+    if not slug or re.match(r"v\d", slug):
+        raise SystemExit("This branch name cannot be used for a preview")
+    build = f"{slug}-{run_id}-{attempt}"
+    return {"version": version, "preview": "true", "image_tag": build, "release_tag": f"conversationalbi-{build}",
+            "slug": slug}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag")
     parser.add_argument("--build", action="store_true")
+    parser.add_argument("--channel", metavar="REF", help="Only print the release names for a Git ref")
     args = parser.parse_args()
+    if args.channel:
+        version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+        names = channel(args.channel, version, os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"])
+        print("\n".join(f"{key}={value}" for key, value in names.items()))
+        return
     version, files = check(tag=args.tag)
     print(f"PASS: iceberg-conversationalbi {version}, {len(files)} files")
     if args.build:

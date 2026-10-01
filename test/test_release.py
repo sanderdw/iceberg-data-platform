@@ -50,6 +50,15 @@ def test_conversationalbi_bundle_uses_its_published_images(release_tree):
         release_tree / "extensions/conversationalbi/scripts/setup.py").read_bytes()
 
 
+def test_a_preview_bundle_uses_the_conversationalbi_images_of_its_build(release_tree):
+    files = conversationalbi_bundle(release_tree, "branch-12-1")[1]
+    compose = files["conversationalbi/compose.yaml"].decode()
+    assert "image: ghcr.io/sanderdw/iceberg-conversationalbi:branch-12-1\n" in compose
+    assert "image: ghcr.io/sanderdw/iceberg-conversationalbi-runtime:branch-12-1\n" in compose
+    with pytest.raises(ValueError, match="Invalid Conversational BI image tag"):
+        conversationalbi_bundle(release_tree, "x;rm -rf /")
+
+
 def test_conversationalbi_bundle_needs_the_versioned_images(release_tree):
     compose = release_tree / "extensions/conversationalbi/compose.yaml"
     compose.write_text(compose.read_text().replace("iceberg-conversationalbi:0", "iceberg-conversationalbi:9"))

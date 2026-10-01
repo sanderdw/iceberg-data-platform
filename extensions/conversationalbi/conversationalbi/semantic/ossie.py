@@ -15,6 +15,11 @@ from ..errors import CbiError
 NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 # Dialects in order of preference: the engine is DuckDB, whose SQL is close to ANSI.
 DIALECTS = ("DUCKDB", "ANSI_SQL", "")
+# A model can come from another team. Bound what one model may ask of the catalog and the join planner.
+MAX_DATASETS = 64
+MAX_FIELDS = 512
+MAX_RELATIONSHIPS = 256
+MAX_METRICS = 256
 
 
 @dataclass(frozen=True)
@@ -132,6 +137,12 @@ def names(kind, items):
         seen.add(item.name)
 
 
+def limit(kind, items, most):
+    if len(items) > most:
+        raise CbiError(422, f"The semantic model has {len(items)} {kind}; Conversational BI reads at most {most}.",
+                       "invalid_model")
+
+
 def parse(loaded, namespace):
     """A Polaris semantic-model response (or a bare Ossie document) as a `Model`."""
     raw = loaded.get("document", {}).get("semantic_model") if isinstance(loaded, dict) and "document" in loaded \
@@ -144,8 +155,12 @@ def parse(loaded, namespace):
     model = first_model(raw)
     if model is None:
         raise CbiError(422, "The stored semantic model has no datasets.", "invalid_model")
+    limit("datasets", dicts(model.get("datasets")), MAX_DATASETS)
+    limit("relationships", dicts(model.get("relationships")), MAX_RELATIONSHIPS)
+    limit("metrics", dicts(model.get("metrics")), MAX_METRICS)
     datasets = []
     for d in dicts(model.get("datasets")):
+        limit(f"fields in dataset {text(d.get('name'))[:60]!r}", dicts(d.get("fields")), MAX_FIELDS)
         target = dataset_target(d.get("source"), namespace)
         if target is None:
             raise CbiError(422, f"Dataset {text(d.get('name'))[:60]!r} has no source table.", "invalid_model")

@@ -197,19 +197,22 @@ CBI = "extensions/conversationalbi"
 CBI_IMAGES = ("iceberg-conversationalbi", "iceberg-conversationalbi-runtime")
 
 
-def conversationalbi_bundle(root=ROOT):
+def conversationalbi_bundle(root=ROOT, image_tag=None):
     """Conversational BI for the installer: its compose file on the published images, and its setup.
 
+    The images are those of its own release, or `image_tag` for a preview built from the same commit.
     A strict text rewrite rather than `docker compose config`, which would inline the env files
     (the LLM key and the Bridge secret) of a local checkout.
     """
     version = tomllib.loads((root / CBI / "pyproject.toml").read_text())["project"]["version"]
+    if image_tag is not None and not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", image_tag):
+        raise ValueError("Invalid Conversational BI image tag")
     text = (root / CBI / "compose.yaml").read_text()
     for image in CBI_IMAGES:
         local = f"    image: {image}:{version}\n"
         if text.count(local) != 1:
             raise ValueError(f"{CBI}/compose.yaml must use {image}:{version} once")
-        text = text.replace(local, f"    image: ghcr.io/sanderdw/{image}:{version}\n")
+        text = text.replace(local, f"    image: ghcr.io/sanderdw/{image}:{image_tag or version}\n")
     text, builds = re.subn(r"(?m)^    build: \S+\n", "", text)
     if builds != len(CBI_IMAGES) or "build:" in text:
         raise ValueError(f"Unexpected build sections in {CBI}/compose.yaml")
@@ -234,7 +237,7 @@ def local_secrets(paths, words=()):
     return values
 
 
-def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="latest"):
+def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="latest", extension_image_tag=None):
     """Render portable Compose files and matching stable or pinned installers."""
     version, files = check(root)
     output = output or root / "dist"
@@ -268,8 +271,8 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
         contents[filename] = (root / filename).read_bytes()
     # Connect your own tools; its defaults match a local installation.
     contents["iceberg_connect.py"] = (root / "user_portal/client/iceberg_connect.py").read_bytes()
-    # Conversational BI, installed only when asked for (pinned to its own release).
-    contents.update(conversationalbi_bundle(root)[1])
+    # Conversational BI, installed only when asked for: pinned to its own release, or to this preview's build.
+    contents.update(conversationalbi_bundle(root, extension_image_tag)[1])
     # Getting-started skills for coding agents, opened in the installation directory.
     for path in files:
         relative = path.relative_to(root).as_posix()
@@ -318,6 +321,7 @@ def main():
     parser.add_argument("--install", action="store_true", help="Also build a Docker-only installation bundle")
     parser.add_argument("--release-tag", default="latest", help="GitHub release to download from the generated installers")
     parser.add_argument("--image-tag", default="latest", help="Matching application image tag for the installation bundle")
+    parser.add_argument("--extension-image-tag", help="Conversational BI image tag for a preview (default: its release)")
     parser.add_argument("--channel", metavar="REF", help="Only print the release names for a Git ref as key=value lines")
     args = parser.parse_args()
     try:
@@ -328,7 +332,8 @@ def main():
             return
         build() if args.build else check()
         if args.install:
-            build_install(release_tag=args.release_tag, image_tag=args.image_tag)
+            build_install(release_tag=args.release_tag, image_tag=args.image_tag,
+                          extension_image_tag=args.extension_image_tag)
     except ValueError as exc:
         parser.exit(1, f"Release check failed: {exc}\n")
 

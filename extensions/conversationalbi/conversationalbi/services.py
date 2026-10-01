@@ -8,8 +8,10 @@ Who may ask what is decided per call from the Bridge's `/me`, never from the cli
 
 Data is always read with a read token of the team's automation principal for the database's
 environment, which a team administrator enables once. For a shared model that is the principal of
-the recipient team. The principal can read what every member of the team can read, so the checks
-above are what keeps one person to their own teams.
+a recipient team whose own scope holds the model and every table it reads: `/me` lists what all of
+the person's teams received together, so it cannot tell which team can read what. The principal
+can read what every member of the team can read, so the checks above are what keeps one person to
+their own teams.
 """
 
 import asyncio
@@ -24,6 +26,8 @@ from .semantic import compiler, ossie
 from .semantic.compiler import ModelRef, QuerySpec
 
 ADMINS = ("admin", "bucket-admin")
+# Catalog requests in flight for one model's table schemas.
+SCHEMA_FETCHES = 8
 
 
 class Services:
@@ -53,6 +57,23 @@ class Services:
     async def principals(self):
         return {(p["team"], p["environment"]): p["id"] for p in await self.bridge.automation()
                 if p["status"] == "active"}
+
+    @staticmethod
+    def recipients(shared):
+        return shared.get("recipientTeams") or [shared["sharedWithTeam"]]
+
+    async def readers(self, shared, principals=None):
+        """The enabled recipient teams of a shared database, each with exactly what its principal can read."""
+        principals = principals or await self.principals()
+        found = []
+        for team in self.recipients(shared):
+            if principal := principals.get((team, shared["environment"])):
+                scope = await self.bridge.scope(principal)
+                objects = next((d.get("sharedObjects", []) for d in scope.get("sharedDatabases", [])
+                                if d["id"] == shared["id"]), [])
+                found.append({"team": team, "principal": principal,
+                              "objects": {(o["kind"], tuple(o["namespace"]), o["name"]) for o in objects}})
+        return found
 
     async def whoami(self, caller):
         me = await self.me(caller)
@@ -101,12 +122,16 @@ class Services:
             if not any(o["kind"] == "semantic-model" and o["namespace"] == ref.namespace and o["name"] == ref.name
                        for o in shared.get("sharedObjects", [])):
                 raise CbiError(404, "This semantic model is not shared with your teams.", "unknown_model")
-            principals = await self.principals()
-            for team in shared.get("recipientTeams") or [shared["sharedWithTeam"]]:
-                if principal := principals.get((team, shared["environment"])):
-                    return {"principal": principal, "database": shared, "shared": True, "team": shared["team"],
-                            "readingTeam": team}
-            team = (shared.get("recipientTeams") or [shared["sharedWithTeam"]])[0]
+            readers = await self.readers(shared)
+            able = [r for r in readers if ("semantic-model", tuple(ref.namespace), ref.name) in r["objects"]]
+            if able:
+                return {"principal": able[0]["principal"], "database": shared, "shared": True,
+                        "team": shared["team"], "readingTeam": able[0]["team"], "readers": able}
+            # Another of the person's teams received the model, but has not enabled Conversational BI.
+            waiting = [t for t in self.recipients(shared) if t not in {r["team"] for r in readers}]
+            if not waiting:
+                raise CbiError(404, "This semantic model is not shared with your teams.", "unknown_model")
+            team = waiting[0]
             raise CbiError(409, f"Conversational BI is not enabled for {shared['environment']} in "
                                 f"{self.team_name(me, team)}, the team that received this share. A team "
                                 "administrator enables it with enable_environment.", "environment_not_enabled",
@@ -120,15 +145,24 @@ class Services:
         model = ossie.parse(await self.catalog.load_model(principal, ref.database, ref.namespace, ref.name),
                             ref.namespace)
         if access["shared"]:
-            tables = {(tuple(o["namespace"]), o["name"]) for o in access["database"].get("sharedObjects", [])
-                      if o["kind"] == "table"}
-            missing = sorted(".".join([*d.namespace, d.table]) for d in model.datasets
-                             if (d.namespace, d.table) not in tables)
-            if missing:
+            # Read with a recipient team that received the model and every table it reads.
+            needed = {("table", d.namespace, d.table) for d in model.datasets}
+            reader = next((r for r in access["readers"] if needed <= r["objects"]), None)
+            if reader is None:
+                # Name what the closest recipient team still lacks.
+                gaps = min((needed - r["objects"] for r in access["readers"]), key=len)
+                missing = sorted(".".join([*ns, table]) for _, ns, table in gaps)
                 raise CbiError(403, "The share includes this model but not every table it reads. Ask the owning "
                                     "team to add them to the share.", "tables_not_shared", {"tables": missing})
-        loaded = await asyncio.gather(*(self.catalog.table_schema(principal, ref.database, list(d.namespace), d.table)
-                                        for d in model.datasets))
+            principal = access["principal"] = reader["principal"]
+            access["readingTeam"] = reader["team"]
+        slots = asyncio.Semaphore(SCHEMA_FETCHES)
+
+        async def schema(d):
+            async with slots:
+                return await self.catalog.table_schema(principal, ref.database, list(d.namespace), d.table)
+
+        loaded = await asyncio.gather(*(schema(d) for d in model.datasets))
         schemas = {d.name: found or {} for d, found in zip(model.datasets, loaded, strict=True)}
         unreadable = sorted(".".join([*d.namespace, d.table]) for d, found in zip(model.datasets, loaded, strict=True)
                             if found is None)
@@ -164,12 +198,20 @@ class Services:
             found += items
         if await self.shared_data():
             for database in me.get("sharedDatabases", []):
-                recipients = database.get("recipientTeams") or [database["sharedWithTeam"]]
-                team = next((t for t in recipients if (t, database["environment"]) in principals), None)
                 models = [o for o in database.get("sharedObjects", []) if o["kind"] == "semantic-model"]
-                if models and team is None:
-                    not_enabled[(recipients[0], database["environment"])] = True
-                for o in models if team else []:
+                if not models:
+                    continue
+                readers = await self.readers(database, principals)
+                waiting = [t for t in self.recipients(database) if t not in {r["team"] for r in readers}]
+                for o in models:
+                    key = ("semantic-model", tuple(o["namespace"]), o["name"])
+                    able = [r for r in readers if key in r["objects"]]
+                    if not able:
+                        if waiting:
+                            not_enabled[(waiting[0], database["environment"])] = True
+                        continue
+                    # Loading the model picks the team exactly; until then, the one that received most tables.
+                    team = max(able, key=lambda r: sum(k[0] == "table" for k in r["objects"]))["team"]
                     found.append(self.entry(me, database, o["namespace"], o["name"], shared=True, reading_team=team))
         return {
             "models": sorted(found, key=lambda m: (m["environment"], m["shared"], m["databaseName"], m["key"])),
@@ -253,7 +295,10 @@ class Services:
             "elapsedMs": round((time.monotonic() - started) * 1000),
             "query": spec.model_dump(exclude_defaults=True),
         }
-        id = self.results.put(caller.subject, result)
+        # What reading this result again must still be allowed: the reading team and the tables it read.
+        guard = {"shared": access["shared"], "readingTeam": access["readingTeam"],
+                 "tables": sorted({(tuple(b["namespace"]), b["table"]) for b in compiled.bindings})}
+        id = self.results.put(caller.subject, result, guard)
         return self.results.get(caller.subject, id)
 
     async def get_result(self, caller, id):
@@ -261,8 +306,14 @@ class Services:
         if result is None:
             raise CbiError(404, "This result expired or belongs to someone else. Ask the question again.",
                            "unknown_result")
-        # Access can end after the question: a share revoked, a membership removed.
-        await self.resolve(caller, ModelRef.model_validate(result["model"]))
+        # Access can end after the question: a share revoked, a table removed from it, a membership removed.
+        access = await self.resolve(caller, ModelRef.model_validate(result["model"]))
+        guard = self.results.guard(caller.subject, id)
+        if guard["shared"]:
+            reader = next((r for r in access["readers"] if r["team"] == guard["readingTeam"]), None)
+            if reader is None or any(("table", ns, table) not in reader["objects"] for ns, table in guard["tables"]):
+                raise CbiError(403, "A table this result read is no longer shared with your team.",
+                               "table_not_readable")
         return result
 
     def for_llm(self, result, rows=None):

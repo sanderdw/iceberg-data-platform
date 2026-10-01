@@ -1,5 +1,6 @@
 name: Conversational BI release
 # Releases of Conversational BI are independent of platform releases (v* tags): tag conversationalbi-vX.Y.Z.
+# Run workflow on a branch publishes a preview: images and a prerelease tagged BRANCH-RUN_ID-ATTEMPT.
 on:
   push:
     tags: ['conversationalbi-v*']
@@ -18,6 +19,10 @@ jobs:
     timeout-minutes: 15
     outputs:
       version: ${{ steps.version.outputs.version }}
+      preview: ${{ steps.version.outputs.preview }}
+      image_tag: ${{ steps.version.outputs.image_tag }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      slug: ${{ steps.version.outputs.slug }}
     defaults:
       run:
         working-directory: extensions/conversationalbi
@@ -29,10 +34,16 @@ jobs:
         with:
           version: '0.12.18'
       - id: version
+        run: uv run --no-project python -m scripts.release --channel "$GITHUB_REF" >> "$GITHUB_OUTPUT"
+      - name: Check and build the source archive
+        env:
+          PREVIEW: ${{ steps.version.outputs.preview }}
         run: |
-          tag="${GITHUB_REF_NAME}"
-          uv run --no-project python -m scripts.release --tag "$tag" --build
-          echo "version=${tag#conversationalbi-v}" >> "$GITHUB_OUTPUT"
+          if [ "$PREVIEW" = true ]; then
+            uv run --no-project python -m scripts.release --build
+          else
+            uv run --no-project python -m scripts.release --tag "$GITHUB_REF_NAME" --build
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: conversationalbi-source
@@ -78,10 +89,10 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/${{ matrix.arch }}
           push: true
-          tags: ghcr.io/sanderdw/${{ matrix.image }}:${{ needs.validate.outputs.version }}-${{ matrix.arch }}
+          tags: ghcr.io/sanderdw/${{ matrix.image }}:${{ needs.validate.outputs.image_tag }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+            org.opencontainers.image.version=${{ needs.validate.outputs.image_tag }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=Apache-2.0
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
@@ -106,23 +117,24 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish multi-platform images
         env:
-          VERSION: ${{ needs.validate.outputs.version }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
         run: |
           for image in iceberg-conversationalbi iceberg-conversationalbi-runtime; do
-            docker buildx imagetools create --tag "ghcr.io/sanderdw/${image}:${VERSION}" \
-              "ghcr.io/sanderdw/${image}:${VERSION}-amd64" "ghcr.io/sanderdw/${image}:${VERSION}-arm64"
+            docker buildx imagetools create --tag "ghcr.io/sanderdw/${image}:${IMAGE_TAG}" \
+              "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-amd64" "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-arm64"
           done
       - name: The images are public
         # The platform installer pulls them without signing in. A new GHCR package starts private:
         # make it public in the package settings, then re-run this job.
         env:
-          VERSION: ${{ needs.validate.outputs.version }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
         run: |
           for image in iceberg-conversationalbi iceberg-conversationalbi-runtime; do
-            docker --config "$(mktemp -d)" manifest inspect "ghcr.io/sanderdw/${image}:${VERSION}" >/dev/null \
+            docker --config "$(mktemp -d)" manifest inspect "ghcr.io/sanderdw/${image}:${IMAGE_TAG}" >/dev/null \
               || { echo "ghcr.io/sanderdw/${image} is not public" >&2; exit 1; }
           done
       - name: Create the GitHub release
+        if: needs.validate.outputs.preview != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.validate.outputs.version }}
@@ -130,3 +142,30 @@ jobs:
         run: |
           gh release create "conversationalbi-v${VERSION}" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --latest=false \
             --title "Conversational BI ${VERSION}" --notes "Conversational BI ${VERSION} for the Iceberg Data Platform (Bridge contract 0.1). Images: ghcr.io/sanderdw/iceberg-conversationalbi:${VERSION} and ghcr.io/sanderdw/iceberg-conversationalbi-runtime:${VERSION}."
+      - name: Create the preview prerelease
+        if: needs.validate.outputs.preview == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --latest=false --title "Conversational BI preview ${IMAGE_TAG}" \
+            --notes "Conversational BI ${VERSION} built from commit ${GITHUB_SHA} on the ${BRANCH} branch (Bridge contract 0.1). Images: ghcr.io/sanderdw/iceberg-conversationalbi:${IMAGE_TAG} and ghcr.io/sanderdw/iceberg-conversationalbi-runtime:${IMAGE_TAG}."
+      - name: Prune older previews of this branch
+        if: needs.validate.outputs.preview == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ needs.validate.outputs.slug }}
+        run: |
+          # Keep the five newest previews of this branch; run ids only increase.
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,isPrerelease --jq \
+            '("conversationalbi-" + $ENV.SLUG + "-") as $prefix
+              | [.[] | select(.isPrerelease and (.tagName | startswith($prefix)))
+              | .tagName | select(ltrimstr($prefix) | test("^[0-9]+-[0-9]+$"))]
+              | sort_by(ltrimstr($prefix) | split("-") | map(tonumber)) | reverse | .[5:][]' |
+            while read -r old; do
+              gh release delete "$old" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            done

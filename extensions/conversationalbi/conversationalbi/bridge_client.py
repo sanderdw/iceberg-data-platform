@@ -46,6 +46,7 @@ class BridgeClient:
         self._service_until = 0.0
         self._me = {}
         self._automation = None
+        self._scopes = {}
         self._lock = asyncio.Lock()
 
     async def close(self):
@@ -153,7 +154,14 @@ class BridgeClient:
                             "administrator enables it with enable_environment.", "environment_not_enabled")
 
     async def scope(self, id):
-        return await self.request("GET", f"/automation-principals/{id}", await self.service_token())
+        """What one automation principal can read, including received shares; cached for 15 seconds."""
+        now = time.monotonic()
+        cached = self._scopes.get(id)
+        if cached is None or cached[0] <= now:
+            cached = (now + 15, await self.request("GET", f"/automation-principals/{id}", await self.service_token()))
+            self._scopes = {k: v for k, v in self._scopes.items() if v[0] > now}
+            self._scopes[id] = cached
+        return cached[1]
 
     async def catalog_token(self, id, access, purpose):
         return await self.request("POST", f"/automation-principals/{id}/tokens", await self.service_token(),

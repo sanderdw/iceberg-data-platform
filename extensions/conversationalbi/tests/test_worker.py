@@ -1,10 +1,14 @@
+import asyncio
 import datetime
 import decimal
+import sys
 
 import pytest
 
+from conversationalbi.config import Settings
+from conversationalbi.errors import CbiError
 from conversationalbi.results import ResultStore
-from conversationalbi.semantic import worker
+from conversationalbi.semantic import executor, worker
 from conversationalbi.tickets import RunTickets, ThreadOwners
 from tests import flights
 
@@ -49,3 +53,22 @@ def test_tickets_and_threads():
     assert tickets.resolve(ticket) == ("session", "sub") and tickets.resolve("x") is None
     threads = ThreadOwners()
     assert threads.claim("t", "a") and threads.claim("t", "a") and not threads.claim("t", "b")
+
+
+def test_a_result_too_large_stops_the_worker(tmp_path, monkeypatch):
+    # A worker that keeps writing: the gateway must stop reading, and the worker, at the limit.
+    (tmp_path / "chatty.py").write_text("import sys\nwhile True:\n    sys.stdout.write('x' * 65536)\n")
+    monkeypatch.setattr(executor, "MAX_OUTPUT", 200_000)
+    monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+    monkeypatch.setattr(executor, "ROOT", tmp_path)
+    run = executor.Executor(timeout=10, module="chatty")
+    with pytest.raises(CbiError) as raised:
+        asyncio.run(run.run({}))
+    assert raised.value.code == "result_too_large"
+
+
+def test_max_rows_never_exceeds_what_a_query_may_ask():
+    env = {"OIDC_ISSUER": "http://localhost:8080/realms/iceberg", "BRIDGE_CLIENT_ID": "ext-conversationalbi",
+           "BRIDGE_CLIENT_SECRET": "s" * 48}
+    assert Settings.from_env({**env, "BI_MAX_ROWS": "50000"}).max_rows == 5000
+    assert Settings.from_env({**env, "BI_MAX_ROWS": "250"}).max_rows == 250

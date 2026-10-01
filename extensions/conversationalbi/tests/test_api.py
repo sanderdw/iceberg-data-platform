@@ -6,7 +6,7 @@ import pytest
 from conversationalbi.api import OPERATIONS
 from conversationalbi.config import ROOT
 from conversationalbi.mcp_server import create_mcp
-from tests.conftest import OTHER, OWN_DB, SHARED_DB, TABLES, TEAM
+from tests.conftest import FLIGHTS, OTHER, OWN_DB, SHARED_DB, TABLES, TEAM
 
 QUERY = {"metrics": ["average_departure_delay"], "dimensions": [{"field": "CARRIER.name"}],
          "order_by": [{"name": "average_departure_delay", "desc": True}]}
@@ -72,6 +72,34 @@ def test_a_share_without_every_table_is_refused(stack):
     stack.bridge.shared_objects = [o for o in stack.bridge.shared_objects if o.get("name") != "carriers"]
     refused = stack.call("POST", "/queries", "bob", json={"model": model(SHARED_DB), **QUERY}).json()
     assert refused["code"] == "tables_not_shared" and refused["detail"]["tables"] == ["ai_flights.carriers"]
+
+
+def test_the_team_that_received_every_table_reads_a_shared_model(stack):
+    # Alice is in two recipient teams: OTHER received only the model, TEAM the model and its tables.
+    stack.bridge.roles["alice"] = {OTHER: "admin", TEAM: "admin"}
+    stack.bridge.recipients = [OTHER, TEAM]
+    stack.bridge.received = {OTHER: [FLIGHTS]}
+    enable(stack, team=OTHER)
+    enable(stack)
+    shared = next(m for m in stack.call("GET", "/models").json()["models"] if m["shared"])
+    assert shared["readingTeam"] == TEAM
+    result = stack.call("POST", "/queries", json={"model": model(SHARED_DB), **QUERY}).json()
+    assert result["rowCount"] == 3
+    reader = next(a["id"] for a in stack.bridge.automation_ if a["team"] == TEAM)
+    assert {principal for principal, _, _ in stack.bridge.tokens} == {reader}
+    # Without a team that received every table, the question is refused and names what is missing.
+    stack.bridge.received[TEAM] = [FLIGHTS, *[o for o in TABLES if o["name"] != "routes"]]
+    refused = stack.call("POST", "/queries", json={"model": model(SHARED_DB), **QUERY}).json()
+    assert refused["code"] == "tables_not_shared" and refused["detail"]["tables"] == ["ai_flights.routes"]
+
+
+def test_a_result_ends_when_a_table_it_read_leaves_the_share(stack):
+    enable(stack)
+    result = stack.call("POST", "/queries", "bob", json={"model": model(SHARED_DB), **QUERY}).json()
+    assert stack.call("GET", f"/results/{result['id']}", "bob").status_code == 200
+    # The model stays shared, but the carriers table this result read does not.
+    stack.bridge.shared_objects = [o for o in [FLIGHTS, *TABLES] if o["name"] != "carriers"]
+    assert stack.call("GET", f"/results/{result['id']}", "bob").json()["code"] == "table_not_readable"
 
 
 def test_without_shared_data_only_own_models(stack):

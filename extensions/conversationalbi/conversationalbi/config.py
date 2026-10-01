@@ -60,7 +60,7 @@ class Settings:
             model=env.get("LLM_MODEL", "") or DEFAULT_MODEL,
             model_configured=bool(env.get("LLM_MODEL", "")),
             allow_test_model=env.get("BI_ALLOW_TEST_MODEL") == "1",
-            max_rows=min(int(env.get("BI_MAX_ROWS", "5000")), 50000),
+            max_rows=max(1, min(int(env.get("BI_MAX_ROWS", "5000")), 5000)),  # a query asks for at most 5,000
             llm_rows=max(0, min(int(env.get("BI_LLM_ROWS", "20")), 200)),
             llm_bytes=max(0, min(int(env.get("BI_LLM_BYTES", "8192")), 65536)),
             query_timeout=min(int(env.get("BI_QUERY_TIMEOUT", "30")), 300),

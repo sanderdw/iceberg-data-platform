@@ -45,6 +45,9 @@ class FakeBridge:
         self.capabilities_ = ["user-context", "automation-principals", "automation-tokens", "shared-data"]
         self.automation_ = []
         self.shared_objects = [FLIGHTS, *TABLES]
+        # Teams that received the partner's share, and what each one's share holds (default: shared_objects).
+        self.recipients = [TEAM]
+        self.received = {}
         self.tokens = []
         self.me_calls = []
 
@@ -71,10 +74,21 @@ class FakeBridge:
             "databases": [d for d in databases if d["team"] in roles],
             "sharedDatabases": [
                 {"id": SHARED_DB, "name": "flights", "team": PARTNER, "environment": "development", "status": "ready",
-                 "sharedWithTeam": TEAM, "ownerTeamName": "partner-team", "recipientTeams": [TEAM],
-                 "sharedObjects": self.shared_objects}
-            ] if TEAM in roles else [],
+                 "sharedWithTeam": teams[0], "ownerTeamName": "partner-team", "recipientTeams": teams,
+                 # Like the Bridge: what all of the user's recipient teams received, together.
+                 "sharedObjects": [o for o in [FLIGHTS, *TABLES] if any(o in self.objects(t) for t in teams)]}
+            ] if (teams := [t for t in self.recipients if t in roles]) else [],
         }
+
+    def objects(self, team):
+        return self.received.get(team, self.shared_objects)
+
+    async def scope(self, id):
+        item = next(a for a in self.automation_ if a["id"] == id)
+        shared = [{"id": SHARED_DB, "name": "flights", "team": PARTNER, "environment": "development", "status": "ready",
+                   "sharedObjects": self.objects(item["team"])}] if (
+            item["team"] in self.recipients and item["environment"] == "development") else []
+        return {**item, "databases": [], "sharedDatabases": shared}
 
     async def team_automation(self, token, team):
         return [a for a in self.automation_ if a["team"] == team]

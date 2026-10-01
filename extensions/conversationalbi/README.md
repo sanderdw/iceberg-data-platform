@@ -129,11 +129,12 @@ claude mcp add --transport http --client-id ext-conversationalbi-mcp --callback-
 | Model | You can ask about it when |
 | --- | --- |
 | In a database of one of your teams | you are a member of that team, in any role |
-| Shared with one of your teams | the share includes the model **and every table it reads**, and a team that received it enabled Conversational BI for that environment |
+| Shared with one of your teams | one of your teams received the model **and every table it reads**, and enabled Conversational BI for that environment; that team's service account reads it |
 
-Everything is re-checked on every question and when a chart loads its rows: a revoked share, an
-expired share or a removed membership ends access at once. Data is read with **read-only** tokens
-of the team's automation principal. Conversational BI never writes to the platform.
+Everything is re-checked on every question and when a chart loads its rows: a revoked share, a
+table removed from it, an expired share or a removed membership ends access within 30 seconds.
+Data is read with **read-only** tokens of the team's automation principal. Conversational BI never
+writes to the platform.
 
 ## Governed queries
 
@@ -220,7 +221,7 @@ tests and CI. `scripts/e2e_smoke.py` checks a live installation through MCP.
 ## Limits
 
 Conversations live in the runtime's memory and end when it restarts. Results are kept for 30
-minutes. One query reads at most 5,000 rows by default (`BI_MAX_ROWS`, up to 50,000).
+minutes. One query reads at most 5,000 rows; `BI_MAX_ROWS` can lower that.
 
 ## License
 

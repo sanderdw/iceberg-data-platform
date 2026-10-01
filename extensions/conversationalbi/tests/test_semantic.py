@@ -53,6 +53,21 @@ def test_rejects_models_it_cannot_trust():
         ossie.parse({"document": {"semantic_model": "not json"}}, ["ns"])
 
 
+@pytest.mark.parametrize(("key", "count", "item"), [
+    ("datasets", ossie.MAX_DATASETS + 1, lambda i: {"name": f"D{i}", "source": f"ns.t{i}", "fields": []}),
+    ("metrics", ossie.MAX_METRICS + 1, lambda i: {"name": f"m{i}", "expression": "count(*)"}),
+    ("relationships", ossie.MAX_RELATIONSHIPS + 1,
+     lambda i: {"name": f"r{i}", "from": "A", "to": "A", "from_columns": ["id"], "to_columns": ["id"]}),
+])
+def test_rejects_models_too_large_to_plan(key, count, item):
+    base = {"datasets": [{"name": "A", "source": "ns.a", "fields": []}]}
+    with pytest.raises(CbiError, match=f"has {count} {key}"):
+        ossie.parse({**base, key: [item(i) for i in range(count)]}, ["ns"])
+    fields = [{"name": f"f{i}", "expression": f"f{i}"} for i in range(ossie.MAX_FIELDS + 1)]
+    with pytest.raises(CbiError, match="fields in dataset 'A'"):
+        ossie.parse({"datasets": [{"name": "A", "source": "ns.a", "fields": fields}]}, ["ns"])
+
+
 def test_prefers_duckdb_then_ansi_sql():
     model = ossie.parse({"datasets": [{"name": "A", "source": "t", "fields": []}], "metrics": [
         {"name": "m", "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "count(*)"},

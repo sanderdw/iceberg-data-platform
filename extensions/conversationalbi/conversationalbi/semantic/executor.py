@@ -19,6 +19,23 @@ class Executor:
         self.module = module
         self.slots = asyncio.Semaphore(concurrency)
 
+    @staticmethod
+    async def collect(process, payload):
+        """The worker's output, read as it arrives; None, with the worker stopped, once it passes MAX_OUTPUT."""
+        process.stdin.write(payload)
+        await process.stdin.drain()
+        process.stdin.close()
+        chunks, size = [], 0
+        while chunk := await process.stdout.read(65536):
+            size += len(chunk)
+            if size > MAX_OUTPUT:
+                process.kill()
+                await process.wait()
+                return None
+            chunks.append(chunk)
+        await process.wait()
+        return b"".join(chunks)
+
     async def run(self, job):
         async with self.slots:
             with tempfile.TemporaryDirectory(prefix="cbi-query-") as home:
@@ -32,13 +49,13 @@ class Executor:
                              "DUCKDB_EXTENSION_DIRECTORY", str(Path.home() / ".duckdb" / "extensions"))},
                 )
                 try:
-                    stdout, _ = await asyncio.wait_for(process.communicate(json.dumps(job).encode()), self.timeout)
+                    stdout = await asyncio.wait_for(self.collect(process, json.dumps(job).encode()), self.timeout)
                 except TimeoutError:
                     process.kill()
                     await process.wait()
                     raise CbiError(504, f"The query ran longer than {self.timeout} seconds. Narrow it with filters "
                                         "or fewer dimensions.", "query_timeout") from None
-        if len(stdout) > MAX_OUTPUT:
+        if stdout is None:
             raise CbiError(413, "The result is too large. Ask for fewer rows or dimensions.", "result_too_large")
         try:
             result = json.loads(stdout or b"{}")

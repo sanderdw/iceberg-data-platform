@@ -15,12 +15,14 @@ Branches listed under `on.push.branches` in `.github/workflows/release.yml` publ
 
 The workflow runs the full CI suite and builds AMD64 and ARM64 images. Only then does it publish the exact prerelease and update the `SLUG-preview` installers. A failed run leaves the previous preview in place.
 
+A preview also builds the Conversational BI images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add Conversational BI without a Conversational BI release.
+
 `SLUG` is the branch name in lowercase, with characters other than letters, digits, `.`, `_` and `-` replaced by `-`, up to 60 characters. Branch names that start with `v` plus a digit are rejected. The workflow keeps the five newest builds per branch. Delete the `SLUG-preview` release after merging.
 
 To build a pinned bundle locally without publishing:
 
 ```bash
-uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --image-tag BRANCH-123-1
+uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --image-tag BRANCH-123-1 --extension-image-tag BRANCH-123-1
 ```
 
 ## Publish a stable release
@@ -69,6 +71,8 @@ Extensions are versioned and released on their own, with tags `<id>-vX.Y.Z` that
 
 The **Conversational BI release** workflow runs its CI, builds `ghcr.io/sanderdw/iceberg-conversationalbi` and `iceberg-conversationalbi-runtime` for AMD64 and ARM64, checks that both are public and publishes the release with its source archive. On the first publication, set both packages to **Public** and rerun the failed job. Then release the core.
 
+To publish Conversational BI from a branch without a release, run **Actions → Conversational BI release → Run workflow** on that branch, or `gh workflow run "Conversational BI release" --ref BRANCH`. It tags both images `:SLUG-RUN_ID-ATTEMPT` and publishes a prerelease `conversationalbi-SLUG-RUN_ID-ATTEMPT` with the source archive, never the version tag. It keeps the five newest previews per branch.
+
 ## Package visibility
 
-On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.
+On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**, including `iceberg-conversationalbi` and `iceberg-conversationalbi-runtime`. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.
