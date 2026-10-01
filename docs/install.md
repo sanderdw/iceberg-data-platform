@@ -20,13 +20,39 @@ The installer does the following:
 - creates `.env` with random credentials in `~/iceberg-data-platform` (`$HOME\iceberg-data-platform` on Windows)
 - pulls the images and starts both Compose projects
 - puts `iceberg_connect.py` next to `.env`, so you can [connect your own tools](../user_portal/README.md#connect-from-your-computer) such as Python, the DuckDB CLI or DBeaver
-- ends with where to sign in first: the administration portal, `platform-admin` and, on a new installation, the temporary password (you choose a new one at first sign-in). It also lists the commands to stop and start both stacks and the bundled [agent skills](#agent-skills)
+- ends with where to sign in first: the administration portal, `platform-admin` and, on a new installation, the temporary password (you choose a new one at first sign-in). It also lists the commands to stop and start the platform and the bundled [agent skills](#agent-skills)
 
 The bundled `iceberg_connect.py` uses the default local addresses. If you changed `POLARIS_PUBLIC_URL` or the Keycloak address, for example with `quick-share`, download it from the user portal instead (**Catalog › Connect from your computer**). The portal fills in your addresses.
 
 You don't need a source checkout, Python or Node.js. Continue with the [first steps](../README.md#first-steps).
 
 The installer scripts and archives are available in the [release assets](https://github.com/sanderdw/iceberg-data-platform/releases/latest) for inspection.
+
+## Add Conversational BI
+
+The installer can also add Conversational BI (`extensions/conversationalbi` in the repository), a chat that answers questions from your teams' semantic models with an LLM. In a terminal it asks whether to add it, then which model to use and its key. At the prompt the key is never echoed and stays out of your shell history. To install without questions, pass the model and its key in the environment:
+
+```bash
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | \
+  LLM_MODEL=anthropic:claude-sonnet-5-5 ANTHROPIC_API_KEY=sk-ant-... sh
+```
+
+```powershell
+$env:LLM_MODEL = 'anthropic:claude-sonnet-5-5'; $env:ANTHROPIC_API_KEY = 'sk-ant-...'
+irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
+```
+
+Google Gemini (`GOOGLE_API_KEY`), Anthropic (`ANTHROPIC_API_KEY`), OpenAI (`OPENAI_API_KEY`) and Amazon Bedrock (`AWS_BEARER_TOKEN_BEDROCK` and `AWS_REGION`) are supported. The [Conversational BI configuration](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/conversationalbi#configuration) lists the `LLM_MODEL` values and settings per provider.
+
+`ICEBERG_EXTENSIONS=conversationalbi` adds it without a model, and `ICEBERG_EXTENSIONS=none` skips the question. Conversational BI opens on `http://localhost:3007`; a team administrator enables it once per environment with **Enable** in the chat. Allocate 8 GiB of Docker memory with it.
+
+The model and key are in `conversationalbi/llm.env` in the installation directory, readable only by you and given only to the chat's gateway container. To change the model, edit that file and restart the gateway from the installation directory:
+
+```bash
+docker compose -f conversationalbi/compose.yaml up -d --wait
+```
+
+Rerunning the installer keeps Conversational BI and `llm.env`. Pass `LLM_MODEL` and its key again to replace them.
 
 ## Agent skills
 
@@ -51,7 +77,7 @@ The skills are updated with the installer. Keep your own changes in a copy under
 Replace `latest/download` with `download/vX.Y.Z`. The bundle, Compose files and images are all pinned to that version:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.6.0/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.7.0/install.sh | sh
 ```
 
 ## Test a branch
@@ -90,6 +116,7 @@ To restart without downloading anything, run from the installation directory:
 ```bash
 docker compose up -d --wait
 docker compose -f compose.users.yaml up -d --wait users
+docker compose -f conversationalbi/compose.yaml up -d --wait   # with Conversational BI
 ```
 
 ## Stop and preserve data
@@ -97,6 +124,7 @@ docker compose -f compose.users.yaml up -d --wait users
 Stop the workspaces first so the user portal can close its notebooks:
 
 ```bash
+docker compose -f conversationalbi/compose.yaml down   # with Conversational BI
 docker compose -f compose.users.yaml down
 docker compose down
 ```

@@ -25,7 +25,7 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
 
 ## Publish a stable release
 
-1. Update the version in `pyproject.toml`, `package.json`, both fields in `package-lock.json`, `uv.lock` (`uv lock`) and the API versions in `server/app.py` and `user_portal/app.py`. `npm run check:release` rejects any mismatch. Update `CHANGELOG.md`, add the release notes in `docs/releases/X.Y.Z.md` and update the version in the install examples.
+1. Update the version in `pyproject.toml`, `package.json`, both fields in `package-lock.json`, `uv.lock` (`uv lock`) and the API versions in `server/app.py` and `user_portal/app.py`. `npm run check:release` rejects any mismatch. Update `CHANGELOG.md`, add the release notes in `docs/releases/X.Y.Z.md` and update the version in the install examples. Record Bridge contract changes in `contracts/bridge/CHANGELOG.md` and the version in `server/bridge.py` (see [COMPATIBILITY.md](../contracts/bridge/COMPATIBILITY.md)); the Bridge has no release of its own.
 2. Run the [checks](../CONTRIBUTING.md#tests) and the dependency audits:
 
    ```bash
@@ -34,7 +34,8 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
    npm audit
    ```
 
-3. Merge into `main`, wait for CI, then tag that commit:
+3. Merge into `main`, wait for CI, then [release Conversational BI](#release-an-extension) if its version changed. The installation bundle installs Conversational BI from its own release, so a stable core release requires the tag `conversationalbi-v<version>` of the version in `extensions/conversationalbi/pyproject.toml`, unchanged `compose.yaml` and `scripts/setup.py` in that folder since the tag, and public images. A branch preview only warns.
+4. Tag the core commit on `main`:
 
    ```bash
    git tag -a vX.Y.Z -m "Release X.Y.Z"
@@ -53,6 +54,20 @@ To check a release before merging, run **Actions → Release candidate → Run w
 Never move a published tag. Fix the cause and rerun the workflow instead.
 
 To inspect the artifacts locally, run `uv run python -m scripts.release --build --install --release-tag vX.Y.Z --image-tag X.Y.Z`. This writes a deterministic source archive, an install bundle and checksums to `dist/`. `check:release` enforces a source allowlist, matching versions, license notices and valid local Markdown links. It also rejects known local secrets.
+
+## Release an extension
+
+Extensions are versioned and released on their own, with tags `<id>-vX.Y.Z` that never mark the latest release. For Conversational BI:
+
+1. In `extensions/conversationalbi`, update the version in `pyproject.toml`, `uv.lock` (`uv lock`), `conversationalbi/config.py`, `web/package.json` and `runtime/package.json` with their lock files, the two image tags in `compose.yaml` and the API contract (`uv run python -m scripts.api_contract`). Date its `CHANGELOG.md` section. `uv run python -m scripts.release` rejects a mismatch.
+2. After the merge into `main`, tag that commit:
+
+   ```bash
+   git tag -a conversationalbi-vX.Y.Z -m "Conversational BI X.Y.Z"
+   git push origin conversationalbi-vX.Y.Z
+   ```
+
+The **Conversational BI release** workflow runs its CI, builds `ghcr.io/sanderdw/iceberg-conversationalbi` and `iceberg-conversationalbi-runtime` for AMD64 and ARM64, checks that both are public and publishes the release with its source archive. On the first publication, set both packages to **Public** and rerun the failed job. Then release the core.
 
 ## Package visibility
 

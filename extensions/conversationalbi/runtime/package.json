@@ -1,0 +1,11 @@
+{
+  "name": "iceberg-conversationalbi-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": {
+    "@ag-ui/client": "1.0.1",
+    "@copilotkit/runtime": "1.76.0"
+  }
+}

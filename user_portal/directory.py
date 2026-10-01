@@ -1,11 +1,13 @@
 """Trusted metadata directory plus catalog requests made as the actual user."""
 
+import os
 import time
 from dataclasses import dataclass, field
 
 import httpx
 from pydantic import ValidationError
 
+from server import extensions
 from server.models import DatabaseInput, Environment, ServiceError
 from server.polaris import MAX_SHARES, PolarisProvider, enc
 from server.storage import RustFSStorage
@@ -136,12 +138,9 @@ class UserDirectory:
                 if share.get("recipientTeam") not in recipients:
                     continue
                 # Team-share grants sit on each member's own role, so shares received by
-                # several of the user's teams combine. A renamed object keeps its grant
-                # under its new name, which Polaris reports as an extra grant.
+                # several of the user's teams combine.
                 received.setdefault(share["database"], []).extend(
-                    [o for o in share["objects"] if o.get("granted")]
-                    + [{"kind": g["kind"], "namespace": g["namespace"], "name": g["name"], "granted": True}
-                       for g in share.get("extraGrants", []) if g["kind"] in ("table", "view", "semantic-model") and g["name"]]
+                    {**o, "granted": True} for o in self.metadata.received_objects(share)
                 )
                 recipient[share["database"]] = min(
                     recipient.get(share["database"], share["recipientTeam"]), share["recipientTeam"],
@@ -508,7 +507,8 @@ class UserDirectory:
                 name, namespace, self.request(session, f"{polaris}/semantic-models/{enc(name)}")
             )
         loaded = self.request(session, f"{path}/{kind}s/{enc(name)}")
-        return {"name": name, "namespace": namespace, **object_details(kind, loaded)}
+        return {"name": name, "namespace": namespace,
+                **object_details(kind, loaded, extensions.extensions(os.environ))}
 
     def preview_request(self, session, database, namespace, name, snapshot_id, limit):
         details = self.details(session, database, namespace, "table", name)

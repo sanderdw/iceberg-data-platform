@@ -64,6 +64,8 @@ npm run test:mcp-admin
 npm run test:connect
 ```
 
+`scripts.bridge_smoke` checks the Extension Bridge with a registered extension; see its docstring. Each extension in `extensions/` has its own tests and CI, described in its README.
+
 ## Pull requests
 
 - Keep pull requests focused, and describe the behaviour before and after the change plus the checks you ran.

@@ -42,7 +42,7 @@ ROOT_FILES = (
     "pyproject.toml",
     "uv.lock",
 )
-SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", ".github", ".agents")
+SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", "contracts", ".github", ".agents")
 # Agent skills ship in the installation bundle at the same paths.
 SKILLS_DIR = ".agents/skills"
 # Extensionless files accepted in source directories.
@@ -53,8 +53,9 @@ IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv"}
 LOCAL_FILES = {"docs/conversation.md", "docs/dbaas-reference-architecture.drawio"}
 # Git-ignored personal notes; never scanned or released.
 LOCAL_DIRS = ("docs/local_only/",)
-# Tracked in git and published by the GitHub Pages workflow, but not part of the source release.
-TRACKED_UNRELEASED = ("presentation/",)
+# Tracked in git but not part of the core source release: the presentation is published by the
+# GitHub Pages workflow; extensions and their workflows are versioned and released on their own.
+TRACKED_UNRELEASED = ("presentation/", "extensions/", ".github/workflows/conversationalbi-")
 
 
 def release_files(root=ROOT):
@@ -63,6 +64,7 @@ def release_files(root=ROOT):
         for path in (root / directory).rglob("*"):
             relative = path.relative_to(root)
             if (relative.as_posix() in LOCAL_FILES or relative.as_posix().startswith(LOCAL_DIRS)
+                    or relative.as_posix().startswith(TRACKED_UNRELEASED)
                     or any(part in IGNORED for part in relative.parts)):
                 continue
             if path.is_symlink():
@@ -102,19 +104,13 @@ def check(root=ROOT):
             raise ValueError(f"The API version in {api_path} differs from the project version")
     if project.get("license") != "Apache-2.0" or package.get("license") != "Apache-2.0":
         raise ValueError("Expected Apache-2.0 project metadata")
-    local_secrets = []
-    for env_file in root.glob(".env*"):
-        if env_file.is_file() and env_file.name != ".env.example":
-            for line in env_file.read_text().splitlines():
-                key, _, value = line.partition("=")
-                if ("SECRET" in key or "PASSWORD" in key) and len(value.strip()) >= 12:
-                    local_secrets.append(value.strip().strip("\"'"))
+    found = local_secrets(root.glob(".env*"))
     for path in files:
         relative = path.relative_to(root).as_posix()
         if path.suffix in BINARY_SUFFIXES:
             continue
         content = path.read_text()
-        if any(secret in content for secret in local_secrets):
+        if any(secret in content for secret in found):
             raise ValueError(f"Local credential found in {relative}; value suppressed")
         if re.search(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", content):
             raise ValueError(f"Private key found in {relative}")
@@ -197,6 +193,47 @@ def installer_source(root, filename, release_tag="latest", image_tag="latest"):
     return content.replace("iceberg-data-platform-portal:latest", f"iceberg-data-platform-portal:{image_tag}").encode()
 
 
+CBI = "extensions/conversationalbi"
+CBI_IMAGES = ("iceberg-conversationalbi", "iceberg-conversationalbi-runtime")
+
+
+def conversationalbi_bundle(root=ROOT):
+    """Conversational BI for the installer: its compose file on the published images, and its setup.
+
+    A strict text rewrite rather than `docker compose config`, which would inline the env files
+    (the LLM key and the Bridge secret) of a local checkout.
+    """
+    version = tomllib.loads((root / CBI / "pyproject.toml").read_text())["project"]["version"]
+    text = (root / CBI / "compose.yaml").read_text()
+    for image in CBI_IMAGES:
+        local = f"    image: {image}:{version}\n"
+        if text.count(local) != 1:
+            raise ValueError(f"{CBI}/compose.yaml must use {image}:{version} once")
+        text = text.replace(local, f"    image: ghcr.io/sanderdw/{image}:{version}\n")
+    text, builds = re.subn(r"(?m)^    build: \S+\n", "", text)
+    if builds != len(CBI_IMAGES) or "build:" in text:
+        raise ValueError(f"Unexpected build sections in {CBI}/compose.yaml")
+    return version, {"conversationalbi/compose.yaml": text.encode(),
+                     "conversationalbi/scripts/setup.py": (root / CBI / "scripts/setup.py").read_bytes()}
+
+
+def local_secrets(paths, words=()):
+    """Credential values in local env files, to make sure no released file contains them.
+
+    Any key naming a SECRET or PASSWORD, and keys with one of `words` as a part (such as KEY in
+    ANTHROPIC_API_KEY, not in KEYCLOAK_ORIGIN).
+    """
+    values = []
+    for env_file in paths:
+        if env_file.is_file() and env_file.name != ".env.example":
+            for line in env_file.read_text().splitlines():
+                key, _, value = line.partition("=")
+                credential = "SECRET" in key or "PASSWORD" in key or set(words) & set(key.strip().split("_"))
+                if credential and len(value.strip()) >= 12:
+                    values.append(value.strip().strip("\"'"))
+    return values
+
+
 def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="latest"):
     """Render portable Compose files and matching stable or pinned installers."""
     version, files = check(root)
@@ -204,7 +241,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
     output.mkdir(parents=True, exist_ok=True)
     registry = "ghcr.io/sanderdw/iceberg-data-platform"
     image_names = {"portal": "portal", "monitor": "portal", "users": "users", "notebook-image": "notebook",
-                   "keycloak-bootstrap": "portal"}
+                   "keycloak-bootstrap": "portal", "bridge": "portal"}
     contents = {name: installer_source(root, name, release_tag, image_tag) for name in ("install.sh", "install.ps1")}
     for filename in ("compose.yaml", "compose.users.yaml"):
         model = json.loads(subprocess.check_output([
@@ -231,6 +268,8 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
         contents[filename] = (root / filename).read_bytes()
     # Connect your own tools; its defaults match a local installation.
     contents["iceberg_connect.py"] = (root / "user_portal/client/iceberg_connect.py").read_bytes()
+    # Conversational BI, installed only when asked for (pinned to its own release).
+    contents.update(conversationalbi_bundle(root)[1])
     # Getting-started skills for coding agents, opened in the installation directory.
     for path in files:
         relative = path.relative_to(root).as_posix()
@@ -244,6 +283,11 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
                     f"---\n{frontmatter}---\n\nRead `{SKILLS_DIR}/{skill}/SKILL.md` and follow it. "
                     f"Paths in that skill are relative to `{SKILLS_DIR}/{skill}/`.\n"
                 ).encode()
+    found = [*local_secrets(root.glob(".env*")),
+             *local_secrets([*(root / CBI).glob(".env*"), root / CBI / "llm.env"], words=("KEY", "TOKEN"))]
+    for filename, data in contents.items():
+        if any(secret.encode() in data for secret in found):
+            raise ValueError(f"Local credential found in bundled {filename}; value suppressed")
     name = f"iceberg-data-platform-{version}-install"
     archive = output / f"{name}.tar.gz"
     with (

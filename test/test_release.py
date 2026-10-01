@@ -17,6 +17,7 @@ from scripts.release import (
     build,
     build_install,
     check,
+    conversationalbi_bundle,
     installer_source,
     release_channel,
     release_files,
@@ -30,7 +31,40 @@ def release_tree(tmp_path):
         target = root / path.relative_to(ROOT)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, target)
+    # The installation bundle also carries Conversational BI's compose file and setup.
+    for name in ("pyproject.toml", "compose.yaml", "scripts/setup.py"):
+        target = root / "extensions/conversationalbi" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "extensions/conversationalbi" / name, target)
     return root
+
+
+def test_conversationalbi_bundle_uses_its_published_images(release_tree):
+    version, files = conversationalbi_bundle(release_tree)
+    compose = files["conversationalbi/compose.yaml"].decode()
+    assert f"image: ghcr.io/sanderdw/iceberg-conversationalbi:{version}\n" in compose
+    assert f"image: ghcr.io/sanderdw/iceberg-conversationalbi-runtime:{version}\n" in compose
+    assert "build:" not in compose
+    assert "env_file: [llm.env, .env.bridge]" in compose
+    assert files["conversationalbi/scripts/setup.py"] == (
+        release_tree / "extensions/conversationalbi/scripts/setup.py").read_bytes()
+
+
+def test_conversationalbi_bundle_needs_the_versioned_images(release_tree):
+    compose = release_tree / "extensions/conversationalbi/compose.yaml"
+    compose.write_text(compose.read_text().replace("iceberg-conversationalbi:0", "iceberg-conversationalbi:9"))
+    with pytest.raises(ValueError, match="must use iceberg-conversationalbi:"):
+        conversationalbi_bundle(release_tree)
+
+
+@pytest.mark.parametrize("env_file", [".env", ".env.bridge", "llm.env"])
+def test_conversationalbi_credentials_never_reach_the_bundle(release_tree, env_file):
+    secret = secrets.token_hex(24)
+    (release_tree / "extensions/conversationalbi" / env_file).write_text(f"ANTHROPIC_API_KEY={secret}\n")
+    setup = release_tree / "extensions/conversationalbi/scripts/setup.py"
+    setup.write_text(setup.read_text() + f"# {secret}\n")
+    with pytest.raises(ValueError, match="bundled conversationalbi/scripts/setup.py"):
+        build_install(release_tree)
 
 
 def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
@@ -102,6 +136,7 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
         files = {name.split("/", 1)[1]: archive.extractfile(name).read() for name in archive.getnames()}
     assert ".env" not in files
     assert "scripts/setup.py" in files
+    assert {"conversationalbi/compose.yaml", "conversationalbi/scripts/setup.py"} <= set(files)
     assert "pgadmin/servers.json" in files
     assert files["iceberg_connect.py"] == (release_tree / "user_portal/client/iceberg_connect.py").read_bytes()
     skills = sorted(path.relative_to(release_tree).as_posix()
@@ -168,6 +203,22 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
         assert model["name"] == expected
         resolved.append(model)
     platform_model, workspace_model = resolved
+    # Conversational BI as the installer adds it: registered, set up, and its compose file resolved
+    # from the installation directory with the env file next to it.
+    subprocess.run([sys.executable, str(installed / "scripts/setup.py"), "--extension", "conversationalbi",
+                    "--origin", "http://localhost:3007", "--handshake", str(installed / "conversationalbi/.env.bridge")],
+                   check=True, capture_output=True)
+    subprocess.run([sys.executable, str(installed / "conversationalbi/scripts/setup.py")], check=True,
+                   env={"PATH": os.environ["PATH"], "LLM_MODEL": "anthropic:claude-sonnet-5-5",
+                        "ANTHROPIC_API_KEY": "a" * 20}, stdin=subprocess.DEVNULL, capture_output=True)
+    cbi = json.loads(subprocess.check_output(["docker", "compose", "-f", "conversationalbi/compose.yaml", "config",
+                                              "--format", "json"], cwd=installed))
+    gateway = cbi["services"]["cbi-gateway"]
+    assert gateway["image"].startswith("ghcr.io/sanderdw/iceberg-conversationalbi:")
+    assert gateway["environment"]["LLM_MODEL"] == "anthropic:claude-sonnet-5-5"
+    assert gateway["environment"]["RUNTIME_KEY"] == cbi["services"]["cbi-runtime"]["environment"]["RUNTIME_KEY"]
+    assert "ANTHROPIC_API_KEY" not in cbi["services"]["cbi-runtime"]["environment"]
+    assert cbi["networks"]["platform"]["name"] == platform_model["networks"]["default"]["name"]
     assert workspace_model["services"]["users"]["environment"]["NOTEBOOK_IMAGE"] == (
         f"ghcr.io/sanderdw/iceberg-data-platform-notebook:{image_tag}"
     )

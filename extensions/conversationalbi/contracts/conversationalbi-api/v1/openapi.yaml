@@ -1,0 +1,658 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Conversational BI \u00b7 Iceberg Data Platform",
+    "description": "Governed questions over the semantic models of your teams and of the data shares they received. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-conversationalbi-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/me": {
+      "get": {
+        "summary": "Your teams, roles, databases, received shares and this extension",
+        "operationId": "whoami",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{team}/environments": {
+      "get": {
+        "summary": "Where Conversational BI is enabled for a team",
+        "operationId": "listEnvironments",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^team-[a-f0-9]{32}$",
+              "title": "Team"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{team}/environments/{environment}": {
+      "post": {
+        "summary": "Enable Conversational BI for a team environment (team administrators)",
+        "operationId": "enableEnvironment",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^team-[a-f0-9]{32}$",
+              "title": "Team"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "development",
+                "acceptance",
+                "production"
+              ],
+              "type": "string",
+              "title": "Environment"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Disable Conversational BI for a team environment (team administrators)",
+        "operationId": "disableEnvironment",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^team-[a-f0-9]{32}$",
+              "title": "Team"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "development",
+                "acceptance",
+                "production"
+              ],
+              "type": "string",
+              "title": "Environment"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/models": {
+      "get": {
+        "summary": "Semantic models of your teams and of data shares your teams received",
+        "operationId": "listModels",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/models/describe": {
+      "get": {
+        "summary": "A model's datasets, fields, metrics and the dimensions each metric can be split by",
+        "operationId": "describeModel",
+        "parameters": [
+          {
+            "name": "database",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^db-[a-f0-9]{32}$",
+              "title": "Database"
+            }
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 2000,
+              "description": "Namespace levels joined by '.'",
+              "title": "Namespace"
+            },
+            "description": "Namespace levels joined by '.'"
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,256}$",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/queries": {
+      "post": {
+        "summary": "Run a governed query: metrics by dimensions, compiled from the semantic model",
+        "operationId": "runQuery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/results/{result}": {
+      "get": {
+        "summary": "A query result you asked for, by id",
+        "operationId": "getResult",
+        "parameters": [
+          {
+            "name": "result",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^res-[a-f0-9]{24}$",
+              "title": "Result"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50000,
+              "minimum": 1,
+              "default": 50000,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Dimension": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}\\.[A-Za-z_][A-Za-z0-9_]{0,127}$",
+            "title": "Field",
+            "description": "DATASET.field, as listed by describe_model."
+          },
+          "via": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Via",
+            "description": "Relationship names that pick the join path when several exist.",
+            "default": []
+          },
+          "grain": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "day",
+                  "week",
+                  "month",
+                  "quarter",
+                  "year"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grain",
+            "description": "Truncate a date or timestamp field."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "field"
+        ],
+        "title": "Dimension"
+      },
+      "Filter": {
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}\\.[A-Za-z_][A-Za-z0-9_]{0,127}$",
+                "description": "DATASET.field, as listed by describe_model."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric"
+          },
+          "via": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Via",
+            "default": []
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "=",
+              "!=",
+              "<",
+              "<=",
+              ">",
+              ">=",
+              "in",
+              "not_in",
+              "between",
+              "is_null",
+              "is_not_null"
+            ],
+            "title": "Op"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "op"
+        ],
+        "title": "Filter"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ModelRef": {
+        "properties": {
+          "database": {
+            "type": "string",
+            "pattern": "^db-[a-f0-9]{32}$",
+            "title": "Database",
+            "description": "Database id, from list_models."
+          },
+          "namespace": {
+            "items": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Namespace"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,256}$",
+            "title": "Name",
+            "description": "Semantic model name."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "database",
+          "namespace",
+          "name"
+        ],
+        "title": "ModelRef"
+      },
+      "Order": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Name",
+            "description": "An output column: a metric name or a dimension's column name."
+          },
+          "desc": {
+            "type": "boolean",
+            "title": "Desc",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "Order"
+      },
+      "QueryInput": {
+        "properties": {
+          "metrics": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Metrics"
+          },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/Dimension"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Dimensions",
+            "default": []
+          },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/Filter"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Filters",
+            "default": []
+          },
+          "order_by": {
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Order By",
+            "default": []
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 100
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelRef"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "metrics",
+          "model"
+        ],
+        "title": "QueryInput"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

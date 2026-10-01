@@ -42,6 +42,31 @@ jobs:
         run: |
           # /releases/latest serves stable installers, so a stable release is always a main release.
           git merge-base --is-ancestor HEAD origin/main || { echo 'Tag a commit on main for a stable release' >&2; exit 1; }
+      - name: Conversational BI release is published
+        # The bundle installs Conversational BI from its own release: its tag must exist, the bundled
+        # files must match it, and its images must be public. Previews only warn.
+        env:
+          PREVIEW: ${{ steps.version.outputs.preview }}
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('extensions/conversationalbi/pyproject.toml', 'rb'))['project']['version'])")
+          problem=
+          if ! git rev-parse -q --verify "refs/tags/conversationalbi-v$version" >/dev/null; then
+            problem="Tag conversationalbi-v$version does not exist"
+          elif ! git diff --quiet "conversationalbi-v$version" HEAD -- extensions/conversationalbi/compose.yaml extensions/conversationalbi/scripts/setup.py; then
+            problem="The bundled Conversational BI files changed since conversationalbi-v$version"
+          else
+            for image in iceberg-conversationalbi iceberg-conversationalbi-runtime; do
+              docker --config "$(mktemp -d)" manifest inspect "ghcr.io/sanderdw/$image:$version" >/dev/null \
+                || problem="ghcr.io/sanderdw/$image:$version is not public"
+            done
+          fi
+          if [ -n "$problem" ]; then
+            if [ "$PREVIEW" = true ]; then
+              echo "::warning::$problem; installing Conversational BI from this preview will fail."
+            else
+              echo "$problem. Release Conversational BI first." >&2; exit 1
+            fi
+          fi
       - run: uv sync --locked --all-groups
       - run: uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
       - name: Build matching source, bundle and installers
@@ -238,7 +263,7 @@ jobs:
 
           \`irm https://github.com/${GH_REPO}/releases/latest/download/install.ps1 | iex\`
 
-          The installer creates configuration and random credentials, pulls the images of this release and starts both stacks. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
+          The installer creates configuration and random credentials, pulls the images of this release and starts both Compose projects. It can also add the separately released Conversational BI extension; see docs/install.md. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
 
           The commands above always install the newest release. To install exactly this version, replace \`latest/download\` with \`download/v${VERSION}\`; its installers, Compose files and images are pinned to ${VERSION}.
 

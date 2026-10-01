@@ -86,6 +86,39 @@ async function inspectObject(db, ns, kind, name) {
   } catch (error) { if (version === browseVersion) { $('#objects').replaceChildren(element('p', error.message, 'catalog-empty')); notice(error.message, true); } }
 }
 
+/* Tables that a producer such as a dbt pipeline describes with the Bridge table-property conventions. */
+function producerCard(producer) {
+  const card = element('section', undefined, 'producer-card');
+  card.append(element('span', `Produced by ${producer.name}`, 'eyebrow'));
+  const quality = producer.quality ? `${producer.quality.status}${producer.quality.summary ? ' · ' + producer.quality.summary : ''}` : 'No tests recorded';
+  const status = element('span', quality, `producer-quality ${producer.quality ? producer.quality.status : 'none'}`);
+  card.append(status, facts([['Last run', producer.runAt ? timestamp(Date.parse(producer.runAt)) : null],
+    ['Revision', producer.revision ? producer.revision.slice(0, 12) : null], ['Node', producer.node], ['Version', producer.version]]));
+  if (producer.inputs.length) {
+    card.append(element('h3', 'Upstream tables'));
+    const list = element('ul', undefined, 'producer-inputs');
+    for (const input of producer.inputs) {
+      const known = [...(state.databases || []), ...(state.sharedDatabases || [])].find(d => d.id === input.database);
+      const label = `${known ? known.name : input.database} · ${[...input.namespace, input.name].join('.')}`;
+      const item = element('li');
+      if (known) {
+        const button = element('button', label, 'link-button'); button.type = 'button';
+        button.addEventListener('click', async () => { await browse(input.database, input.namespace); await inspectObject(input.database, input.namespace, 'table', input.name); });
+        item.append(button);
+      } else { item.append(element('span', label)); item.title = 'Not available in your active team and environment.'; }
+      list.append(item);
+    }
+    card.append(list);
+    if (producer.inputsTruncated) card.append(element('p', 'Showing the first 50 upstream tables.', 'hint'));
+  }
+  if (producer.url) {
+    const link = element('a', `Open pipeline in ${producer.extension || producer.name}`, 'button quiet');
+    link.href = producer.url; link.target = '_blank'; link.rel = 'noopener';
+    card.append(link);
+  }
+  return card;
+}
+
 /* Accessible tab strip shared by the object detail views. */
 function makeTabs(label) {
   const tabs = element('div', undefined, 'catalog-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', `${label} details`);
@@ -116,6 +149,8 @@ function renderObjectDetails(detail, db, ns, name, version) {
   toolbar.append(action('Copy identifier', async () => { await navigator.clipboard.writeText([db, ...ns, name].map(p => '"' + p.replaceAll('"', '""') + '"').join('.')); notice('Identifier copied.'); }));
   const {tabs, panel, tab} = makeTabs(detail.kind);
   const overview = tab('Overview', p => {
+    if (detail.comment) p.append(element('p', detail.comment, 'catalog-comment'));
+    if (detail.producer) p.append(producerCard(detail.producer));
     const entries = [['Format version', detail.formatVersion], ['Schema ID', detail.schemaId], ['UUID', detail.uuid], ['Location', detail.location]];
     if (detail.kind === 'table') {
       entries.unshift(['Current snapshot', detail.currentSnapshotId], ['Last updated', timestamp(detail.updatedAt)]);
@@ -200,6 +235,14 @@ function renderSemanticModel(detail, db, ns, name) {
   toolbar.append(element('span', 'SEMANTIC MODEL · APACHE OSSIE', 'eyebrow'));
   // The Polaris name, as notebooks and MCP tools address it; a model is not a SQL relation.
   toolbar.append(action('Copy name', async () => { await navigator.clipboard.writeText([db, ...ns, name].join('.')); notice('Name copied.'); }));
+  const conversational = (state.extensions || []).find(e => e.id === 'conversationalbi');
+  if (conversational) {
+    // The extension checks access again; the link only preselects the model.
+    const ask = element('a', 'Ask in Conversational BI', 'button quiet');
+    ask.href = conversational.origin + '/#/ask?' + new URLSearchParams({database: db, namespace: JSON.stringify(ns), model: name});
+    ask.target = '_blank'; ask.rel = 'noopener'; ask.dataset.extension = 'conversationalbi';
+    toolbar.append(ask);
+  }
   const {tabs, panel, tab} = makeTabs(detail.kind);
   const models = detail.models || [];
   const count = key => models.reduce((sum, m) => sum + m[key].length, 0);

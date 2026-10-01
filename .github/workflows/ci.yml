@@ -2,7 +2,15 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['presentation/**']
+    # Extensions have their own CI, except the Conversational BI files the installer bundles.
+    paths:
+      - '**'
+      - '!presentation/**'
+      - '!extensions/**'
+      - 'extensions/conversationalbi/compose.yaml'
+      - 'extensions/conversationalbi/scripts/setup.py'
+      - 'extensions/conversationalbi/pyproject.toml'
+      - '!.github/workflows/conversationalbi-*.yml'
   pull_request:
   workflow_dispatch:
   workflow_call:
@@ -143,7 +151,8 @@ jobs:
       - run: uv sync --locked --all-groups
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: uv run python -m scripts.setup --demo
+      # Registers an extension named dbt so the live bridge check has a Keycloak client.
+      - run: uv run python -m scripts.setup --demo --extension dbt --origin http://localhost:3004 --handshake .local/dbt.bridge.env
       - run: docker compose -f compose.users.yaml --profile images build notebook-image
       - run: docker compose up -d --build --wait
       - run: docker compose -f compose.users.yaml up -d --build --wait users
@@ -153,6 +162,7 @@ jobs:
       - run: uv run --all-groups python -m scripts.mcp_smoke
       - run: uv run --all-groups python -m scripts.connect_smoke
       - run: uv run --all-groups python -m scripts.mcp_admin_smoke
+      - run: uv run --all-groups python -m scripts.bridge_smoke
       - name: Clean this runner's Keycloak stack
         if: always()
         run: |

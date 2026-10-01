@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 - 2026-10-01
+
+- **Extension Bridge contract 0.1.0:** a versioned interface (`contracts/bridge`, `/bridge/v1`) through which separately released extensions, such as the new Conversational BI, use the platform. It provides the signed-in user's teams and databases, and service accounts per team and environment that only team administrators enable. Extensions receive one-hour catalog tokens, never secrets or storage keys. Team shares a team received reach the read role of that team's extension service accounts in the same environment, never the write role (capability `shared-data`). See [extensions](docs/extensions.md).
+- New `bridge` service, and `scripts.setup --extension <id> --origin <url> --handshake <file>` to register an extension with its own Keycloak clients.
+- The user portal links to registered extensions. The administration portal lists extension service accounts on the Teams page and can revoke them, also through the new MCP tools `list_automation_principals` and `revoke_automation_principal`.
+- The Infrastructure page includes the containers of extensions.
+- **Where a table comes from:** the catalog shows a table's description (`comment`) and, for tables a pipeline describes with the Bridge table-property conventions, a **Produced by** card with the last run, revision, test outcome, upstream tables and a link to the producer. Links open only for registered extensions.
+- New separately released **Conversational BI** extension 0.1.0 (`extensions/conversationalbi`): ask questions about your teams' semantic models and the ones shared with your teams, in a chat with generative UI. Answers are governed queries compiled from the model, with the SQL, join path and metric definitions next to every chart. A Pydantic AI agent defined in YAML, on OpenAI, Anthropic, Google Gemini or Amazon Bedrock (`LLM_MODEL`). See its README.
+- A semantic model in the catalog links to **Ask in Conversational BI** when that extension is registered.
+- **The installer can add Conversational BI:** it asks in a terminal, or takes `LLM_MODEL` and the provider's key from the environment (`ICEBERG_EXTENSIONS=conversationalbi` without a model). The model and key are stored in `conversationalbi/llm.env`, which only the chat's gateway reads. See [installation](docs/install.md#add-conversational-bi).
+- `scripts.flights_seed` publishes the flights data product in a partner team and shares it with a team, for demos and extension tests.
+
 ## 0.6.0 - 2026-09-30
 
 - **Polaris 1.8.0 adds semantic models to the Catalog.** Explore datasets, fields, metrics and relationships alongside your tables, and use the models with AI agents. `describe_semantic_model` can also return the stored definition.

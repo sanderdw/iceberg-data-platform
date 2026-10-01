@@ -28,7 +28,7 @@ test('central teams, memberships, move and deletion through FastAPI', async ({ p
     await page.getByLabel('Description').fill('Centrally managed browser team');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('dialog')).not.toBeVisible();
-    await expect(page.locator('tbody')).toContainText(renamed);
+    await expect(page.locator('tbody').first()).toContainText(renamed);
     await page.screenshot({ path: 'test-results/teams-fastapi.png', fullPage: true });
 
     await page.getByRole('button', { name: 'Databases', exact: false }).first().click();
