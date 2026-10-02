@@ -7,7 +7,7 @@
 - **Any AI agent answers from your semantic models.** The MCP tool `query_semantic_model` builds the SQL from the model's agreed metrics and joins, and reads with your own permissions.
 - **Build semantic models with your coding agent.** The `semantic-model` skill interviews you about the questions the model must answer, tests each one against the real data and publishes after your approval. Models follow Apache Ossie, including datatypes and synonyms. See [agent skills](docs/install.md#agent-skills).
 - **Where a table comes from:** the catalog shows a table's description and, for tables a pipeline produces, the last run, test outcome and upstream tables.
-- **Also:** an `AGENTS.md` that guides coding agents in the installation folder, the same UTC dates on every computer, read-only access to received shares for extensions, and extension service accounts that platform administrators can revoke.
+- **Also:** `quick-share` gives Conversational BI its own public address for a class, an `AGENTS.md` that guides coding agents in the installation folder, the same UTC dates on every computer, read-only access to received shares for extensions, and extension service accounts that platform administrators can revoke.
 
 ## 0.6.0 - 2026-09-30
 

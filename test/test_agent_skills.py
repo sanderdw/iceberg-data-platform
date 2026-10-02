@@ -111,6 +111,17 @@ def test_skills_work_in_any_coding_agent(name):
     assert "Copilot" in skill
 
 
+def test_quick_share_tunnels_conversationalbi_only_when_installed():
+    compose = yaml.safe_load((SKILLS / "quick-share/assets/compose.quickshare.yaml").read_text())
+    tunnel = compose["services"]["cbi-tunnel"]
+    assert tunnel["profiles"] == ["conversationalbi"]
+    assert tunnel["command"] == "tunnel --url http://gateway:8082"
+    assert not any("profiles" in s for name, s in compose["services"].items() if name != "cbi-tunnel")
+    caddyfile = (SKILLS / "quick-share/assets/Caddyfile").read_text()
+    site, = re.findall(r"^:8082 \{\n(.*?)^\}", caddyfile, re.DOTALL | re.MULTILINE)
+    assert "reverse_proxy cbi-gateway:3007" in site
+
+
 @pytest.fixture
 def sync_origins():
     spec = importlib.util.spec_from_file_location("sync_origins", SKILLS / "quick-share/scripts/sync_origins.py")

@@ -20,6 +20,16 @@ services:
       - gateway
     networks:
       - platform
+  # Only with Conversational BI installed: docker compose --profile conversationalbi ...
+  cbi-tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: "no"
+    command: tunnel --url http://gateway:8082
+    profiles: [conversationalbi]
+    depends_on:
+      - gateway
+    networks:
+      - platform
   gateway:
     image: caddy:2
     restart: unless-stopped

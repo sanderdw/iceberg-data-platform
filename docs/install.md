@@ -66,6 +66,7 @@ The skills that use the platform's MCP server explain how to connect each agent.
 - [`quick-share`](../.agents/skills/quick-share/SKILL.md) makes the portals reachable from anywhere for a temporary session, such as a class with `demo-company`. It starts two free Cloudflare quick tunnels with public `trycloudflare.com` addresses and trusted certificates, so nobody installs an app or imports a certificate.
   - Participants use only the user portal address. It also carries the Iceberg catalog and S3 API, so DuckDB and PyIceberg on their own laptops work too.
   - The other address serves the administration portal and sign-in.
+  - With Conversational BI installed, a third address serves the chat, linked from the user portal.
   - A gateway keeps the Keycloak administration console, the Polaris management API and the RustFS console off the internet.
   - The addresses are random, public and change whenever the tunnels restart, so end the session with the skill's undo.
 - [`demo-company`](../.agents/skills/demo-company/SKILL.md) sets up a fictional Energy, Webshop or Retail company for a class or training through the [administration MCP server](admin-guide.md#connect-an-mcp-client). It creates one account for each of up to 48 participants in teams of about 4, each with its own databases, gives the platform administrator read-only access to every team, and ends with a printable page of sign-in slips. Connect the agent to the administration MCP server first; the skill explains how.
