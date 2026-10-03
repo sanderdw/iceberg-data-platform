@@ -1,5 +1,5 @@
 FROM ghcr.io/astral-sh/uv:0.12.19 AS uv
-FROM python:3.14.7-slim
+FROM python:3.15.0rc2-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md ./
