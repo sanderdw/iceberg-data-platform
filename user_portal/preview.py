@@ -11,11 +11,12 @@ from urllib.parse import quote, urlsplit
 from server.models import ServiceError
 
 
-def run_preview(request):
+def run_preview(request, module="user_portal.preview", what="Preview"):
+    """Run one read in a disposable process; `module` is this preview or the semantic query worker."""
     with tempfile.TemporaryDirectory(prefix="iceberg-preview-") as home:
         try:
             completed = subprocess.run(
-                [sys.executable, "-m", "user_portal.preview"],
+                [sys.executable, "-m", module],
                 input=json.dumps(request),
                 capture_output=True,
                 text=True,
@@ -35,13 +36,13 @@ def run_preview(request):
                 },
             )
         except subprocess.TimeoutExpired:
-            raise ServiceError(504, "Preview exceeded 30 seconds. Use marimo for larger reads.") from None
+            raise ServiceError(504, f"{what} exceeded 30 seconds. Use marimo for larger reads.") from None
     if completed.returncode or len(completed.stdout) > 4_000_000:
-        raise ServiceError(502, "Preview unavailable. Check read permissions or use marimo for this table.")
+        raise ServiceError(502, f"{what} unavailable. Check read permissions or use marimo for this table.")
     try:
         return json.loads(completed.stdout)
     except ValueError:
-        raise ServiceError(502, "Preview could not be read.") from None
+        raise ServiceError(502, f"{what} could not be read.") from None
 
 
 def sql_literal(value):
@@ -66,6 +67,7 @@ def connect(request, metadata):
         settings["extension_directory"] = directory
     connection = duckdb.connect(config=settings)
     connection.execute("LOAD httpfs; LOAD iceberg;")
+    connection.execute("SET TimeZone = 'UTC'")  # Timestamps render in UTC, whatever the host's zone.
     connection.execute(f"CREATE SECRET catalog (TYPE iceberg, TOKEN {sql_literal(request['token'])})")
     connection.execute(f"""
         CREATE SECRET table_storage (

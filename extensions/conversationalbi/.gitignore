@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+llm.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+dist/
+test-results/
+# Built by web/ (npm run build) and in the image.
+conversationalbi/public/
+# Test fixtures: the flights data the compiler tests run on (the platform ignores *.parquet).
+!tests/fixtures/*.parquet

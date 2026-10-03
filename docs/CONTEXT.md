@@ -10,6 +10,7 @@ Polaris is the single source of truth. Users, teams, databases and data shares a
 | Role assignment | Per catalog, the user's principal role gets the catalog role matching their role in the owning team | Polaris catalog-role grants |
 | Database | Internal Iceberg catalog with a dedicated RustFS bucket | `portal.name`, `portal.team`, `portal.environment`, `portal.description`, `portal.bucket` |
 | Data share | Principal marked `portal.kind=share`, with a principal role and a catalog role of the same name | `portal.database`, `portal.objects`, `portal.recipient-team`, `portal.external`, `portal.expires-at`, … |
+| Automation principal | Principal `svc-<uuid>` marked `portal.kind=automation`, with principal roles `svc-<uuid>` (catalog role `writer`) and `svc-<uuid>-read` (`reader`) on each database of its team and environment; the share catalog roles of team shares received in that environment on `svc-<uuid>-read` | `portal.team`, `portal.environment`, `portal.extension`, `portal.created-by` |
 
 Managed records carry `portal.managed-by=iceberg-portal-v2`.
 
@@ -57,3 +58,15 @@ A data share gives another team, an external party, or both read access to selec
 - **Limits and drift:** a share holds at most 50 objects, and a database at most 20 shares. Grants follow the object itself, not its name, so a renamed object stays shared, while a dropped and recreated one does not. The portal shows the difference, and saving the share again fixes it.
 - **Ownership:** a share belongs to its database. Every current Administrator of the owning team can manage it. A shared database can't move to another team until its shares are revoked.
 - **Secret and expiry:** the client secret is shown once and never stored. **New secret** ends the previous one immediately. Revocation and expiry end issued tokens at once. The user gateway enforces expiry every 30 seconds, and every share listing enforces it too.
+
+## Automation principals
+
+An automation principal is the service account through which an extension, such as
+Conversational BI, acts for one team in one environment. A team Administrator enables it through the
+extension (the [Bridge](extensions.md)). There is at most one per team, environment and extension.
+It follows the team's databases in that environment: creating, moving and deleting a database
+update its grants like a member's. It is never a user, member or portal login. Deleting the team
+revokes it, and platform administrators can revoke it on the Teams page. Its secret is never
+stored; the Bridge resets it when it starts and issues one-hour tokens that carry either the
+writer or the read-only role. Team shares that its team received from a database in the same environment
+are also granted to its read-only role, never to the writer role, and end with the share.

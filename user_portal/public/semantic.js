@@ -158,7 +158,7 @@ function semanticDiagram(model, {onOpenTable} = {}) {
       const y = SD.header + i * SD.row, joined = joinedBy.get(name).has(f.name), key = d.primaryKey.includes(f.name);
       const row = svgNode('g', {transform: `translate(0 ${y})`}, `sd-field${joined ? ' sd-joined' : ''}`);
       if (i) row.append(svgNode('line', {x1: 0, x2: SD.width, y1: 0, y2: 0}, 'sd-rule'));
-      const tag = key ? 'PK' : model.relationships.some(r => r.from === name && r.fromColumns.includes(f.name)) ? 'FK' : f.dimension ? '◆' : '';
+      const tag = key ? 'PK' : model.relationships.some(r => r.from === name && r.fromColumns.includes(f.name)) ? 'FK' : f.timeDimension ? '◷' : f.dimension ? '◆' : '';
       if (tag) row.append(svgText(12, 15, tag, key ? 'sd-tag sd-key' : 'sd-tag'));
       const type = f.datatype ? svgText(SD.width - 12, 15, f.datatype.toLowerCase(), 'sd-type', 80) : null;
       row.append(svgText(40, 15, f.name, 'sd-column', SD.width - 52 - (type ? Math.min(80, f.datatype.length * SD.char) + 8 : 0)));
@@ -200,7 +200,7 @@ function semanticDiagram(model, {onOpenTable} = {}) {
   });
 
   const toolbar = element('div', undefined, 'sd-toolbar');
-  const legend = element('p', 'PK primary key · FK join column · ◆ dimension · crow’s foot marks the many side. Hover a dataset to follow its relationships.', 'hint');
+  const legend = element('p', 'PK primary key · FK join column · ◆ dimension · ◷ time dimension · crow’s foot marks the many side. Hover a dataset to follow its relationships.', 'hint');
   const size = element('button', 'Actual size', 'quiet');
   size.addEventListener('click', () => { const fit = wrap.classList.toggle('sd-fit'); size.textContent = fit ? 'Actual size' : 'Fit to width'; });
   toolbar.append(legend, size);

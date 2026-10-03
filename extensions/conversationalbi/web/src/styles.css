@@ -1,0 +1,200 @@
+/* The platform portals' design (user_portal/public/style.css): Nothing design system, same tokens,
+   header, headings, lists and buttons; plus the chat and its generative components. */
+@font-face { font-family: 'Space Grotesk'; src: url('/fonts/space-grotesk.ttf') format('truetype'); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: 'Space Mono'; src: url('/fonts/space-mono.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: Doto; src: url('/fonts/doto.ttf') format('truetype'); font-weight: 400 700; font-display: swap; }
+
+:root {
+  color-scheme: dark;
+  --black: #000; --surface: #111; --surface-raised: #1a1a1a; --border: #222; --border-visible: #333;
+  --text-disabled: #666; --text-secondary: #999; --text-primary: #e8e8e8; --text-display: #fff;
+  --accent: #d71921; --success: #4a9e5c;
+  --body: 'Space Grotesk', system-ui, sans-serif; --mono: 'Space Mono', monospace; --display: Doto, var(--mono);
+  --large: 4.5rem; --medium: 1rem; --small: .75rem;
+  font: var(--medium)/1.5 var(--body); font-synthesis: none; background: var(--black); color: var(--text-primary);
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --black: #f5f5f5; --surface: #fff; --surface-raised: #f0f0f0; --border: #e8e8e8; --border-visible: #ccc;
+  --text-disabled: #999; --text-secondary: #666; --text-primary: #1a1a1a; --text-display: #000;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--black); }
+[hidden] { display: none !important; }
+h1, h2, h3, p, pre { margin: 0; }
+h2, h3, strong { font-size: var(--medium); font-weight: 500; }
+p { color: var(--text-secondary); line-height: 1.65; }
+a { color: inherit; }
+button, input, select { font: inherit; }
+/* Portal buttons everywhere except CopilotKit's own controls; our cards inside the chat keep them. */
+:is(button:not([data-copilotkit] *), .gen-card button), a.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 12px 24px;
+  border: 1px solid var(--text-display); border-radius: 999px; background: var(--text-display); color: var(--black);
+  font: var(--small)/1.5 var(--mono); font-weight: 400; text-transform: uppercase; letter-spacing: .06em;
+  text-decoration: none; cursor: pointer; transition: color 150ms ease-out, border-color 150ms ease-out, background-color 150ms ease-out;
+}
+:is(button:not([data-copilotkit] *), .gen-card button):hover { background: var(--text-primary); }
+button.quiet { background: transparent; border-color: var(--border-visible); color: var(--text-primary); }
+button.quiet:hover { border-color: var(--text-primary); color: var(--text-display); }
+button.ghost { background: transparent; border-color: transparent; color: var(--text-secondary); padding-inline: 8px; }
+button.ghost:hover { color: var(--text-display); }
+button:disabled { cursor: not-allowed; opacity: .4; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 4px; }
+svg { width: 20px; height: 20px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.eyebrow, .hint { font: var(--small)/1.6 var(--mono); color: var(--text-secondary); }
+.eyebrow { text-transform: uppercase; letter-spacing: .06em; }
+/* The accent is Doto's period, a small plus of dots, as in the portals; here it stays red. */
+.dot-accent { color: var(--accent); font-family: var(--display); }
+.notice-error { margin-top: 16px; padding-left: 16px; border-left: 2px solid var(--accent); font: var(--small)/1.7 var(--mono); color: var(--text-primary); }
+
+/* Header */
+header.site { min-height: 96px; padding: 24px 48px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--border); }
+.brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 500; text-decoration: none; color: var(--text-display); }
+.brand img { width: 32px; height: 32px; }
+.brand span { font: var(--small) var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
+header.site nav { display: flex; align-items: center; gap: 24px; margin-right: auto; margin-left: 24px; }
+header.site .nav-item { background: transparent; border: 0; border-radius: 0; padding: 16px 0; color: var(--text-secondary); white-space: nowrap; }
+header.site .nav-item:hover, header.site .nav-item[aria-current='page'] { color: var(--text-display); background: transparent; }
+header.site .nav-item[aria-current='page']::before { content: '['; }
+header.site .nav-item[aria-current='page']::after { content: ']'; }
+header.site a.nav-item { display: inline-flex; align-items: center; min-height: 44px; font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; text-decoration: none; }
+header.site a.nav-item.extension-link::after { content: ' ↗'; }
+.header-actions, #identity { display: flex; align-items: center; gap: 24px; min-width: 0; }
+#username { max-width: 240px; overflow: hidden; text-overflow: ellipsis; font: var(--small) var(--mono); }
+main.initial { display: grid; place-items: center; min-height: calc(100vh - 96px); }
+
+/* Sign in */
+h1 { font: 500 var(--large)/1.1 var(--display); letter-spacing: -.03em; color: var(--text-display); margin: 16px 0; overflow-wrap: anywhere; }
+#login-screen { max-width: 1440px; min-height: calc(100vh - 96px); margin: auto; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; gap: 96px; padding: 64px 48px 96px; }
+.login > p { max-width: 440px; }
+.login button.wide { width: 100%; max-width: 400px; justify-content: space-between; margin: 40px 0 16px; }
+.intro { align-self: center; padding-left: 48px; }
+.intro h2 { margin: 16px 0; color: var(--text-display); }
+.intro p { max-width: 320px; }
+.intro ol { list-style: none; padding: 0; margin: 48px 0 0; display: grid; gap: 24px; }
+.intro li { display: flex; align-items: baseline; gap: 24px; color: var(--text-primary); }
+.intro li span { font: var(--small) var(--mono); color: var(--text-secondary); }
+
+/* Workspace */
+#workspace-screen { max-width: 1800px; margin: auto; padding: 48px 48px 24px; height: calc(100vh - 96px); min-height: 760px; display: flex; flex-direction: column; }
+.workspace-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 48px; margin-bottom: 40px; }
+.workspace-heading p { max-width: 560px; }
+.workspace-context { display: flex; flex-wrap: wrap; gap: 24px 48px; }
+.fact { display: grid; gap: 8px; min-width: 120px; }
+.fact strong { font: var(--small)/1.5 var(--mono); color: var(--text-primary); font-weight: 400; }
+/* After the first question: one line under the header, so the conversation starts at the top. */
+#workspace-screen.started { padding-top: 24px; }
+.workspace-heading.compact { align-items: center; gap: 32px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+.workspace-heading.compact > div:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 24px; min-width: 0; }
+.workspace-heading.compact h1 { font-size: 2rem; margin: 0; }
+.workspace-heading.compact p { display: none; }
+.workspace-heading.compact .workspace-context { gap: 8px 32px; }
+.workspace-heading.compact .fact { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.started section.chat { border-top: 0; }
+/* The chat fills what the heading leaves of the viewport; the page scrolls only on small screens. */
+.workbench { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 64px; }
+.catalog { min-width: 0; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-bottom: 24px; }
+.panel-heading h2 { color: var(--text-display); }
+#refresh { width: 44px; padding: 0; }
+.database-group { min-width: 0; }
+.database-group + .database-group { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border-visible); }
+.database-group-title { margin-bottom: 12px; color: var(--text-secondary); font: var(--small)/1.6 var(--mono); }
+.catalog button.db { width: 100%; justify-content: flex-start; align-items: flex-start; gap: 12px; background: transparent; color: var(--text-secondary);
+  border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 16px 0; text-align: left; text-transform: none; letter-spacing: 0;
+  font: var(--medium)/1.5 var(--body); overflow-wrap: anywhere; }
+.catalog button.db svg { margin-top: 2px; }
+.catalog button.db.selected { color: var(--text-display); border-bottom-color: var(--text-primary); }
+.catalog button.db:hover { color: var(--text-display); }
+.database-label { display: block; min-width: 0; }
+.database-label strong { font-weight: 400; }
+.database-label small, .not-enabled small { display: block; margin-top: 6px; color: var(--text-secondary); font: var(--small)/1.6 var(--mono); }
+.shared-badge { display: block; width: fit-content; margin-top: 8px; padding: 3px 8px; border: 1px solid var(--border-visible); border-radius: 4px;
+  background: var(--surface-raised); color: var(--text-primary); font: var(--small)/1.6 var(--mono); }
+.not-enabled { display: grid; gap: 12px; justify-items: start; padding: 16px 0; border-bottom: 1px solid var(--border); }
+.not-enabled small { margin: 0; }
+.not-enabled button { min-height: 36px; padding: 8px 16px; }
+section.chat { min-width: 0; min-height: 440px; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.catalog { overflow-y: auto; }
+section.chat > * { flex: 1; min-height: 0; }
+
+/* CopilotKit v2 chat on the portal tokens, in both themes. */
+html [data-copilotkit] {
+  --background: var(--black); --foreground: var(--text-primary); --card: var(--surface); --card-foreground: var(--text-primary);
+  --popover: var(--surface); --popover-foreground: var(--text-primary); --primary: var(--text-display); --primary-foreground: var(--black);
+  --secondary: var(--surface-raised); --secondary-foreground: var(--text-primary); --muted: var(--surface); --muted-foreground: var(--text-secondary);
+  --accent: var(--surface-raised); --accent-foreground: var(--text-primary); --destructive: #d71921; --destructive-foreground: #fff;
+  --border: var(--border-visible); --input: var(--border-visible); --ring: var(--text-secondary); --radius: 12px;
+  --cpk-font-sans: var(--body); --cpk-font-mono: var(--mono);
+  --cpk-default-font-family: var(--body); --cpk-default-mono-font-family: var(--mono);
+  background: var(--black);
+}
+html [data-copilotkit] * { box-shadow: none !important; }
+
+/* Generative components */
+.gen-card, .query-card { display: grid; gap: 12px; padding: 20px 24px; margin: 8px 0; border: 1px solid var(--border);
+  border-radius: 16px; background: var(--surface); max-width: 880px; }
+.gen-card.problem, .query-card.failed { border-color: var(--accent); }
+.gen-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gen-head button { min-height: 32px; padding: 6px 14px; }
+.gen-title { font: 500 1.1rem var(--body); color: var(--text-display); }
+.chart-box { position: relative; height: 300px; }
+.loading { font: var(--small) var(--mono); color: var(--text-disabled); letter-spacing: .08em; }
+.provenance { display: flex; flex-wrap: wrap; gap: 4px 16px; font: .65rem var(--mono); color: var(--text-disabled); letter-spacing: .04em; text-transform: uppercase; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: var(--small) var(--mono); padding: 2px 10px; border-radius: 4px; border: 1px solid var(--border-visible); color: var(--text-secondary); }
+.chip.metric { color: var(--text-display); border-color: var(--text-primary); }
+.chip.quiet { border-style: dashed; }
+.query-error { color: var(--text-primary); border-left: 2px solid var(--accent); padding-left: 12px; font-size: .9rem; }
+.facts { display: grid; gap: 4px; margin: 0; }
+.facts div { display: flex; gap: 12px; font: var(--small) var(--mono); }
+.facts dt { color: var(--text-secondary); min-width: 180px; }
+.facts dd { margin: 0; color: var(--text-primary); }
+details summary { cursor: pointer; font: var(--small) var(--mono); letter-spacing: .06em; color: var(--text-secondary); }
+details pre { margin-top: 8px; padding: 16px; background: var(--black); border: 1px solid var(--border); border-radius: 4px; overflow-x: auto;
+  color: var(--text-primary); white-space: pre; font: var(--small)/1.7 var(--mono); }
+.tool-line { font-size: .8rem; color: var(--text-disabled); margin: 4px 0; }
+.mono { font-family: var(--mono); }
+.table-scroll { overflow: auto; max-height: 420px; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+th { font: var(--small) var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); text-align: left;
+  padding: 12px; border-bottom: 1px solid var(--border-visible); position: sticky; top: 0; background: var(--surface); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-primary); }
+th:first-child, td:first-child { padding-left: 0; }
+.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.unit { color: var(--text-disabled); text-transform: none; }
+.kpi { display: flex; align-items: baseline; gap: 12px; }
+.kpi-value { font: 500 4rem/1 var(--display); color: var(--text-display); letter-spacing: -.02em; }
+.kpi-unit { font: var(--small) var(--mono); color: var(--text-secondary); }
+.kpi-label { color: var(--text-primary); }
+
+@media (max-width: 1100px) {
+  :root { --large: 3rem; }
+  header.site { padding-inline: 32px; }
+  #login-screen { gap: 48px; padding-inline: 32px; }
+  .intro { padding-left: 0; }
+  #workspace-screen { padding-inline: 32px; }
+  .workbench { grid-template-columns: 200px minmax(0, 1fr); gap: 32px; }
+}
+@media (max-width: 700px) {
+  :root { --large: 2.25rem; }
+  header.site { min-height: 80px; padding: 16px 20px; flex-wrap: wrap; gap: 8px 16px; }
+  header.site nav { order: 3; width: 100%; margin: 0; gap: 20px; overflow-x: auto; }
+  header.site .nav-item { font-size: .65rem; }
+  .header-actions, #identity { gap: 8px; }
+  .header-actions { margin-left: auto; }
+  .brand span { display: none; }
+  #username { max-width: 120px; }
+  #login-screen { display: block; min-height: calc(100vh - 80px); padding: 64px 24px; }
+  .intro { display: none; }
+  #workspace-screen { padding: 48px 24px 24px; height: auto; min-height: 0; display: block; }
+  section.chat { height: 80vh; }
+  .workspace-heading { align-items: stretch; flex-direction: column; gap: 32px; margin-bottom: 48px; }
+  .workspace-heading.compact { flex-direction: row; align-items: center; gap: 16px; }
+  .workspace-heading.compact .workspace-context { display: none; }
+  .workbench { display: block; }
+  .catalog { margin-bottom: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}

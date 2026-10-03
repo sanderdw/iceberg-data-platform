@@ -1,6 +1,7 @@
 """MCP endpoint: Keycloak bearer tokens, catalog reads and team database management."""
 
 import asyncio
+import json
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -91,7 +92,7 @@ def stack(issuer):  # noqa: F811 - pytest fixture
     token = sign(state, account["id"])
     expected["token"] = token
     return SimpleNamespace(
-        app=app, oidc=oidc, state=state, provider=p, principal=principal, account=account,
+        app=app, oidc=oidc, state=state, provider=p, principal=principal, account=account, directory=directory,
         teams=teams, databases=databases, token=token, expected=expected, calls=calls,
     )
 
@@ -224,6 +225,108 @@ def test_tools_use_the_callers_grants(stack, monkeypatch):
     prepared = run.call_args.args[0]
     assert prepared["token"] == stack.token and prepared["limit"] == 3 and prepared["snapshotId"] == SNAPSHOT
     assert stack.token not in text(result)
+
+
+EVENTS_MODEL = {
+    "name": "Events", "description": "Events. One row in EVENTS per event, identified by id.",
+    "ai_context": {"instructions": "Time: UTC.\nGrain: one row per event.\nMissing values: none.\n"
+                                   "Owner: Analytics. Refresh: hourly.\nClassification: internal."},
+    "datasets": [{
+        "name": "EVENTS", "source": "lakehouse.analytics.events", "description": "An event.", "primary_key": ["id"],
+        "fields": [
+            {"name": "id", "description": "Event id.", "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "id"}]}},
+            {"name": "event", "description": "Event kind.", "dimension": {"is_time": False},
+             "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "event"}]}},
+        ],
+    }],
+    "metrics": [{"name": "events", "description": "Number of events. Unit: count.",
+                 "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "count(*)"}]}}],
+}
+
+
+@pytest.fixture
+def stored_models(stack):
+    """A catalog that keeps semantic models: create, versioned replace and delete, as Polaris does."""
+    store, writes = {}, []
+
+    def wire(request):
+        assert request.headers["Authorization"] == "Bearer " + stack.expected["token"]
+        path = request.url.path
+        if path.endswith("/tables/events"):
+            return httpx.Response(200, json={"metadata": TABLE_METADATA, "config": {}})
+        if "/semantic-models" not in path:
+            return httpx.Response(404)
+        name = path.rsplit("/", 1)[1] if not path.endswith("/semantic-models") else None
+        body = json.loads(request.content) if request.content else None
+        if request.method != "GET":
+            writes.append((request.method, name, body))
+        if request.method == "POST":
+            store[body["name"]] = {"document": body["document"], "entity-version": 1}
+            return httpx.Response(200, json=store[body["name"]])
+        if name not in store:
+            return httpx.Response(404)
+        if request.method == "PUT":
+            if body["entity-version"] != store[name]["entity-version"]:
+                return httpx.Response(409)
+            store[name] = {"document": body["document"], "entity-version": store[name]["entity-version"] + 1}
+        if request.method == "DELETE":
+            del store[name]
+            return httpx.Response(204)
+        return httpx.Response(200, json=store[name])
+
+    stack.directory.http = httpx.Client(transport=httpx.MockTransport(wire))
+    return store, writes
+
+
+def test_semantic_models_are_published_queried_and_deleted_as_the_caller(stack, stored_models, monkeypatch):
+    store, writes = stored_models
+    where = {"database": stack.databases[0], "namespace": ["analytics"], "name": "events"}
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": EVENTS_MODEL})
+    assert not result.is_error, text(result)
+    assert result.structured_content["action"] == "created" and result.structured_content["entityVersion"] == 1
+    stored = json.loads(store["events"]["document"]["semantic_model"])
+    assert stored == {"version": "0.2.0", "semantic_model": [EVENTS_MODEL]}
+    # Replacing needs the version that was read, so a teammate's change is never overwritten unseen.
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": EVENTS_MODEL})
+    assert result.is_error and "exists at version 1" in text(result)
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": EVENTS_MODEL, "entity_version": 1})
+    assert result.structured_content["action"] == "updated" and result.structured_content["entityVersion"] == 2
+    broken = {**EVENTS_MODEL, "description": "", "metrics": [{"name": "x", "description": "X. Unit: count.",
+                                                              "expression": "count(*)"}],
+              "datasets": [{**EVENTS_MODEL["datasets"][0], "fields": [
+                  {"name": "id", "dimension": True, "expression": "id"}]}]}
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": broken, "entity_version": 2})
+    assert result.is_error and "no description" in text(result) and '"is_time"' in text(result)
+    assert [w[0] for w in writes] == ["POST", "PUT"]
+
+    described = call(stack, stack.token, "describe_semantic_model", {
+        "database": where["database"], "namespace": ["analytics"], "model": "events"}).structured_content
+    assert described["queryable"]["metrics"] == {"events": "EVENTS"}
+    assert [d["field"] for d in described["queryable"]["dimensions"]["EVENTS"]] == ["EVENTS.event"]
+
+    run = Mock(return_value={"columns": [{"name": "event", "type": "VARCHAR"}, {"name": "events", "type": "BIGINT"}],
+                             "rows": [["door", 7]], "truncated": False,
+                             "snapshots": {"EVENTS": {"id": 1, "committedAt": 1790000000000}}})
+    monkeypatch.setattr("user_portal.mcp_server.run_preview", run)
+    question = {"database": where["database"], "namespace": ["analytics"], "model": "events", "metrics": ["events"],
+                "dimensions": [{"field": "EVENTS.event"}], "filters": [{"field": "EVENTS.event", "op": "!=", "value": "test"}]}
+    result = call(stack, stack.token, "query_semantic_model", question)
+    assert not result.is_error, text(result)
+    answer = result.structured_content
+    assert answer["rows"] == [["door", 7]] and answer["dataAsOf"].startswith("2026-")
+    assert answer["metrics"][0]["name"] == "events" and "count(*)" in answer["sql"].lower()
+    job, module = run.call_args.args[0], run.call_args.args[1]
+    assert module == "user_portal.semantic.worker"
+    assert job["token"] == stack.token and job["params"] == ["test"] and "'test'" not in job["sql"]
+    assert job["bindings"] == [{"view": "EVENTS", "namespace": ["analytics"], "table": "events"}]
+    assert stack.token not in text(result)
+    result = call(stack, stack.token, "query_semantic_model", {**question, "metrics": ["revenue"]})
+    assert result.is_error and "no metric 'revenue'" in text(result) and "events" in text(result)
+
+    result = call(stack, stack.token, "delete_semantic_model", {**where, "confirm_name": "event"})
+    assert result.is_error and "events" in store
+    result = call(stack, stack.token, "delete_semantic_model", {**where, "confirm_name": "events"})
+    assert result.structured_content["deleted"] and "events" not in store
 
 
 def test_tools_refuse_other_teams_invalid_input_and_unlinked_identity(stack, monkeypatch):
@@ -439,15 +542,17 @@ def test_streamable_http_round_trip_authenticates_each_request(stack):
     tools = getattr(tools, "tools", tools)
     assert sorted(t.name for t in tools) == sorted(
         ["list_databases", "list_namespaces", "list_tables", "describe_table", "describe_view", "preview_rows",
-         "list_semantic_models", "describe_semantic_model", "create_database", "rename_database", "delete_database",
+         "list_semantic_models", "describe_semantic_model", "query_semantic_model", "publish_semantic_model",
+         "delete_semantic_model", "create_database", "rename_database", "delete_database",
          "list_share_teams", "list_shares", "list_received_shares", "create_share", "update_share",
          "rotate_share_credential", "delete_share"]
     )
     assert all(t.annotations.read_only_hint for t in tools if t.name in {
         "list_databases", "list_namespaces", "list_tables", "describe_table", "describe_view", "preview_rows",
-        "list_semantic_models", "describe_semantic_model", "list_share_teams", "list_shares", "list_received_shares",
+        "list_semantic_models", "describe_semantic_model", "query_semantic_model", "list_share_teams", "list_shares",
+        "list_received_shares",
     })
     assert all(next(t for t in tools if t.name == name).annotations.destructive_hint
-               for name in ("delete_database", "rotate_share_credential", "delete_share"))
+               for name in ("delete_database", "rotate_share_credential", "delete_share", "delete_semantic_model"))
     assert not result.is_error, text(result)
     assert [d["id"] for d in result.structured_content["databases"]] == stack.databases[:1]

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 - 2026-10-01
+
+- **Extensions.** Separately released extensions add capabilities through the Extension Bridge contract 0.1.0. Team administrators enable them per team and environment; they never receive secrets or storage keys. See [extensions](docs/extensions.md).
+- **Conversational BI 0.1.0**, the first extension: chat with your semantic models, including shared ones, and get charts with the SQL and metric definitions behind them. The installer can add it, with OpenAI, Anthropic, Google Gemini or Amazon Bedrock. See [installation](docs/install.md#add-conversational-bi).
+- **Any AI agent answers from your semantic models.** The MCP tool `query_semantic_model` builds the SQL from the model's agreed metrics and joins, and reads with your own permissions.
+- **Build semantic models with your coding agent.** The `semantic-model` skill interviews you about the questions the model must answer, tests each one against the real data and publishes after your approval. Models follow Apache Ossie, including datatypes and synonyms. See [agent skills](docs/install.md#agent-skills).
+- **Where a table comes from:** the catalog shows a table's description and, for tables a pipeline produces, the last run, test outcome and upstream tables.
+- **Also:** `quick-share` gives Conversational BI its own public address for a class, an `AGENTS.md` that guides coding agents in the installation folder, the same UTC dates on every computer, read-only access to received shares for extensions, and extension service accounts that platform administrators can revoke.
+
 ## 0.6.0 - 2026-09-30
 
 - **Polaris 1.8.0 adds semantic models to the Catalog.** Explore datasets, fields, metrics and relationships alongside your tables, and use the models with AI agents. `describe_semantic_model` can also return the stored definition.

@@ -39,7 +39,7 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/dow
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to set up a demo company and to share the portals with a class over the internet.
+The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to set up a demo company and to share the portals with a class over the internet. The installer can also add the [Conversational BI extension](docs/install.md#add-conversational-bi), a chat over your semantic models.
 
 ### Run from source
 
@@ -70,6 +70,8 @@ Rerun the three Docker commands after source changes. Save your notebook work fi
 | Polaris Iceberg REST API  | http://localhost:8181/api/catalog | Keycloak bearer token ([connect from your computer](user_portal/README.md#connect-from-your-computer)) or client credentials |
 | RustFS console            | http://localhost:9001             | `RUSTFS_ACCESS_KEY` + `RUSTFS_SECRET_KEY`                                                                                    |
 | pgAdmin                   | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD`                                                                                         |
+| Extension Bridge          | http://localhost:3005/bridge/v1   | Tokens of registered [extensions](docs/extensions.md) only                                                                   |
+| Conversational BI         | http://localhost:3007             | Optional extension; Keycloak account                                                                                         |
 
 Credentials are in `.env`. All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [deploying beyond localhost](SECURITY.md#deploying-beyond-localhost) or the [quick-share skill](docs/install.md#agent-skills).
 
@@ -93,6 +95,7 @@ Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) e
 - [Resource model: users, teams, roles, databases, shares](docs/CONTEXT.md)
 - [Form validation rules](docs/form-validation.md)
 - [Architecture](docs/architecture.md)
+- [Extensions and the Extension Bridge](docs/extensions.md)
 - [Security model](SECURITY.md)
 - [Contributing and tests](CONTRIBUTING.md)
 - [Publishing a release](docs/releasing.md)

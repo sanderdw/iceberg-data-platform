@@ -1,0 +1,242 @@
+{
+ "runways": [
+  {
+   "name": "airport_code",
+   "type": "string"
+  },
+  {
+   "name": "length",
+   "type": "double"
+  },
+  {
+   "name": "shape",
+   "type": "string"
+  },
+  {
+   "name": "designator",
+   "type": "string"
+  },
+  {
+   "name": "synthetic",
+   "type": "boolean"
+  }
+ ],
+ "aircraft": [
+  {
+   "name": "serial_nr",
+   "type": "string"
+  },
+  {
+   "name": "name",
+   "type": "string"
+  },
+  {
+   "name": "nr_seats",
+   "type": "int"
+  },
+  {
+   "name": "tail_nr",
+   "type": "string"
+  },
+  {
+   "name": "carrier_code",
+   "type": "string"
+  },
+  {
+   "name": "manufacturer",
+   "type": "string"
+  },
+  {
+   "name": "model",
+   "type": "string"
+  },
+  {
+   "name": "year",
+   "type": "string"
+  },
+  {
+   "name": "capacity",
+   "type": "long"
+  },
+  {
+   "name": "synthetic",
+   "type": "boolean"
+  }
+ ],
+ "airports": [
+  {
+   "name": "state_code",
+   "type": "string"
+  },
+  {
+   "name": "market_nm",
+   "type": "string"
+  },
+  {
+   "name": "longitude",
+   "type": "double"
+  },
+  {
+   "name": "opened",
+   "type": "date"
+  },
+  {
+   "name": "state_nm",
+   "type": "string"
+  },
+  {
+   "name": "city_nm",
+   "type": "string"
+  },
+  {
+   "name": "name",
+   "type": "string"
+  },
+  {
+   "name": "code",
+   "type": "string"
+  },
+  {
+   "name": "latitude",
+   "type": "double"
+  },
+  {
+   "name": "synthetic",
+   "type": "boolean"
+  }
+ ],
+ "flights": [
+  {
+   "name": "dep_delay",
+   "type": "double"
+  },
+  {
+   "name": "air_time",
+   "type": "double"
+  },
+  {
+   "name": "nr",
+   "type": "string"
+  },
+  {
+   "name": "carrier_code",
+   "type": "string"
+  },
+  {
+   "name": "duration",
+   "type": "double"
+  },
+  {
+   "name": "scheduled_departure",
+   "type": "timestamp"
+  },
+  {
+   "name": "arr_delay",
+   "type": "double"
+  },
+  {
+   "name": "cancelled",
+   "type": "boolean"
+  },
+  {
+   "name": "cancel_code",
+   "type": "string"
+  },
+  {
+   "name": "distance",
+   "type": "double"
+  },
+  {
+   "name": "id",
+   "type": "string"
+  },
+  {
+   "name": "scheduled_arrival",
+   "type": "timestamp"
+  },
+  {
+   "name": "wheels_on",
+   "type": "timestamp"
+  },
+  {
+   "name": "date",
+   "type": "date"
+  },
+  {
+   "name": "wheels_off",
+   "type": "timestamp"
+  },
+  {
+   "name": "scheduled_duration",
+   "type": "double"
+  },
+  {
+   "name": "tail_nr",
+   "type": "string"
+  },
+  {
+   "name": "departure",
+   "type": "timestamp"
+  },
+  {
+   "name": "route_id",
+   "type": "string"
+  },
+  {
+   "name": "diverted",
+   "type": "boolean"
+  },
+  {
+   "name": "arrival",
+   "type": "timestamp"
+  },
+  {
+   "name": "synthetic",
+   "type": "boolean"
+  }
+ ],
+ "carriers": [
+  {
+   "name": "code",
+   "type": "string"
+  },
+  {
+   "name": "name",
+   "type": "string"
+  },
+  {
+   "name": "synthetic",
+   "type": "boolean"
+  }
+ ],
+ "routes": [
+  {
+   "name": "orig_airport_code",
+   "type": "string"
+  },
+  {
+   "name": "dest_airport_code",
+   "type": "string"
+  },
+  {
+   "name": "distance",
+   "type": "double"
+  },
+  {
+   "name": "dist_grp",
+   "type": "int"
+  },
+  {
+   "name": "id",
+   "type": "string"
+  },
+  {
+   "name": "name",
+   "type": "string"
+  },
+  {
+   "name": "synthetic",
+   "type": "boolean"
+  }
+ ]
+}

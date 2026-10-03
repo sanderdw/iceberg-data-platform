@@ -12,6 +12,9 @@
 !scripts/setup.py
 !public/
 !public/**
+!contracts/
+!contracts/bridge/
+!contracts/bridge/**
 !user_portal/
 !user_portal/**
 **/__pycache__/

@@ -13,7 +13,7 @@ import duckdb
 def main():
     directory = os.environ["DUCKDB_EXTENSION_DIRECTORY"]
     connection = duckdb.connect(config={"extension_directory": directory})
-    connection.execute("INSTALL httpfs; INSTALL iceberg; LOAD httpfs; LOAD iceberg")
+    connection.execute("INSTALL httpfs; INSTALL avro; INSTALL iceberg; LOAD httpfs; LOAD iceberg")
     extensions = connection.execute("""
         SELECT extension_name, extension_version, installed_from
         FROM duckdb_extensions()

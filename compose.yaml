@@ -58,6 +58,8 @@ services:
 
   rustfs:
     image: rustfs/rustfs:1.0.0
+    labels:
+      io.iceberg-platform.role: storage
     environment:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
@@ -80,6 +82,8 @@ services:
 
   polaris:
     image: apache/polaris:1.8.0
+    labels:
+      io.iceberg-platform.role: catalog
     networks:
       default:
         aliases:
@@ -147,6 +151,7 @@ services:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      PLATFORM_EXTENSIONS: ${PLATFORM_EXTENSIONS:-}
     ports:
       - "127.0.0.1:${PORT:-3000}:3000"
     depends_on:
@@ -156,6 +161,50 @@ services:
         condition: service_healthy
     healthcheck:
       test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Extension Bridge (contracts/bridge): the stable interface for extensions such as Conversational BI.
+  # Extensions join this network; the loopback port serves extensions under development and
+  # smoke tests. It holds no storage credentials.
+  bridge:
+    build: .
+    command: ["/app/.venv/bin/uvicorn", "server.bridge:create_bridge_app", "--factory", "--host", "0.0.0.0", "--port", "3005", "--no-access-log"]
+    labels:
+      io.iceberg-platform.role: bridge
+    networks:
+      default:
+        aliases:
+        - bridge
+    environment:
+      OIDC_ISSUER: ${OIDC_ISSUER:?Run scripts.setup first}
+      OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/iceberg
+      POLARIS_URL: http://polaris:8181
+      POLARIS_PUBLIC_URL: ${POLARIS_PUBLIC_URL:-http://localhost:8181}
+      POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}
+      POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET}
+      BRIDGE_CATALOG_URI: http://polaris-control-plane:8181/api/catalog
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:9000}
+      S3_INTERNAL_ENDPOINT: http://rustfs:9000
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      USER_ORIGIN: ${USER_ORIGIN:-http://localhost:3002}
+      PLATFORM_EXTENSIONS: ${PLATFORM_EXTENSIONS:-}
+    ports:
+      - "127.0.0.1:${BRIDGE_PORT:-3005}:3005"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      keycloak-bootstrap:
+        condition: service_completed_successfully
+      polaris:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3005/bridge/v1/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -257,6 +306,8 @@ services:
       DEMO_READER_PASSWORD: ${DEMO_READER_PASSWORD:-}
       DEMO_OUTSIDER_PASSWORD: ${DEMO_OUTSIDER_PASSWORD:-}
       MCP_CALLBACK_PORT: ${MCP_CALLBACK_PORT:-3010}
+      PLATFORM_EXTENSIONS: ${PLATFORM_EXTENSIONS:-}
+      PLATFORM_EXTENSION_SECRETS: ${PLATFORM_EXTENSION_SECRETS:-}
     entrypoint:
     - /app/.venv/bin/python
     - -m

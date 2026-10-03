@@ -33,6 +33,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+.claude/*
 
 # Private historical material is kept outside the repository
 docs/conversation.md
@@ -41,3 +42,9 @@ notebooktest/
 # Personal sample data and generated user credentials
 /personal/*
 docs/local_only/*
+
+# The dbt extension is held back from the 0.7.0 release; it stays on disk, untracked
+extensions/dbt/
+.github/workflows/dbt-*.yml
+screenshots/design-experiments/skills/*
+screenshots/design-experiments/2026-10-02*

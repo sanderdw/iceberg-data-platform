@@ -162,14 +162,16 @@ class Monitor:
 
     def containers(self):
         projects = self.env.get("MONITOR_PROJECTS", "iceberg-platform,iceberg-workspaces").split(",")
-        rows = []
-        for project in projects:
-            containers = self.docker_get(
-                "/containers/json",
-                all="true",
-                filters=json.dumps({"label": [f"com.docker.compose.project={project.strip()}"]}),
-            )
+        # Extensions label their containers (contracts/bridge/v1/network.md) and need no configuration here.
+        filters = [{"label": [f"com.docker.compose.project={project.strip()}"]} for project in projects]
+        filters.append({"label": ["io.iceberg-platform.extension"]})
+        rows, seen = [], set()
+        for query in filters:
+            containers = self.docker_get("/containers/json", all="true", filters=json.dumps(query))
             for container in containers:
+                if container["Id"] in seen:
+                    continue
+                seen.add(container["Id"])
                 labels = container.get("Labels", {})
                 if labels.get("com.docker.compose.service") in ("polaris-bootstrap", "notebook-image"):
                     continue

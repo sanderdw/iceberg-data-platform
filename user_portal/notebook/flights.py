@@ -52,6 +52,25 @@ RELATIONSHIPS = [
     ("route_destination_airport", "ROUTE", "AIRPORT", ["dest_airport_code"], ["code"]),
     ("runway_airport", "RUNWAY", "AIRPORT", ["airport_code"], ["code"]),
 ]
+# Fields people group and filter by, as Ossie dimensions; True marks a time dimension. A dataset that
+# flags any field offers only those to query tools, so every useful grouping of a dataset is listed.
+DIMENSIONS = {
+    "FLIGHT": {"date": True, "scheduled_departure": True, "carrier_code": False, "cancelled": False,
+               "diverted": False, "cancel_code": False},
+    "CARRIER": {"code": False, "name": False},
+    "ROUTE": {"name": False, "dist_grp": False},
+    "AIRPORT": {"code": False, "name": False, "city_nm": False, "state_code": False, "state_nm": False,
+                "market_nm": False},
+    "AIRCRAFT": {"manufacturer": False, "model": False, "year": False},
+}
+
+
+def field_entry(dataset, field):
+    entry = {"name": field["name"], "expression": field["expression"]}
+    is_time = DIMENSIONS.get(dataset, {}).get(field["name"])
+    if is_time is not None:
+        entry["dimension"] = {"is_time": is_time}
+    return entry
 
 
 def semantic_model(model, contract, namespace, catalog="lakehouse"):
@@ -69,6 +88,9 @@ def semantic_model(model, contract, namespace, catalog="lakehouse"):
     for name, source, target, source_columns, target_columns in RELATIONSHIPS:
         if not set(source_columns) <= columns[source] or not set(target_columns) <= columns[target]:
             raise ValueError(f"Relationship {name} uses a field that is not mapped.")
+    for name, flagged in DIMENSIONS.items():
+        if not set(flagged) <= columns[name]:
+            raise ValueError(f"{name} has no field {min(set(flagged) - columns[name])}.")
     return {
         "name": model["name"],
         "description": f"{model['description']} {contract['grain']}",
@@ -89,7 +111,7 @@ def semantic_model(model, contract, namespace, catalog="lakehouse"):
                 "source": ".".join([catalog, *namespace, table_name(d)]),
                 **({"description": d["description"]} if d.get("description") else {}),
                 "primary_key": PRIMARY_KEYS[d["name"]],
-                "fields": [{"name": f["name"], "expression": f["expression"]} for f in d["fields"]],
+                "fields": [field_entry(d["name"], f) for f in d["fields"]],
             }
             for d in found
         ],

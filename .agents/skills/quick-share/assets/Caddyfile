@@ -39,3 +39,12 @@
 		reverse_proxy users:3002
 	}
 }
+
+# Conversational BI, an extension with its own origin: chat UI, API, MCP server and sign-in callback.
+# Only its tunnel reaches this block; without the extension the gateway answers 502.
+:8082 {
+	reverse_proxy cbi-gateway:3007 {
+		# Send chat answers on as they stream instead of buffering them.
+		flush_interval -1
+	}
+}

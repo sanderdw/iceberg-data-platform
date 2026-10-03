@@ -24,6 +24,7 @@ from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
+from server import extensions
 from server.mcp_auth import is_mcp_path, mount_mcp
 from server.models import (
     ENVIRONMENTS,
@@ -154,6 +155,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             ],
             "notebooks": [w.public() for w in runtime.workspaces.values() if w.session_id == session.id],
             "catalogUri": directory.metadata.public_url + "/api/catalog",
+            "extensions": extensions.public(os.environ),
         }
 
     async def sweep():
@@ -218,7 +220,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     directory.close()
 
     app = FastAPI(
-        title="Iceberg User Workspace", version="0.6.0", docs_url=None, redoc_url=None, lifespan=lifespan,
+        title="Iceberg User Workspace", version="0.7.0", docs_url=None, redoc_url=None, lifespan=lifespan,
         description=(
             "Sign in to the user portal first, then open /docs to call these APIs with your session. "
             "Your team roles and selected team/environment apply to every operation. "

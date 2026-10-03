@@ -1,7 +1,7 @@
 """User MCP tools: catalog reads and administrator-scoped database management."""
 
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from mcp.server.mcpserver.exceptions import ToolError
@@ -24,6 +24,8 @@ from server.validation import validation_message
 
 from .directory import UserSession, validate_namespace
 from .preview import run_preview
+from .semantic.compiler import Dimension, Filter, Order, QuerySpec
+from .semantic.compiler import Name as MetricName
 
 READ_ONLY = ToolAnnotations(
     read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False
@@ -42,9 +44,14 @@ the tables and views in one namespace, describe_table and describe_view for sche
 snapshots and view SQL, and preview_rows for up to 100 rendered rows at the current or a
 given snapshot. list_semantic_models and describe_semantic_model return the Apache Ossie
 semantic models stored next to the tables: datasets that map to tables, fields, relationships
-and metrics with their SQL expressions. Read them before writing SQL for a business question,
-so that metrics use the agreed definition. These catalog tools read with the user's Polaris
-grants and never run SQL.
+and metrics with their SQL expressions, plus what each metric can be split by. Answer business
+questions with query_semantic_model: name metrics, dimensions (DATASET.field, optional time grain)
+and filters; it compiles the model's agreed SQL and reads with the user's own grants. State the
+metric definition, filters and period with every answer, and use preview_rows only to look at raw
+rows. All tools read with the user's Polaris grants; none runs free-form SQL.
+Writers create a semantic model with publish_semantic_model. To replace one, read it with
+describe_semantic_model first and pass its entityVersion; a newer version is refused. Ask the
+user before replacing a model or calling delete_semantic_model, which needs confirm_name.
 Only a current Administrator or Database + bucket administrator of a team may create,
 rename or delete its databases. create_database takes the owning team id and environment;
 rename_database and delete_database take the database id. Deletion immediately destroys
@@ -70,6 +77,8 @@ Namespace = Annotated[
     Field(max_length=100, description="Namespace path as a list of parts, for example ['analytics']."),
 ]
 Name = Annotated[str, Field(min_length=1, max_length=256)]
+ModelName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,256}$", description="Semantic model name: letters, digits, - and _.")]
+QUERY_ROWS = 200
 Limit = Annotated[int, Field(ge=1, le=100, description="Rows to return, at most 100.")]
 Snapshot = Annotated[
     str | None, Field(pattern=r"^[0-9]{1,19}$", description="Snapshot id from describe_table; current when omitted.")
@@ -246,7 +255,8 @@ def create_mcp(directory, oidc, *, lock, previews):
     async def describe_semantic_model(
         database: DatabaseId, namespace: Namespace, model: Name, include_definition: bool = False
     ) -> dict[str, Any]:
-        """Datasets (with their source tables and fields), relationships and metrics of a semantic model.
+        """Datasets (with their source tables and fields), relationships and metrics of a semantic model,
+        and what query_semantic_model can split each metric by.
 
         include_definition also returns the document exactly as Polaris stores it.
         """
@@ -256,7 +266,8 @@ def create_mcp(directory, oidc, *, lock, previews):
         session, _ = await resolve(database, shared=True)
         details = await query(directory.details, session, database, parts, "semantic-model", model)
         keep = ("name", "namespace", "specVersion", "entityVersion", "models") + (("definition",) if include_definition else ())
-        return {k: details[k] for k in keep}
+        guide = await query(directory.semantic_query_guide, session, database, parts, model)
+        return {**{k: details[k] for k in keep}, "queryable": guide}
 
     @mcp.tool(annotations=READ_ONLY)
     async def preview_rows(
@@ -276,6 +287,67 @@ def create_mcp(directory, oidc, *, lock, previews):
             # Revocation while reading discards the result, as in the portal preview.
             await query(directory.details, session, database, parts, "table", table)
             return result
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def query_semantic_model(
+        database: DatabaseId, namespace: Namespace, model: Name,
+        metrics: Annotated[list[MetricName], Field(min_length=1, max_length=5)],
+        dimensions: Annotated[list[Dimension], Field(max_length=5)] = [],  # noqa: B006
+        filters: Annotated[list[Filter], Field(max_length=10)] = [],  # noqa: B006
+        order_by: Annotated[list[Order], Field(max_length=5)] = [],  # noqa: B006
+        limit: Annotated[int, Field(ge=1, le=QUERY_ROWS)] = 100,
+    ) -> dict[str, Any]:
+        """Answer a business question with a semantic model's agreed metrics, split by dimensions
+        (DATASET.field, optional time grain and via) and filtered, read with your own permissions."""
+        parts = namespace_parts(namespace, model)
+        if not parts:
+            raise ToolError("Select a namespace.")
+        try:
+            spec = QuerySpec(metrics=metrics, dimensions=dimensions, filters=filters, order_by=order_by, limit=limit)
+        except ValidationError as exc:
+            raise ToolError(validation_message(exc.errors(), "query")) from None
+        if previews.locked():
+            raise ToolError("Query slots are busy. Try again shortly.")
+        async with previews:
+            session, _ = await resolve(database, shared=True)
+            _, compiled, job = await query(directory.semantic_query_job, session, database, parts, model, spec,
+                                           QUERY_ROWS)
+            out = await call(run_preview, job, "user_portal.semantic.worker", "Query")
+            # Revocation while reading discards the result, as for previews.
+            await query(directory.load_semantic_model, session, database, parts, model)
+        committed = (out.get("snapshots", {}).get(compiled.metrics[0]["dataset"]) or {}).get("committedAt")
+        return {
+            "model": {"database": database, "namespace": parts, "name": model},
+            "columns": compiled.columns, "rows": out["rows"], "rowCount": len(out["rows"]),
+            "truncated": out["truncated"], "metrics": compiled.metrics, "joinPaths": compiled.join_paths,
+            "sql": compiled.pretty, "params": compiled.params,
+            "dataAsOf": datetime.fromtimestamp(committed / 1000, UTC).isoformat(timespec="seconds") if committed else None,
+        }
+
+    @mcp.tool(annotations=UPDATE)
+    async def publish_semantic_model(
+        database: DatabaseId, namespace: Namespace, name: ModelName,
+        model: Annotated[dict[str, Any], Field(description="One Apache Ossie semantic model, or a document that holds one.")],
+        entity_version: Annotated[int | None, Field(description="entityVersion from describe_semantic_model; "
+                                                                "required to replace an existing model.")] = None,
+    ) -> dict[str, Any]:
+        """Create a semantic model in a namespace, or replace the version you read (Writer role)."""
+        parts = namespace_parts(namespace, name)
+        if not parts:
+            raise ToolError("Select a namespace.")
+        session, _ = await resolve(database)
+        return await query(directory.publish_semantic_model, session, database, parts, name, model, entity_version)
+
+    @mcp.tool(annotations=DESTRUCTIVE)
+    async def delete_semantic_model(
+        database: DatabaseId, namespace: Namespace, name: ModelName, confirm_name: str
+    ) -> dict[str, Any]:
+        """Permanently delete a semantic model (Writer role); confirm_name must equal its name."""
+        parts = namespace_parts(namespace, name)
+        if not parts:
+            raise ToolError("Select a namespace.")
+        session, _ = await resolve(database)
+        return await query(directory.delete_semantic_model, session, database, parts, name, confirm_name)
 
     async def owned_share(database, share):
         """A session for the share's owning database; the share must belong to it."""
