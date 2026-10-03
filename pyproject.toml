@@ -22,11 +22,11 @@ dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mc
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "pandas>=3.0.6", "ipykernel>=7.3.0", "matplotlib>=3.11.2"]
 users = [
     "docker==7.2.0",
-    "duckdb==1.5.5",
+    "duckdb==1.5.6",
 ]
 notebook = [
     "altair>=6.3.0",
-    "duckdb==1.5.5",
+    "duckdb==1.5.6",
     "marimo[sql]==0.25.0",
     "matplotlib>=3.11.2",
     "nbformat>=5.11.1",
