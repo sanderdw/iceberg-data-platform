@@ -54,8 +54,9 @@ LOCAL_FILES = {"docs/conversation.md", "docs/dbaas-reference-architecture.drawio
 # Git-ignored personal notes; never scanned or released.
 LOCAL_DIRS = ("docs/local_only/",)
 # Tracked in git but not part of the core source release: the presentation is published by the
-# GitHub Pages workflow; extensions and their workflows are versioned and released on their own.
-TRACKED_UNRELEASED = ("presentation/", "extensions/", ".github/workflows/conversationalbi-")
+# GitHub Pages workflow; extensions and their workflows are versioned and released on their own;
+# screenshots are design references for contributors.
+TRACKED_UNRELEASED = ("presentation/", "extensions/", ".github/workflows/conversationalbi-", "screenshots/")
 
 
 def release_files(root=ROOT):

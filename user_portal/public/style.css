@@ -102,6 +102,15 @@ input:focus, select:focus { border-color: var(--text-primary); }
 #workspace-screen { max-width: 1800px; margin: auto; padding: 64px 48px 24px; }
 .workspace-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 48px; margin-bottom: 64px; }
 .workspace-heading p { max-width: 560px; }
+/* Once work starts: one line under the header, so the page content starts near the top. */
+#workspace-screen.started { padding-top: 24px; }
+#workspace-screen.started .workspace-heading { align-items: center; gap: 32px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+#workspace-screen.started .workspace-heading > div:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 24px; min-width: 0; }
+#workspace-screen.started .workspace-heading h1 { font-size: 2rem; margin: 0; }
+#workspace-screen.started .workspace-heading p { display: none; }
+#workspace-screen.started .workspace-context { flex-wrap: nowrap; gap: 8px 32px; }
+#workspace-screen.started .team-label { display: flex; align-items: center; gap: 12px; flex: 0 1 auto; width: auto; white-space: nowrap; }
+#workspace-screen.started .team-label select { width: 240px; }
 .team-label { width: 256px; flex-shrink: 0; }
 .workbench { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 64px; min-height: 55vh; }
 .catalog, .content { min-width: 0; }
@@ -161,6 +170,10 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
   .login form { margin-top: 32px; }
   #workspace-screen { padding: 48px 24px 24px; }
   .workspace-heading { align-items: stretch; flex-direction: column; gap: 32px; margin-bottom: 48px; }
+  #workspace-screen.started .workspace-heading { align-items: stretch; gap: 16px; margin-bottom: 24px; }
+  #workspace-screen.started .workspace-context { flex-wrap: wrap; }
+  #workspace-screen.started .team-label { flex: 1 1 100%; }
+  #workspace-screen.started .team-label select { width: auto; flex: 1; }
   .team-label { width: 100%; }
   .workbench { display: block; }
   .catalog { margin-bottom: 48px; }

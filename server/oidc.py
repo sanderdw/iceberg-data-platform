@@ -153,7 +153,9 @@ class OIDC:
                 del self.pending[next(iter(self.pending))]
             transaction = secrets.token_urlsafe(32)
             request.scope["session"] = {}
-            response = await self.client.authorize_redirect(request, self.origin + "/auth/callback")
+            # "Try again" after a refused sign-in must not silently reuse the same Keycloak account.
+            extra = {"prompt": "login"} if request.query_params.get("prompt") == "login" else {}
+            response = await self.client.authorize_redirect(request, self.origin + "/auth/callback", **extra)
             self.pending[transaction] = (now + 300, request.session, host, target)
             response.set_cookie(self.cookie, transaction, max_age=300, httponly=True,
                                 secure=self.secure, samesite="lax", path="/auth")
@@ -183,7 +185,7 @@ class OIDC:
                 # Never echo provider exceptions: they can contain tokens or user details.
                 response = HTMLResponse(
                     '<h1>Sign-in failed</h1><p>Your account may not have access, or the sign-in expired.</p>'
-                    '<p><a href="/auth/login">Try again</a> · <a href="/">Return to portal</a></p>',
+                    '<p><a href="/auth/login?prompt=login">Try again</a> · <a href="/">Return to portal</a></p>',
                     status_code=403,
                 )
             response.delete_cookie(self.cookie, path="/auth", httponly=True,

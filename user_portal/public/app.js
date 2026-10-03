@@ -49,8 +49,10 @@ const workspacePages = {
   shares: ['Data shares', 'Share data with other teams and external parties, and review data shared with your team.'],
   guide: ['Getting started', 'Notebook, your own tools or an AI agent. Three ways to work with your team data.'],
 };
+// The full heading introduces the workspace; once you open a page, database or notebook it shrinks to one line.
+function startWork() { $('#workspace-screen').classList.add('started'); }
 function showPage(page, updateRoute = true) {
-  if (page !== workspacePage) clearNotice();
+  if (page !== workspacePage) { clearNotice(); startWork(); }
   workspacePage = page;
   for (const name of Object.keys(workspacePages)) $(`#${name}-page`).hidden = name !== page;
   document.querySelectorAll('header [data-page]').forEach(button => {
@@ -116,7 +118,7 @@ function renderNotebookContext(notebook) {
   renderDatabaseContext($('#editor-database-context'), db);
 }
 function resetEditor() { $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
-function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; $('#guide-nav').hidden = true; sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
+function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; $('#guide-nav').hidden = true; sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#workspace-screen').classList.remove('started'); $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
 async function api(path, method = 'GET', body) { const response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); const result = await response.json(); if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
 // Extensions open in their own origin; the portal only links to them.
@@ -306,7 +308,7 @@ async function browse(db, ns, background = false) {
     host.querySelectorAll('details').forEach(n => { n.open = open.includes(n.querySelector('summary').textContent); });
     return;
   }
-  showPage('catalog', false); clearNotice(); selectedObject = null; const version = ++browseVersion; database = db; namespace = [...ns]; saveRoute(); $('#browser').hidden = false; renderState();
+  showPage('catalog', false); startWork(); clearNotice(); selectedObject = null; const version = ++browseVersion; database = db; namespace = [...ns]; saveRoute(); $('#browser').hidden = false; renderState();
   $('#database-label').textContent = state.databases.find(d => d.id === db)?.name || db; $('#namespace-title').textContent = ns.length ? ns.at(-1) : 'Namespaces';
   const crumbs = [[], ...ns.map((_, i) => ns.slice(0, i + 1))];
   $('#breadcrumbs').replaceChildren(...crumbs.flatMap((parts, i) => { const b = element('button', parts.at(-1) || state.databases.find(d => d.id === db)?.name || db); b.addEventListener('click', () => browse(db, parts)); return i ? [element('span', '/'), b] : [b]; }));
@@ -327,7 +329,7 @@ function renderListing(db, ns, detail, result) {
     renderCatalogListing(detail, result, rows);
     $('#objects').dataset.listing = JSON.stringify([detail, result]);
 }
-function showNotebook(notebook, targetUrl = notebook.url) { if (activeNotebook?.id !== notebook.id || activeNotebook?.selectedUrl !== targetUrl) { const frame = element('iframe'); frame.title = `marimo · ${notebook.database}`; frame.src = targetUrl; frame.allow = 'clipboard-read; clipboard-write'; $('#frame-host').replaceChildren(frame); } activeNotebook = {...notebook, selectedUrl: targetUrl}; $('#notebook-file').replaceChildren(...[{title: 'Shared files', url: notebook.filesUrl}, {title: 'Starter notebook', url: notebook.url}, ...(notebook.examples || [])].map(n => { const option = element('option', n.title); option.value = n.url; return option; })); $('#notebook-file').value = targetUrl; renderNotebookContext(notebook); $('#editor-external').href = targetUrl; $('#browser').hidden = false; $('#editor').hidden = false; $('#notebook-empty').hidden = true; showPage('notebooks'); }
+function showNotebook(notebook, targetUrl = notebook.url) { if (activeNotebook?.id !== notebook.id || activeNotebook?.selectedUrl !== targetUrl) { const frame = element('iframe'); frame.title = `marimo · ${notebook.database}`; frame.src = targetUrl; frame.allow = 'clipboard-read; clipboard-write'; $('#frame-host').replaceChildren(frame); } activeNotebook = {...notebook, selectedUrl: targetUrl}; $('#notebook-file').replaceChildren(...[{title: 'Shared files', url: notebook.filesUrl}, {title: 'Starter notebook', url: notebook.url}, ...(notebook.examples || [])].map(n => { const option = element('option', n.title); option.value = n.url; return option; })); $('#notebook-file').value = targetUrl; renderNotebookContext(notebook); $('#editor-external').href = targetUrl; $('#browser').hidden = false; $('#editor').hidden = false; $('#notebook-empty').hidden = true; startWork(); showPage('notebooks'); }
 async function openNotebook(db) { const existing = state.notebooks.find(n => n.database === db); if (existing) { showNotebook(existing); notice('Your existing notebook for this database has resumed. Select the table you want to work with there.'); return; } notice('Opening your team’s shared workspace…'); const notebook = await api('/notebooks', 'POST', {database: db, namespace: [], table: null}); await loadState(); showNotebook(notebook); notice('Marimo is ready. Saved files are shared with your team in this environment.'); }
 $('#login').addEventListener('submit', e => { e.preventDefault(); const form = e.currentTarget; busy(form.querySelector('button'), async () => { const data = Object.fromEntries(new FormData(form)); await api('/session', 'POST', data); form.reset(); clearBrowser(); await loadState(); await restoreRoute(); }); });
 $('#logout').addEventListener('click', e => busy(e.currentTarget, async () => { const result = await api('/session', 'DELETE'); if (result.logoutUrl) { location.assign(result.logoutUrl); return; } loginScreen(); }));
