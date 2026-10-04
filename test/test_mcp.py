@@ -211,9 +211,13 @@ def test_tools_use_the_callers_grants(stack, monkeypatch):
     result = call(stack, stack.token, "describe_semantic_model", {"database": database, "namespace": ["analytics"], "model": "revenue"})
     model = result.structured_content["models"][0]
     assert result.structured_content["entityVersion"] == "3"
-    assert model["metrics"][0]["expressions"] == [{"dialect": "ANSI_SQL", "expression": "COUNT(*)"}]
+    assert model["metrics"][0]["expression"] == "COUNT(*)" and "expressions" not in model["metrics"][0]
     assert model["datasets"][0]["table"] == {"namespace": ["analytics"], "name": "events"}
-    assert "definition" not in result.structured_content
+    assert "definition" not in result.structured_content and "matched" not in result.structured_content
+    result = call(stack, stack.token, "describe_semantic_model", {
+        "database": database, "namespace": ["analytics"], "model": "revenue", "detail": "full"})
+    model = result.structured_content["models"][0]
+    assert model["metrics"][0]["expressions"] == [{"dialect": "ANSI_SQL", "expression": "COUNT(*)"}]
     result = call(stack, stack.token, "describe_semantic_model", {
         "database": database, "namespace": ["analytics"], "model": "revenue", "include_definition": True,
     })
@@ -302,7 +306,7 @@ def test_semantic_models_are_published_queried_and_deleted_as_the_caller(stack, 
     described = call(stack, stack.token, "describe_semantic_model", {
         "database": where["database"], "namespace": ["analytics"], "model": "events"}).structured_content
     assert described["queryable"]["metrics"] == {"events": "EVENTS"}
-    assert [d["field"] for d in described["queryable"]["dimensions"]["EVENTS"]] == ["EVENTS.event"]
+    assert described["queryable"]["dimensions"] == {"EVENTS": ["EVENTS.event"]}
 
     run = Mock(return_value={"columns": [{"name": "event", "type": "VARCHAR"}, {"name": "events", "type": "BIGINT"}],
                              "rows": [["door", 7]], "truncated": False,
@@ -327,6 +331,95 @@ def test_semantic_models_are_published_queried_and_deleted_as_the_caller(stack, 
     assert result.is_error and "events" in store
     result = call(stack, stack.token, "delete_semantic_model", {**where, "confirm_name": "events"})
     assert result.structured_content["deleted"] and "events" not in store
+
+
+def test_describe_summarises_and_narrows_a_model(stack, stored_models):
+    where = {"database": stack.databases[0], "namespace": ["analytics"]}
+    call(stack, stack.token, "publish_semantic_model", {**where, "name": "events", "model": EVENTS_MODEL})
+    summary = call(stack, stack.token, "describe_semantic_model", {**where, "model": "events"}).structured_content
+    metric = summary["models"][0]["metrics"][0]
+    assert metric == {"name": "events", "dataset": "EVENTS", "unit": "count", "expression": "count(*)",
+                      "synonyms": [], "summary": "Number of events."}
+    field = summary["models"][0]["datasets"][0]["fields"][1]
+    assert field == {"name": "event", "datatype": "", "dimension": True, "timeDimension": False, "summary": "Event kind."}
+    # search keeps matching fields and metrics and says how many of each it kept.
+    found = call(stack, stack.token, "describe_semantic_model", {**where, "model": "events", "search": "KIND"})
+    found = found.structured_content
+    assert [f["name"] for f in found["models"][0]["datasets"][0]["fields"]] == ["event"]
+    assert found["models"][0]["metrics"] == []
+    assert found["matched"] == {"fields": {"shown": 1, "of": 2}, "metrics": {"shown": 0, "of": 1}}
+    other = call(stack, stack.token, "describe_semantic_model", {**where, "model": "events", "dataset": "OTHER"})
+    other = other.structured_content
+    assert other["models"][0]["datasets"] == [] and other["models"][0]["metrics"] == []
+    assert other["queryable"]["dimensions"] == {} and other["matched"]["metrics"] == {"shown": 0, "of": 0}
+
+
+def test_dimension_values_help_pick_exact_filter_values(stack, stored_models, monkeypatch):
+    where = {"database": stack.databases[0], "namespace": ["analytics"]}
+    call(stack, stack.token, "publish_semantic_model", {**where, "name": "events", "model": EVENTS_MODEL})
+    run = Mock(return_value={"columns": [], "rows": [["door", 7], ["Doorbell", 2]], "truncated": True,
+                             "snapshots": {"EVENTS": {"id": 1, "committedAt": 1790000000000}}})
+    monkeypatch.setattr("user_portal.mcp_server.run_preview", run)
+    lookup = {**where, "model": "events", "field": "EVENTS.event", "search": "DOOR", "limit": 2}
+    result = call(stack, stack.token, "list_dimension_values", lookup)
+    assert not result.is_error, text(result)
+    answer = result.structured_content
+    assert answer["values"] == [{"value": "door", "rows": 7}, {"value": "Doorbell", "rows": 2}]
+    assert answer["truncated"] and answer["dataAsOf"].startswith("2026-")
+    job, module = run.call_args.args[0], run.call_args.args[1]
+    assert module == "user_portal.semantic.worker" and job["params"] == ["DOOR"] and job["limit"] == 2
+    assert "DOOR" not in job["sql"] and job["bindings"] == [{"view": "EVENTS", "namespace": ["analytics"],
+                                                            "table": "events"}]
+    refused = [({"field": "EVENTS.id"}, "no dimension 'id'"), ({"limit": 201}, "limit"),
+               ({"field": "EVENTS.event; DROP"}, "field")]
+    for change, message in refused:
+        result = call(stack, stack.token, "list_dimension_values", {**lookup, **change})
+        assert result.is_error and message in text(result), text(result)
+
+
+def test_publish_checks_fields_against_the_table_columns(stack, stored_models):
+    where = {"database": stack.databases[0], "namespace": ["analytics"], "name": "events"}
+    dataset = EVENTS_MODEL["datasets"][0]
+    typo = {**EVENTS_MODEL, "datasets": [{**dataset, "fields": [*dataset["fields"], {
+        "name": "kind", "description": "A misspelt column.",
+        "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "kind"}]}}]}]}
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": typo})
+    assert result.is_error and "EVENTS.kind is not a column of the table" in text(result)
+    # A table that does not exist yet is not a reason to refuse the model, but the caller hears about it.
+    missing = {**typo, "datasets": [{**typo["datasets"][0], "source": "lakehouse.analytics.later"}]}
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": missing})
+    assert not result.is_error, text(result)
+    assert any("analytics.later is missing or not readable" in w for w in result.structured_content["warnings"])
+
+
+def test_query_slots_wait_briefly_before_reporting_busy(stack, monkeypatch):
+    monkeypatch.setenv("USER_QUERY_SLOTS", "1")
+    monkeypatch.setenv("USER_QUERY_WAIT_SECONDS", "0.3")
+    arguments = {"database": stack.databases[0], "namespace": ["analytics"], "table": "events"}
+
+    def both(seconds):
+        """Two previews at once, while the preview in a slot takes `seconds`."""
+        def run(prepared):
+            time.sleep(seconds)
+            return {"columns": ["id"], "rows": [["1"]], "snapshotId": SNAPSHOT, "limit": 3}
+
+        async def calls():
+            access = await KeycloakVerifier(stack.oidc).verify_token(stack.token)
+            auth_context_var.set(AuthenticatedUser(access))
+            async with Client(app.state.mcp) as client:
+                return await asyncio.gather(*(client.call_tool("preview_rows", arguments) for _ in range(2)))
+
+        monkeypatch.setattr("user_portal.mcp_server.run_preview", run)
+        # A fresh app per event loop, as the portal has one loop for its whole life.
+        app = create_app(stack.directory, FakeRuntime(), oidc=stack.oidc)
+        return asyncio.run(calls())
+
+    # The second call waits for the first one's slot when it frees up in time.
+    assert not any(r.is_error for r in both(0.05))
+    # It reports busy when the slot stays taken for longer than the wait.
+    results = both(1.0)
+    assert [r.is_error for r in results].count(True) == 1
+    assert "Preview slots are busy" in text(next(r for r in results if r.is_error))
 
 
 def test_tools_refuse_other_teams_invalid_input_and_unlinked_identity(stack, monkeypatch):
@@ -542,7 +635,8 @@ def test_streamable_http_round_trip_authenticates_each_request(stack):
     tools = getattr(tools, "tools", tools)
     assert sorted(t.name for t in tools) == sorted(
         ["list_databases", "list_namespaces", "list_tables", "describe_table", "describe_view", "preview_rows",
-         "list_semantic_models", "describe_semantic_model", "query_semantic_model", "publish_semantic_model",
+         "list_semantic_models", "describe_semantic_model", "query_semantic_model", "list_dimension_values",
+         "publish_semantic_model",
          "delete_semantic_model", "create_database", "rename_database", "delete_database",
          "list_share_teams", "list_shares", "list_received_shares", "create_share", "update_share",
          "rotate_share_credential", "delete_share"]

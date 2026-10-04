@@ -538,7 +538,12 @@ class UserDirectory:
 
     def publish_semantic_model(self, session, database, namespace, name, model, entity_version=None):
         """Create a model, or replace the version the caller read; Polaris checks the Writer role."""
-        model, warnings = rules.validate(model)
+        targets = [(d.get("name"), *target) for d in rules.dicts(rules.first_model(model).get("datasets"))
+                   if (target := ossie.dataset_target(d.get("source"), namespace))]
+        schemas, unreadable = self.semantic_tables(session, database, targets)
+        model, warnings = rules.validate(model, {name: set(columns) for name, columns in schemas.items()})
+        warnings = [f"Table {table} is missing or not readable, so its fields were not checked against its columns."
+                    for table in unreadable] + warnings
         document = rules.document(model)
         try:
             current = self.request(session, self.semantic_model_path(database, namespace, name))
@@ -585,29 +590,47 @@ class UserDirectory:
                 "dimensions": {home: compiler.reachable(model, home) for home in sorted({h for h in homes.values() if h})},
                 "problems": problems}
 
-    def semantic_query_job(self, session, database, namespace, name, spec, max_rows=200):
-        """Compile a governed query from the stored model, to run as the user in a worker process."""
-        loaded = self.load_semantic_model(session, database, namespace, name)
-        model = ossie.parse(loaded, tuple(namespace))
+    def semantic_tables(self, session, database, targets):
+        """{dataset: {column: Iceberg type}} for `(dataset, namespace, table)` targets, and the tables not readable."""
         schemas, unreadable = {}, []
-        for dataset in model.datasets:
+        for dataset, namespace, table in targets:
             try:
-                table = self.details(session, database, list(dataset.namespace), "table", dataset.table)
+                found = self.details(session, database, list(namespace), "table", table)
             except ServiceError as exc:
                 if exc.status not in (403, 404):
                     raise
-                unreadable.append(".".join([*dataset.namespace, dataset.table]))
+                unreadable.append(".".join([*namespace, table]))
                 continue
-            schemas[dataset.name] = {c["name"]: c["type"] for c in table["columns"] if "." not in c["name"]}
-        compiled = compiler.compile_query(model, schemas, spec, max_rows)
+            schemas[dataset] = {c["name"]: c["type"] for c in found["columns"] if "." not in c["name"]}
+        return schemas, unreadable
+
+    def semantic_job(self, session, database, compiled, unreadable):
+        """The worker job for a compiled governed query, as long as every table it binds is readable."""
         missing = sorted({".".join([*b["namespace"], b["table"]]) for b in compiled.bindings} & set(unreadable))
         if missing:
             raise SemanticError(403, "A table this query needs is missing or not readable with your permissions: "
                                      + ", ".join(missing) + ".", "table_not_readable", {"tables": missing})
-        job = {"uri": self.url + "/api/catalog", "warehouse": database, "token": session.token,
-               "s3Endpoint": self.s3_endpoint, "bindings": compiled.bindings, "sql": compiled.sql,
-               "params": compiled.params, "limit": compiled.limit}
-        return model, compiled, job
+        return {"uri": self.url + "/api/catalog", "warehouse": database, "token": session.token,
+                "s3Endpoint": self.s3_endpoint, "bindings": compiled.bindings, "sql": compiled.sql,
+                "params": compiled.params, "limit": compiled.limit}
+
+    def semantic_query_job(self, session, database, namespace, name, spec, max_rows=200):
+        """Compile a governed query from the stored model, to run as the user in a worker process."""
+        loaded = self.load_semantic_model(session, database, namespace, name)
+        model = ossie.parse(loaded, tuple(namespace))
+        schemas, unreadable = self.semantic_tables(
+            session, database, [(d.name, d.namespace, d.table) for d in model.datasets])
+        compiled = compiler.compile_query(model, schemas, spec, max_rows)
+        return model, compiled, self.semantic_job(session, database, compiled, unreadable)
+
+    def semantic_values_job(self, session, database, namespace, name, field, search=None, limit=50):
+        """Compile a lookup of one dimension's distinct values, to run as the user in a worker process."""
+        model = ossie.parse(self.load_semantic_model(session, database, namespace, name), tuple(namespace))
+        wanted = field.partition(".")[0]
+        schemas, unreadable = self.semantic_tables(
+            session, database, [(d.name, d.namespace, d.table) for d in model.datasets if d.name == wanted])
+        compiled = compiler.compile_values(model, schemas, field, search, limit)
+        return compiled, self.semantic_job(session, database, compiled, unreadable)
 
     def preview_request(self, session, database, namespace, name, snapshot_id, limit):
         details = self.details(session, database, namespace, "table", name)

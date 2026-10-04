@@ -146,7 +146,7 @@ def names(kind, items):
 
 def limit(kind, items, most):
     if len(items) > most:
-        raise SemanticError(422, f"The semantic model has {len(items)} {kind}; Conversational BI reads at most {most}.",
+        raise SemanticError(422, f"The semantic model has {len(items)} {kind}; governed queries read at most {most}.",
                        "invalid_model")
 
 

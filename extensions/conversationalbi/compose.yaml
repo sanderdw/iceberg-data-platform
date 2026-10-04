@@ -26,6 +26,7 @@ services:
       RUNTIME_URL: http://cbi-runtime:4000
       RUNTIME_KEY: ${RUNTIME_KEY:?Run scripts/setup.py first}
       BI_LLM_ROWS: ${BI_LLM_ROWS:-20}
+      BI_LLM_BYTES: ${BI_LLM_BYTES:-8192}
       BI_MAX_ROWS: ${BI_MAX_ROWS:-5000}
       BI_QUERY_TIMEOUT: ${BI_QUERY_TIMEOUT:-30}
       BI_MAX_QUERIES: ${BI_MAX_QUERIES:-4}

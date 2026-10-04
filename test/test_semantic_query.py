@@ -283,6 +283,32 @@ def test_flagged_dimensions_limit_what_a_query_may_group_by():
         compile_query(model, schemas, QuerySpec(metrics=["cancellation_pct"], dimensions=[{"field": "FLIGHT.dep_delay"}]))
 
 
+def test_dimension_values_list_distinct_values_with_their_rows():
+    model = flights.model()
+    compiled = compiler.compile_values(model, flights.schemas(model), "CARRIER.name")
+    expected = flights.local().execute(
+        "SELECT name, count(*) FROM CARRIER WHERE name IS NOT NULL GROUP BY ALL ORDER BY 1").fetchall()
+    assert run(compiled) == expected and expected
+    assert compiled.bindings == [{"view": "CARRIER", "namespace": ["ai_flights"], "table": "carriers"}]
+    assert [c["name"] for c in compiled.columns] == ["CARRIER.name", "rows"]
+    # The search text is a parameter, matched without regard to case.
+    needle = expected[0][0][1:3].upper()
+    found = compiler.compile_values(model, flights.schemas(model), "CARRIER.name", needle, limit=1)
+    assert found.params == [needle] and needle not in found.sql and found.limit == 1
+    assert all(needle.lower() in name.lower() for name, _ in run(found))
+    injected = compiler.compile_values(model, flights.schemas(model), "CARRIER.name", "x' OR 1=1 --")
+    assert "OR 1=1" not in injected.sql and run(injected) == []
+
+
+def test_dimension_values_need_a_dimension():
+    model = ossie.parse(flights.stored(flagged=True), ["ai_flights"])
+    with pytest.raises(SemanticError, match="no dimension 'dep_delay'"):
+        compiler.compile_values(model, flights.schemas(model), "FLIGHT.dep_delay")
+    with pytest.raises(SemanticError) as exc:
+        compiler.compile_values(model, flights.schemas(model), "NOPE.name")
+    assert exc.value.code == "unknown_field"
+
+
 def test_plain_values_stay_exact_in_a_browser():
     assert worker.plain(2**60) == str(2**60) and worker.plain(42) == 42
     assert worker.plain(decimal.Decimal("12.50")) == 12.5

@@ -225,6 +225,38 @@ function expressionText(expressions) {
   return (expressions || []).map(e => (expressions.length > 1 && e.dialect ? `${e.dialect}: ` : '') + e.expression).join('\n');
 }
 
+/* The stored JSON as YAML, which reads more easily: block style, multi-line text such as AI
+   instructions as literal blocks, and quotes wherever YAML would read a string as something else. */
+function yamlScalar(value) {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value !== 'string') return String(value);
+  // A leading digit, sign or dot could read as a number, date or time (YAML 1.1 reads 1_000 and 12:30 as numbers).
+  const plain = value !== '' && !/^[\s\d.+-]|\s$|^[?:,[\]{}#&*!|>'"%@`]|: |\s#|:$|[\n\r\t]/.test(value)
+    && !/^(true|false|yes|no|on|off|y|n|null|~)$/i.test(value);
+  return plain ? value : JSON.stringify(value);
+}
+function yamlLines(value, pad) {
+  const block = v => v !== null && typeof v === 'object' && Object.keys(v).length > 0;
+  const entry = (prefix, v, inner) => {
+    if (v !== null && typeof v === 'object') return [prefix + (Array.isArray(v) ? '[]' : '{}')];
+    if (typeof v === 'string' && v.includes('\n') && !/^[ \n]|\r|\t|\n\n$/.test(v)) {
+      return [prefix + (v.endsWith('\n') ? '|' : '|-'), ...v.replace(/\n$/, '').split('\n').map(line => line && inner + line)];
+    }
+    return [prefix + yamlScalar(v)];
+  };
+  if (Array.isArray(value)) return value.flatMap(item => {
+    if (!block(item)) return entry(`${pad}- `, item, `${pad}  `);
+    const lines = yamlLines(item, `${pad}  `);
+    return [`${pad}- ${lines[0].slice(pad.length + 2)}`, ...lines.slice(1)];
+  });
+  return Object.entries(value).flatMap(([key, v]) => block(v)
+    ? [`${pad}${yamlScalar(key)}:`, ...yamlLines(v, `${pad}  `)]
+    : entry(`${pad}${yamlScalar(key)}: `, v, `${pad}  `));
+}
+function toYaml(value) {
+  return value !== null && typeof value === 'object' && Object.keys(value).length ? yamlLines(value, '').join('\n') : yamlScalar(value);
+}
+
 async function openDataset(db, ns, dataset) {
   if (dataset.table.namespace.join('\x1f') !== ns.join('\x1f')) await browse(db, dataset.table.namespace);
   await inspectObject(db, dataset.table.namespace, 'table', dataset.table.name);
@@ -284,9 +316,18 @@ function renderSemanticModel(detail, db, ns, name) {
     p.append(dataGrid(['Name', 'From', 'To', 'Columns'], models.flatMap(m => m.relationships.map(r => [r.name, r.from, r.to, `${r.fromColumns.join(', ')} → ${r.toColumns.join(', ')}`])), 'Relationships'));
   });
   tab('Definition', p => {
-    const box = element('pre', detail.definition, 'view-sql'), buttons = element('div', undefined, 'share-actions');
-    buttons.append(copyButton('Copy', detail.definition, 'Definition copied.'));
-    p.append(element('p', 'The document exactly as Polaris stores it.', 'hint'), box, buttons);
+    let stored;
+    try { stored = JSON.parse(detail.definition); } catch { stored = undefined; }
+    // YAML by default for reading; JSON is exactly what Polaris stores. Text that is not JSON is shown as stored.
+    const formats = stored === undefined ? {Stored: detail.definition} : {YAML: toYaml(stored), JSON: detail.definition};
+    const box = element('pre', undefined, 'view-sql'), buttons = element('div', undefined, 'share-actions');
+    const choices = Object.keys(formats).map(name => { const b = element('button', name, 'quiet'); b.type = 'button'; b.addEventListener('click', () => show(name)); return b; });
+    let current;
+    function show(name) { current = name; box.textContent = formats[name]; choices.forEach(b => b.setAttribute('aria-pressed', String(b.textContent === name))); }
+    if (choices.length > 1) buttons.append(...choices);
+    buttons.append(action('Copy', async () => { await navigator.clipboard.writeText(formats[current]); notice(`Definition copied as ${current}.`); }));
+    p.append(element('p', stored === undefined ? 'The document exactly as Polaris stores it.' : 'The document Polaris stores, as YAML for reading or as the stored JSON.', 'hint'), buttons, box);
+    show(Object.keys(formats)[0]);
   });
   host.replaceChildren(toolbar, tabs, panel); overview();
 }

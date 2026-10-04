@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.12.19 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.22 AS uv
 FROM python:3.14.7-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
@@ -18,5 +18,6 @@ COPY user_portal/public ./user_portal/public
 COPY user_portal/client ./user_portal/client
 COPY public/fonts ./user_portal/public/fonts
 COPY public/favicon.svg ./user_portal/public/favicon.svg
+COPY public/docs.js ./user_portal/public/docs.js
 EXPOSE 3002
 CMD ["uv", "run", "--no-sync", "python", "-m", "user_portal"]

@@ -172,6 +172,7 @@ main() {
     printf '   Skills for coding agents such as Claude Code, Codex and GitHub Copilot:\n'
     printf '     quick-share    Share the portals for a class or demo over temporary HTTPS links\n'
     printf '     demo-company   Create an Energy, Webshop or Retail demo company, one account per participant\n'
+    printf '     semantic-model Build a semantic model by interview, tested against your own data\n'
     printf '   Open your agent in %s and ask, for example: "Set up a demo company for my class"\n' "$shown_dir"
 }
 

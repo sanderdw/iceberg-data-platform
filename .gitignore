@@ -48,3 +48,8 @@ extensions/dbt/
 .github/workflows/dbt-*.yml
 screenshots/design-experiments/skills/*
 screenshots/design-experiments/2026-10-02*
+
+# Per-session artefacts: the portal download of iceberg_connect.py, Windows download markers and semantic-model work files.
+/iceberg_connect.py
+*:Zone.Identifier
+/semantic-models/

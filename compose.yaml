@@ -280,9 +280,6 @@ services:
     build:
       context: .
     environment:
-      HOST: 0.0.0.0
-      PORTAL_PASSWORD: ${PORTAL_PASSWORD}
-      PROVIDER: polaris
       POLARIS_URL: http://polaris:8181
       POLARIS_PUBLIC_URL: ${POLARIS_PUBLIC_URL:-http://localhost:8181}
       POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}
@@ -295,10 +292,7 @@ services:
       AWS_REGION: ${AWS_REGION:-us-east-1}
       OIDC_ISSUER: ${OIDC_ISSUER}
       OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/iceberg
-      OIDC_CLIENT_ID: iceberg-admin
-      OIDC_CLIENT_SECRET: ${OIDC_PORTAL_SECRET}
       OIDC_MANAGEMENT_SECRET: ${OIDC_MANAGEMENT_SECRET}
-      OIDC_ORIGIN: ${PORTAL_ORIGIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       PLATFORM_ADMIN_USERNAME: ${PLATFORM_ADMIN_USERNAME:-platform-admin}
       DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}

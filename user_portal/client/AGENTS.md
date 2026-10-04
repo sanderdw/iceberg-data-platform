@@ -70,7 +70,7 @@ Both portals serve a Model Context Protocol endpoint at `/mcp`. On the first too
 
 | Server | Address (local default) | For | Main tools |
 |---|---|---|---|
-| `iceberg-user` | `http://localhost:3002/mcp` | everyone | `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `preview_rows` (up to 100 rows), `list_semantic_models`, `describe_semantic_model`, `query_semantic_model`, `list_shares`, `list_received_shares`; writers also `publish_semantic_model`, `delete_semantic_model`; team admins also `create_database`, `rename_database`, `delete_database`, `create_share`, `update_share`, `rotate_share_credential`, `delete_share` |
+| `iceberg-user` | `http://localhost:3002/mcp` | everyone | `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `preview_rows` (up to 100 rows), `list_semantic_models`, `describe_semantic_model`, `query_semantic_model`, `list_dimension_values`, `list_shares`, `list_received_shares`, `list_share_teams`; writers also `publish_semantic_model`, `delete_semantic_model`; team admins also `create_database`, `rename_database`, `delete_database`, `create_share`, `update_share`, `rotate_share_credential`, `delete_share` |
 | `iceberg-admin` | `http://localhost:3000/mcp` | platform administrators | teams, users, databases and shares across the platform (`get_overview`, `create_team`, `create_user`, `create_database`, …) |
 
 Register a server in your agent (replace `iceberg-user` and the address for the admin server):
@@ -88,7 +88,7 @@ Notes:
 
 ## 3. Semantic models
 
-A semantic model makes tables answerable: it states the grain, the joins, the agreed metrics with their SQL and the rules an AI must follow. For a business question, read the models of the namespace first (`list_semantic_models`, `describe_semantic_model`), then **answer with `query_semantic_model`**: name the metrics, the dimensions to split by (a time dimension can take a `day`, `week`, `month`, `quarter` or `year` grain; `via` picks the relationship when a dataset can be reached in several ways) and filters, for example:
+A semantic model makes tables answerable: it states the grain, the joins, the agreed metrics with their SQL and the rules an AI must follow. For a business question, read the models of the namespace first (`list_semantic_models`, `describe_semantic_model`, which summarises by default: narrow a large model with `search` or `dataset`, and pass `detail="full"` for every description). Look up the exact value to filter on with `list_dimension_values`, such as `Utrecht (PV)`. Then **answer with `query_semantic_model`**: name the metrics, the dimensions to split by (a time dimension can take a `day`, `week`, `month`, `quarter` or `year` grain; `via` picks the relationship when a dataset can be reached in several ways) and filters, for example:
 
 ```json
 {"database": "db-…", "namespace": ["sales"], "model": "orders", "metrics": ["revenue"],
@@ -129,5 +129,6 @@ Claude Code reads skills from `.claude/skills`; the pointers there lead to `.age
 | "You are not signed in" / "sign-in has expired" | The person runs `uv run iceberg_connect.py login` |
 | "Could not reach …" | The platform is stopped, or `iceberg_connect.py` points at an old address: download it again from the portal |
 | 403 / "Your role may not do this" | The person lacks the Writer (or Admin) role in the database's team |
+| "Query slots are busy" / "Preview slots are busy" | Every query slot stayed taken for 15 seconds: ask fewer questions at once and retry, or an administrator raises `USER_QUERY_SLOTS` in `.env` |
 | 406 on semantic models | Semantic models are switched off; an administrator sets `POLARIS_SEMANTIC_MODELS=true` in `.env` |
 | DuckDB write fails with "Metadata-log exists but none of the entries were valid" | Clock skew; `iceberg_connect.py` already turns the lookup off, so connect through it and keep the host clock in sync |

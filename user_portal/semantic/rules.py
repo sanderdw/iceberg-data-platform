@@ -10,6 +10,7 @@ import re
 
 from . import expressions
 from .errors import SemanticError
+from .ossie import dicts
 
 SPEC_VERSION = "0.2.0"
 DIALECT = "ANSI_SQL"
@@ -21,10 +22,6 @@ IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 DATATYPES = ("String", "Integer", "Decimal", "Float", "Boolean", "Date", "Time", "DateTime", "DateTimeTz", "Opaque")
 TIME_DATATYPES = ("Date", "Time", "DateTime", "DateTimeTz")
 GRAIN_DATATYPES = ("Date", "DateTime", "DateTimeTz")
-
-
-def dicts(value):
-    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
 
 
 def text(value):
@@ -195,10 +192,13 @@ def query_warnings(model):
     return found
 
 
-def validate(model):
-    """The model to store and its warnings; SemanticError 422 lists everything that blocks it."""
+def validate(model, columns=None):
+    """The model to store and its warnings; SemanticError 422 lists everything that blocks it.
+
+    `columns` maps a dataset name to its table's column names, so fields that name a missing column block it.
+    """
     model = first_model(model)
-    errors, warnings = check_structure(model)
+    errors, warnings = check_structure(model, columns)
     if errors:
         raise SemanticError(422, "The semantic model is not valid: " + " ".join(errors), "invalid_model",
                             {"errors": errors, "warnings": warnings})

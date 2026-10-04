@@ -77,7 +77,7 @@ Credentials are in `.env`. All ports bind to `127.0.0.1`, and PostgreSQL is inte
 
 ### Connect an AI agent
 
-Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`. On the first tool call the agent opens Keycloak in your browser. For Codex, GitHub Copilot, other clients and the tool lists, see [the user MCP server](user_portal/README.md#connect-an-mcp-client) and [the administration MCP server](docs/admin-guide.md#connect-an-mcp-client).
+Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`. On the first tool call the agent opens Keycloak in your browser. For Codex, GitHub Copilot and other clients, see [the user MCP server](user_portal/README.md#connect-an-mcp-client) and [the administration MCP server](docs/admin-guide.md#connect-an-mcp-client). [MCP tools](docs/mcp.md) describes every tool of the user server.
 
 ### First steps
 
@@ -91,6 +91,7 @@ Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) e
 - [Installation](docs/install.md)
 - [User portal and notebooks](user_portal/README.md)
 - [Administration guide](docs/admin-guide.md)
+- [MCP tools](docs/mcp.md)
 - [Keycloak identity and access](docs/keycloak.md)
 - [Resource model: users, teams, roles, databases, shares](docs/CONTEXT.md)
 - [Form validation rules](docs/form-validation.md)

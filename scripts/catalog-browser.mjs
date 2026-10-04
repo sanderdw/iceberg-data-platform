@@ -167,6 +167,10 @@ try {
   await expect(page.getByRole('tabpanel')).toContainText('SUM(READINGS.kwh)');
   await expect(page.getByRole('tabpanel')).toContainText('meter_id → id');
   await page.getByRole('tab', {name: 'Definition', exact: true}).click();
+  // YAML by default; JSON is the stored document.
+  await expect(page.locator('.view-sql')).toHaveText('name: Energy');
+  await expect(page.getByRole('button', {name: 'YAML', exact: true})).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', {name: 'JSON', exact: true}).click();
   await expect(page.locator('.view-sql')).toContainText('"name": "Energy"');
   for (const name of ['Overview', 'Diagram', 'Datasets & fields', 'Metrics & relationships', 'Definition']) {
     await page.getByRole('tab', {name, exact: true}).click();

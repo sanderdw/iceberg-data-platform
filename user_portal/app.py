@@ -101,8 +101,11 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
     runtime = runtime or NotebookRuntime(os.environ)
     sessions, attempts = {}, {}
     lock = asyncio.Lock()
-    previews = asyncio.Semaphore(2)
-    secure = oidc.secure if oidc else os.environ.get("USER_COOKIE_SECURE") == "true"
+    # Previews and governed queries share these slots; MCP calls wait up to USER_QUERY_WAIT_SECONDS for one.
+    previews = asyncio.Semaphore(max(1, int(os.environ.get("USER_QUERY_SLOTS") or 2)))
+    query_wait = max(0.0, float(os.environ.get("USER_QUERY_WAIT_SECONDS") or 15))
+    # Keycloak sign-in marks cookies Secure when USER_ORIGIN is https; the password test mode never is.
+    secure = oidc.secure if oidc else False
 
     def session_for(cookies):
         session = sessions.get(cookies.get(session_cookie))
@@ -360,7 +363,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         return response
 
     if oidc:
-        mcp = create_mcp(directory, oidc, lock=lock, previews=previews)
+        mcp = create_mcp(directory, oidc, lock=lock, previews=previews, query_wait=query_wait)
         mcp_running = mount_mcp(app, mcp, oidc, "Iceberg Workspaces")
 
     @app.get("/api/health")
@@ -727,7 +730,8 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         if path not in files:
             raise ServiceError(404, "Not found.")
         asset = PUBLIC / files[path]
-        if path.startswith("fonts/") or path == "favicon.svg":
+        # Fonts, the icon and the API docs script are the administration portal's; the image copies them in.
+        if path.startswith("fonts/") or path in ("favicon.svg", "docs.js"):
             shared = Path(__file__).parent.parent / "public" / files[path]
             if shared.is_file():
                 asset = shared

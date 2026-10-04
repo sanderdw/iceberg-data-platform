@@ -227,11 +227,11 @@
   <h2>One command, and the platform runs</h2>
   <pre style="font-size:0.56em;margin-bottom:24px"><code data-noescape><span class="c">$</span> <span class="k">curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh</span></code></pre>
   <div class="cols-asym">
-    <pre style="font-size:0.56em"><code data-noescape>Downloading release v0.6.0...
+    <pre style="font-size:0.56em"><code data-noescape>Downloading release v0.7.0...
 Pulling images for both stacks (the notebook image may take a few minutes)...
 Starting the user portal...
 
-<span class="k">Iceberg Data Platform 0.6.0 is running.</span>
+<span class="k">Iceberg Data Platform 0.7.0 is running.</span>
 
 1. Sign in to the administration portal
    http://localhost:3000/#guide
@@ -245,7 +245,8 @@ Starting the user portal...
 Optional
    Skills for coding agents such as Claude Code, Codex and GitHub Copilot:
      quick-share    Share the portals for a class or demo
-     demo-company   Create a demo company, one account per participant</code></pre>
+     demo-company   Create a demo company, one account per participant
+     semantic-model Build a semantic model by interview, tested on your data</code></pre>
     <ul style="font-size:0.8em">
       <li>Linux, macOS and Windows. Only Docker with Compose is needed: no source checkout, Python or Node.js.</li>
       <li>The installer verifies the bundle and writes random credentials to <code>.env</code>. It ends with who signs in first, and where.</li>
@@ -516,7 +517,7 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
       <tr><td>Object storage (S3 API)</td><td>RustFS</td><td class="num">1.0.0</td><td class="mono">Apache-2.0</td><td>AWS S3, MinIO, Ceph, Cloudflare R2, on-prem</td></tr>
       <tr><td>Catalog metadata store</td><td>PostgreSQL</td><td class="num">18</td><td class="mono">PostgreSQL</td><td>Managed Postgres anywhere</td></tr>
       <tr><td>Notebooks</td><td>marimo</td><td class="num">0.25.0</td><td class="mono">Apache-2.0</td><td>Jupyter, VS Code, any Python client</td></tr>
-      <tr><td>Query engine</td><td>DuckDB with the iceberg extension, reads and writes</td><td class="num">1.5.5</td><td class="mono">MIT</td><td>Trino, Spark, Flink, Polars, ClickHouse</td></tr>
+      <tr><td>Query engine</td><td>DuckDB with the iceberg extension, reads and writes</td><td class="num">1.5.6</td><td class="mono">MIT</td><td>Trino, Spark, Flink, Polars, ClickHouse</td></tr>
       <tr><td>Portals and API</td><td>FastAPI, Python 3.14</td><td class="num">0.141</td><td class="mono">MIT</td><td>Built here, deliberately thin.</td></tr>
       <tr><td>Semantic models</td><td>Apache Ossie (incubating), stored by Polaris</td><td class="num">spec 0.2.0</td><td class="mono">Apache-2.0</td><td>Any tool that reads the open specification</td></tr>
       <tr><td>Agent interface</td><td>Model Context Protocol, Python SDK</td><td class="num">2.2</td><td class="mono">MIT</td><td>Any MCP client: Claude Code, IDEs, your own agent</td></tr>
@@ -1150,7 +1151,9 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
         <tr><td class="mono">list_databases</td><td>Your teams, your role in each, owned and shared databases</td></tr>
         <tr><td class="mono">list_namespaces · list_tables</td><td>Browse what your grants allow</td></tr>
         <tr><td class="mono">describe_table · describe_view</td><td>Schema, partitioning, snapshots, branches, view SQL</td></tr>
-        <tr><td class="mono">list_semantic_models · describe_semantic_model</td><td>Datasets, joins, agreed metrics and AI context · the stored definition on request</td></tr>
+        <tr><td class="mono">list_semantic_models · describe_semantic_model</td><td>Datasets, joins, agreed metrics and AI context · a summary, searchable, for large models</td></tr>
+        <tr><td class="mono">query_semantic_model</td><td>Answers from the agreed metrics and joins, read with your grants</td></tr>
+        <tr><td class="mono">list_dimension_values</td><td>The exact values to filter on, such as Utrecht (PV)</td></tr>
         <tr><td class="mono">preview_rows</td><td>Up to 100 rows, at any snapshot</td></tr>
         <tr><td class="mono">list · create · update · delete_share</td><td>Team administrators only · sharing a model adds its tables</td></tr>
         <tr><td class="mono">create · rename · delete_database</td><td>Team administrators only · delete needs the exact name</td></tr>
@@ -1159,13 +1162,13 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
     <ul>
       <li>The agent signs in through Keycloak as <em>you</em>: a public client with PKCE, no secret to store.</li>
       <li>Every call runs with your Polaris grants, so the agent sees exactly what you see and nothing more.</li>
-      <li>The server tells the agent to read the semantic model before it writes SQL, so a metric uses the agreed definition.</li>
+      <li>The agent never writes SQL: it names metrics, dimensions and filters, and the portal builds the query from the semantic model, so a metric always uses the agreed definition.</li>
       <li>A shared database stays read-only for the agent too.</li>
       <li>Destructive tools are marked as such, and the agent is told to ask before using them.</li>
     </ul>
   </div>
   <p class="secondary foot">“Use the flights semantic model in ai_flights to compare carriers' on-time arrival for January 2026. State the grain, UTC window, denominator and exclusions, and show the SQL.”</p>
-  <aside class="notes">Any MCP client works: Claude Code, Codex, an IDE, or your own agent. The prompt in the footer comes from the flights reader notebook; the agent answers it with describe_semantic_model and the stored metric SQL. Model Context Protocol over streamable HTTP at /mcp on the user portal. Tokens must be issued to the iceberg-mcp client (azp check), so a browser session token cannot be replayed here. Signature, issuer, audience and expiry are verified and the user is mapped to their Polaris principal on every call. The callback port is fixed so the redirect URI can be exact.</aside>
+  <aside class="notes">Any MCP client works: Claude Code, Codex, an IDE, or your own agent. The prompt in the footer comes from the flights reader notebook; the agent reads the model with describe_semantic_model and answers with query_semantic_model, which compiles the agreed metric SQL and runs it read-only with the user's grants. Model Context Protocol over streamable HTTP at /mcp on the user portal. Tokens must be issued to the iceberg-mcp client (azp check), so a browser session token cannot be replayed here. Signature, issuer, audience and expiry are verified and the user is mapped to their Polaris principal on every call. The callback port is fixed so the redirect URI can be exact.</aside>
 </section>
 
 <section>

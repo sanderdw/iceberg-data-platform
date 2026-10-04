@@ -4,6 +4,8 @@ import json
 import re
 from urllib.parse import urlsplit
 
+from .semantic.ossie import dicts
+
 SENSITIVE = re.compile(
     r"secret|token|credential|password|access.key|private.key|authorization", re.IGNORECASE
 )
@@ -203,10 +205,6 @@ def text(value):
     if isinstance(value, (dict, list)):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
-
-
-def dicts(value):
-    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
 
 
 def expressions(item):

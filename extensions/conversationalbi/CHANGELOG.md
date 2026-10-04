@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - 2026-10-01
+## 0.1.0 - 2026-10-04
 
 - First version of Conversational BI for the Iceberg Data Platform, on Extension Bridge contract 0.1.
 - Chat with CopilotKit v2 generative UI: query cards, Chart.js charts, tables and KPIs that load

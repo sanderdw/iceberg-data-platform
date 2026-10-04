@@ -51,7 +51,7 @@ Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic mode
 
 - **Access:** the Reader role of a new database gets `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ`. Writers and administrators already have `CATALOG_MANAGE_CONTENT`, which covers creating, replacing and dropping models.
 - **Deleting a database** removes its semantic models first. Polaris refuses to drop a namespace that still holds one.
-- **Where users find them:** **Catalog** in the user portal (the administration portal's **Catalog** lists their names only), the MCP tools `list_semantic_models`, `describe_semantic_model` and `query_semantic_model` (writers also `publish_semantic_model` and `delete_semantic_model`), the installation's `semantic-model` agent skill, and example notebooks 06 (publish) and 07 (read).
+- **Where users find them:** **Catalog** in the user portal (the administration portal's **Catalog** lists their names only), the MCP tools `list_semantic_models`, `describe_semantic_model`, `query_semantic_model` and `list_dimension_values` (writers also `publish_semantic_model` and `delete_semantic_model`), the installation's `semantic-model` agent skill, and example notebooks 06 (publish) and 07 (read).
 - **Beta:** the Polaris API may change in a later release. Check the [release notes](https://polaris.apache.org/releases/1.8.0/) before upgrading Polaris.
 
 ## Infrastructure

@@ -161,6 +161,7 @@
         Write-Host '   Skills for coding agents such as Claude Code, Codex and GitHub Copilot:'
         Write-Host '     quick-share    Share the portals for a class or demo over temporary HTTPS links'
         Write-Host '     demo-company   Create an Energy, Webshop or Retail demo company, one account per participant'
+        Write-Host '     semantic-model Build a semantic model by interview, tested against your own data'
         Write-Host "   Open your agent in $ShownDir and ask, for example: `"Set up a demo company for my class`""
     }
     finally {

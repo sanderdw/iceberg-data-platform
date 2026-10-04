@@ -1,6 +1,6 @@
 # Bridge contract changelog
 
-## 0.1.0 - 2026-10-01
+## 0.1.0 - 2026-10-04
 
 First version, released with core 0.7.0.
 

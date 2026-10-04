@@ -67,6 +67,7 @@ button, a.button {
 button:hover, a.button:hover { background: var(--text-primary); }
 button.quiet, a.quiet { background: transparent; border-color: var(--border-visible); color: var(--text-primary); }
 button.quiet:hover, a.quiet:hover { border-color: var(--text-primary); color: var(--text-display); }
+button.quiet[aria-pressed="true"] { border-color: var(--text-display); color: var(--text-display); }
 button.ghost { background: transparent; border-color: transparent; color: var(--text-secondary); padding-inline: 8px; }
 button.ghost:hover { color: var(--text-display); }
 button:disabled { cursor: not-allowed; opacity: .4; }

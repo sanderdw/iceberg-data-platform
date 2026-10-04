@@ -47,7 +47,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         raise RuntimeError(
             "Set PORTAL_PASSWORD (at least 16 characters). Run uv run python -m scripts.setup."
         )
-    secure_cookie = secure_cookie if secure_cookie is not None else os.environ.get("COOKIE_SECURE") == "true"
+    secure_cookie = bool(secure_cookie)
     owned = provider is None
     if provider is None:
         if os.environ.get("PROVIDER", "polaris") != "polaris":

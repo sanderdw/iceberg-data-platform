@@ -271,6 +271,16 @@ def typed(kind):
     return f"CAST(? AS {duck})" if duck else "?"
 
 
+def field_expression(dataset, field, alias):
+    """The SQL of a dimension field over its own dataset, which the query reads as `alias`."""
+    tree = expressions.parse(field.expression)
+    if expressions.is_aggregate(tree):
+        raise fail(422, f"{dataset.name}.{field.name} is an aggregate and cannot be a dimension.", "invalid_model")
+    if expressions.datasets(tree) - {dataset.name}:
+        raise fail(422, f"{dataset.name}.{field.name} reads another dataset.", "invalid_model")
+    return expressions.sql(expressions.qualify(tree, {dataset.name: alias}, default=dataset.name))
+
+
 def compile_query(model, schemas, spec, max_rows=5000):
     """`schemas`: dataset name → {column: Iceberg type}. Returns the SQL, its parameters and metadata."""
     metrics = []
@@ -304,17 +314,9 @@ def compile_query(model, schemas, spec, max_rows=5000):
     field_filters = [(f, *place(f.field, f.via)) for f in spec.filters if f.field]
     aliases = plan.aliases()
 
-    def field_sql(dataset, field, path):
-        tree = expressions.parse(field.expression)
-        if expressions.is_aggregate(tree):
-            raise fail(422, f"{dataset.name}.{field.name} is an aggregate and cannot be a dimension.", "invalid_model")
-        if expressions.datasets(tree) - {dataset.name}:
-            raise fail(422, f"{dataset.name}.{field.name} reads another dataset.", "invalid_model")
-        return expressions.sql(expressions.qualify(tree, {dataset.name: aliases[path]}, default=dataset.name))
-
     select, columns, join_paths, outputs = [], [], {}, []
     for d, dataset, field, path in dims:
-        expr, kind = field_sql(dataset, field, path), field_type(dataset, field, schemas)
+        expr, kind = field_expression(dataset, field, aliases[path]), field_type(dataset, field, schemas)
         alias = aliases[path]
         name = f"{alias}.{field.name}" + (f":{d.grain}" if d.grain else "")
         if d.grain:
@@ -361,7 +363,7 @@ def compile_query(model, schemas, spec, max_rows=5000):
         return f"{expr} {flt.op} {placeholder}"
 
     for flt, dataset, field, path in field_filters:
-        where.append(condition(field_sql(dataset, field, path), flt, field_type(dataset, field, schemas)))
+        where.append(condition(field_expression(dataset, field, aliases[path]), flt, field_type(dataset, field, schemas)))
     for flt in (f for f in spec.filters if f.metric):
         metric = model.metric(flt.metric)
         if metric is None:
@@ -395,6 +397,31 @@ def compile_query(model, schemas, spec, max_rows=5000):
                 for name in used]
     return Compiled(sql=query, params=params, bindings=bindings, join_paths=join_paths, columns=columns,
                     metrics=metric_meta, limit=limit)
+
+
+def compile_values(model, schemas, ref, search=None, limit=50):
+    """The distinct values of one dimension (`DATASET.field`) with their row counts, to find exact filter values.
+
+    `search` keeps the values whose text contains it, ignoring case; it is a parameter, never SQL.
+    """
+    dataset, field = resolve_field(model, ref)
+    expr = field_expression(dataset, field, dataset.name)
+    name = f"{dataset.name}.{field.name}"
+    params, where = [], [f"{expr} IS NOT NULL"]
+    if search:
+        params.append(search)
+        where.append(f"contains(lower(CAST({expr} AS VARCHAR)), lower(?))")
+    query = (f"SELECT {expr} AS {quote(name)}, count(*) AS {quote('rows')} "
+             f"FROM {quote(dataset.name)} AS {quote(dataset.name)} WHERE {' AND '.join(where)} "
+             f"GROUP BY ALL ORDER BY 1 LIMIT {limit + 1}")
+    columns = [{"name": name, "kind": "dimension", "dataset": dataset.name, "field": field.name,
+                "label": field.name.replace("_", " "), "via": [], "type": field_type(dataset, field, schemas),
+                "grain": None, "description": field.description},
+               {"name": "rows", "kind": "count", "label": "rows", "unit": "rows",
+                "description": f"Rows of {dataset.name} with this value."}]
+    bindings = [{"view": dataset.name, "namespace": list(dataset.namespace), "table": dataset.table}]
+    return Compiled(sql=query, params=params, bindings=bindings, join_paths={name: []}, columns=columns,
+                    metrics=[], limit=limit)
 
 
 def reachable(model, home):

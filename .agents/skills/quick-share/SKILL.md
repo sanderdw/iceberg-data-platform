@@ -73,7 +73,6 @@ OIDC_ISSUER=<ADMIN_URL>/realms/iceberg
 USER_ORIGIN=<USERS_URL>
 POLARIS_PUBLIC_URL=<USERS_URL>
 S3_ENDPOINT=<USERS_URL>
-USER_COOKIE_SECURE=true
 FORWARDED_ALLOW_IPS=<platform subnet from step 3>
 ```
 - `FORWARDED_ALLOW_IPS` lets the portals trust the gateway's `X-Forwarded-*` headers, so they see HTTPS and the visitor's address.
