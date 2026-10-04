@@ -198,12 +198,16 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "maxLength": 2000,
-              "description": "Namespace levels joined by '.'",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 20,
+              "description": "Namespace levels in order; repeat the parameter for nested levels.",
               "title": "Namespace"
             },
-            "description": "Namespace levels joined by '.'"
+            "description": "Namespace levels in order; repeat the parameter for nested levels."
           },
           {
             "name": "name",

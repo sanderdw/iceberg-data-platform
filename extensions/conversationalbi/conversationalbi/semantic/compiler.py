@@ -52,7 +52,8 @@ class ModelRef(Input):
 
     @property
     def key(self):
-        return f"{self.database}/{'.'.join(self.namespace)}/{self.name}"
+        # Namespace levels may contain dots but never \x1f, so ["a.b"] and ["a", "b"] stay apart.
+        return f"{self.database}/{'\x1f'.join(self.namespace)}/{self.name}"
 
 
 class Dimension(Input):

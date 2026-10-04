@@ -54,7 +54,8 @@ export function chartConfig(result: Result, props: ChartProps, theme: Theme = "d
   let lines: Line[];
   if (props.kind === "scatter") {
     if (result.rows.some((r) => r[xi] !== null && typeof r[xi] !== "number")) return { problem: "A scatter chart needs a numeric x column." };
-    const data = result.rows.map((r) => ({ x: numeric(r[xi]) ?? 0, y: numeric(r[yi[0]]) ?? 0 }));
+    // A row without both coordinates is not a point; plotting it at 0 would invent data.
+    const data = result.rows.flatMap((r) => { const x = numeric(r[xi]), y = numeric(r[yi[0]]); return x === null || y === null ? [] : [{ x, y }]; });
     const s = series(0, theme);
     return {
       config: {

@@ -254,7 +254,8 @@ class Services:
     async def model_context(self, caller, ref, me=None):
         """What the chat agent is told about the selected model: names and the owner's guidance, as data."""
         _, model, _, _ = await self.load(caller, ref, me)
-        return {"label": f"{model.name or ref.name} ({ref.key})", "description": model.description[:1500],
+        where = f"{ref.database}/{'.'.join(ref.namespace)}/{ref.name}"
+        return {"label": f"{model.name or ref.name} ({where})", "description": model.description[:1500],
                 "guidance": model.instructions[:6000], "metrics": [m.name for m in model.metrics],
                 "datasets": [d.name for d in model.datasets]}
 

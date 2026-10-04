@@ -113,7 +113,8 @@ class BrowserLogin:
             del self.pending[next(iter(self.pending))]
         state, (code_verifier, challenge) = secrets.token_urlsafe(24), pkce()
         parsed = urlsplit(return_to)
-        if parsed.scheme or parsed.netloc or not return_to.startswith("/") or return_to.startswith("//"):
+        if (parsed.scheme or parsed.netloc or not return_to.startswith("/") or return_to.startswith("//")
+                or "\\" in return_to):
             return_to = "/"
         self.pending[state] = {"verifier": code_verifier, "until": now + 300, "return_to": return_to}
         query = urlencode({

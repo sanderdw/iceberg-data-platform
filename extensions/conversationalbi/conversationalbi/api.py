@@ -54,9 +54,10 @@ def router(services, caller_dependency):
     @api.get("/models/describe", operation_id="describeModel",
              summary="A model's datasets, fields, metrics and the dimensions each metric can be split by")
     async def describe(caller: Caller, database: Annotated[str, Query(pattern=r"^db-[a-f0-9]{32}$")],
-                       namespace: Annotated[str, Query(max_length=2000, description="Namespace levels joined by '.'")],
+                       namespace: Annotated[list[str], Query(min_length=1, max_length=20, description=(
+                           "Namespace levels in order; repeat the parameter for nested levels."))],
                        name: Annotated[str, Query(pattern=r"^[A-Za-z0-9_-]{1,256}$")]):
-        ref = ModelRef(database=database, namespace=namespace.split("."), name=name)
+        ref = ModelRef(database=database, namespace=namespace, name=name)
         return await services.describe_model(caller, ref)
 
     @api.post("/queries", operation_id="runQuery",

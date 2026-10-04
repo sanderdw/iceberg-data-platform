@@ -2,13 +2,16 @@ import asyncio
 import datetime
 import decimal
 import sys
+from types import SimpleNamespace
 
 import pytest
 
+from conversationalbi.auth import BrowserLogin
 from conversationalbi.config import Settings
 from conversationalbi.errors import CbiError
 from conversationalbi.results import ResultStore
 from conversationalbi.semantic import executor, worker
+from conversationalbi.semantic.compiler import ModelRef
 from conversationalbi.tickets import RunTickets, ThreadOwners
 from tests import flights
 
@@ -45,6 +48,34 @@ def test_results_belong_to_their_owner():
     store.put("a", {"rows": [2]})
     store.put("a", {"rows": [3]})
     assert store.get("a", first) is None  # Oldest result of that owner is dropped.
+
+
+def test_results_are_bounded_by_bytes_not_only_by_count():
+    rows = {"rows": ["x" * 90]}  # About 100 bytes of JSON.
+    store = ResultStore(max_bytes=500, per_owner_bytes=250)
+    a = [store.put("a", rows) for _ in range(3)]
+    # One owner holds at most two such results, so the third pushes out the first.
+    assert store.get("a", a[0]) is None and all(store.get("a", id) for id in a[1:])
+    b = [store.put("b", rows) for _ in range(2)]
+    c = store.put("c", rows)
+    # The whole store holds at most four: everyone's oldest makes room.
+    assert store.get("a", a[1]) is None and store.get("c", c) and all(store.get("b", id) for id in b)
+
+
+def test_model_keys_keep_dotted_namespaces_apart():
+    dotted = ModelRef(database="db-" + "0" * 32, namespace=["a.b"], name="m")
+    nested = ModelRef(database="db-" + "0" * 32, namespace=["a", "b"], name="m")
+    assert dotted.key != nested.key
+
+
+@pytest.mark.parametrize("target", ["https://evil.example", "//evil.example", "/\\evil.example", "/\\\\evil",
+                                    "evil", "/ok\\..\\x"])
+def test_sign_in_returns_only_to_this_origin(target):
+    login = BrowserLogin(SimpleNamespace(origin="https://cbi", client_id="c", issuer="https://kc/realms/r"), None)
+    login.start(target)
+    assert next(iter(login.pending.values()))["return_to"] == "/"
+    login.start("/#/ask?model=x")
+    assert list(login.pending.values())[-1]["return_to"] == "/#/ask?model=x"
 
 
 def test_tickets_and_threads():

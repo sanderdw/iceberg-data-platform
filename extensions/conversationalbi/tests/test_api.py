@@ -112,7 +112,7 @@ def test_without_shared_data_only_own_models(stack):
 def test_describe_explains_joins(stack):
     enable(stack)
     described = stack.call("GET", "/models/describe", params={
-        "database": OWN_DB, "namespace": "ai_flights", "name": "flights"}).json()
+        "database": OWN_DB, "namespace": ["ai_flights"], "name": "flights"}).json()
     assert [m["name"] for m in described["metrics"]] == [
         "average_departure_delay", "average_arrival_delay", "on_time_arrival_pct", "cancellation_pct"]
     assert {m["dataset"] for m in described["metrics"]} == {"FLIGHT"}

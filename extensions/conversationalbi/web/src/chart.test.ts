@@ -26,8 +26,27 @@ describe("charts bind to result columns, never to numbers from the LLM", () => {
     const { config } = chartConfig(result, {
       resultId: result.id, kind: "line", x: "FLIGHT.date:week", y: ["average_departure_delay"], series: "CARRIER.name",
     });
-    expect(config?.data.labels).toEqual(["JAN 05", "JAN 12"]);
+    expect(config?.data.labels).toEqual(["05 JAN 2026", "12 JAN 2026"]);
     expect(config?.data.datasets.map((d) => [d.label, d.data])).toEqual([["A", [10, 9]], ["B", [12.5, null]]]);
+  });
+
+  it("keeps the same day of different years apart", () => {
+    const years: Result = { ...result, rows: [["2025-01-05", "A", 1], ["2026-01-05", "A", 2]] };
+    const { config } = chartConfig(years, {
+      resultId: years.id, kind: "line", x: "FLIGHT.date:week", y: ["average_departure_delay"], series: "CARRIER.name",
+    });
+    expect(config?.data.labels).toEqual(["05 JAN 2025", "05 JAN 2026"]);
+    expect(config?.data.datasets[0].data).toEqual([1, 2]);
+  });
+
+  it("leaves rows without both coordinates out of a scatter chart", () => {
+    const points: Result = {
+      ...result,
+      columns: [{ name: "x", kind: "metric", label: "x" }, { name: "y", kind: "metric", label: "y" }],
+      rows: [[1, 2], [null, 3], [4, null], [5, 6]],
+    };
+    const { config } = chartConfig(points, { resultId: points.id, kind: "scatter", x: "x", y: ["y"] });
+    expect(config?.data.datasets[0].data).toEqual([{ x: 1, y: 2 }, { x: 5, y: 6 }]);
   });
 
   it("refuses columns the result does not have, and text as values", () => {
@@ -42,6 +61,7 @@ describe("exports", () => {
   it("formats grains", () => {
     expect(formatLabel("2026-03-01", "month")).toBe("MAR 2026");
     expect(formatLabel("2026-04-01", "quarter")).toBe("Q2 2026");
+    expect(formatLabel("2026-03-01", "day")).toBe("01 MAR 2026");
   });
 
   it("never lets a spreadsheet evaluate a value", () => {

@@ -55,7 +55,7 @@ export function formatLabel(value: unknown, grain?: string | null): string {
     if (grain === "year") return String(date.getUTCFullYear());
     if (grain === "quarter") return `Q${Math.floor(date.getUTCMonth() / 3) + 1} ${date.getUTCFullYear()}`;
     if (grain === "month") return `${month} ${date.getUTCFullYear()}`;
-    return `${month} ${String(date.getUTCDate()).padStart(2, "0")}`;
+    return `${String(date.getUTCDate()).padStart(2, "0")} ${month} ${date.getUTCFullYear()}`;
   }
   return formatValue(value);
 }
