@@ -1,26 +1,26 @@
 {
-  "source": "07 · Read an AI-ready flights product, section 4",
-  "carriers": [
+  "source": "query_semantic_model on grid_sensors.feeder_load as sander, the same question noor asks Conversational BI (captures 55, 56)",
+  "readings": 32256,
+  "tables": 3,
+  "metrics": 7,
+  "questions": 6,
+  "failed": 0,
+  "overloads": [
     {
-      "carrier": "Example Aurora Air",
-      "scheduled_flights": "4000",
-      "eligible_arrivals": "3862",
-      "on_time_arrival_pct": "68.07",
-      "cancellation_pct": "2.45"
+      "feeder": "Dockside-4 Church",
+      "overload_hours": 6.5
     },
     {
-      "carrier": "Example Blue Skies",
-      "scheduled_flights": "4000",
-      "eligible_arrivals": "3863",
-      "on_time_arrival_pct": "60.60",
-      "cancellation_pct": "2.42"
+      "feeder": "Northgate-2 Mill",
+      "overload_hours": 5.75
     },
     {
-      "carrier": "Example Cloudline",
-      "scheduled_flights": "4000",
-      "eligible_arrivals": "3862",
-      "on_time_arrival_pct": "60.56",
-      "cancellation_pct": "2.45"
+      "feeder": "Northgate-3 Station",
+      "overload_hours": 5.0
+    },
+    {
+      "feeder": "Millbrook-1 Mill",
+      "overload_hours": 4.25
     }
   ]
 }

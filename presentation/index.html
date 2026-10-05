@@ -162,6 +162,27 @@
     .reveal table.versus th:first-child { width: 18%; }
     .reveal table.versus th:not(:first-child) { width: 41%; }
     .reveal table.versus td:first-child { color: var(--text-secondary); }
+    /* Agent transcript: who speaks is a mono label in the margin, never a bubble */
+    .reveal .chat { display: grid; gap: var(--space-md); }
+    .reveal .turn { display: grid; grid-template-columns: 110px 1fr; gap: var(--space-md); align-items: baseline; }
+    .reveal .turn .who { font-family: var(--r-code-font); font-size: 0.6em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-disabled); }
+    .reveal .turn p { margin: 0; color: var(--text-secondary); }
+    .reveal .turn.you .who, .reveal .turn.you p { color: var(--text-display); }
+    .reveal .turn pre { font-size: 0.82em; }
+    .reveal table.ask { font-size: 0.64em; }
+    .reveal table.ask td { padding: 10px 16px 10px 0; line-height: 1.35; }
+    .reveal table.ask td:first-child { color: var(--text-secondary); width: 32%; }
+    .reveal table.ask td:nth-child(2) { color: var(--text-disabled); width: 26%; }
+    .reveal table.ask td:last-child { color: var(--text-display); }
+    .reveal pre code .ok { color: var(--success); }
+    .reveal pre code .flag { color: var(--accent); }
+    .reveal .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-md) var(--space-lg); }
+    .reveal .steps div { border-top: 1px solid var(--border-visible); padding-top: var(--space-sm); font-size: 0.72em; color: var(--text-secondary); line-height: 1.35; }
+    .reveal .steps strong { display: block; font-family: var(--r-code-font); font-weight: 400; font-size: 0.78em; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+    .reveal .bridge text.never { fill: var(--text-disabled); }
+    .reveal .bridge line, .reveal .bridge path { marker-end: url(#arr-bridge); }
+    .reveal .bridge line.none { marker-end: none; stroke: var(--border-visible); stroke-dasharray: 2 6; }
+    .reveal .bridge rect.out { stroke-dasharray: 4 4; }
     /* Chrome: small quiet controls, thin progress, dim slide number */
     .reveal .progress { color: var(--text-secondary); height: 2px; }
     .reveal .controls { font-size: 5px; color: var(--text-disabled); opacity: 0.35; transition: opacity 200ms cubic-bezier(0.25, 0.1, 0.25, 1); }
@@ -174,25 +195,23 @@
 <div class="reveal">
 <div class="slides">
 
-<!-- ========== TITLE ========== -->
 <section class="title">
-  <div class="label">Iceberg Data Platform · September 2026</div>
+  <div class="label">Iceberg Data Platform · October 2026</div>
   <h1 class="doto">An open lakehouse you actually own.</h1>
   <div class="meta-row">
     <p class="lede">Apache Iceberg as the table format, with every other building block open source, replaceable, and running on a single laptop.</p>
     <div class="label">Sander de Wildt<br>Apache Iceberg · Polaris · Keycloak<br>RustFS · marimo · DuckDB</div>
   </div>
-  <aside class="notes">Three parts: what Iceberg is and is not, why the all open source approach matters for autonomy and portability, and a demo of the platform itself. Slides with two screenshots have vertical slides below them (arrow down) with each capture full screen.</aside>
+  <aside class="notes">Three parts: what Iceberg is and is not, why the all open source approach matters for autonomy and portability, and a demo of the platform itself, with Conversational BI as its first extension. Three parts: Iceberg, the platform, and one demo from raw data to answers. The model diagram and the Conversational BI answer have full-screen views below them (arrow down).</aside>
 </section>
 
-<!-- ========== INTRO ========== -->
 <section>
   <div class="label">Intro</div>
-  <h2>Hi all,</h2>
+  <h2>Hi,</h2>
   <div class="cols-asym">
     <div>
       <p>Knowledge about Apache Iceberg is not spreading as easily as it should. Before you can start, you need quite a few components: a catalog, object storage, identity, an engine and a place to work. Vendors make that part easy, and that is usually where vendor lock-in starts.</p>
-      <p>So I built a small platform that shows the other route: every building block open source, running on one laptop with a single command. As far as I'm concerned, <strong>Iceberg is a very good choice for autonomy and portability</strong>, not only for scale.</p>
+      <p>So I built a small platform that shows the other route: every building block open source, running on one laptop with a single command. <strong> Apache Iceberg is a very good choice for autonomy and portability</strong>.</p>
       <p class="link-row"><span class="label tight" style="display:block">Read more</span><a class="url" href="https://medium.com/@sanderdw/making-apache-iceberg-feel-like-a-database-service-e89c5d0bed98" target="_blank" rel="noopener">https://medium.com/@sanderdw/making-apache-iceberg-feel-like-a-database-service-e89c5d0bed98</a><br><a class="url" href="https://www.linkedin.com/posts/sanderdw_at-alliander-we-want-to-take-data-sharing-ugcPost-7505007789820256256-eoeA/" target="_blank" rel="noopener">https://www.linkedin.com/posts/sanderdw_at-alliander-we-want-to-take-data-sharing-ugcPost-7505007789820256256-eoeA/</a></p>
     </div>
     <div>
@@ -200,7 +219,7 @@
       <ol>
         <li>How Iceberg actually works, and why it is not a platform like Snowflake.</li>
         <li>What a fully open source stack gives us: autonomy, portability and no lock-in.</li>
-        <li>A demo of teams, databases, notebooks and AI-ready data products that people and agents can share, on one identity.</li>
+        <li>A demo of one grid sensor data product: loaded by a team, given meaning by a coding agent, shared with another team and asked about in a chat.</li>
       </ol>
     </div>
   </div>
@@ -212,127 +231,13 @@
   <div class="label">Intro · How I build</div>
   <h2>Five principles behind every choice</h2>
   <div class="layers principles">
-    <div class="layer"><span class="n">1 · Clean UX</span><span class="d"><strong>No ticket, no manual.</strong> From sign-in to a notebook in a few clicks, one design language in both portals, and a Getting started page in each.</span></div>
+    <div class="layer"><span class="n">1 · Clean UX</span><span class="d"><strong>One Design System.</strong> From sign-in to a notebook in a few clicks, one design language in both portals, and a Getting started page in each.</span></div>
     <div class="layer"><span class="n">2 · API first</span><span class="d"><strong>The portal is just a client.</strong> Every button is a documented route with an OpenAPI schema, so a script can do everything a person can.</span></div>
     <div class="layer"><span class="n">3 · AI native</span><span class="d"><strong>Agents are first-class users.</strong> Both portals serve MCP with the user's own identity, data products carry their meaning in a semantic model, and agent skills ship with the installer.</span></div>
-    <div class="layer"><span class="n">4 · Open source</span><span class="d"><strong>Nothing to rent.</strong> Every building block is Apache-2.0 or MIT, and so is the platform. No vendor account and no trial clock.</span></div>
-    <div class="layer"><span class="n">5 · Loosely coupled</span><span class="d"><strong>Open interfaces between the blocks.</strong> Iceberg REST, S3, OIDC and MCP, so you can replace one block without touching the others.</span></div>
+    <div class="layer"><span class="n">4 · Open source</span><span class="d"><strong>No licences.</strong> Every building block is Apache-2.0 or MIT, and so is the platform. No vendor account and no trial clock.</span></div>
+    <div class="layer"><span class="n">5 · Loosely coupled</span><span class="d"><strong>Open interfaces between the components.</strong> Iceberg REST, S3, OIDC and MCP, so you can replace one block without touching the others. Bigger capabilities come as extensions behind one contract, so the core stays small.</span></div>
   </div>
-  <p class="secondary foot">These principles decide the trade-offs. When a feature does not fit them, it does not go in.</p>
-  <aside class="notes">This is the lens for the rest of the talk. Clean UX: team members serve themselves; destructive actions ask for the exact name. API first: the UI has no private backdoor, the OpenAPI schema comes from the same code. AI native: MCP on both portals, tokens issued to the iceberg-mcp client, and two skills in the Agent Skills format in the installation folder. Loosely coupled: every connection between building blocks is an open standard, which is what makes swapping possible.</aside>
-</section>
-
-<section>
-  <div class="label">First use · Install</div>
-  <h2>One command, and the platform runs</h2>
-  <pre style="font-size:0.56em;margin-bottom:24px"><code data-noescape><span class="c">$</span> <span class="k">curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh</span></code></pre>
-  <div class="cols-asym">
-    <pre style="font-size:0.56em"><code data-noescape>Downloading release v0.7.0...
-Pulling images for both stacks (the notebook image may take a few minutes)...
-Starting the user portal...
-
-<span class="k">Iceberg Data Platform 0.7.0 is running.</span>
-
-1. Sign in to the administration portal
-   http://localhost:3000/#guide
-   Username  platform-admin
-   Password  ••••••••••••  (temporary: you choose a new one)
-
-2. Create a team and a user, then sign in as that user
-   http://localhost:3002/#guide
-   Or skip the setup: the demo-company skill below does it
-
-Optional
-   Skills for coding agents such as Claude Code, Codex and GitHub Copilot:
-     quick-share    Share the portals for a class or demo
-     demo-company   Create a demo company, one account per participant
-     semantic-model Build a semantic model by interview, tested on your data</code></pre>
-    <ul style="font-size:0.8em">
-      <li>Linux, macOS and Windows. Only Docker with Compose is needed: no source checkout, Python or Node.js.</li>
-      <li>The installer verifies the bundle and writes random credentials to <code>.env</code>. It ends with who signs in first, and where.</li>
-      <li>It pulls pinned images and starts both stacks.</li>
-      <li>It puts <code>iceberg_connect.py</code> for your own tools and the agent skills in the same folder.</li>
-      <li>To update, run it again. <code>.env</code> and the data stay.</li>
-    </ul>
-  </div>
-  <div class="caption foot">Windows PowerShell · irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex</div>
-  <aside class="notes">Output shortened: the real run also prints every progress step, the stop, start and update commands and the iceberg_connect.py login command. The password is shown once, on a new installation; it is temporary and Keycloak asks for a new one at first sign-in. Every release pins the bundle and all images to its version; replace latest/download with download/vX.Y.Z to install a specific one.</aside>
-</section>
-
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">First use · Getting started</span><h2>Each portal explains its three ways in</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/48-user-guide.png" alt="User portal Getting started page with the notebook, your own tools and AI agent tracks">
-      <img class="shot" src="screenshots/47-admin-guide.png" alt="Administration portal Getting started page with the portal, AI agent and API tracks">
-    </div>
-    <div class="caption foot two"><span>User portal · notebook, your own tools, or an AI agent over MCP</span><span>Administration · portal, AI agent or API · examples use your own address</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/48-user-guide.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · Getting started</div>
-  </section>
-  <section class="full" data-background-image="screenshots/47-admin-guide.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">Administration portal · Getting started</div>
-  </section>
-  <aside class="notes">The same setup three ways: click through the portal, ask an agent, or call the API. The guide in the user portal follows the active team, environment and role, so the snippets fit the person reading them.</aside>
-</section>
-
-<section>
-  <div class="label">First use · MCP</div>
-  <h2>Connect the agent you already use</h2>
-  <div class="cols-asym">
-    <div>
-      <div class="label tight">Codex · ~/.codex/config.toml</div>
-      <pre style="font-size:0.64em"><code data-noescape><span class="k">[mcp_servers.iceberg-user]</span>
-url = <span class="s">"http://localhost:3002/mcp"</span>
-scopes = [<span class="s">"openid"</span>, <span class="s">"profile"</span>, <span class="s">"offline_access"</span>]
-
-<span class="k">[mcp_servers.iceberg-user.oauth]</span>
-client_id = <span class="s">"iceberg-mcp"</span></code></pre>
-      <div class="label tight" style="margin-top:24px">Claude Code</div>
-      <pre style="font-size:0.64em"><code data-noescape>claude mcp add --transport http --client-id iceberg-mcp \
-  --callback-port 3010 iceberg-user http://localhost:3002/mcp</code></pre>
-    </div>
-    <div style="font-size:0.85em">
-      <div class="group"><div class="label tight">01 · Register</div><p class="secondary">Codex, GitHub Copilot, Claude Code or any other MCP client. One URL and one public client ID, no secret.</p></div>
-      <div class="group"><div class="label tight">02 · Sign in</div><p class="secondary">The agent opens Keycloak in your browser. From then on it works as <em>you</em>, with your grants.</p></div>
-      <div class="group"><div class="label tight">03 · Ask</div><p class="secondary">“Which metric should I use for on-time arrival in ai-examples, and how is it defined?”</p></div>
-    </div>
-  </div>
-  <p class="secondary foot">The portals print these recipes with your own address, for both the user and the administration endpoint.</p>
-  <aside class="notes">The iceberg-mcp client accepts any loopback callback port; Claude Code uses 3010. Codex needs the scopes line or Keycloak refuses with invalid_scope. GitHub Copilot uses .vscode/mcp.json with oauth.clientId. The tools and security of both endpoints come back in the demo.</aside>
-</section>
-
-<section>
-  <div class="label">First use · Skills</div>
-  <h2>Skills turn one sentence into a finished setup</h2>
-  <div class="cols-asym">
-    <div>
-      <pre style="font-size:0.58em"><code data-noescape><span class="c">&gt;</span> <span class="k">Set up a demo company for my class</span>
-
-  How many participants?   <span class="s">12</span>
-  Which company?           <span class="s">Energy · Voltara Energy</span>
-
-  Plan · 3 teams of 4 · 1 team admin and 3 writers each
-  create_team      grid-planning, …          <span class="s">3</span>
-  create_database  production, development   <span class="s">6</span>
-  create_user      one per participant       <span class="s">12</span>
-  link_user        you, reader in each team  <span class="s">3</span>
-
-  <span class="k"># Voltara Energy demo accounts: 12 participants</span>
-  | # | Username    | Team            | Role  | Temporary password |
-  | 1 | noor-bakker | grid-planning   | admin | ••••••••••••       |
-  | … |             |                 |       |                    |</code></pre>
-    </div>
-    <div style="font-size:0.85em">
-      <div class="group"><div class="label tight">demo-company</div><p class="secondary">A fictional Energy, Webshop or Retail company for a class of up to 48. One account per participant, teams with their own databases, sign-in slips to hand out, and read access for you as the trainer. All through the administration MCP server.</p></div>
-      <div class="group"><div class="label tight">quick-share</div><p class="secondary">Opens the portals to participants anywhere for a class or demo, over temporary public HTTPS addresses. No app to install, no certificate to import, and it knows how to undo it.</p></div>
-      <div class="group"><div class="label tight">Where they live</div><p class="secondary">In <code>.agents/skills</code> of the installation folder, in the open Agent Skills format. Start your agent there and ask.</p></div>
-    </div>
-  </div>
-  <p class="secondary foot">A skill carries the know-how, MCP does the work with your permissions, through the same API as the portal.</p>
-  <aside class="notes">Illustrative transcript, shortened. Codex, GitHub Copilot, Gemini CLI and Cursor read .agents/skills directly; Claude Code reads .claude/skills, and the installer puts a pointer there for each skill. The skill asks for the class size and domain, shows the plan, creates only what is missing on a rerun, and writes the one-time passwords to a credentials file with chmod 600. The skills are updated with the installer.</aside>
+  <aside class="notes">This is the lens for the rest of the talk. Clean UX: team members serve themselves; destructive actions ask for the exact name. API first: the UI has no private backdoor, the OpenAPI schema comes from the same code. AI native: MCP on both portals, tokens issued to the iceberg-mcp client, and two skills in the Agent Skills format in the installation folder. Loosely coupled: every connection between building blocks is an open standard, which is what makes swapping possible. The same idea one level up: Conversational BI is an extension with its own release, and it reaches the core only through the Extension Bridge.</aside>
 </section>
 
 <section class="title">
@@ -344,7 +249,6 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
   </div>
 </section>
 
-<!-- ========== PART 1: ICEBERG ========== -->
 <section class="divider">
   <div class="doto num">01</div>
   <h1>How Apache Iceberg works</h1>
@@ -372,7 +276,6 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
       </ul>
     </div>
   </div>
-  <p class="secondary foot">The point of the comparison is ownership: which parts of the stack you control yourself, and which parts you rent.</p>
 </section>
 
 <section>
@@ -386,127 +289,14 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
       <tr><td>Find the table<br>and check access</td><td>PostgreSQL's system catalogs and permissions.</td><td>Polaris: the table's name, permissions and current metadata location.</td></tr>
       <tr><td>Describe the columns</td><td>PostgreSQL's system catalogs.</td><td>An Iceberg metadata file in object storage.</td></tr>
       <tr><td>Store the rows</td><td>Files managed and read by PostgreSQL.</td><td>Parquet files in a bucket, read directly by the engine.</td></tr>
+      <tr><td>Scale storage and compute</td><td>One server: more data or more queries means a bigger server.</td><td>Separate: storage grows in the bucket, and each engine brings its own compute.</td></tr>
     </tbody>
   </table>
-  <p class="secondary foot">PostgreSQL brings these jobs together. With Iceberg, you choose the components separately.</p>
-  <aside class="notes">Compare responsibilities, not identical internals. PostgreSQL also stores data in files; applications normally access those files through its server. For an Iceberg query, the engine asks Polaris for the table metadata and access, then reads table files directly from storage. Polaris can read and write Iceberg metadata during catalog operations, but query rows do not flow through it. Even when Polaris uses PostgreSQL as its backing store, that database holds catalog records and permissions; the Iceberg schema and snapshot history live in object storage. Sources: <a href="https://www.postgresql.org/docs/current/tutorial-arch.html">PostgreSQL architecture</a>, <a href="https://www.postgresql.org/docs/current/catalogs.html">PostgreSQL system catalogs</a>, <a href="https://polaris.apache.org/releases/1.8.0/entities/">Polaris 1.8.0 entities</a>, <a href="https://polaris.apache.org/releases/1.8.0/vended-credentials/">Polaris 1.8.0 vended credentials</a>, <a href="https://polaris.apache.org/releases/1.8.0/metastores/relational-jdbc/">Polaris 1.8.0 JDBC metastore</a>. Background reading: <a href="https://community.cloudera.com/t5/Developer-Blogs/The-Architecture-of-Apache-Polaris-Under-the-Hood/ba-p/414066">The Architecture of Apache Polaris, Under the Hood</a>.</aside>
+  <aside class="notes">Compare responsibilities, not identical internals. The last row is the separation of storage and compute: the bucket grows on its own, and DuckDB on a laptop, Spark on a cluster or Snowflake each bring their own compute to the same files. PostgreSQL also stores data in files; applications normally access those files through its server. For an Iceberg query, the engine asks Polaris for the table metadata and access, then reads table files directly from storage. Polaris can read and write Iceberg metadata during catalog operations, but query rows do not flow through it. Even when Polaris uses PostgreSQL as its backing store, that database holds catalog records and permissions; the Iceberg schema and snapshot history live in object storage. Sources: <a href="https://www.postgresql.org/docs/current/tutorial-arch.html">PostgreSQL architecture</a>, <a href="https://www.postgresql.org/docs/current/catalogs.html">PostgreSQL system catalogs</a>, <a href="https://polaris.apache.org/releases/1.8.0/entities/">Polaris 1.8.0 entities</a>, <a href="https://polaris.apache.org/releases/1.8.0/vended-credentials/">Polaris 1.8.0 vended credentials</a>, <a href="https://polaris.apache.org/releases/1.8.0/metastores/relational-jdbc/">Polaris 1.8.0 JDBC metastore</a>. Background reading: <a href="https://community.cloudera.com/t5/Developer-Blogs/The-Architecture-of-Apache-Polaris-Under-the-Hood/ba-p/414066">The Architecture of Apache Polaris, Under the Hood</a>.</aside>
 </section>
 
 <section>
-  <section>
-    <div class="label">01 · Iceberg</div>
-    <span class="hint">↓ see the files</span>
-    <h2>From a table name to its rows</h2>
-    <p>The engine follows a chain of references. Each step answers one question.</p>
-    <div class="layers">
-      <div class="layer"><span class="n">1 · Catalog<small>Polaris</small></span><span class="d"><strong>Where do I start?</strong> Checks access and points to the current metadata file.</span></div>
-      <div class="layer"><span class="n">2 · Table description<small>metadata.json · in the bucket</small></span><span class="d"><strong>What does this table look like?</strong> Its columns and saved versions, called snapshots.</span></div>
-      <div class="layer"><span class="n">3 · Lists of files<small>manifest list → manifests · in the bucket</small></span><span class="d"><strong>Which files belong to this snapshot?</strong> File lists and statistics help the engine choose what to read.</span></div>
-      <div class="layer"><span class="n">4 · The rows<small>Parquet files · in the bucket</small></span><span class="d"><strong>What are the values?</strong> The actual flights your query uses.</span></div>
-    </div>
-    <p class="secondary foot">A bucket can also contain old or unused files. The references define the table.</p>
-    <aside class="notes">Read down the chain once, without asking the audience to remember file extensions. Step 3 groups two levels: a snapshot points to a manifest list, which points to manifests; manifests track data files and, where relevant, delete files. Their statistics help skip files that cannot match a query. These are file inventories, not PostgreSQL B-tree indexes. Parquet is the data format used in this demo. Polaris keeps the current metadata location in its catalog state; everything below that reference is in object storage. Source: <a href="https://iceberg.apache.org/spec/#overview">Iceberg specification: overview</a>. Arrow down shows this small demo table's files.</aside>
-  </section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">01 · Iceberg</span><h2>Here are the files behind our demo table</h2></div>
-    <div class="fig"><img class="shot" src="screenshots/21-rustfs-metadata-files.png" alt="RustFS console listing JSON metadata versions and Avro file lists in the demo table's metadata folder"></div>
-    <div class="caption foot">metadata/ holds the table descriptions and file lists · data/ beside it holds the Parquet rows · larger tables have many more files</div>
-    <aside class="notes">Point out the JSON and Avro extensions. The screenshot shows only the metadata folder, not the data folder or Polaris's catalog entry. Two metadata versions do not necessarily mean two data snapshots: creating the empty table also produces metadata. The bucket listing alone cannot tell us which files are current; start from the catalog reference.</aside>
-  </section>
-</section>
-
-<section>
-  <section>
-    <div class="label">01 · Iceberg</div>
-    <span class="hint">↓ see the real file</span>
-    <h2>metadata.json is the table's description</h2>
-    <p>In PostgreSQL, you inspect columns with <code>\d</code> or <code>information_schema</code>. Here, they are recorded in JSON.</p>
-    <div class="cols metadata-example">
-      <pre><code data-noescape>{
-  <span class="k">"schemas"</span>: [{
-    <span class="k">"schema-id"</span>: <span class="n">0</span>,
-    <span class="k">"fields"</span>: [{
-      <span class="k">"id"</span>: <span class="n">1</span>,
-      <span class="k">"name"</span>: <span class="s">"dep_delay"</span>,
-      <span class="k">"type"</span>: <span class="s">"double"</span>
-    }]
-  }],
-  <span class="k">"current-snapshot-id"</span>: <span class="n">375055661454543954</span>,
-  <span class="k">"snapshots"</span>: [{
-    <span class="k">"snapshot-id"</span>: <span class="n">375055661454543954</span>,
-    <span class="k">"manifest-list"</span>:
-      <span class="s">"s3://db-…/metadata/snap-3750…avro"</span>
-  }]
-}</code></pre>
-      <div>
-        <div class="group"><h3>Columns</h3><p class="secondary"><code>dep_delay</code> is a double. Its stable ID lets an engine recognize the column after a rename.</p></div>
-        <div class="group"><h3>Current version</h3><p class="secondary">The snapshot ID selects a saved state of the table's data.</p></div>
-        <div class="group"><h3>Where to look next</h3><p class="secondary">The manifest-list path leads to the file lists for that snapshot.</p></div>
-      </div>
-    </div>
-    <div class="caption foot">Selected fields from the demo · other fields omitted and storage path shortened · ↓ full file in RustFS</div>
-    <aside class="notes">This is a teaching excerpt, not a complete metadata document. The schema is comparable in purpose to the column definition PostgreSQL exposes, not to a row of user data. A snapshot is a saved set of file references, not a full copy of all rows; snapshots can share unchanged files. Schema-only commits can create new metadata without a new data snapshot. Source: <a href="https://iceberg.apache.org/spec/#table-metadata">Iceberg table metadata</a>.</aside>
-  </section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">01 · Iceberg</span><h2>You can open that description in the storage console</h2></div>
-    <div class="fig"><img class="shot" src="screenshots/22-rustfs-metadata-json.png" alt="RustFS preview of the demo table's metadata JSON, containing its schema and snapshot references"></div>
-    <div class="caption foot">The JSON describes the flights table · the rows are in Parquet · Polaris records which metadata file is current</div>
-    <aside class="notes">This is the full file behind the previous excerpt. We can inspect it without running a SQL query. Use an Iceberg engine or library to change a table so that changes follow the commit protocol.</aside>
-  </section>
-</section>
-
-<section>
-  <div class="label">01 · Iceberg</div>
-  <h2>How a new batch becomes visible</h2>
-  <p>Imagine adding today's flights. Readers should see the whole batch together.</p>
-  <div class="cols-3" style="margin-top:32px">
-    <div><div class="label tight">1 · Prepare</div><h3>Write new files</h3><p class="secondary">The writer adds the new rows and file lists to storage. The current table still points to the previous version.</p></div>
-    <div><div class="label tight">2 · Commit</div><h3>Publish the new version</h3><p class="secondary">New table metadata is written. Polaris checks the commit and atomically switches the current metadata reference.</p></div>
-    <div><div class="label tight">3 · Read</div><h3>See a complete snapshot</h3><p class="secondary">New queries can see the batch. Queries already reading an older snapshot keep a consistent view.</p></div>
-  </div>
-  <p class="secondary foot">If another writer commits first, the change must be rechecked and retried or rejected.</p>
-  <aside class="notes">The familiar PostgreSQL idea is COMMIT making a transaction visible. Here, the atomic publication described is for one Iceberg table; do not imply a PostgreSQL-style transaction across several tables. The catalog checks the expected prior state. Uploading a Parquet file alone does not add it to the table. Unchanged files can be reused by the new snapshot. Snapshot expiry must leave running readers enough time to finish. Source: <a href="https://iceberg.apache.org/docs/latest/reliability/">Iceberg reliability and concurrent writes</a>.</aside>
-</section>
-
-<section>
-  <div class="label">01 · Iceberg</div>
-  <h2>What this means when you use the table</h2>
-  <table class="comparison">
-    <thead><tr><th scope="col">You want to…</th><th scope="col">A regular PostgreSQL table</th><th scope="col">An Iceberg table</th></tr></thead>
-    <tbody>
-      <tr><td>Publish a batch safely</td><td>Commit a transaction; it can span several tables.</td><td>Publish one table version atomically through the catalog.</td></tr>
-      <tr><td>Rename a column</td><td>Change the column definition with <code>ALTER TABLE</code>.</td><td>Update metadata; the column ID stays the same and data files stay in place.</td></tr>
-      <tr><td>Read an earlier version</td><td>Usually needs history tables or a backup restore.</td><td>Choose an older snapshot, while its metadata and files are retained.</td></tr>
-      <tr><td>Use another engine</td><td>Other tools normally query through PostgreSQL.</td><td>Compatible engines read the same table files directly.</td></tr>
-    </tbody>
-  </table>
-  <p class="secondary foot">Iceberg defines the table rules. Engines and catalogs implement them; feature support varies.</p>
-  <aside class="notes">Lead with familiar outcomes, rather than an inventory of every Iceberg feature. PostgreSQL MVCC provides consistent transaction views, not a built-in SQL interface to query arbitrary historical table versions. Iceberg time travel depends on retaining snapshots and their files. Metadata statistics and hidden partitioning also help engines avoid unnecessary reads; partition layouts can evolve without rewriting existing files. Branches, tags and v3 features such as deletion vectors are useful follow-up topics. Views have a separate specification and are catalog objects, not a feature of the table's data files. Iceberg does not by itself provide PostgreSQL's primary-key or foreign-key enforcement. Sources: <a href="https://iceberg.apache.org/docs/latest/evolution/">Iceberg evolution</a>, <a href="https://iceberg.apache.org/docs/latest/reliability/">Iceberg reliability</a>.</aside>
-</section>
-
-<section>
-  <div class="label">01 · Iceberg</div>
-  <h2>What Iceberg is <em>not</em></h2>
-  <div class="cols-asym">
-    <ul>
-      <li>It is not a query engine and does not execute SQL, so you pick DuckDB, Trino, Spark, Snowflake, or all of them.</li>
-      <li>It is not a storage system: it sits on the S3 compatible object storage you already have.</li>
-      <li>It is not a security layer by itself. Permissions and credential vending live in the catalog and in your identity provider.</li>
-      <li>It is not maintenance free. Compaction, snapshot expiry and orphan cleanup are yours to schedule.</li>
-    </ul>
-  </div>
-  <p class="secondary foot">That separation is deliberate: because the building blocks are independent, you decide who owns each one.</p>
-</section>
-
-<!-- ========== PART 2: OPEN SOURCE ========== -->
-<section class="divider">
-  <div class="doto num">02</div>
-  <h1>Fully open source</h1>
-  <p class="secondary">Autonomy, portability, and the trade-offs that come with them.</p>
-</section>
-
-<section>
-  <div class="label">02 · Open source</div>
+  <div class="label">01 · Open source</div>
   <h2>Every building block is open source</h2>
   <table>
     <thead><tr><th>Capability</th><th>Component</th><th class="num">Version</th><th>License</th><th>Swappable for</th></tr></thead>
@@ -520,82 +310,20 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
       <tr><td>Query engine</td><td>DuckDB with the iceberg extension, reads and writes</td><td class="num">1.5.6</td><td class="mono">MIT</td><td>Trino, Spark, Flink, Polars, ClickHouse</td></tr>
       <tr><td>Portals and API</td><td>FastAPI, Python 3.14</td><td class="num">0.141</td><td class="mono">MIT</td><td>Built here, deliberately thin.</td></tr>
       <tr><td>Semantic models</td><td>Apache Ossie (incubating), stored by Polaris</td><td class="num">spec 0.2.0</td><td class="mono">Apache-2.0</td><td>Any tool that reads the open specification</td></tr>
-      <tr><td>Agent interface</td><td>Model Context Protocol, Python SDK</td><td class="num">2.2</td><td class="mono">MIT</td><td>Any MCP client: Claude Code, IDEs, your own agent</td></tr>
+      <tr><td>Agent interface</td><td>Model Context Protocol, Python SDK</td><td class="num">2.2</td><td class="mono">MIT</td><td>Any MCP client: Claude Code, IDEs, a custom agent</td></tr>
+      <tr><td>Conversational BI (extension)</td><td>Pydantic AI, CopilotKit, Chart.js, DuckDB</td><td class="num">2.52 · 1.76 · 4.5 · 1.5.5</td><td class="mono">MIT</td><td>Any LLM provider: OpenAI, Anthropic, Gemini, Bedrock</td></tr>
     </tbody>
   </table>
-  <div class="caption foot">The platform itself is Apache-2.0 and is an independent project, not an Apache Software Foundation project.</div>
 </section>
 
-<section>
-  <div class="label">02 · Open source</div>
-  <h2>What avoiding lock-in means in practice</h2>
-  <div class="cols-3">
-    <div class="group">
-      <div class="label">Data</div>
-      <p>The data is Parquet in a bucket you control. Moving means copying the bucket and pointing another catalog at it, without an export job or a negotiation about egress.</p>
-    </div>
-    <div class="group">
-      <div class="label">Catalog</div>
-      <p>Iceberg REST is an open API, so Polaris today can be another REST catalog tomorrow. The table metadata already lives next to the data.</p>
-    </div>
-    <div class="group">
-      <div class="label">Engines</div>
-      <p>Whether a team runs local analysis with DuckDB, distributed queries on Trino, or Snowflake where that is justified, every engine points at the same dataset without duplication.</p>
-    </div>
-  </div>
-  <p class="lede foot">Vendor lock-in rarely happens overnight; it creeps in through the default choices. Open formats keep the platform flexible and save us a costly migration later.</p>
-</section>
-
-<section>
-  <div class="label">02 · Open source</div>
-  <h2>Autonomy and portability</h2>
-  <div class="cols">
-    <div>
-      <div class="label tight">Autonomy</div>
-      <ul>
-        <li>It runs on a laptop, a VM, Kubernetes or a cloud account, from the same Compose definition.</li>
-        <li>A one command installer for Linux, macOS and Windows, without a vendor account or a trial clock.</li>
-        <li>You decide where the data lives and which network it ever touches.</li>
-        <li>The cost is compute and storage you already pay for.</li>
-      </ul>
-    </div>
-    <div>
-      <div class="label tight">Portability</div>
-      <ul>
-        <li>Storage: anything with an S3 API.</li>
-        <li>Identity: any OIDC provider, with users and roles staying yours.</li>
-        <li>Catalog: any Iceberg REST implementation.</li>
-        <li>Compute: whichever engine fits the job, per team and per workload.</li>
-      </ul>
-    </div>
-  </div>
-  <div class="foot"><pre><code>curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | sh</code></pre></div>
-</section>
-
-<section>
-  <div class="label">02 · Open source</div>
-  <h2>PS: the honest part</h2>
-  <div class="cols-asym">
-    <ul>
-      <li><strong>Operations are your responsibility:</strong> upgrades, backups of Postgres and the buckets, monitoring, HTTPS and secrets.</li>
-      <li><strong>Table maintenance is yours as well.</strong> Compaction, snapshot expiration and orphan file cleanup need a schedule.</li>
-      <li><strong>Security boundaries are explicit.</strong> This build is a local development platform with in-memory sessions on a trusted Docker host, so read the security model before running it anywhere else.</li>
-      <li><strong>Fewer vendors means tighter control over the architecture</strong>, but we have to be realistic: it also pushes more integration decisions onto a small team.</li>
-      <li><strong>Performance across data products is harder.</strong> Combining many Iceberg data products and querying them fast takes more work than inside one integrated platform.</li>
-    </ul>
-  </div>
-  <p class="secondary foot">Open source does not mean free of work. The ownership you gain comes with the responsibility that goes with it.</p>
-</section>
-
-<!-- ========== PART 3: DEMO ========== -->
 <section class="divider">
-  <div class="doto num">03</div>
+  <div class="doto num">02</div>
   <h1>The platform</h1>
-  <p class="secondary">Teams, databases, notebooks, semantic models, data shares and AI agents, on one identity and your own permissions throughout.</p>
+  <p class="secondary">Teams, databases, AI agents and extensions, on one identity and with each user's own permissions throughout.</p>
 </section>
 
 <section>
-  <div class="label">03 · Platform</div>
+  <div class="label">02 · Platform</div>
   <h2>Architecture</h2>
   <div class="arch">
     <svg viewBox="0 0 1200 520" role="img" aria-label="Architecture diagram">
@@ -628,35 +356,17 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
       <text class="lbl" x="560" y="40">bucket and IAM provisioning (S3 API)</text>
       <text class="lbl" x="725" y="275">token validation (JWKS)</text>
       <text class="lbl" x="725" y="405">vended, table-scoped credentials</text>
+      <rect class="out" x="920" y="80" width="240" height="70" rx="8" style="stroke-dasharray:4 4"/><text x="1040" y="110" text-anchor="middle">Conversational BI</text><text class="sub" x="1040" y="134" text-anchor="middle">extension · :3007 · own release</text>
+      <rect x="920" y="190" width="240" height="70" rx="8"/><text x="1040" y="220" text-anchor="middle">Extension Bridge</text><text class="sub" x="1040" y="244" text-anchor="middle">/bridge/v1 · contract 0.1</text>
+      <line x1="1040" y1="150" x2="1040" y2="190"/>
+      <line x1="920" y1="225" x2="820" y2="210"/>
     </svg>
   </div>
-  <div class="caption foot">Two Compose projects: iceberg-platform (admin, identity, data services) and iceberg-workspaces (user gateway, notebooks) · both portals serve /mcp for AI agents</div>
+  <div class="caption foot">iceberg-platform (admin, identity, data, Bridge) and iceberg-workspaces (gateway, notebooks) · both portals serve /mcp · extensions run beside them</div>
 </section>
 
 <section>
-  <div class="label">03 · Platform</div>
-  <h2>The capability model</h2>
-  <div class="cols">
-    <ul>
-      <li>A <strong>team</strong> owns databases and has a stable ID, a unique name and a description.</li>
-      <li>A <strong>user</strong> signs in with Keycloak, belongs to one or more teams and has a role per team: read, read and write, or admin.</li>
-      <li>A <strong>database</strong> is an Iceberg catalog in Polaris plus a dedicated S3 bucket. Team administrators create, rename and delete their own.</li>
-      <li>Every database has an <strong>environment</strong>: development, acceptance or production.</li>
-      <li>A <strong>data share</strong> gives another team, an external party, or both read access to selected tables, views and semantic models of one database.</li>
-    </ul>
-    <ul>
-      <li>A <strong>semantic model</strong> sits next to the tables in a namespace and says what they mean: datasets, joins and agreed metrics.</li>
-      <li>Effective access is the union of the user's teams, each at its own role. Moving a database re-syncs grants and bucket policies.</li>
-      <li>A team share follows membership: join the receiving team and you can read it, leave and you cannot.</li>
-      <li>There is no second application database: Polaris is the source of truth for teams, users and catalogs.</li>
-      <li>Portal administration is a Keycloak role; administering a team does not grant it.</li>
-    </ul>
-  </div>
-  <p class="lede foot">Ownership is explicit: a team owns a database and a database owns a bucket. That is the governance model.</p>
-</section>
-
-<section>
-  <div class="label">03 · Platform</div>
+  <div class="label">02 · Platform</div>
   <h2>Polaris RBAC per team: the high-level view</h2>
   <div class="arch rbac rbac-teams">
     <svg viewBox="0 0 1440 480" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="rbac-teams-title">
@@ -706,460 +416,42 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
       <rect class="hi" x="1255" y="400" width="185" height="60" rx="8"/><text class="hi cat" x="1347.5" y="425" text-anchor="middle">outage-analytics</text><text class="sub" x="1347.5" y="445" text-anchor="middle">development</text>
     </svg>
   </div>
-  <div class="caption foot">A team's role applies to every catalog it owns · the trainer reads every team, changes nothing · for participants no grant crosses a team boundary, a data share is the only way across · next: one team opened up</div>
-  <aside class="notes">The trainer-level picture: one company, three teams of four, two catalogs per team. Whatever role you hold in your team, you hold in both of its catalogs; production and development only change what the portal shows you. Every catalog carries reader, writer and admin catalog roles. Participants only get admin or writer, so everyone can build tables. The trainer's own account gets a platform user with reader in every team, so they can follow all databases in the user portal without changing anything: portal administration by itself grants no data access. For participants no grant crosses a team boundary, so grid-planning cannot see outage-events until a team admin creates a data share. Polaris itself has no notion of a team member: the next slide shows the principals and principal roles underneath.</aside>
-</section>
-
-<section>
-  <div class="label">03 · Platform</div>
-  <h2>Polaris RBAC, filled in by the demo-company skill</h2>
-  <div class="arch rbac">
-    <svg viewBox="0 0 1440 575" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="rbac-title">
-      <title id="rbac-title">The Polaris RBAC chain, principal to principal role to catalog role to privilege to catalog, applied to the grid-planning team of a 12-person Voltara Energy class. Each of the four members and the trainer's platform-admin user has a personal principal role. The admin's role is granted the admin catalog role, the three writers' roles the writer catalog role and the trainer's role the reader catalog role, in both team catalogs. Team records and the Keycloak platform-admin role sit outside the chain. asset-management and outage-response follow the same pattern.</title>
-      <defs><marker id="arr-rbac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#666666"/></marker></defs>
-
-      <text class="lbl" x="0" y="20">Polaris RBAC model</text>
-      <text class="lbl" x="340" y="20">grid-planning · 4 of 12 + trainer</text>
-      <line class="plain admin" style="stroke-dasharray:none" x1="640" y1="16" x2="670" y2="16"/><text class="lbl" x="678" y="20">admin grant</text>
-      <line class="plain" style="stroke:var(--text-disabled);stroke-dasharray:none" x1="790" y1="16" x2="820" y2="16"/><text class="lbl" x="828" y="20">writer grant</text>
-      <line class="plain read" x1="945" y1="16" x2="975" y2="16"/><text class="lbl" x="983" y="20">reader grant</text>
-      <text class="lbl" x="1180" y="20">Around the chain</text>
-      <line class="plain" x1="305" y1="32" x2="305" y2="570"/>
-      <line class="plain" x1="1165" y1="32" x2="1165" y2="570"/>
-
-      <rect class="hi" x="0" y="40" width="260" height="56" rx="8"/><text class="hi" x="130" y="64" text-anchor="middle">Principal</text><text class="sub" x="130" y="84" text-anchor="middle">an identity, such as a person</text>
-      <rect class="hi" x="0" y="150" width="260" height="56" rx="8"/><text class="hi" x="130" y="174" text-anchor="middle">Principal role</text><text class="sub" x="130" y="194" text-anchor="middle">usually shared by many principals</text>
-      <rect class="hi" x="0" y="290" width="260" height="56" rx="8"/><text class="hi" x="130" y="314" text-anchor="middle">Catalog role</text><text class="sub" x="130" y="334" text-anchor="middle">belongs to one catalog</text>
-      <rect class="hi" x="0" y="380" width="260" height="76" rx="8"/><text class="hi" x="130" y="410" text-anchor="middle">Privilege</text><text class="sub" x="130" y="432" text-anchor="middle">CATALOG_… (prefix dropped →)</text>
-      <rect class="hi" x="0" y="500" width="260" height="60" rx="8"/><text class="hi" x="130" y="525" text-anchor="middle">Securable object</text><text class="sub" x="130" y="545" text-anchor="middle">catalog · table · view · model</text>
-      <line x1="130" y1="96" x2="130" y2="150"/><text class="lbl" x="144" y="128">has</text>
-      <line x1="130" y1="206" x2="130" y2="290"/><text class="lbl" x="144" y="252">is granted</text>
-      <line x1="130" y1="346" x2="130" y2="380"/><text class="lbl" x="144" y="367">holds</text>
-      <line x1="130" y1="456" x2="130" y2="500"/><text class="lbl" x="144" y="482">on</text>
-
-      <rect class="hi" x="340" y="40" width="150" height="56" rx="8"/><text class="hi" x="415" y="64" text-anchor="middle">noor-bakker</text><text class="sub" x="415" y="84" text-anchor="middle">admin</text>
-      <rect x="505" y="40" width="150" height="56" rx="8"/><text x="580" y="64" text-anchor="middle">lucas-meijer</text><text class="sub" x="580" y="84" text-anchor="middle">writer</text>
-      <rect x="670" y="40" width="150" height="56" rx="8"/><text x="745" y="64" text-anchor="middle">amira-haddad</text><text class="sub" x="745" y="84" text-anchor="middle">writer</text>
-      <rect x="835" y="40" width="150" height="56" rx="8"/><text x="910" y="64" text-anchor="middle">kenji-sato</text><text class="sub" x="910" y="84" text-anchor="middle">writer</text>
-      <rect class="out" x="1000" y="40" width="150" height="56" rx="8"/><text x="1075" y="64" text-anchor="middle">platform-admin</text><text class="sub" x="1075" y="84" text-anchor="middle">reader · trainer</text>
-      <line x1="415" y1="96" x2="415" y2="150"/><line x1="580" y1="96" x2="580" y2="150"/><line x1="745" y1="96" x2="745" y2="150"/><line x1="910" y1="96" x2="910" y2="150"/><line x1="1075" y1="96" x2="1075" y2="150"/>
-      <text class="lbl" x="427" y="128">1 : 1, personal</text>
-
-      <rect class="hi" x="340" y="150" width="150" height="56" rx="8"/><text class="hi" x="415" y="174" text-anchor="middle">portal-…</text><text class="sub" x="415" y="194" text-anchor="middle">personal role</text>
-      <rect x="505" y="150" width="150" height="56" rx="8"/><text x="580" y="174" text-anchor="middle">portal-…</text><text class="sub" x="580" y="194" text-anchor="middle">personal role</text>
-      <rect x="670" y="150" width="150" height="56" rx="8"/><text x="745" y="174" text-anchor="middle">portal-…</text><text class="sub" x="745" y="194" text-anchor="middle">personal role</text>
-      <rect x="835" y="150" width="150" height="56" rx="8"/><text x="910" y="174" text-anchor="middle">portal-…</text><text class="sub" x="910" y="194" text-anchor="middle">personal role</text>
-      <rect class="out" x="1000" y="150" width="150" height="56" rx="8"/><text x="1075" y="174" text-anchor="middle">portal-…</text><text class="sub" x="1075" y="194" text-anchor="middle">personal role</text>
-
-      <line x1="580" y1="206" x2="537.5" y2="290"/><line x1="580" y1="206" x2="952.5" y2="290"/>
-      <line x1="745" y1="206" x2="537.5" y2="290"/><line x1="745" y1="206" x2="952.5" y2="290"/>
-      <line x1="910" y1="206" x2="537.5" y2="290"/><line x1="910" y1="206" x2="952.5" y2="290"/>
-      <line class="admin" x1="415" y1="206" x2="402.5" y2="290"/><line class="admin" x1="415" y1="206" x2="817.5" y2="290"/>
-      <line class="read" x1="1075" y1="206" x2="672.5" y2="290"/><line class="read" x1="1075" y1="206" x2="1087.5" y2="290"/>
-
-      <rect class="hi" x="340" y="290" width="125" height="56" rx="8"/><text class="hi" x="402.5" y="314" text-anchor="middle">admin</text><text class="sub" x="402.5" y="334" text-anchor="middle">catalog role</text>
-      <rect x="475" y="290" width="125" height="56" rx="8"/><text x="537.5" y="314" text-anchor="middle">writer</text><text class="sub" x="537.5" y="334" text-anchor="middle">catalog role</text>
-      <rect x="610" y="290" width="125" height="56" rx="8"/><text x="672.5" y="314" text-anchor="middle">reader</text><text class="sub" x="672.5" y="334" text-anchor="middle">catalog role</text>
-      <rect class="hi" x="755" y="290" width="125" height="56" rx="8"/><text class="hi" x="817.5" y="314" text-anchor="middle">admin</text><text class="sub" x="817.5" y="334" text-anchor="middle">catalog role</text>
-      <rect x="890" y="290" width="125" height="56" rx="8"/><text x="952.5" y="314" text-anchor="middle">writer</text><text class="sub" x="952.5" y="334" text-anchor="middle">catalog role</text>
-      <rect x="1025" y="290" width="125" height="56" rx="8"/><text x="1087.5" y="314" text-anchor="middle">reader</text><text class="sub" x="1087.5" y="334" text-anchor="middle">catalog role</text>
-
-      <line x1="402.5" y1="346" x2="402.5" y2="380"/><line x1="537.5" y1="346" x2="537.5" y2="380"/><line x1="672.5" y1="346" x2="672.5" y2="380"/>
-      <line x1="817.5" y1="346" x2="817.5" y2="380"/><line x1="952.5" y1="346" x2="952.5" y2="380"/><line x1="1087.5" y1="346" x2="1087.5" y2="380"/>
-
-      <rect x="340" y="380" width="125" height="76" rx="8"/><text class="code" x="402.5" y="402" text-anchor="middle">MANAGE_CONTENT</text><text class="code" x="402.5" y="420" text-anchor="middle">+ MANAGE_ACCESS</text><text class="code" x="402.5" y="438" text-anchor="middle">+ MANAGE_METADATA</text>
-      <rect x="475" y="380" width="125" height="76" rx="8"/><text class="code" x="537.5" y="412" text-anchor="middle">MANAGE_CONTENT</text><text class="sub" x="537.5" y="432" text-anchor="middle">read + write data</text>
-      <rect x="610" y="380" width="125" height="76" rx="8"/><text class="code" x="672.5" y="402" text-anchor="middle">10 privileges</text><text class="sub" x="672.5" y="422" text-anchor="middle">list and read</text><text class="sub" x="672.5" y="440" text-anchor="middle">incl. models</text>
-      <rect x="755" y="380" width="125" height="76" rx="8"/><text class="code" x="817.5" y="402" text-anchor="middle">MANAGE_CONTENT</text><text class="code" x="817.5" y="420" text-anchor="middle">+ MANAGE_ACCESS</text><text class="code" x="817.5" y="438" text-anchor="middle">+ MANAGE_METADATA</text>
-      <rect x="890" y="380" width="125" height="76" rx="8"/><text class="code" x="952.5" y="412" text-anchor="middle">MANAGE_CONTENT</text><text class="sub" x="952.5" y="432" text-anchor="middle">read + write data</text>
-      <rect x="1025" y="380" width="125" height="76" rx="8"/><text class="code" x="1087.5" y="402" text-anchor="middle">10 privileges</text><text class="sub" x="1087.5" y="422" text-anchor="middle">list and read</text><text class="sub" x="1087.5" y="440" text-anchor="middle">incl. models</text>
-
-      <line x1="402.5" y1="456" x2="402.5" y2="500"/><line x1="537.5" y1="456" x2="537.5" y2="500"/><line x1="672.5" y1="456" x2="672.5" y2="500"/>
-      <line x1="817.5" y1="456" x2="817.5" y2="500"/><line x1="952.5" y1="456" x2="952.5" y2="500"/><line x1="1087.5" y1="456" x2="1087.5" y2="500"/>
-
-      <rect class="hi" x="340" y="500" width="395" height="60" rx="8"/><text class="hi" x="537.5" y="525" text-anchor="middle">grid-capacity</text><text class="sub" x="537.5" y="545" text-anchor="middle">catalog · production · db-… · own bucket</text>
-      <rect class="hi" x="755" y="500" width="395" height="60" rx="8"/><text class="hi" x="952.5" y="525" text-anchor="middle">grid-capacity-scenarios</text><text class="sub" x="952.5" y="545" text-anchor="middle">catalog · development · db-… · own bucket</text>
-
-      <rect class="out" x="1180" y="40" width="260" height="56" rx="8"/><text x="1310" y="64" text-anchor="middle">platform-admin</text><text class="sub" x="1310" y="84" text-anchor="middle">Keycloak role, grants no data</text>
-      <rect class="out" x="1180" y="150" width="260" height="56" rx="8"/><text x="1310" y="174" text-anchor="middle">team-… × 3</text><text class="sub" x="1310" y="194" text-anchor="middle">principal role · never granted</text>
-      <text class="lbl" x="1180" y="276">Same chain, other teams</text>
-      <rect x="1180" y="290" width="260" height="128" rx="8"/><text class="hi" x="1310" y="316" text-anchor="middle">asset-management</text><text class="sub" x="1310" y="340" text-anchor="middle">daan-visser admin · 3 writers</text><text class="sub" x="1310" y="358" text-anchor="middle">grid-assets · production</text><text class="sub" x="1310" y="376" text-anchor="middle">maintenance-forecasts · dev</text><text class="code" x="1310" y="402" text-anchor="middle">10 grants · trainer reads</text>
-      <rect x="1180" y="432" width="260" height="128" rx="8"/><text class="hi" x="1310" y="458" text-anchor="middle">outage-response</text><text class="sub" x="1310" y="482" text-anchor="middle">priya-raman admin · 3 writers</text><text class="sub" x="1310" y="500" text-anchor="middle">outage-events · production</text><text class="sub" x="1310" y="518" text-anchor="middle">outage-analytics · development</text><text class="code" x="1310" y="544" text-anchor="middle">10 grants · trainer reads</text>
-    </svg>
-  </div>
-  <div class="caption foot">12 participants and the trainer · 3 teams · 6 catalogs · 18 catalog roles, all in use · 13 principals with 13 personal roles · 30 grants: 6 admin, 18 writer, 6 reader · 0 data shares · production and development are workspace filters, not privilege levels</div>
-  <aside class="notes">Left is the Polaris model from the 1.8 access-control docs: privileges are granted to catalog roles, catalog roles to principal roles, principal roles to principals. Right is what the demo-company skill leaves behind for 12 participants on a fresh install; seats go round-robin, so grid-planning gets pool entries 1, 4, 7 and 10. The twist: the platform gives every user a personal principal role (create_user) and grants catalog roles to that, per catalog the team owns (sync_access). A team is also a principal role (save_team), but only as a record: nobody is granted it. Membership lives in the portal.memberships property and is turned into grants whenever it changes. Every database gets reader, writer and admin catalog roles (create_database). Participants are admin or writer; the skill links the trainer's own platform-admin account as a platform user with reader in every team (link_user), because portal administration grants no data access. Reader holds 10 list and read privileges, including SEMANTIC_MODEL_LIST and SEMANTIC_MODEL_READ. CATALOG_MANAGE_CONTENT already includes MANAGE_METADATA and table read and write, so in Polaris terms admin adds MANAGE_ACCESS. Creating databases and data shares as team admin is checked by the user portal, not by a Polaris privilege. platform-admin is a Keycloak role; the admin portal and its MCP server then act as Polaris service_admin.</aside>
-</section>
-
-<section>
-  <div class="label">03 · Platform · After the skill</div>
-  <h2>Data shares in Polaris terms: one catalog role, two ways in</h2>
-  <div class="arch rbac rbac-share">
-    <svg viewBox="0 0 1440 575" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="share-title">
-      <title id="share-title">noor-bakker of grid-planning shares the flights semantic model in ai_flights, with the six tables it reads, with the team outage-response and with a research partner. The share is one catalog role named share-… holding SEMANTIC_MODEL_READ on that model and TABLE_READ_DATA on each of its tables, and nothing else. For the team, the catalog role is granted to the personal principal role of each of its four members. For the research partner, it is granted to a share principal role, assigned to a share principal with its own client ID and secret.</title>
-      <defs><marker id="arr-share" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#666666"/></marker></defs>
-
-      <text class="lbl" x="0" y="20">Polaris RBAC model</text>
-      <text class="lbl" x="340" y="20">Team share · outage-response</text>
-      <text class="lbl" x="1180" y="20">External share · a research partner</text>
-      <line class="plain" x1="305" y1="32" x2="305" y2="570"/>
-
-      <rect class="hi" x="0" y="40" width="260" height="56" rx="8"/><text class="hi" x="130" y="64" text-anchor="middle">Principal</text><text class="sub" x="130" y="84" text-anchor="middle">a person or a credential</text>
-      <rect class="hi" x="0" y="150" width="260" height="56" rx="8"/><text class="hi" x="130" y="174" text-anchor="middle">Principal role</text><text class="sub" x="130" y="194" text-anchor="middle">personal, or one per share</text>
-      <rect class="hi" x="0" y="290" width="260" height="56" rx="8"/><text class="hi" x="130" y="314" text-anchor="middle">Catalog role</text><text class="sub" x="130" y="334" text-anchor="middle">one per share</text>
-      <rect class="hi" x="0" y="380" width="260" height="76" rx="8"/><text class="hi" x="130" y="410" text-anchor="middle">Privilege</text><text class="sub" x="130" y="432" text-anchor="middle">one per shared object</text>
-      <rect class="hi" x="0" y="500" width="260" height="60" rx="8"/><text class="hi" x="130" y="525" text-anchor="middle">Securable object</text><text class="sub" x="130" y="545" text-anchor="middle">a table, view or model</text>
-      <line x1="130" y1="96" x2="130" y2="150"/><text class="lbl" x="144" y="128">has</text>
-      <line x1="130" y1="206" x2="130" y2="290"/><text class="lbl" x="144" y="252">is granted</text>
-      <line x1="130" y1="346" x2="130" y2="380"/><text class="lbl" x="144" y="367">holds</text>
-      <line x1="130" y1="456" x2="130" y2="500"/><text class="lbl" x="144" y="482">on</text>
-
-      <rect x="340" y="40" width="125" height="56" rx="8"/><text x="402.5" y="64" text-anchor="middle">priya-raman</text><text class="sub" x="402.5" y="84" text-anchor="middle">portal-…</text>
-      <rect x="475" y="40" width="125" height="56" rx="8"/><text x="537.5" y="64" text-anchor="middle">tomas-novak</text><text class="sub" x="537.5" y="84" text-anchor="middle">portal-…</text>
-      <rect x="610" y="40" width="125" height="56" rx="8"/><text x="672.5" y="64" text-anchor="middle">emma-devries</text><text class="sub" x="672.5" y="84" text-anchor="middle">portal-…</text>
-      <rect x="745" y="40" width="125" height="56" rx="8"/><text x="807.5" y="64" text-anchor="middle">omar-farouk</text><text class="sub" x="807.5" y="84" text-anchor="middle">portal-…</text>
-      <line x1="402.5" y1="96" x2="402.5" y2="150"/><line x1="537.5" y1="96" x2="537.5" y2="150"/><line x1="672.5" y1="96" x2="672.5" y2="150"/><line x1="807.5" y1="96" x2="807.5" y2="150"/>
-      <rect x="340" y="150" width="125" height="56" rx="8"/><text x="402.5" y="174" text-anchor="middle">portal-…</text><text class="sub" x="402.5" y="194" text-anchor="middle">personal</text>
-      <rect x="475" y="150" width="125" height="56" rx="8"/><text x="537.5" y="174" text-anchor="middle">portal-…</text><text class="sub" x="537.5" y="194" text-anchor="middle">personal</text>
-      <rect x="610" y="150" width="125" height="56" rx="8"/><text x="672.5" y="174" text-anchor="middle">portal-…</text><text class="sub" x="672.5" y="194" text-anchor="middle">personal</text>
-      <rect x="745" y="150" width="125" height="56" rx="8"/><text x="807.5" y="174" text-anchor="middle">portal-…</text><text class="sub" x="807.5" y="194" text-anchor="middle">personal</text>
-      <line class="admin" x1="402.5" y1="206" x2="860" y2="290"/><line class="admin" x1="537.5" y1="206" x2="890" y2="290"/>
-      <line class="admin" x1="672.5" y1="206" x2="920" y2="290"/><line class="admin" x1="807.5" y1="206" x2="950" y2="290"/>
-      <text class="lbl" x="340" y="262">every member's own role</text>
-
-      <rect class="hi" x="820" y="290" width="300" height="56" rx="8"/><text class="hi" x="970" y="314" text-anchor="middle">share-…</text><text class="sub" x="970" y="334" text-anchor="middle">catalog role in grid-capacity</text>
-      <line x1="970" y1="346" x2="970" y2="380"/>
-      <rect x="820" y="380" width="300" height="76" rx="8"/><text class="code" x="970" y="402" text-anchor="middle">SEMANTIC_MODEL_READ × 1</text><text class="code" x="970" y="422" text-anchor="middle">TABLE_READ_DATA × 6</text><text class="sub" x="970" y="444" text-anchor="middle">nothing to list, nothing to write</text>
-      <line x1="970" y1="456" x2="970" y2="500"/>
-      <rect class="hi" x="820" y="500" width="300" height="60" rx="8"/><text class="hi" x="970" y="525" text-anchor="middle">flights model + its 6 tables</text><text class="sub" x="970" y="545" text-anchor="middle">ai_flights · grid-capacity · production</text>
-
-      <rect class="out" x="340" y="380" width="450" height="76" rx="8"/><text x="565" y="410" text-anchor="middle">Access follows membership</text><text class="sub" x="565" y="432" text-anchor="middle">joiners get the grant, leavers lose it</text>
-      <rect class="out" x="340" y="500" width="450" height="60" rx="8"/><text x="565" y="525" text-anchor="middle">Owner roles unchanged</text><text class="sub" x="565" y="545" text-anchor="middle">shared by noor-bakker, admin of grid-planning</text>
-
-      <rect x="1180" y="40" width="260" height="56" rx="8"/><text x="1310" y="64" text-anchor="middle">share-…</text><text class="sub" x="1310" y="84" text-anchor="middle">client ID + secret, shown once</text>
-      <line x1="1310" y1="96" x2="1310" y2="150"/><text class="lbl" x="1324" y="128">activated last</text>
-      <rect x="1180" y="150" width="260" height="56" rx="8"/><text x="1310" y="174" text-anchor="middle">share-…</text><text class="sub" x="1310" y="194" text-anchor="middle">principal role of the share</text>
-      <line x1="1310" y1="206" x2="1090" y2="290"/>
-      <text class="lbl" x="1200" y="262">same catalog role</text>
-      <rect class="out" x="1180" y="380" width="260" height="76" rx="8"/><text x="1310" y="410" text-anchor="middle">Model by its address</text><text class="sub" x="1310" y="432" text-anchor="middle">tables with read-only S3 keys</text>
-      <rect class="out" x="1180" y="500" width="260" height="60" rx="8"/><text x="1310" y="525" text-anchor="middle">New secret · revoke</text><text class="sub" x="1310" y="545" text-anchor="middle">Polaris tokens end at once</text>
-    </svg>
-  </div>
-  <div class="caption foot">One share is three Polaris records named share-…: a catalog role, a principal role and a principal · to a team, an external party or both · selecting the model selects the tables it reads · a team admin creates it, in the portal or through MCP</div>
-  <aside class="notes">Same example as the data sharing demo later on: the grid-planning admin shares the flights semantic model with outage-response and with a research partner. Selecting the model selects the six tables it reads, because a model without its tables cannot be queried. create_share makes the catalog role with exactly one grant per object, TABLE_READ_DATA for a table, VIEW_READ_PROPERTIES for a view or SEMANTIC_MODEL_READ for a semantic model, and nothing on the namespace or catalog, so nobody can list. An external recipient loads the model with a GET on its address under the Polaris API, using a token from the token endpoint. For the team, sync_team_shares grants that catalog role to each member's personal principal role, including people who join later, and removes it when they leave. The share principal of a team-only share never receives its principal role, so its secret opens nothing. For an external share, assigning the principal role to the principal is the very last step, after every check. New secret resets the principal: same client ID, the old secret dies at once. Revocation unassigns the external role first, then removes members' grants, the catalog role, the principal role and the principal. Storage credentials that were already vended stay valid until they expire.</aside>
-</section>
-
-<section>
-  <div class="label">03 · Platform · After the skill</div>
-  <h2>Team share versus external share</h2>
-  <table class="versus">
-    <thead><tr><th></th><th>Team share</th><th>External share</th></tr></thead>
-    <tbody>
-      <tr><td>Who reads</td><td>Every member of outage-response, now and in future</td><td>A research partner, or any party outside the platform</td></tr>
-      <tr><td>Identity</td><td>Their own Keycloak accounts</td><td>A <code>share-…</code> client ID and secret</td></tr>
-      <tr><td>Grant path</td><td>Share catalog role → each member's personal principal role</td><td>Share catalog role → share principal role → share principal</td></tr>
-      <tr><td>Where</td><td>User portal, notebooks, their own tools and AI agents</td><td>DuckDB, PyIceberg or any other Iceberg REST client · a model with a GET on its address</td></tr>
-      <tr><td>Credential</td><td>Nothing to hand out</td><td>Shown once and never stored · New secret keeps the client ID and ends the old one at once</td></tr>
-      <tr><td>Expiry and revoke</td><td colspan="2">Optional expiry, enforced every 30 seconds · revoking ends Polaris tokens and team grants at once · storage credentials already vended expire on their own</td></tr>
-      <tr><td>Limits</td><td colspan="2">At least one table and at most 50 objects per share, 20 shares per database · recipients fixed at creation · managed by the owning team's administrators; the platform administrator can only revoke</td></tr>
-    </tbody>
-  </table>
-  <p class="secondary foot"><span class="dot"></span>One share can do both, because both paths end in the same catalog role.</p>
-  <aside class="notes">The team share is the internal route: nothing leaves the platform, and access is re-checked against Polaris on every request, so leaving outage-response ends it. The external share is the only way a credential leaves the platform; treat the secret like a password. A shared view is a definition, not a filter: the tables it reads are shared with it. A shared database cannot move to another team until its shares are revoked, so a new owner never inherits access it did not grant. Sources: create_share, sync_team_shares, rotate_share and delete_share in server/polaris.py, and SECURITY.md.</aside>
-</section>
-
-<section>
-  <div class="label">03 · Platform</div>
-  <h2>API first: the portals are just clients, and so is an agent</h2>
-  <div class="cols" style="grid-template-columns:1fr 1fr;gap:48px">
-    <div class="group">
-      <div class="label">Admin API · :3000 · OpenAPI at /docs</div>
-      <table class="api"><tbody>
-        <tr><td class="mono verb">GET POST DELETE</td><td class="mono">/api/session</td><td>Auth state, sign in, sign out</td></tr>
-        <tr><td class="mono verb">GET</td><td class="mono">/api/overview</td><td>Health and every resource</td></tr>
-        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/teams[/{id}]</td><td>Teams</td></tr>
-        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/databases[/{id}[/name]]</td><td>Create, move, rename, delete</td></tr>
-        <tr><td class="mono verb">GET</td><td class="mono">/api/databases/{id}/connection</td><td>Iceberg REST settings</td></tr>
-        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/users[/{id}]</td><td>Users, a role per team</td></tr>
-        <tr><td class="mono verb">DELETE</td><td class="mono">/api/shares/{id}</td><td>Revoke a data share</td></tr>
-        <tr><td class="mono verb">GET POST</td><td class="mono">/api/identity/{accounts,users,links}</td><td>Keycloak accounts</td></tr>
-        <tr><td class="mono verb">POST</td><td class="mono">/api/users/{id}/identity[/…]</td><td>Link, retry, reset password</td></tr>
-        <tr><td class="mono verb">GET</td><td class="mono">/api/admin/explorer/{databases,contents}</td><td>Browse every catalog</td></tr>
-        <tr><td class="mono verb">GET</td><td class="mono">/api/{infrastructure,health}</td><td>Live metrics, liveness</td></tr>
-        <tr><td class="mono verb">MCP</td><td class="mono">/mcp</td><td>The same, as agent tools</td></tr>
-      </tbody></table>
-    </div>
-    <div class="group">
-      <div class="label">User gateway · :3002 · OpenAPI at /docs</div>
-      <table class="api"><tbody>
-        <tr><td class="mono verb">GET POST DELETE</td><td class="mono">/api/session</td><td>Sign in, sign out</td></tr>
-        <tr><td class="mono verb">GET PATCH</td><td class="mono">/api/{workspace,team,environment}</td><td>My context, switch it</td></tr>
-        <tr><td class="mono verb">POST PATCH DELETE</td><td class="mono">/api/databases[/{id}]</td><td>Team administrators</td></tr>
-        <tr><td class="mono verb">GET</td><td class="mono">/api/{contents,details}</td><td>Tables, views, semantic models</td></tr>
-        <tr><td class="mono verb">POST</td><td class="mono">/api/preview</td><td>100 rows max</td></tr>
-        <tr><td class="mono verb">POST DELETE</td><td class="mono">/api/notebooks[/{id}]</td><td>Start, stop marimo</td></tr>
-        <tr><td class="mono verb">GET POST PATCH DELETE</td><td class="mono">/api/shares[/{id}[/rotate]]</td><td>Outgoing shares, with a model's tables</td></tr>
-        <tr><td class="mono verb">GET</td><td class="mono">/api/{share-teams,received-shares}</td><td>Targets, received</td></tr>
-        <tr><td class="mono verb">ANY · WS</td><td class="mono">/workspaces/{id}/…</td><td>Notebook proxy</td></tr>
-        <tr><td class="mono verb">MCP</td><td class="mono">/mcp</td><td>Agent tools</td></tr>
-      </tbody></table>
-    </div>
-  </div>
-  <p class="secondary foot"><span class="dot"></span>There is no private backdoor for the UI: every button is a fetch to one of these routes, and the OpenAPI schema is generated from the same code. One level down it is open APIs again: Iceberg REST on Polaris, S3 on RustFS and OIDC on Keycloak.</p>
-  <aside class="notes">Both portals are static pages that only call their own FastAPI app. Everything in the demo that follows is one of these routes. Swagger UI sits behind the sign-in at /docs on both portals; mutations need a session and the X-Portal-Request header, which Swagger adds for you. /mcp exposes the same operations to an AI agent, with the agent's own Keycloak token.</aside>
 </section>
 
 <section class="shot-slide">
-  <div class="head"><span class="label">03 · Platform</span><h2>Try every route in the browser</h2></div>
-  <div class="fig"><img class="shot" src="screenshots/45-user-api-docs.png" alt="Swagger UI of the user workspace API"></div>
-  <div class="caption foot">User portal :3002/docs · Swagger with your own session and team permissions · Try it out adds the write header for you</div>
-</section>
-
-<section class="shot-slide">
-  <div class="head"><span class="label">Demo · Sign in</span><h2>One identity for everything</h2></div>
-  <div class="fig"><img class="shot" src="screenshots/01-keycloak-login.png" alt="Keycloak sign-in page for the iceberg realm"></div>
-  <div class="caption foot">Keycloak · realm iceberg · the admin portal, the user portal and Polaris all trust the same tokens</div>
-</section>
-
-<section class="shot-slide">
-  <div class="head"><span class="label">Demo · Administration</span><h2>Databases: a catalog plus a bucket, per team</h2></div>
+  <div class="head"><span class="label">02 · Platform · Administration</span><h2>Databases: a catalog plus a bucket, per team</h2></div>
   <div class="fig"><img class="shot" src="screenshots/02-admin-databases.png" alt="Admin portal databases page"></div>
   <div class="caption foot">Admin portal :3000 · six databases across three fictional grid operator teams, development and production</div>
 </section>
 
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Administration</span><h2>Teams and their members</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/04-admin-teams.png" alt="Admin portal teams page">
-      <img class="shot" src="screenshots/03-admin-users.png" alt="Admin portal users page">
-    </div>
-    <div class="caption foot two"><span>Teams · a central place for ownership and membership</span><span>Users · Keycloak accounts with a role in every team they belong to</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/04-admin-teams.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">Admin portal · teams</div>
-  </section>
-  <section class="full" data-background-image="screenshots/03-admin-users.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">Admin portal · users</div>
-  </section>
-</section>
-
 <section class="shot-slide">
-  <div class="head"><span class="label">Demo · Administration</span><h2>Create a user: an account and a role per team</h2></div>
-  <div class="fig"><img class="shot" src="screenshots/46-admin-user-create.png" alt="Create user dialog with username, name, email and a writer role for team outage-response"></div>
-  <div class="caption foot">Admin portal · Create user · a new Keycloak account or link an existing one · pick the teams and a role in each · the temporary password is shown once</div>
-  <aside class="notes">One form creates the Keycloak account, the Polaris principal and the grants for every database of the selected teams. Link existing account is for people who already have a Keycloak account; their password stays unchanged. The same operation is POST /api/identity/users and the create_user MCP tool.</aside>
-</section>
-
-<section class="shot-slide">
-  <div class="head"><span class="label">Demo · Administration</span><h2>A role per team</h2></div>
-  <div class="fig"><img class="shot" src="screenshots/24-admin-edit-access.png" alt="Edit access dialog with a role select for every team of the user"></div>
-  <div class="caption foot">Edit access · sander reads asset-management and writes grid-planning · each role reaches only the databases of that team</div>
-  <aside class="notes">Read, read and write, or administrator, chosen per team. Saving re-syncs the Polaris grants of every database those teams own. Database administration never grants access to this portal.</aside>
-</section>
-
-<section class="shot-slide">
-  <div class="head"><span class="label">Demo · Administration</span><h2>Creating a user creates a Keycloak account</h2></div>
-  <div class="fig"><img class="shot" src="screenshots/23-keycloak-users.png" alt="Keycloak admin console listing the users of the iceberg realm"></div>
-  <div class="caption foot">Keycloak admin console · accounts created by the portal · temporary password shown once · change forced at first sign-in</div>
-  <aside class="notes">The portal links the Keycloak subject to a Polaris principal. Revoke in the portal and the notebook session stops within 30 seconds.</aside>
-</section>
-
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Administration</span><h2>Catalog explorer and live infrastructure</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/20-admin-explorer.png" alt="Admin catalog explorer showing database, namespace and table">
-      <img class="shot" src="screenshots/05-admin-infrastructure.png" alt="Admin infrastructure page with service health">
-    </div>
-    <div class="caption foot two"><span>All catalogs, namespaces, tables and views · read only for the portal admin</span><span>Health, CPU, memory, bucket data · separate monitor service</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/20-admin-explorer.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">Admin portal · catalog explorer</div>
-  </section>
-  <section class="full" data-background-image="screenshots/05-admin-infrastructure.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">Admin portal · infrastructure</div>
-  </section>
-</section>
-
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Team workspace</span><h2>The user portal: your teams, your databases</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/07-user-welcome.png" alt="User portal welcome page">
-      <img class="shot" src="screenshots/08-user-catalog-empty.png" alt="User portal with active team, environment and database selected">
-    </div>
-    <div class="caption foot two"><span>User portal :3002 · sign in with the same Keycloak account</span><span>Active team with your role in it · environment · a notebook next to every database</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/07-user-welcome.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · welcome</div>
-  </section>
-  <section class="full" data-background-image="screenshots/08-user-catalog-empty.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · team, environment, database</div>
-  </section>
-</section>
-
-<section class="shot-slide">
-  <div class="head"><span class="label">Demo · Team workspace</span><h2>Team administrators run their own databases</h2></div>
+  <div class="head"><span class="label">02 · Platform · Team workspace</span><h2>Team administrators run their own databases</h2></div>
   <div class="fig"><img class="shot" src="screenshots/36-user-databases-create.png" alt="User portal Databases page with the create database form filled in"></div>
-  <div class="caption foot">mila administers grid-planning · create, rename and delete with the name typed to confirm · an interrupted deletion can be resumed</div>
+  <div class="caption foot"></div>
   <aside class="notes">No ticket to the platform team: a team administrator creates the catalog and its bucket from the user portal. The gateway re-checks the administrator role, owning team and environment against Polaris before every change. Readers and writers see the same page without the buttons. The platform administrator still sees every database in the admin portal.</aside>
 </section>
 
-<section class="shot-slide">
-  <div class="head"><span class="label">Demo · Notebooks</span><h2>A notebook next to every database</h2></div>
-  <div class="fig"><img class="shot" src="screenshots/41-user-notebook-flights.png" alt="marimo notebook in the user portal that publishes an AI-ready flights data product in the ai-examples database"></div>
-  <div class="caption foot">marimo in the user portal · a container per session and database, with your own credentials · one shared /work filespace per team · catalog, table and df ready to use</div>
-  <aside class="notes">sander, a writer in grid-planning, opens ai-examples in Notebooks and runs one notebook: Write an AI-ready flights product. It writes with DuckDB through the Polaris REST catalog, with sander's own identity and grants. Teammates see each other's saved files; switching team or environment stops execution and keeps the files. Notebooks have internet access; packages installed from marimo land in /tmp/packages and disappear with the container.</aside>
-</section>
-
 <section>
-  <div class="label">Demo · AI-ready data</div>
-  <h2>A data product is data, meaning, evidence and access</h2>
-  <div class="cols-4">
-    <div class="group">
-      <div class="label">Data</div>
-      <p>Six Iceberg tables in <code>ai_flights</code>: 12,000 synthetic flights with their airports, carriers, aircraft, routes and runways. DuckDB generates and writes every row with SQL.</p>
-    </div>
-    <div class="group">
-      <div class="label">Meaning</div>
-      <p>A semantic model in the same namespace: 6 datasets, 7 relationships, 4 agreed metrics and instructions for AI.</p>
-    </div>
-    <div class="group">
-      <div class="label">Evidence</div>
-      <p>11 SQL checks on keys, joins, coordinates, time order and cancellations. One failure and nothing is published.</p>
-    </div>
-    <div class="group">
-      <div class="label">Access</div>
-      <p>Polaris decides who reads the tables and the model: team roles, and data shares. An agent gets exactly the grants of its user.</p>
-    </div>
-  </div>
-  <p class="lede foot">Tables alone are not AI-ready. An agent also needs to know what a row means, which metric is agreed and whether the data passed its checks.</p>
-  <aside class="notes">The notebook opens with the same line: a useful data product combines data, meaning, quality evidence and access. The data is synthetic, with no real flights or passenger data. The concepts come from the Apache Ossie flights example; a small product contract beside the notebook adds the grain, units, null policy, metrics and quality checks. After publication, readers need neither file: everything lives in Polaris.</aside>
-</section>
-
-<section>
-  <section>
-    <div class="label">Demo · AI-ready data</div>
-    <span class="hint">↓ the checks</span>
-    <h2>The metadata an AI needs, stored beside the tables</h2>
-    <div class="cols-asym">
-      <pre style="font-size:0.62em"><code data-noescape>{
-  <span class="k">"name"</span>: <span class="s">"Flights"</span>,
-  <span class="k">"description"</span>: <span class="s">"… One row in FLIGHT per scheduled flight instance."</span>,
-  <span class="k">"ai_context"</span>: { <span class="k">"instructions"</span>:
-    <span class="s">"Time: All TIMESTAMP values represent UTC …
-     Never join RUNWAY into a flight aggregate without …
-     State the metric definition, denominator, units,
-     time window and exclusions with every answer."</span> },
-  <span class="k">"datasets"</span>: [{ <span class="k">"name"</span>: <span class="s">"FLIGHT"</span>,
-    <span class="k">"source"</span>: <span class="s">"lakehouse.ai_flights.flights"</span>,
-    <span class="k">"primary_key"</span>: [<span class="s">"id"</span>], … }, …],
-  <span class="k">"relationships"</span>: [{ <span class="k">"name"</span>: <span class="s">"flight_route"</span>,
-    <span class="k">"from"</span>: <span class="s">"FLIGHT"</span>, <span class="k">"from_columns"</span>: [<span class="s">"route_id"</span>],
-    <span class="k">"to"</span>: <span class="s">"ROUTE"</span>, <span class="k">"to_columns"</span>: [<span class="s">"id"</span>] }, …],
-  <span class="k">"metrics"</span>: [{ <span class="k">"name"</span>: <span class="s">"on_time_arrival_pct"</span>,
-    <span class="k">"description"</span>: <span class="s">"Arrival delay &lt; 15 minutes among
-      noncanceled, nondiverted flights. Unit: percent."</span>,
-    <span class="k">"expression"</span>: { <span class="k">"dialect"</span>: <span class="s">"ANSI_SQL"</span>,
-      <span class="k">"expression"</span>: <span class="s">"100.0 * count(*) FILTER (…) / …"</span> } }, …]
-}</code></pre>
-      <div style="font-size:0.85em">
-        <div class="group"><h3>Grain and keys</h3><p class="secondary">One row per scheduled flight, and a primary key per dataset, so the agent knows what it counts.</p></div>
-        <div class="group"><h3>Relationships</h3><p class="secondary">The joins are stated instead of guessed, and the guidance warns about the runway fan-out.</p></div>
-        <div class="group"><h3>Metrics</h3><p class="secondary">On-time arrival is defined once, with its unit, denominator and exclusions.</p></div>
-        <div class="group"><h3>AI context</h3><p class="secondary">UTC time, the null policy for cancellations, owner, classification, and how to answer.</p></div>
-      </div>
-    </div>
-    <div class="caption foot">Apache Ossie semantic model, shortened · Polaris stores it in the namespace and authorises it like a table · it never runs a metric · ↓ the quality checks</div>
-    <aside class="notes">This is the document notebook 06 publishes, shortened; the Definition tab in the catalog shows the full one. The model name, datasets and fields come from the Ossie flights example; keys, joins, metrics and AI context come from the product contract. What is not there yet: column comments, synonyms and field types. The portal would show them when present. A rerun replaces the model with an optimistic version check, so a teammate's change in the meantime is refused, not overwritten.</aside>
-  </section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · AI-ready data</span><h2>Publish only what passed its checks</h2></div>
-    <div class="fig"><img class="shot" src="screenshots/42-user-notebook-checks.png" alt="Notebook section with SQL quality checks, all with zero violations, before the tables are published"></div>
-    <div class="caption foot">11 checks on identity, join integrity, coordinates, time order and cancellation nulls · publication stops if one fails</div>
-  </section>
-</section>
-
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Catalog details</span><h2>Inspect a table without opening a notebook</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/16-user-table-overview.png" alt="Table overview with current snapshot, format version and location">
-      <img class="shot" src="screenshots/17-user-table-schema.png" alt="Table schema tab with field IDs and types">
-    </div>
-    <div class="caption foot two"><span>Overview · snapshot, format version, location, statistics</span><span>Schema with Iceberg field IDs</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/15-user-catalog-namespace.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · ai_flights · six Iceberg tables and one semantic model</div>
-  </section>
-  <section class="full" data-background-image="screenshots/16-user-table-overview.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · table overview</div>
-  </section>
-  <section class="full" data-background-image="screenshots/17-user-table-schema.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · schema</div>
-  </section>
-</section>
-
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Catalog details</span><h2>Snapshots, branches and a preview at any snapshot</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/18-user-table-snapshots.png" alt="Snapshot history and branches of the table">
-      <img class="shot" src="screenshots/19-user-table-preview.png" alt="Preview of 100 rows at the selected snapshot">
-    </div>
-    <div class="caption foot two"><span>History and refs · main branch</span><span>100 rows at a selected snapshot · DuckDB in a disposable process, with the user's own permissions</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/18-user-table-snapshots.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · snapshots and refs</div>
-  </section>
-  <section class="full" data-background-image="screenshots/19-user-table-preview.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · preview at a snapshot</div>
-  </section>
-</section>
-
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Semantic model</span><h2>The platform draws the model</h2></div>
-    <div class="fig"><img class="shot" src="screenshots/44-user-model-diagram.png" alt="Diagram tab of the flights semantic model: six datasets drawn as tables with their keys, relationships as lines between the join columns"></div>
-    <div class="caption foot">Catalog · ai_flights · flights · datasets as tables with PK and FK · each relationship a line between the join columns · hover to follow it, select to open the table</div>
-    <div class="hint">↓ overview and metrics</div>
-  </section>
-  <section class="full" data-background-image="screenshots/43-user-model-overview.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · semantic model overview with its AI context</div>
-  </section>
-  <section class="full" data-background-image="screenshots/49-user-model-metrics.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · metrics and relationships</div>
-  </section>
-  <aside class="notes">No extra tool and no second copy: the catalog reads the model from Polaris with the user's own grants, like a table. Facts sit on the left, dimensions to the right. A box shows at most 12 fields and always keeps keys and join columns. Metrics are not drawn; they are in the Metrics and relationships tab with their SQL. Datasets and fields link to the Iceberg tables, and Definition shows the stored document.</aside>
-</section>
-
-<section>
-  <div class="label">Demo · AI agents</div>
-  <h2>Your catalog, for an AI agent</h2>
+  <div class="label">02 · Platform · AI agents</div>
+  <h2>The catalog, for an AI agent</h2>
   <div class="cols-asym">
     <div>
       <pre style="font-size:0.6em"><code data-noescape>claude mcp add --transport http \
   --client-id iceberg-mcp --callback-port 3010 \
   iceberg-user http://localhost:3002/mcp</code></pre>
       <table class="api" style="margin-top:32px;font-size:0.62em"><tbody>
-        <tr><td class="mono">list_databases</td><td>Your teams, your role in each, owned and shared databases</td></tr>
-        <tr><td class="mono">list_namespaces · list_tables</td><td>Browse what your grants allow</td></tr>
+        <tr><td class="mono">list_databases</td><td>Teams, the role in each, owned and shared databases</td></tr>
+        <tr><td class="mono">list_namespaces · list_tables</td><td>Only what the grants allow</td></tr>
         <tr><td class="mono">describe_table · describe_view</td><td>Schema, partitioning, snapshots, branches, view SQL</td></tr>
         <tr><td class="mono">list_semantic_models · describe_semantic_model</td><td>Datasets, joins, agreed metrics and AI context · a summary, searchable, for large models</td></tr>
-        <tr><td class="mono">query_semantic_model</td><td>Answers from the agreed metrics and joins, read with your grants</td></tr>
-        <tr><td class="mono">list_dimension_values</td><td>The exact values to filter on, such as Utrecht (PV)</td></tr>
+        <tr><td class="mono">query_semantic_model</td><td>Answers from the agreed metrics and joins, read with the user's own grants</td></tr>
+        <tr><td class="mono">list_dimension_values</td><td>Exact filter values, such as Dockside-4 Church</td></tr>
         <tr><td class="mono">preview_rows</td><td>Up to 100 rows, at any snapshot</td></tr>
         <tr><td class="mono">list · create · update · delete_share</td><td>Team administrators only · sharing a model adds its tables</td></tr>
         <tr><td class="mono">create · rename · delete_database</td><td>Team administrators only · delete needs the exact name</td></tr>
       </tbody></table>
     </div>
-    <ul>
+    <ul style="font-size:0.9em">
       <li>The agent signs in through Keycloak as <em>you</em>: a public client with PKCE, no secret to store.</li>
       <li>Every call runs with your Polaris grants, so the agent sees exactly what you see and nothing more.</li>
       <li>The agent never writes SQL: it names metrics, dimensions and filters, and the portal builds the query from the semantic model, so a metric always uses the agreed definition.</li>
@@ -1167,160 +459,61 @@ client_id = <span class="s">"iceberg-mcp"</span></code></pre>
       <li>Destructive tools are marked as such, and the agent is told to ask before using them.</li>
     </ul>
   </div>
-  <p class="secondary foot">“Use the flights semantic model in ai_flights to compare carriers' on-time arrival for January 2026. State the grain, UTC window, denominator and exclusions, and show the SQL.”</p>
-  <aside class="notes">Any MCP client works: Claude Code, Codex, an IDE, or your own agent. The prompt in the footer comes from the flights reader notebook; the agent reads the model with describe_semantic_model and answers with query_semantic_model, which compiles the agreed metric SQL and runs it read-only with the user's grants. Model Context Protocol over streamable HTTP at /mcp on the user portal. Tokens must be issued to the iceberg-mcp client (azp check), so a browser session token cannot be replayed here. Signature, issuer, audience and expiry are verified and the user is mapped to their Polaris principal on every call. The callback port is fixed so the redirect URI can be exact.</aside>
+  <div class="caption foot">“Which feeders ran above their rating last week? Use the feeder_load model and show the definition and the SQL.”</div>
+  <aside class="notes">Any MCP client works: Claude Code, Codex, an IDE, or your own agent. The agent reads the model with describe_semantic_model and answers with query_semantic_model, which compiles the agreed metric SQL and runs it read-only with the user's grants. Model Context Protocol over streamable HTTP at /mcp on the user portal. Tokens must be issued to the iceberg-mcp client (azp check), so a browser session token cannot be replayed here. Signature, issuer, audience and expiry are verified and the user is mapped to their Polaris principal on every call. The callback port is fixed so the redirect URI can be exact.</aside>
 </section>
 
 <section>
-  <div class="label">Demo · Data sharing</div>
-  <h2>Share with another team or someone outside, without a copy</h2>
-  <div class="cols-3">
-    <div class="group">
-      <div class="label">01 · Team administrator</div>
-      <p>A team administrator picks tables, views and semantic models of one database and chooses the recipient: another team, an external party, or both. Selecting a model selects the tables it reads.</p>
-    </div>
-    <div class="group">
-      <div class="label">02 · Polaris</div>
-      <p>Access is granted per object: an explicit read grant for each selected table or view, rather than blanket permissions on the namespace or the catalog.</p>
-    </div>
-    <div class="group">
-      <div class="label">03 · Recipient</div>
-      <p>Members of the receiving team use their own accounts, in the portal, notebooks and agents. An external party uses any Iceberg REST client, and loads a model by its address.</p>
-    </div>
+  <div class="label">02 · Platform · Extensions</div>
+  <h2>Keep the core small: extensions come in through one Bridge</h2>
+  <div class="arch rbac bridge">
+    <svg viewBox="0 0 1440 520" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="bridge-title">
+      <title id="bridge-title">Conversational BI, an extension with a gateway, an agent and a query worker, talks to the core platform only through the Extension Bridge at /bridge/v1: the signed-in user's teams and databases, automation principals per team and environment, and one-hour catalog tokens. With that token its query worker reads tables and models over Iceberg REST and S3, like any other client. Secrets, storage keys, core source code, container names and the Polaris management API never cross.</title>
+      <defs><marker id="arr-bridge" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#666666"/></marker></defs>
+      <text class="lbl" x="0" y="20">Extension · iceberg-conversationalbi</text>
+      <text class="lbl" x="500" y="20">Contract</text>
+      <text class="lbl" x="1040" y="20">Core · iceberg-platform</text>
+
+      <rect class="out" x="0" y="40" width="380" height="300" rx="8"/><text class="hi" x="190" y="76" text-anchor="middle">Conversational BI</text><text class="sub" x="190" y="98" text-anchor="middle">own release · :3007</text>
+      <rect x="20" y="120" width="340" height="56" rx="8"/><text x="190" y="144" text-anchor="middle">Gateway</text><text class="sub" x="190" y="164" text-anchor="middle">chat UI · REST API · MCP</text>
+      <rect x="20" y="190" width="340" height="56" rx="8"/><text x="190" y="214" text-anchor="middle">Agent</text><text class="sub" x="190" y="234" text-anchor="middle">Pydantic AI, defined in YAML · any LLM</text>
+      <rect x="20" y="260" width="340" height="56" rx="8"/><text x="190" y="284" text-anchor="middle">Query worker</text><text class="sub" x="190" y="304" text-anchor="middle">DuckDB · one locked-down process per query</text>
+
+      <rect class="hi" x="500" y="40" width="420" height="300" rx="8"/><text class="hi" x="710" y="76" text-anchor="middle">Extension Bridge</text><text class="sub" x="710" y="98" text-anchor="middle">/bridge/v1 · contract 0.1.0</text>
+      <text class="code" x="530" y="146">GET /me</text><text class="sub" x="530" y="166">teams, roles, own and shared databases</text>
+      <text class="code" x="530" y="216">automation principals</text><text class="sub" x="530" y="236">one per team and environment, enabled by its admins</text>
+      <text class="code" x="530" y="286">POST …/tokens</text><text class="sub" x="530" y="306">a one-hour catalog token, read only for this extension</text>
+
+      <rect class="hi" x="1040" y="40" width="400" height="300" rx="8"/><text class="hi" x="1240" y="76" text-anchor="middle">Core platform</text><text class="sub" x="1240" y="98" text-anchor="middle">small, released on its own</text>
+      <rect x="1060" y="120" width="360" height="56" rx="8"/><text x="1240" y="144" text-anchor="middle">Keycloak</text><text class="sub" x="1240" y="164" text-anchor="middle">the extension's own ext-… clients</text>
+      <rect x="1060" y="190" width="360" height="56" rx="8"/><text x="1240" y="214" text-anchor="middle">Apache Polaris</text><text class="sub" x="1240" y="234" text-anchor="middle">tables and semantic models</text>
+      <rect x="1060" y="260" width="360" height="56" rx="8"/><text x="1240" y="284" text-anchor="middle">RustFS</text><text class="sub" x="1240" y="304" text-anchor="middle">vended, table-scoped credentials</text>
+
+      <line x1="360" y1="148" x2="500" y2="148"/><text class="lbl" x="372" y="138">user context</text>
+      <line x1="920" y1="148" x2="1060" y2="148"/><line x1="920" y1="218" x2="1060" y2="218"/>
+      <path d="M190,316 L190,390 L1240,390 L1240,320"/>
+      <text class="lbl" x="210" y="380">with that token: Iceberg REST and S3, the open standards every client uses</text>
+
+      <rect class="out" x="500" y="430" width="420" height="80" rx="8"/><text class="lbl" x="520" y="456">Never crosses</text>
+      <text class="never" x="520" y="482">secrets · storage keys · core source code</text><text class="never" x="520" y="502">container names · the Polaris management API</text>
+    </svg>
   </div>
-  <p class="lede foot">Every recipient reads the same files and the same meaning, and the team can expire or revoke access at any time. There is still only one copy of the data.</p>
-  <aside class="notes">This is the open-standard answer to vendor data sharing: the contract is Iceberg REST plus S3, so the recipient can bring an engine of choice. Ownership stays with the team that owns the database, and every administrator of that team manages the same shares. A team share is granted to each member's own Polaris role, including future members, and removed when a member leaves. Destinations are fixed when the share is created. A shared model without its tables cannot be queried, so the portal adds them and the API warns about any that are missing.</aside>
+  <div class="caption foot">Big capabilities never land in the core · an extension has its own Compose project and release · it refuses to start outside its contract range, &gt;=0.1,&lt;0.2</div>
+  <aside class="notes">This is the loosely coupled principle one level up. An LLM chat brings a heavy dependency tree, a model provider and a fast release cycle; none of that belongs in the catalog and identity layer every team depends on. The core stays small: catalog, storage, identity, portals and notebooks. Sources: contracts/bridge/README.md and COMPATIBILITY.md in the core, and the AGENTS.md of the extension. The Bridge capabilities are user-context, automation-principals, automation-tokens and shared-data. An automation principal is a service account for one team in one environment; only that team's administrators create it, and it reaches the data shares the team received through their read role. Its catalog tokens last an hour. Conversational BI asks only for read tokens. The extension signs people in through its own Keycloak clients, whose tokens Polaris refuses, so a chat session can never be replayed against the catalog. Any producer can describe a table with the table-property conventions, which the catalog shows as Produced by.</aside>
 </section>
 
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Data sharing</span><h2>Choose the recipient and the tables in one form</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/37-user-share-team-form.png" alt="User portal data share form with another team as recipient, the flights semantic model selected and its six tables added">
-      <img class="shot" src="screenshots/32-user-share-form.png" alt="User portal form for an external data share with a recipient, an expiry and the flights semantic model with its tables selected">
-    </div>
-    <div class="caption foot two"><span>mila administers grid-planning · the flights model for outage-response · its six tables come along · no credential needed</span><span>The same model for a research partner, with an expiry · credential shown once</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/37-user-share-team-form.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · share with another team</div>
-  </section>
-  <section class="full" data-background-image="screenshots/32-user-share-form.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · share externally</div>
-  </section>
-  <section class="full" data-background-image="screenshots/33-user-share-credential.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · credential for the external recipient · the shared names, with the address of the model · the secret in this capture has been replaced</div>
-  </section>
-  <aside class="notes">The Data shares page is available to all members of the active team and environment. Readers and writers see disabled management buttons; the gateway re-reads the administrator role from Polaris for every mutation. A view can be shared too, but it is only a definition: the tables it reads go into the share with it. The credential panel has a Copy DuckDB snippet button without a code preview. The script lists every shared table and view in comments and queries the first table.</aside>
-</section>
-
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Data sharing</span><h2>What the receiving team sees</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/38-user-received-databases.png" alt="User portal Databases page of a team without databases, listing a database shared with it">
-      <img class="shot" src="screenshots/39-user-received-catalog.png" alt="User portal catalog of a shared database, marked shared and read-only">
-    </div>
-    <div class="caption foot two"><span>noor in outage-response · no database of their own in development · one shared with the team</span><span>Catalog · only the shared objects: six tables and the model · read-only, owner team named</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/38-user-received-databases.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · databases shared with your team</div>
-  </section>
-  <section class="full" data-background-image="screenshots/39-user-received-catalog.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · shared database in the catalog</div>
-  </section>
-  <section class="full" data-background-image="screenshots/50-user-received-model-diagram.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · the shared model's diagram, read-only for the receiving team · hovering RUNWAY follows its join to AIRPORT</div>
-  </section>
-  <section class="full" data-background-image="screenshots/40-user-received-notebook.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">marimo · notebook on the shared database · lists the shared tables and model · files stay in the receiving team's own workspace</div>
-  </section>
-  <aside class="notes">The receiving team can browse, preview, open the model's diagram and open notebooks on the shared objects, with their own identity. Their agents read the same model through MCP. They cannot write, list anything else, rename or delete the database, or see its outgoing shares. The notebook starts on a starter that lists only the shared objects, including how to load the shared model, because a share holds no list privilege; saved files go to the receiving team's own filespace.</aside>
-</section>
-
-<section>
-  <section class="shot-slide">
-    <div class="head"><span class="label">Demo · Data sharing</span><h2>Teams manage their own shares, the platform keeps oversight</h2></div>
-    <div class="fig two">
-      <img class="shot" src="screenshots/34-user-share-list.png" alt="User portal list of data shares with edit, secret and revoke actions">
-      <img class="shot" src="screenshots/35-admin-shares.png" alt="Admin portal page listing every data share with its database, team, tables and expiry">
-    </div>
-    <div class="caption foot two"><span>User portal · one share per recipient · edit the selection, replace an external secret, revoke</span><span>Admin portal · every share across all teams · revoke only</span></div>
-    <div class="hint">↓ full screen</div>
-  </section>
-  <section class="full" data-background-image="screenshots/34-user-share-list.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · data shares of a database</div>
-  </section>
-  <section class="full" data-background-image="screenshots/35-admin-shares.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">Admin portal · data shares</div>
-  </section>
-  <aside class="notes">Revoking ends issued Polaris tokens and the receiving team's grants at once. Deleting a database revokes its shares, and a shared database stays with its team until the shares are revoked, so an owner never inherits access it did not grant.</aside>
-</section>
-
-<section>
-  <div class="label">Demo · Data sharing</div>
-  <h2>What an external recipient can and cannot do</h2>
-  <div class="cols-asym">
-    <pre style="font-size:0.56em"><code data-noescape>catalog = load_catalog(
-    <span class="s">"shared"</span>, type=<span class="s">"rest"</span>, uri=URI, warehouse=<span class="s">"db-…"</span>,
-    credential=<span class="s">f"{ID}:{SECRET}"</span>, scope=<span class="s">"PRINCIPAL_ROLE:ALL"</span>,
-    **{<span class="s">"header.X-Iceberg-Access-Delegation"</span>:
-       <span class="s">"vended-credentials"</span>},
-)
-catalog.load_table(<span class="s">"ai_flights.flights"</span>).scan().to_arrow()
-                                        <span class="c"># 12,000 rows</span>
-
-<span class="c"># The model: a GET on the address shown with the credential</span>
-token = httpx.post(URI + <span class="s">"/v1/oauth/tokens"</span>, data={
-    <span class="s">"grant_type"</span>: <span class="s">"client_credentials"</span>, <span class="s">"client_id"</span>: ID,
-    <span class="s">"client_secret"</span>: SECRET, <span class="s">"scope"</span>: <span class="s">"PRINCIPAL_ROLE:ALL"</span>,
-}).json()[<span class="s">"access_token"</span>]
-httpx.get(MODEL_URL, headers={<span class="s">"Authorization"</span>: <span class="s">f"Bearer {token}"</span>})
-                                        <span class="c"># 200</span>
-
-catalog.list_namespaces()               <span class="c"># Forbidden</span>
-catalog.load_table(<span class="s">"ai_flights.other"</span>)  <span class="c"># Forbidden</span>
-httpx.get(MODELS_URL, headers=…)        <span class="c"># Forbidden: no listing</span></code></pre>
-    <ul style="font-size:0.85em">
-      <li>A share holds no list privilege, so the recipient loads <strong>only the shared objects</strong>: tables by full name, a model by its address.</li>
-      <li><strong>Storage follows the grant:</strong> vended S3 credentials are read-only and stop at the prefix of the shared table.</li>
-      <li><strong>A model or a view is a definition</strong> rather than a filter, so the tables it reads are shared with it and readable in full.</li>
-      <li><strong>Revoking is immediate</strong> for catalog tokens; storage credentials already handed out expire on their own.</li>
-      <li>Outside one machine this needs your own TLS proxy in front of Polaris and RustFS.</li>
-    </ul>
+<section class="shot-slide">
+  <div class="head"><span class="label">02 · Platform · Extensions</span><h2>Team administrators switch it on, the platform keeps oversight</h2></div>
+  <div class="fig two">
+    <img class="shot" src="screenshots/54-cbi-enable.png" alt="Conversational BI model list for mila with grid-planning development and production not enabled yet, each with an Enable button">
+    <img class="shot" src="screenshots/57-admin-extension-accounts.png" alt="Admin portal Teams page with the extension service accounts of Conversational BI for outage-response and grid-planning, each with Revoke">
   </div>
-  <div class="caption foot">Every line on this slide is asserted against Polaris and RustFS by scripts/share_smoke.py.</div>
+  <div class="caption foot two"><span>Conversational BI · mila enables it for grid-planning, one environment at a time</span><span>Admin portal · Teams · every extension service account, who enabled it and when · revoke</span></div>
+  <aside class="notes">Enable creates the team's service account for that environment through the Bridge; until then the extension sees nothing of the team. The same works over the extension's MCP server with enable_environment. A revoked service account gets no new tokens, and tokens already issued expire within the hour.</aside>
 </section>
 
 <section>
-  <div class="label">Demo · AI agents</div>
-  <h2>And one for the platform administrator</h2>
-  <div class="cols-asym">
-    <div>
-      <pre style="font-size:0.6em"><code data-noescape>claude mcp add --transport http \
-  --client-id iceberg-mcp --callback-port 3010 \
-  iceberg-admin http://localhost:3000/mcp</code></pre>
-      <table class="api" style="margin-top:32px;font-size:0.62em"><tbody>
-        <tr><td class="mono">get_overview · browse_catalog</td><td>Health, every team, database, user and share</td></tr>
-        <tr><td class="mono">create · update · delete_team</td><td>Teams</td></tr>
-        <tr><td class="mono">create · rename · move · delete_database</td><td>Databases across all teams</td></tr>
-        <tr><td class="mono">create · link_user · update_user_access</td><td>Keycloak accounts and a role per team</td></tr>
-        <tr><td class="mono">list_shares · revoke_share</td><td>Oversight on every data share</td></tr>
-      </tbody></table>
-    </div>
-    <ul>
-      <li>The <strong>platform-admin</strong> role is checked in the token on every call, not once per session.</li>
-      <li>Irreversible tools are marked as destructive; <code>delete_database</code> refuses without the database's exact name.</li>
-      <li>Connection details never include credentials.</li>
-      <li>A new user's one-time password lands in the agent transcript, so treat that transcript as a secret.</li>
-    </ul>
-  </div>
-  <p class="secondary foot">“Create a team for the heat transition, give it a development database and add Noor as a writer” takes one sentence instead of three screens.</p>
-</section>
-
-<section>
-  <div class="label">03 · Platform</div>
+  <div class="label">02 · Platform</div>
   <h2>Security model, in one slide</h2>
   <div class="cols">
     <ul>
@@ -1332,28 +525,224 @@ httpx.get(MODELS_URL, headers=…)        <span class="c"># Forbidden: no listin
       <li>Revoking a membership stops the affected runtimes within 30 seconds.</li>
       <li>A data share holds one read grant per table, view or semantic model. A receiving team never gets administration; an external secret is shown once, never stored.</li>
       <li>MCP accepts only tokens issued to the <code>iceberg-mcp</code> client, verified on every call: an agent never holds more than its user.</li>
+      <li>Extensions get no secrets or storage keys: a team's service account, enabled by its administrators and revocable by the platform administrator.</li>
     </ul>
   </div>
-  <p class="secondary foot"><span class="dot"></span>This build is meant for local development. HTTPS, persistent sessions and hostile-tenant isolation are on the roadmap, and the boundaries are documented.</p>
+  <div class="caption foot">This build is meant for local development. HTTPS, persistent sessions and hostile-tenant isolation are on the roadmap, and the boundaries are documented.</div>
 </section>
 
-<!-- ========== WRAP UP ========== -->
 <section class="divider">
-  <div class="doto num">04</div>
-  <h1>What this means for us</h1>
-  <p class="secondary">Direction and ownership.</p>
+  <div class="doto num">03</div>
+  <h1>From raw data to answers</h1>
+  <p class="secondary">A grid sensor export, loaded by an agent, given meaning by the team, shared and asked about in a chat.</p>
 </section>
 
 <section>
-  <div class="label">04 · Wrap up</div>
+  <div class="label">03 · Demo · Your computer</div>
+  <h2>End users bring their own tools: a coding agent and the DuckDB CLI</h2>
+  <div class="cols-asym">
+    <pre style="font-size:0.54em"><code data-noescape><span class="c">~/iceberg-data-platform $</span> <span class="k">claude</span>
+<span class="c">&gt;</span> <span class="k">The SCADA export of the last two weeks is in scada-export/. Load it into</span>
+<span class="k">  grid-sensors and help me build a semantic model for it.</span>
+
+● iceberg-user · list_databases
+  grid-sensors · development · grid-planning · you: writer
+● Bash  uv run iceberg_connect.py login
+  Open http://localhost:8080/realms/iceberg/device?user_code=… and confirm the code ….
+  Signed in.
+● Bash  uv run iceberg_connect.py shell db-… --write &lt; load.sql
+  CREATE SCHEMA IF NOT EXISTS lakehouse.grid_sensors;
+  CREATE TABLE lakehouse.grid_sensors.substation  AS FROM 'scada-export/substation.parquet';
+  CREATE TABLE lakehouse.grid_sensors.feeder      AS FROM 'scada-export/feeder.parquet';
+  CREATE TABLE lakehouse.grid_sensors.feeder_load AS FROM 'scada-export/feeder_load.parquet';
+  table         rows
+  feeder_load  32256
+● Skill  semantic-model
+  Three tables in grid_sensors. Now the model: I'll profile them first, then ask
+  you which questions it has to answer.</code></pre>
+    <div style="font-size:0.85em">
+      <div class="group"><div class="label tight">Your agent</div><p class="secondary">Claude Code, Codex, GitHub Copilot or any other agent with MCP and a terminal. Registered once against the user portal, it works as <em>you</em>.</p></div>
+      <div class="group"><div class="label tight">Your tools</div><p class="secondary"><code>iceberg_connect.py</code> attaches a database to the DuckDB CLI, PyIceberg or DBeaver with the user's own grants. Read-only unless <code>--write</code> is set, and writing needs the Writer role.</p></div>
+      <div class="group"><div class="label tight">Your data</div><p class="secondary">Here Parquet files in a folder. CSV, an S3 bucket or a URL work the same way: DuckDB reads them all.</p></div>
+    </div>
+  </div>
+  <div class="caption foot">Real commands and output, run as sander on the demo stack · shortened · the prompts were written for the demo · next: the semantic-model skill takes over</div>
+  <aside class="notes">This is track 02 of the user portal's Getting started page: your own tools, as yourself. The agent finds the database over MCP, signs in with iceberg_connect.py (a device sign-in in the browser, so no password or key ends up in a script or a prompt) and loads the export with the DuckDB CLI: the token goes through an owner-only init file, never the command line. The export is synthetic and comes from presentation/grid/grid_sensors.py; load.sql is next to it. The rough edges in the data are deliberate, because the interview has to settle them: evening peaks on feeders with heat pumps and EV chargers that run above their rating in the second week, reverse power flow at midday on rural solar feeders, a six-hour comms outage, a broken temperature sensor that reports -999 and SUSPECT spikes from the head-end.</aside>
+</section>
+
+<section>
+  <div class="label">03 · Demo · Semantic model with your coding agent</div>
+  <h2>The agent looks at the data, asks the owner, and proposes a model</h2>
+  <div class="cols-3" style="font-size:0.8em">
+    <div class="group">
+      <div class="label tight">1 · Profile: what is in the data</div>
+      <p class="secondary">The agent counts and measures every column of the 32,256 readings. That shows what is odd, not what it means:</p>
+      <ul class="secondary" style="font-size:0.9em">
+        <li>1,920.6 kW on cables rated at most 680 kW</li>
+        <li>negative load down to -417.6 kW</li>
+        <li>a cable temperature of -999 °C</li>
+        <li>24 quarter-hours without any data</li>
+      </ul>
+    </div>
+    <div class="group">
+      <div class="label tight">2 · Interview: what it means</div>
+      <p class="secondary">First the questions the model must answer; sander gives six, such as <em>“Which feeders ran above their rating last week?”</em> Then the meaning, a few questions at a time:</p>
+      <div class="chat" style="font-size:0.82em;gap:10px">
+        <div class="turn"><span class="who">agent</span><p>Which readings count?</p></div>
+        <div class="turn you"><span class="who">sander</span><p>OK and ESTIMATED. SUSPECT failed the plausibility check.</p></div>
+        <div class="turn"><span class="who">agent</span><p>And negative load?</p></div>
+        <div class="turn you"><span class="who">sander</span><p>Solar feed-in. We call it teruglevering.</p></div>
+      </div>
+    </div>
+    <div class="group">
+      <div class="label tight">3 · Proposal: a draft model</div>
+      <p class="secondary">The agent writes the answers down as a semantic model and plays it back before anything is stored:</p>
+      <ul class="secondary" style="font-size:0.9em">
+        <li><em>overload_hours</em>: valid quarter-hours above the rating, divided by 4</li>
+        <li>SUSPECT and MISSING never count in a load metric</li>
+        <li>-999 means a broken sensor</li>
+        <li>teruglevering and overbelasting as synonyms</li>
+      </ul>
+    </div>
+  </div>
+  <div class="caption foot">In short: the data shows what is odd, only the team knows what it means. The agent asks, the team decides.</div>
+  <aside class="notes">Real profile output from the semantic-model skill, shortened; sander's answers were written for the demo. The skill ships with the installer in .agents/skills, in the open Agent Skills format, so Claude Code, Codex, GitHub Copilot and others pick it up. Its steps: connect, scope, profile, interview, draft, check, review, publish. The rule it follows: never guess business meaning. The data can suggest an answer, the owner confirms it. It asks at most four questions per round, each with its own suggestion where the profile supports one. One suggestion was wrong for this domain: it proposed a signed average utilisation, but a cable heats up from feed-in as much as from demand, so the metric uses the absolute value. That is exactly the knowledge that is not in the data. Owner (grid-planning), refresh (daily SCADA export at 06:00 UTC) and classification (internal, no personal data) are asked too. The full transcript and the work files are in presentation/grid.</aside>
+</section>
+
+<section>
+  <div class="label">03 · Demo · Semantic model · Draft</div>
+  <h2>The metadata an AI needs, stored beside the tables</h2>
+  <div class="cols-asym">
+    <pre style="font-size:0.56em"><code data-noescape>{
+  <span class="k">"name"</span>: <span class="s">"feeder_load"</span>,
+  <span class="k">"description"</span>: <span class="s">"… One row in FEEDER_LOAD per feeder per quarter-hour."</span>,
+  <span class="k">"ai_context"</span>: { <span class="k">"instructions"</span>:
+    <span class="s">"Time: measured_at is the UTC start of a quarter-hour …
+     Missing values: … SUSPECT readings failed the SCADA
+     plausibility check and are excluded from every load metric …
+     'Last week' means … 2026-09-21 up to and including 2026-09-27."</span> },
+  <span class="k">"datasets"</span>: [{ <span class="k">"name"</span>: <span class="s">"FEEDER_LOAD"</span>,
+    <span class="k">"source"</span>: <span class="s">"lakehouse.grid_sensors.feeder_load"</span>,
+    <span class="k">"primary_key"</span>: [<span class="s">"feeder_id"</span>, <span class="s">"measured_at"</span>], … }, …],
+  <span class="k">"relationships"</span>: [{ <span class="k">"name"</span>: <span class="s">"feeder"</span>,
+    <span class="k">"from"</span>: <span class="s">"FEEDER_LOAD"</span>, <span class="k">"from_columns"</span>: [<span class="s">"feeder_id"</span>],
+    <span class="k">"to"</span>: <span class="s">"FEEDER"</span>, <span class="k">"to_columns"</span>: [<span class="s">"feeder_id"</span>] }, …],
+  <span class="k">"metrics"</span>: [{ <span class="k">"name"</span>: <span class="s">"overload_hours"</span>,
+    <span class="k">"description"</span>: <span class="s">"Hours with a valid reading above the rated
+      capacity … SUSPECT and MISSING readings excluded. Unit: hours."</span>,
+    <span class="k">"ai_context"</span>: { <span class="k">"synonyms"</span>: [<span class="s">"congestion hours"</span>, <span class="s">"overbelasting"</span>] },
+    <span class="k">"expression"</span>: … <span class="s">"count(*) FILTER (WHERE FEEDER_LOAD.utilisation_pct
+      &gt; 100 AND FEEDER_LOAD.quality_flag IN ('OK', 'ESTIMATED')) / 4.0"</span> }, …]
+}</code></pre>
+    <div style="font-size:0.85em">
+      <div class="group"><h3>Grain and keys</h3><p class="secondary">One row per feeder per quarter-hour, and a key per dataset, so the agent knows what it counts.</p></div>
+      <div class="group"><h3>Relationships</h3><p class="secondary">FEEDER_LOAD → FEEDER → SUBSTATION. Ossie points a relationship from the many side to the one side; the platform only joins that way, so no reading is counted twice.</p></div>
+      <div class="group"><h3>Metrics</h3><p class="secondary">Seven, each defined once with its exclusions and unit. "Last week" is a filter, not a metric.</p></div>
+      <div class="group"><h3>AI context</h3><p class="secondary">UTC days, the quality codes, owner and refresh, the synonyms from the interview, and how to answer.</p></div>
+    </div>
+  </div>
+  <div class="caption foot">Apache Ossie semantic model, shortened · Ossie describes, it does not run anything · Polaris stores it beside the tables, the platform compiles the queries</div>
+  <aside class="notes">SM draft writes one dataset per table and one field per column, with TODO wherever meaning is needed; the agent fills those in from the interview. The full document is presentation/grid/semantic-models/grid_sensors/feeder_load.json, and the Definition tab in the catalog shows the stored version. Division of labour: the Ossie specification defines a relationship as from the many side (from) to the one side (to), with to_columns the primary or unique key of the one side. Ossie itself executes nothing. The platform's governed-query compiler joins only along that direction and only onto a primary key, so every join is many-to-one and a metric is never inflated; a question that would fan out is refused (user_portal/semantic/compiler.py). Governed queries accept only an allowlist of SQL: aggregates and scalar functions over the model's own columns, no subqueries, no table functions. That is why time windows are filters at question time rather than metrics.</aside>
+</section>
+
+<section>
+  <div class="label">03 · Demo · Semantic model · Check, review and publish</div>
+  <h2>Every question runs against the real data, then the owner decides</h2>
+  <div class="cols-asym">
+    <pre style="font-size:0.58em"><code data-noescape><span class="c">$</span> <span class="k">SM check $DB grid_sensors feeder_load.json --questions feeder_load.questions.sql</span>
+Keys and relationships
+  <span class="ok">ok</span>    FEEDER_LOAD key (feeder_id, measured_at) is unique: 0 violations
+  <span class="ok">ok</span>    feeder: every FEEDER_LOAD finds its FEEDER: 0 violations
+  <span class="ok">ok</span>    substation: every FEEDER finds its SUBSTATION: 0 violations
+Questions
+  <span class="ok">ok</span>    Which feeders ran above their rating last week, and for how many hours?
+        name | overload_hours
+        Dockside-4 Church | 6.5
+        Northgate-2 Mill | 5.75
+        Northgate-3 Station | 5.0
+        Millbrook-1 Mill | 4.25
+  <span class="ok">ok</span>    How did the daily peak load per substation develop over the last two weeks?
+        name | measured_date | peak_load_kw
+        <span class="flag">Example Dockside | 2026-09-13 | 142.0</span>
+        Example Dockside | 2026-09-14 | 430.8
+        …
+0 errors, 0 failed checks, 0 warnings.
+<span class="c">$</span> <span class="k">SM publish $DB grid_sensors feeder_load.json --name feeder_load …</span>
+<span class="ok">created grid_sensors.feeder_load, entity version 1</span></code></pre>
+    <div class="chat" style="font-size:0.8em">
+      <div class="turn"><span class="who">agent</span><p>Everything passes. One thing to judge: the trend starts on 13 September at 142 kW. That UTC day holds only the first two hours of local 14 September.</p></div>
+      <div class="turn you"><span class="who">sander</span><p>Leave that day out of trends.</p></div>
+      <div class="turn"><span class="who">agent</span><p>Added to the instructions and to question 2. Check again: 0 errors, 0 failed checks, 0 warnings.</p></div>
+      <div class="turn you"><span class="who">sander</span><p>Approved. Publish it.</p></div>
+    </div>
+  </div>
+  <div class="caption foot">A green check is not a right answer: the owner reads the numbers first · after publishing, all six questions give the same answer over MCP</div>
+  <aside class="notes">The check is read-only and runs in UTC: it validates the structure, that every field is a real column, every metric, the primary-key and relationship checks, and each interview question from the questions file, showing up to ten rows. All six questions passed on the first run. The partial first day is the kind of thing only a person spots: technically correct, misleading in a trend chart. Publishing runs the checks again and creates the model with an optimistic version check. The replay compiles each question the way Conversational BI and any MCP agent will; one call was refused at first because order_by needs the output column name, and the error says which names exist.</aside>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">03 · Demo · Semantic model</span><h2>The platform draws the model</h2></div>
+    <div class="fig"><img class="shot" src="screenshots/44-user-model-diagram.png" alt="Diagram tab of the feeder_load semantic model: three datasets drawn as tables with their keys, relationships as lines between the join columns"></div>
+    <div class="caption foot">Catalog · grid_sensors · feeder_load · datasets as tables with PK and FK · each relationship a line between the join columns · hover to follow it, select to open the table</div>
+    <div class="hint">↓ overview and metrics</div>
+  </section>
+  <section class="full" data-background-image="screenshots/43-user-model-overview.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · semantic model overview with its AI context</div>
+  </section>
+  <section class="full" data-background-image="screenshots/49-user-model-metrics.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · metrics and relationships</div>
+  </section>
+  <aside class="notes">No extra tool and no second copy: the catalog reads the model from Polaris with the user's own grants, like a table. Facts sit on the left, dimensions to the right. A box shows at most 12 fields and always keeps keys and join columns. Metrics are not drawn; they are in the Metrics and relationships tab with their SQL. Datasets and fields link to the Iceberg tables, and Definition shows the stored document.</aside>
+</section>
+
+<section class="shot-slide">
+  <div class="head"><span class="label">03 · Demo · Data sharing</span><h2>Share the model with another team, without a copy</h2></div>
+  <div class="fig two">
+    <img class="shot" src="screenshots/37-user-share-team-form.png" alt="User portal data share form with outage-response as recipient team, the feeder_load semantic model selected and its three tables added">
+    <img class="shot" src="screenshots/39-user-received-catalog.png" alt="noor's catalog of the shared grid-sensors database, marked shared and read-only, with the three tables and the model">
+  </div>
+  <div class="caption foot two"><span>mila administers grid-planning · the feeder_load model for outage-response · its three tables come along</span><span>noor in outage-response · only the shared objects, read-only, owner named</span></div>
+  <aside class="notes">A team administrator picks tables, views and semantic models of one database and chooses the recipient: another team, an external party, or both. Selecting a model selects the tables it reads, because a model without its tables cannot be queried. In Polaris a share is one catalog role with one read grant per object, nothing on the namespace or catalog, so a recipient cannot list anything else. A team share is granted to each member's own principal role, including people who join later, and removed when they leave. An external party gets a client ID and a secret shown once, and loads the model by its address with any Iceberg REST client. Shares can expire and be revoked at any time; the platform administrator sees every share and can revoke it. There is still only one copy of the data.</aside>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">03 · Demo · Conversational BI</span><h2>noor asks the shared model a question</h2></div>
+    <div class="fig"><img class="shot" src="screenshots/55-cbi-answer.png" alt="Conversational BI answer for noor on the shared feeder_load model: a query card with overload_hours by FEEDER.name for 21 to 27 September, the metric definition, and a bar chart of four feeders led by Dockside-4 Church with 6.5 hours"></div>
+    <div class="caption foot">“Which feeders ran above their rating in the week of 21 September, and for how many hours?” · the same four feeders and 6.5 hours as the skill's check · the definition and join path above the chart</div>
+    <div class="hint">↓ the SQL</div>
+  </section>
+  <section class="full" data-background-image="screenshots/56-cbi-query.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">Conversational BI · the SQL compiled from the model: the agreed metric, the feeder join, the UTC window</div>
+  </section>
+  <aside class="notes">noor is administrator of outage-response and enabled Conversational BI for their team in development; the model is the one grid-planning shared with outage-response, so it shows as Shared · Read-only with its owner. The LLM in this capture is Google Gemini; OpenAI, Anthropic and Amazon Bedrock work the same way through LLM_MODEL. The answer is not a guess from the LLM: the numbers come from a governed query, and they match what the skill checked before publishing.</aside>
+</section>
+
+<section>
+  <div class="label">03 · Demo · Conversational BI</div>
+  <h2>How a question becomes a governed query</h2>
+  <div class="layers">
+    <div class="layer"><span class="n">1 · The LLM picks names<small>analyst.yaml · any provider</small></span><span class="d"><strong>Metrics, dimensions and filters</strong> from the selected model. It sees the model's context and at most 20 sample rows, never a credential.</span></div>
+    <div class="layer"><span class="n">2 · The model writes the SQL<small>compiled, not generated</small></span><span class="d"><strong>The agreed metric SQL</strong>, joined only along the model's relationships. An allowlist refuses subqueries, table functions and file readers.</span></div>
+    <div class="layer"><span class="n">3 · A disposable worker reads<small>DuckDB · one process per query</small></span><span class="d"><strong>With the team's one-hour read token</strong> and vended, table-scoped credentials. Shared models need nothing extra: the team's read role reaches them.</span></div>
+    <div class="layer"><span class="n">4 · The answer shows its work<small>CopilotKit · Chart.js</small></span><span class="d"><strong>Query card, definitions, join path and SQL.</strong> The chart loads its rows from the result by id, never from the LLM.</span></div>
+  </div>
+  <div class="caption foot">The model owner decides what a metric means. The LLM only picks names.</div>
+  <aside class="notes">Also as an API at :3007/api/v1 and an MCP server at :3007/mcp, so another agent can ask the same governed questions. Every capability is one method exposed three ways: REST, MCP and the chat agent. The extension never writes to the platform. Sources: extensions/conversationalbi/README.md, sections Governed queries and What goes to the LLM.</aside>
+</section>
+
+<section>
+  <div class="label">Wrap up</div>
   <h2>As far as I'm concerned</h2>
   <ul>
     <li><strong>Iceberg complements platforms like Snowflake.</strong> Use it where openness pays off: data that several teams, engines or partners read. Not every table needs to be an Iceberg table.</li>
     <li><strong>Combining data products is where an integrated platform wins.</strong> Joining many data products in one place with good performance is easier when storage, compute and catalog come from one vendor.</li>
-    <li><strong>For Iceberg tables, engines are replaceable.</strong> My recommendation is to treat them as workload decisions and not as platform commitments.</li>
+    <li><strong>For Iceberg tables, engines are replaceable.</strong> My advice is to treat them as workload decisions, not as platform commitments.</li>
     <li><strong>Meaning belongs next to the data.</strong> A semantic model is part of the data product: owned by the team, checked before it is published, and shared and governed like the tables.</li>
     <li><strong>Self-service only works with clear ownership.</strong> Teams create, own and share their databases, while the platform team owns the building blocks.</li>
     <li><strong>Agents use the same front door.</strong> They get the same identity and grants as the people they work for.</li>
+    <li><strong>Keep the core small, grow through extensions.</strong> New capabilities such as Conversational BI come with their own release, behind one versioned contract.</li>
   </ul>
 </section>
 
@@ -1362,8 +751,8 @@ httpx.get(MODELS_URL, headers=…)        <span class="c"># Forbidden: no listin
   <h1 class="doto">Reach out.</h1>
   <div class="meta-row">
     <div>
-      <p class="lede">Feel free to reach out if you want to run this yourself, or if you see a gap I missed. We'll take it from there.</p>
-      <p class="link-row"><a class="url" href="promo/iceberg-data-platform-promo.mp4" target="_blank" rel="noopener">Watch the 60 s promo: AI-ready data products</a></p>
+      <p class="lede">Want to run this yourself, or see a gap I missed? Let me know. We'll take it from there.</p>
+      <p class="link-row"><a class="url" href="promo/iceberg-data-platform-promo.mp4" target="_blank" rel="noopener">Watch the 60 s promo: from raw data to answers</a></p>
     </div>
     <div class="label">Regards, Sander<br>github.com/sanderdw/iceberg-data-platform<br>Apache-2.0</div>
   </div>
