@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.12.19 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.22 AS uv
 FROM python:3.14.7-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
@@ -9,6 +9,7 @@ RUN uv sync --locked --no-dev --group oidc --group mcp
 COPY server ./server
 COPY scripts/setup.py ./scripts/setup.py
 COPY public ./public
+COPY contracts/bridge ./contracts/bridge
 RUN useradd --uid 10001 --create-home portal
 USER portal
 ENV HOST=0.0.0.0 PORT=3000

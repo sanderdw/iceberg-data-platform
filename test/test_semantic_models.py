@@ -70,6 +70,46 @@ def test_projection_accepts_one_model_a_list_or_a_whole_document(payload):
     assert detail["models"][0]["datasets"][0]["table"] == {"namespace": ["ns"], "name": "t"}
 
 
+@pytest.mark.parametrize(
+    ("dimension", "flags"),
+    [
+        ({"is_time": True}, (True, True)),  # Ossie: a time dimension
+        ({"is_time": False}, (True, False)),
+        ({}, (True, False)),  # an object without is_time is still a dimension
+        (True, (True, False)),  # older documents
+        (None, (False, False)),
+        (False, (False, False)),
+        ("yes", (False, False)),
+    ],
+)
+def test_dimensions_follow_the_ossie_object_and_accept_the_old_boolean(dimension, flags):
+    field = {"name": "f"} if dimension is None else {"name": "f", "dimension": dimension}
+    loaded = {"document": {"semantic_model": json.dumps({"datasets": [{"name": "D", "source": "t", "fields": [field]}]})}}
+    shown = semantic_model_details("m", [], loaded)["models"][0]["datasets"][0]["fields"][0]
+    assert (shown["dimension"], shown["timeDimension"]) == flags
+
+
+@pytest.mark.parametrize(("dimension", "datatype", "time"), [
+    ({}, "DateTimeTz", True),  # without is_time, a temporal datatype makes it a time dimension
+    ({}, "Time", True),
+    ({}, "String", False),
+    ({"is_time": False}, "Date", False),  # an explicit is_time wins
+])
+def test_time_dimensions_follow_the_ossie_datatype(dimension, datatype, time):
+    field = {"name": "f", "dimension": dimension, "datatype": datatype}
+    loaded = {"document": {"semantic_model": json.dumps({"datasets": [{"name": "D", "source": "t", "fields": [field]}]})}}
+    assert semantic_model_details("m", [], loaded)["models"][0]["datasets"][0]["fields"][0]["timeDimension"] is time
+
+
+def test_fields_and_metrics_show_their_synonyms():
+    model = {"datasets": [{"name": "D", "source": "t", "fields": [
+                 {"name": "f", "ai_context": {"synonyms": ["eff", 3]}}, {"name": "g", "ai_context": "text"}]}],
+             "metrics": [{"name": "m", "ai_context": {"synonyms": ["em"]}}]}
+    shown = semantic_model_details("m", [], {"document": {"semantic_model": json.dumps(model)}})["models"][0]
+    assert [f["synonyms"] for f in shown["datasets"][0]["fields"]] == [["eff"], []]
+    assert shown["metrics"][0]["synonyms"] == ["em"]
+
+
 @pytest.mark.parametrize("stored", ["not json", "[1, 2]", "42", "null", '{"semantic_model": 7}'])
 def test_projection_survives_documents_it_cannot_read(stored):
     detail = semantic_model_details("m", ["ns"], {"document": {"version": "1", "semantic_model": stored}})
@@ -290,3 +330,11 @@ def test_a_repeated_page_token_stops_instead_of_looping():
     with pytest.raises(ServiceError, match="invalid pagination"):
         p.pages("/api/catalog/v1/db-1/namespaces", "namespaces")
     assert p.calls == 2
+
+
+def test_the_portal_stores_the_same_envelope_as_the_notebook_client():
+    from user_portal.notebook.semantic import SemanticModels
+    from user_portal.semantic.rules import document
+
+    model = {"name": "m", "datasets": [{"name": "D", "source": "lakehouse.ns.t", "fields": []}]}
+    assert document(model) == SemanticModels(None, "", "0.2.0").document(model)

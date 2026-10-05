@@ -1,17 +1,21 @@
 """Trusted metadata directory plus catalog requests made as the actual user."""
 
+import os
 import time
 from dataclasses import dataclass, field
 
 import httpx
 from pydantic import ValidationError
 
+from server import extensions
 from server.models import DatabaseInput, Environment, ServiceError
 from server.polaris import MAX_SHARES, PolarisProvider, enc
 from server.storage import RustFSStorage
 from server.validation import validation_message
 
 from .catalog import object_details, properties, semantic_model_details
+from .semantic import compiler, ossie, rules
+from .semantic.errors import SemanticError
 
 
 def validate_namespace(parts):
@@ -136,12 +140,9 @@ class UserDirectory:
                 if share.get("recipientTeam") not in recipients:
                     continue
                 # Team-share grants sit on each member's own role, so shares received by
-                # several of the user's teams combine. A renamed object keeps its grant
-                # under its new name, which Polaris reports as an extra grant.
+                # several of the user's teams combine.
                 received.setdefault(share["database"], []).extend(
-                    [o for o in share["objects"] if o.get("granted")]
-                    + [{"kind": g["kind"], "namespace": g["namespace"], "name": g["name"], "granted": True}
-                       for g in share.get("extraGrants", []) if g["kind"] in ("table", "view", "semantic-model") and g["name"]]
+                    {**o, "granted": True} for o in self.metadata.received_objects(share)
                 )
                 recipient[share["database"]] = min(
                     recipient.get(share["database"], share["recipientTeam"]), share["recipientTeam"],
@@ -358,29 +359,39 @@ class UserDirectory:
         return {"deleted": True, "id": id, "name": name}
 
     def request(self, session, path):
+        return self.send(session, "GET", path)
+
+    def send(self, session, method, path, body=None):
+        """One catalog request as the user. Polaris's own messages are never passed on: they can echo input."""
         if session.token_until <= time.monotonic():
             if session.oidc_subject:
                 raise ServiceError(401, "Your Keycloak session expired. Sign in again.")
             session.token, session.token_until = self.authenticate(session.client_id, session.secret)
+        headers = {"Authorization": f"Bearer {session.token}", "Polaris-Realm": "POLARIS"}
         try:
-            response = self.http.get(
-                self.url + path,
-                headers={
-                    "Authorization": f"Bearer {session.token}",
-                    "Polaris-Realm": "POLARIS",
-                },
-            )
+            if method == "GET":
+                response = self.http.get(self.url + path, headers=headers)
+            else:
+                response = self.http.request(method, self.url + path, json=body, headers=headers)
         except httpx.HTTPError as exc:
             raise ServiceError(503, "The data provider is unavailable.") from exc
         if response.is_error:
             # 406: Polaris has this feature switched off. 503: it is temporarily unavailable, and retrying helps.
-            status = response.status_code if response.status_code in (401, 403, 404, 406, 503) else 502
+            # 400 and 409 only answer changes: a rejected document, or a newer version than the one read.
+            known = (401, 403, 404, 406, 503) + ((400, 409) if method != "GET" else ())
+            status = response.status_code if response.status_code in known else 502
             if status == 503:
                 raise ServiceError(503, "The data provider is temporarily unavailable. Try again shortly.")
             if status == 406:
                 raise ServiceError(406, "Semantic models are switched off in Polaris.")
+            if status == 400:
+                raise ServiceError(400, "The catalog rejected this request. Names use letters, digits, - and _.")
+            if status == 409:
+                raise ServiceError(409, "Someone changed this object meanwhile. Read it again and retry.")
+            if status == 403 and method != "GET":
+                raise ServiceError(403, "Your role may not change this. Changing semantic models needs the Writer role.")
             raise ServiceError(status, "This content is unavailable with your permissions.")
-        return response.json()
+        return response.json() if response.content else {}
 
     def login_oidc(self, claims, token, lifetime, session_id):
         mapping = claims.get("polaris", {})
@@ -508,7 +519,118 @@ class UserDirectory:
                 name, namespace, self.request(session, f"{polaris}/semantic-models/{enc(name)}")
             )
         loaded = self.request(session, f"{path}/{kind}s/{enc(name)}")
-        return {"name": name, "namespace": namespace, **object_details(kind, loaded)}
+        return {"name": name, "namespace": namespace,
+                **object_details(kind, loaded, extensions.extensions(os.environ))}
+
+    def semantic_model_path(self, database, namespace, name=None):
+        path = f"/api/catalog/polaris/v1/{enc(database)}/namespaces/{enc(chr(31).join(namespace))}/semantic-models"
+        return path + (f"/{enc(name)}" if name else "")
+
+    def load_semantic_model(self, session, database, namespace, name):
+        """The model as Polaris stores it, after the same access check as `details`."""
+        info = self.database(session, database)
+        if info.get("shared") and not any(
+            o["kind"] == "semantic-model" and o["namespace"] == namespace and o["name"] == name
+            for o in info["sharedObjects"]
+        ):
+            raise ServiceError(403, "This object is not shared with your active team.")
+        return self.request(session, self.semantic_model_path(database, namespace, name))
+
+    def publish_semantic_model(self, session, database, namespace, name, model, entity_version=None):
+        """Create a model, or replace the version the caller read; Polaris checks the Writer role."""
+        targets = [(d.get("name"), *target) for d in rules.dicts(rules.first_model(model).get("datasets"))
+                   if (target := ossie.dataset_target(d.get("source"), namespace))]
+        schemas, unreadable = self.semantic_tables(session, database, targets)
+        model, warnings = rules.validate(model, {name: set(columns) for name, columns in schemas.items()})
+        warnings = [f"Table {table} is missing or not readable, so its fields were not checked against its columns."
+                    for table in unreadable] + warnings
+        document = rules.document(model)
+        try:
+            current = self.request(session, self.semantic_model_path(database, namespace, name))
+        except ServiceError as exc:
+            if exc.status != 404:
+                raise
+            current = None
+        if current is None:
+            if entity_version is not None:
+                raise ServiceError(404, f"There is no semantic model {name!r} to replace. Leave out entity_version.")
+            created = self.send(session, "POST", self.semantic_model_path(database, namespace),
+                                {"name": name, "document": document})
+            action, version = "created", created.get("entity-version")
+        else:
+            stored = current.get("entity-version")
+            if entity_version is None or str(entity_version) != str(stored):
+                raise ServiceError(409, f"Semantic model {name!r} exists at version {stored}. Read it with "
+                                        "describe_semantic_model, and pass that entityVersion to replace it.")
+            updated = self.send(session, "PUT", self.semantic_model_path(database, namespace, name),
+                                {"document": document, "entity-version": stored})
+            action, version = "updated", updated.get("entity-version")
+        return {"action": action, "name": name, "namespace": namespace, "entityVersion": version,
+                "warnings": warnings}
+
+    def delete_semantic_model(self, session, database, namespace, name, confirm_name):
+        if confirm_name != name:
+            raise ServiceError(422, "Type the semantic model's name exactly to confirm deleting it.")
+        self.send(session, "DELETE", self.semantic_model_path(database, namespace, name))
+        return {"deleted": True, "name": name, "namespace": namespace}
+
+    def semantic_query_guide(self, session, database, namespace, name):
+        """What query_semantic_model can answer: each metric's dataset and the dimensions reachable from it."""
+        try:
+            model = ossie.parse(self.load_semantic_model(session, database, namespace, name), tuple(namespace))
+        except SemanticError as exc:
+            return {"metrics": {}, "dimensions": {}, "problems": [str(exc)]}
+        homes, problems = {}, []
+        for metric in model.metrics:
+            try:
+                homes[metric.name] = compiler.metric_home(model, metric, compiler.expressions.parse(metric.expression))
+            except SemanticError as exc:
+                problems.append(f"Metric {metric.name}: {exc}")
+        return {"metrics": homes,
+                "dimensions": {home: compiler.reachable(model, home) for home in sorted({h for h in homes.values() if h})},
+                "problems": problems}
+
+    def semantic_tables(self, session, database, targets):
+        """{dataset: {column: Iceberg type}} for `(dataset, namespace, table)` targets, and the tables not readable."""
+        schemas, unreadable = {}, []
+        for dataset, namespace, table in targets:
+            try:
+                found = self.details(session, database, list(namespace), "table", table)
+            except ServiceError as exc:
+                if exc.status not in (403, 404):
+                    raise
+                unreadable.append(".".join([*namespace, table]))
+                continue
+            schemas[dataset] = {c["name"]: c["type"] for c in found["columns"] if "." not in c["name"]}
+        return schemas, unreadable
+
+    def semantic_job(self, session, database, compiled, unreadable):
+        """The worker job for a compiled governed query, as long as every table it binds is readable."""
+        missing = sorted({".".join([*b["namespace"], b["table"]]) for b in compiled.bindings} & set(unreadable))
+        if missing:
+            raise SemanticError(403, "A table this query needs is missing or not readable with your permissions: "
+                                     + ", ".join(missing) + ".", "table_not_readable", {"tables": missing})
+        return {"uri": self.url + "/api/catalog", "warehouse": database, "token": session.token,
+                "s3Endpoint": self.s3_endpoint, "bindings": compiled.bindings, "sql": compiled.sql,
+                "params": compiled.params, "limit": compiled.limit}
+
+    def semantic_query_job(self, session, database, namespace, name, spec, max_rows=200):
+        """Compile a governed query from the stored model, to run as the user in a worker process."""
+        loaded = self.load_semantic_model(session, database, namespace, name)
+        model = ossie.parse(loaded, tuple(namespace))
+        schemas, unreadable = self.semantic_tables(
+            session, database, [(d.name, d.namespace, d.table) for d in model.datasets])
+        compiled = compiler.compile_query(model, schemas, spec, max_rows)
+        return model, compiled, self.semantic_job(session, database, compiled, unreadable)
+
+    def semantic_values_job(self, session, database, namespace, name, field, search=None, limit=50):
+        """Compile a lookup of one dimension's distinct values, to run as the user in a worker process."""
+        model = ossie.parse(self.load_semantic_model(session, database, namespace, name), tuple(namespace))
+        wanted = field.partition(".")[0]
+        schemas, unreadable = self.semantic_tables(
+            session, database, [(d.name, d.namespace, d.table) for d in model.datasets if d.name == wanted])
+        compiled = compiler.compile_values(model, schemas, field, search, limit)
+        return compiled, self.semantic_job(session, database, compiled, unreadable)
 
     def preview_request(self, session, database, namespace, name, snapshot_id, limit):
         details = self.details(session, database, namespace, "table", name)

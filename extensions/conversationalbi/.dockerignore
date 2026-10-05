@@ -1,0 +1,16 @@
+**
+!pyproject.toml
+!uv.lock
+!README.md
+!conversationalbi/
+!conversationalbi/**
+!contracts/
+!contracts/**
+!web/
+!web/**
+**/__pycache__/
+**/.venv/
+**/node_modules/
+**/.env*
+**/llm.env
+conversationalbi/public/

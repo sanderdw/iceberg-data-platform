@@ -1,0 +1,242 @@
+name: Conversational BI CI
+# Conversational BI (extensions/conversationalbi) is tested and released on its own. It runs when the
+# extension, the Bridge contract it depends on, the Bridge implementation or the flights seed changes.
+on:
+  push:
+    branches: [main]
+    paths: ['extensions/conversationalbi/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py',
+            'scripts/flights_seed.py', 'user_portal/notebook/flights.py', '.github/workflows/conversationalbi-*.yml']
+  pull_request:
+    paths: ['extensions/conversationalbi/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py',
+            'scripts/flights_seed.py', 'user_portal/notebook/flights.py', '.github/workflows/conversationalbi-*.yml']
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: conversationalbi-ci-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    working-directory: extensions/conversationalbi
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: '0.12.18'
+          enable-cache: true
+          cache-dependency-glob: extensions/conversationalbi/uv.lock
+      - run: uv sync --locked
+      - run: uv run pytest
+        env:
+          PYDANTIC_AI_NO_BANNER: '1'
+      - run: uv run ruff check .
+      - run: uv run python -m scripts.release
+      - name: Audit Python dependencies
+        run: |
+          uv export --locked --all-groups --no-hashes --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt" > /dev/null
+          uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Chat UI
+        working-directory: extensions/conversationalbi/web
+        env:
+          SCARF_ANALYTICS: 'false'
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          npm test
+          npm audit --omit=dev --audit-level=high
+      - name: CopilotKit runtime
+        working-directory: extensions/conversationalbi/runtime
+        env:
+          SCARF_ANALYTICS: 'false'
+        run: |
+          npm ci --ignore-scripts --omit=dev --no-audit --no-fund
+          node --check server.mjs
+          npm audit --omit=dev --audit-level=high
+
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build -t cbi-check . && docker build -t cbi-runtime-check runtime
+      - name: DuckDB, the agent spec and the chat UI work without network, read-only
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+            -e OIDC_ISSUER=http://keycloak -e BRIDGE_CLIENT_ID=ext-conversationalbi -e BRIDGE_CLIENT_SECRET=unused \
+            cbi-check /app/.venv/bin/python -c "
+          from pathlib import Path
+          from conversationalbi.agent.agui import create_agent
+          from conversationalbi.config import Settings
+          from conversationalbi.semantic import worker
+          import anthropic, boto3, google.genai, openai
+          c = worker.connect(); c.execute('LOAD httpfs; LOAD avro; LOAD iceberg'); worker.lock(c)
+          assert create_agent(Settings.from_env()).name == 'analyst'
+          assert Path('conversationalbi/public/index.html').is_file()
+          print('gateway image ok')"
+          docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL cbi-runtime-check node -e \
+            "import('@copilotkit/runtime/v2').then(() => console.log('runtime image ok'))"
+
+  integration:
+    # The platform from this commit, a partner team sharing the flights product, and the extension,
+    # end to end through MCP and in a browser. The scripted test model stands in for the LLM.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: '0.12.18'
+          enable-cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: uv sync --locked --all-groups
+      - run: npm ci && npx playwright install --with-deps chromium
+      - run: uv run python -m scripts.setup --demo --extension conversationalbi --origin http://localhost:3007 --handshake extensions/conversationalbi/.env.bridge
+      - run: docker compose up -d --build --wait
+      - run: docker compose run --build --rm keycloak-bootstrap --demo
+      - name: Make demo-admin an administrator of demo-team (test fixture)
+        run: |
+          uv run --all-groups python - <<'PY'
+          import os
+          from dotenv import load_dotenv
+          load_dotenv(".env")
+          from server.polaris import PolarisProvider
+          from server.storage import RustFSStorage
+          provider = PolarisProvider(os.environ, RustFSStorage(os.environ))
+          team = next(t for t in provider.list_teams() if t["name"] == "demo-team")["id"]
+          admin = next(u for u in provider.list_users() if u["name"] == "demo-admin")
+          provider.update_memberships(admin["id"], {**{m["team"]: m["role"] for m in admin["memberships"]}, team: "admin"})
+          PY
+      - name: A partner team shares the flights product with demo-team, which also has its own copy
+        run: uv run --all-groups python -m scripts.flights_seed --own demo-demo
+      - name: Start Conversational BI with the scripted model
+        working-directory: extensions/conversationalbi
+        env:
+          LLM_MODEL: test:flights
+          BI_ALLOW_TEST_MODEL: '1'
+        run: |
+          uv sync --locked
+          uv run python -m scripts.setup
+          docker compose up -d --build --wait
+      - name: Only the gateway has the LLM settings, and its model is ready
+        working-directory: extensions/conversationalbi
+        run: |
+          test "$(stat -c %a llm.env)" = 600
+          if docker inspect --format '{{json .Config.Env}}' "$(docker compose ps -q cbi-runtime)" | grep -Eq 'LLM_MODEL|_API_KEY|AWS_'; then
+            echo "cbi-runtime has LLM settings" >&2; exit 1
+          fi
+          curl -fsS http://localhost:3007/api/health | grep -q '"llm":"ready"'
+      - name: End-to-end through MCP
+        working-directory: extensions/conversationalbi
+        run: uv run python -m scripts.e2e_smoke
+      - name: Chat in a browser
+        working-directory: extensions/conversationalbi
+        run: |
+          set -a; . ../../.env; set +a
+          BI_USER=demo-reader BI_PASSWORD="$DEMO_READER_PASSWORD" node scripts/cbi-browser.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: conversationalbi-screenshots
+          path: extensions/conversationalbi/test-results/
+          if-no-files-found: ignore
+      - name: Logs on failure
+        if: failure()
+        working-directory: extensions/conversationalbi
+        run: docker compose logs --tail 200
+      - name: Clean up
+        if: always()
+        run: |
+          (cd extensions/conversationalbi && docker compose down --remove-orphans --volumes) || true
+          docker compose down --remove-orphans --volumes || true
+
+  compat:
+    # This commit's extension against the newest platform release that ships the Bridge.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Find the newest platform release with the Bridge
+        id: core
+        run: |
+          for tag in $(git tag --list 'v*' --sort=-version:refname); do
+            if git cat-file -e "$tag:contracts/bridge/v1/openapi.yaml" 2>/dev/null; then echo "tag=$tag" >> "$GITHUB_OUTPUT"; exit 0; fi
+          done
+          echo "No platform release ships the Bridge yet; the integration job covers this commit." >> "$GITHUB_STEP_SUMMARY"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: steps.core.outputs.tag
+        with:
+          version: '0.12.18'
+      - name: Start that platform release with the flights product
+        if: steps.core.outputs.tag
+        env:
+          TAG: ${{ steps.core.outputs.tag }}
+        run: |
+          git worktree add ../core-release "$TAG"
+          cp scripts/flights_seed.py ../core-release/scripts/flights_seed.py
+          cd ../core-release
+          uv sync --locked --all-groups
+          uv run python -m scripts.setup --demo --extension conversationalbi --origin http://localhost:3007 --handshake "$GITHUB_WORKSPACE/extensions/conversationalbi/.env.bridge"
+          docker compose up -d --build --wait
+          docker compose run --build --rm keycloak-bootstrap --demo
+          uv run --all-groups python - <<'PY'
+          import os
+          from dotenv import load_dotenv
+          load_dotenv(".env")
+          from server.polaris import PolarisProvider
+          from server.storage import RustFSStorage
+          provider = PolarisProvider(os.environ, RustFSStorage(os.environ))
+          team = next(t for t in provider.list_teams() if t["name"] == "demo-team")["id"]
+          admin = next(u for u in provider.list_users() if u["name"] == "demo-admin")
+          provider.update_memberships(admin["id"], {**{m["team"]: m["role"] for m in admin["memberships"]}, team: "admin"})
+          PY
+          uv run --all-groups python -m scripts.flights_seed --own demo-demo
+      - name: This commit's extension against it
+        if: steps.core.outputs.tag
+        working-directory: extensions/conversationalbi
+        env:
+          LLM_MODEL: test:flights
+          BI_ALLOW_TEST_MODEL: '1'
+        run: |
+          uv sync --locked
+          uv run python -m scripts.setup
+          docker compose up -d --build --wait
+          PLATFORM_ENV=../../../core-release/.env uv run python -m scripts.e2e_smoke
+      - name: Clean up
+        if: always() && steps.core.outputs.tag
+        run: |
+          (cd extensions/conversationalbi && docker compose down --remove-orphans --volumes) || true
+          (cd ../core-release && docker compose down --remove-orphans --volumes) || true

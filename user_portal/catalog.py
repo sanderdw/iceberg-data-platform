@@ -2,12 +2,63 @@
 
 import json
 import re
+from urllib.parse import urlsplit
+
+from .semantic.ossie import dicts
 
 SENSITIVE = re.compile(
     r"secret|token|credential|password|access.key|private.key|authorization", re.IGNORECASE
 )
+PRODUCER = "iceberg-data-platform."
+QUALITY = {"pass", "warn", "fail"}
+
+
 def properties(values):
     return {str(k): str(v) for k, v in values.items() if not SENSITIVE.search(str(k))}
+
+
+def producer(values, extensions):
+    """The Bridge table-property conventions (contracts/bridge/v1/table-properties.md), made safe to show.
+
+    Anyone with write access sets these, so every value is capped and typed, lineage entries are
+    validated, and a link is kept only when its origin is a registered extension.
+    """
+    name = str(values.get(PRODUCER + "producer", "")).strip()
+    if not name:
+        return None
+
+    def text(key, limit=200):
+        value = values.get(PRODUCER + key)
+        return str(value)[:limit] if value not in (None, "") else None
+
+    link, extension = text("producer.url", 2000), None
+    if link:
+        parsed = urlsplit(link)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        extension = next((id for id, url in extensions.items() if url == origin), None)
+        if parsed.scheme not in ("http", "https") or not extension:
+            link = None
+    inputs = []
+    try:
+        raw = json.loads(values.get(PRODUCER + "lineage.inputs") or "[]")
+    except ValueError:
+        raw = []
+    for item in raw if isinstance(raw, list) else []:
+        if (isinstance(item, dict) and isinstance(item.get("database"), str) and isinstance(item.get("name"), str)
+                and isinstance(item.get("namespace"), list) and all(isinstance(p, str) for p in item["namespace"])):
+            inputs.append({"database": item["database"][:256], "namespace": [p[:256] for p in item["namespace"][:20]],
+                           "name": item["name"][:256]})
+        if len(inputs) == 50:
+            break
+    status = text("quality.status", 10)
+    return {
+        "name": name[:40], "version": text("producer.version", 80), "extension": extension, "url": link,
+        "runId": text("producer.run-id", 80), "runAt": text("producer.run-at", 40),
+        "revision": text("producer.source-revision", 80), "node": text("producer.node", 300),
+        "inputs": inputs, "inputsTruncated": values.get(PRODUCER + "lineage.inputs-truncated") == "true",
+        "quality": {"status": status, "summary": text("quality.summary"), "checkedAt": text("quality.checked-at", 40)}
+        if status in QUALITY else None,
+    }
 
 
 def identifier(value):
@@ -63,7 +114,7 @@ def columns(schema):
     return result
 
 
-def object_details(kind, loaded):
+def object_details(kind, loaded, extensions=None):
     metadata = loaded["metadata"]
     schemas = metadata.get("schemas", [])
     versions = metadata.get("versions", [])
@@ -78,6 +129,8 @@ def object_details(kind, loaded):
         "schemaId": schema_id,
         "columns": columns(schema),
         "properties": properties(metadata.get("properties", {})),
+        "comment": str(metadata.get("properties", {}).get("comment", ""))[:2000],
+        "producer": producer(metadata.get("properties", {}), extensions or {}),
     }
     if kind == "view":
         result.update(
@@ -154,10 +207,6 @@ def text(value):
     return str(value)
 
 
-def dicts(value):
-    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
-
-
 def expressions(item):
     found = item.get("expression")
     if isinstance(found, dict):
@@ -165,6 +214,29 @@ def expressions(item):
     elif isinstance(found, str):
         return [{"dialect": "", "expression": found}]
     return [{"dialect": text(e.get("dialect")), "expression": text(e.get("expression"))} for e in dicts(found)]
+
+
+TIME_DATATYPES = ("Date", "Time", "DateTime", "DateTimeTz")
+
+
+def dimension(field):
+    """Ossie marks a dimension with an object, `{"is_time": bool}`; older documents wrote `true`.
+    Without `is_time`, a temporal `datatype` makes it a time dimension, as the specification says.
+
+    Returns (is a dimension, is a time dimension).
+    """
+    value = field.get("dimension")
+    if isinstance(value, dict):
+        is_time = value.get("is_time")
+        return True, is_time if isinstance(is_time, bool) else field.get("datatype") in TIME_DATATYPES
+    return value is True, False
+
+
+def synonyms(item):
+    """Ossie's synonyms of one field or metric, from its own `ai_context`."""
+    context = item.get("ai_context")
+    found = context.get("synonyms") if isinstance(context, dict) else None
+    return [text(s) for s in found if isinstance(s, str)] if isinstance(found, list) else []
 
 
 def ossie_models(payload):
@@ -228,7 +300,9 @@ def semantic_model_details(name, namespace, loaded):
                         "name": text(f.get("name")),
                         "description": text(f.get("description")),
                         "datatype": text(f.get("datatype")),
-                        "dimension": bool(f.get("dimension")),
+                        "dimension": dimension(f)[0],
+                        "timeDimension": dimension(f)[1],
+                        "synonyms": synonyms(f),
                         "expressions": expressions(f),
                     }
                     for f in dicts(d.get("fields"))
@@ -257,6 +331,7 @@ def semantic_model_details(name, namespace, loaded):
                         "name": text(m.get("name")),
                         "description": text(m.get("description")),
                         "datatype": text(m.get("datatype")),
+                        "synonyms": synonyms(m),
                         "expressions": expressions(m),
                     }
                     for m in dicts(model.get("metrics"))

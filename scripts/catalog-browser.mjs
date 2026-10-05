@@ -37,7 +37,7 @@ try {
     const url = new URL(route.request().url()), path = url.pathname;
     let body;
     if (path === '/api/session') body = {authenticated: true, ...(oidc ? {loginUrl: '/auth/login'} : {})};
-    else if (path === '/api/workspace') body = {user: {name: 'Analyst'}, teams: [{id: 'analytics', name: 'Energy analytics', role: 'reader'}], databases: [database], activeTeam: 'analytics', activeRole: 'reader', activeEnvironment: 'development', environments: ['development', 'acceptance', 'production'], notebooks: []};
+    else if (path === '/api/workspace') body = {user: {name: 'Analyst'}, teams: [{id: 'analytics', name: 'Energy analytics', role: 'reader'}], databases: [database], activeTeam: 'analytics', activeRole: 'reader', activeEnvironment: 'development', environments: ['development', 'acceptance', 'production'], notebooks: [], extensions: [{id: 'conversationalbi', origin: 'http://bi.test'}]};
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'readings'}], views: [{name: 'daily_energy'}], semanticModels: [{name: 'energy_model'}]} : {namespaces: [['analytics']], tables: [], views: []};
     else if (path === '/api/details') body = ({database: {kind: 'database', database}, namespace: {kind: 'namespace', properties: {owner: 'Energy analytics'}}, table, view, 'semantic-model': semantic})[url.searchParams.get('kind')];
     else if (path === '/api/preview') {
@@ -143,6 +143,11 @@ try {
   await expect(page.getByRole('tabpanel')).toContainText('<img src=x onerror=alert(1)>');
   await expect(page.locator('.catalog-facts-text')).toContainText('Exclude test meters.');
   await expect(page.getByRole('button', {name: 'Copy name', exact: true})).toBeVisible();
+  // With Conversational BI registered, a model links to it with the model preselected.
+  const ask = page.getByRole('link', {name: 'Ask in Conversational BI'});
+  await expect(ask).toHaveAttribute('href', 'http://bi.test/#/ask?database=warehouse-dev&namespace=%5B%22analytics%22%5D&model=energy_model');
+  await expect(ask).toHaveAttribute('rel', 'noopener');
+  await expect(page.locator('#workspace-nav .extension-link')).toHaveText('Conversational BI');
   const modelUrl = page.url();
   await page.reload();
   await expect(page.locator('#namespace-title')).toHaveText('energy_model');
@@ -162,6 +167,10 @@ try {
   await expect(page.getByRole('tabpanel')).toContainText('SUM(READINGS.kwh)');
   await expect(page.getByRole('tabpanel')).toContainText('meter_id → id');
   await page.getByRole('tab', {name: 'Definition', exact: true}).click();
+  // YAML by default; JSON is the stored document.
+  await expect(page.locator('.view-sql')).toHaveText('name: Energy');
+  await expect(page.getByRole('button', {name: 'YAML', exact: true})).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', {name: 'JSON', exact: true}).click();
   await expect(page.locator('.view-sql')).toContainText('"name": "Energy"');
   for (const name of ['Overview', 'Diagram', 'Datasets & fields', 'Metrics & relationships', 'Definition']) {
     await page.getByRole('tab', {name, exact: true}).click();
@@ -174,5 +183,5 @@ try {
   await expect(page.locator('#namespace-title')).toHaveText('readings');
   await expect(page.getByRole('tab', {name: 'Snapshots', exact: true})).toBeVisible();
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS: catalog navigation/filtering, connect panel only with OIDC, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts, semantic models listed, filtered, opened by URL, rendered as text and drawn as a diagram');
+  console.log('PASS: catalog navigation/filtering, connect panel only with OIDC, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts, semantic models listed, filtered, opened by URL, rendered as text and drawn as a diagram, linked to Conversational BI');
 } finally { await browser.close(); }

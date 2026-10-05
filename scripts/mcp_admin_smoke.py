@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 from scripts.mcp_smoke import sign_in, text, tools_as
 
-TOOL_COUNT = 21
+TOOL_COUNT = 23
 
 
 def delete_keycloak_account(username):

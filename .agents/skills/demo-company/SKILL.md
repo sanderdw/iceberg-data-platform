@@ -38,7 +38,7 @@ If the tools are missing, stop and tell the user how to connect. Pick the recipe
    | GitHub Copilot in VS Code | In `.vscode/mcp.json`: `{"servers": {"iceberg-admin": {"type": "http", "url": "<URL>", "oauth": {"clientId": "iceberg-mcp"}}}}` | Start the server from `mcp.json`; VS Code opens the sign-in |
    | GitHub Copilot CLI | In `~/.copilot/mcp-config.json` under `mcpServers`: `"iceberg-admin": {"type": "http", "url": "<URL>", "tools": ["*"], "oauthClientId": "iceberg-mcp", "oauthPublicClient": true}` | On first use; if asked for a client ID, enter `iceberg-mcp` |
    | Claude Code | `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-admin <URL>` | On the first tool call |
-   | Any other agent | A streamable HTTP MCP server at `<URL>` with OAuth: public client ID `iceberg-mcp`, no client secret, no dynamic registration | Callback on `localhost` or `127.0.0.1`, any port |
+   | Any other agent | A streamable HTTP MCP server at `<URL>` with OAuth: public client ID `iceberg-mcp`, no client secret, no dynamic registration, scopes `openid profile offline_access` | Callback on `localhost` or `127.0.0.1`, any port |
 
 3. Start a new agent session so the tools load, then sign in as the platform administrator when the browser opens.
 

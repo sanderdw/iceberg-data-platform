@@ -1,20 +1,25 @@
 // Seeds the demo story on a running local stack and captures the deck's screenshots.
-// Usage: node scripts/presentation-screenshots.mjs [--only 03,24]
+// Usage: node scripts/presentation-screenshots.mjs [--only 03,24] [--seed-only]
+// --seed-only stops once grid-sensors exists, so the data can be loaded and modelled by an agent first.
 import {randomBytes} from 'node:crypto';
+import {spawn, spawnSync} from 'node:child_process';
 import {chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {parseArgs, parseEnv} from 'node:util';
 import {chromium, expect} from '@playwright/test';
 
 const env = parseEnv(readFileSync('.env', 'utf8'));
-const {values: args} = parseArgs({options: {only: {type: 'string'}}});
+const {values: args} = parseArgs({options: {only: {type: 'string'}, 'seed-only': {type: 'boolean'}}});
 const only = args.only ? new Set(args.only.split(',').map(id => id.trim())) : null;
 const OUT = 'presentation/screenshots', STATE = '.local/presentation/state.json';
 const RUSTFS = 'http://localhost:9001/rustfs/console/browser/', KEYCLOAK_USERS = env.KEYCLOAK_ORIGIN + '/admin/master/console/#/iceberg/users';
 
 // Fictional grid operator. Roles differ per team for sander, which the access dialog shows.
-// mila administers grid-planning and creates ai-examples herself. sander publishes the flights data
-// product there with notebook 06: six tables and their semantic model. mila shares the model with a
-// research partner and with outage-response, where noor reads it without owning a database there.
+// mila administers grid-planning and creates grid-sensors herself. sander loads the synthetic feeder
+// SCADA export there from their own computer with the DuckDB CLI, and builds the feeder_load
+// semantic model with the semantic-model skill (work files in presentation/grid). mila shares the
+// model with a research partner and with outage-response, where noor reads it without owning a
+// database. Both team administrators enable Conversational BI, and noor asks it about the model.
 const TEAMS = [
   ['grid-planning', 'Capacity planning for the regional grid'],
   ['asset-management', 'Lifecycle of stations, cables and transformers'],
@@ -26,16 +31,20 @@ const DATABASES = [
   ['outage-events', 'outage-response', 'production'],
 ];
 const USERS = [
-  ['noor', 'Noor', 'Example', [['outage-response', 'writer']]],
+  ['noor', 'Noor', 'Example', [['outage-response', 'admin']]],
   ['sander', 'Sander', 'Example', [['grid-planning', 'writer'], ['asset-management', 'reader']]],
   ['alex', 'Alex', 'Example', [['grid-planning', 'reader']]],
   ['mila', 'Mila', 'Example', [['grid-planning', 'admin']]],
 ];
-const AI_DATABASE = {name: 'ai-examples', description: 'AI-ready data products with their semantic models'};
-const DEMO_USER = 'sander', DEMO_TEAM = 'grid-planning', DEMO_DATABASE = AI_DATABASE.name;
-const NOTEBOOK = '06 · Write an AI-ready flights product', NAMESPACE = 'ai_flights', TABLE = 'flights', MODEL = 'flights';
-const TEAM_ADMIN = 'mila', SHARE = {name: 'flights-research', recipient: 'University of Example · operations research', description: 'Synthetic flights with their semantic model, for delay research'};
-const TEAM_SHARE = {name: 'flights-product', team: 'outage-response', description: 'The flights data product with its agreed metrics'}, RECIPIENT = 'noor';
+const GRID_DATABASE = {name: 'grid-sensors', description: 'Feeder load measurements with their semantic model'};
+const DEMO_USER = 'sander', DEMO_TEAM = 'grid-planning', DEMO_DATABASE = GRID_DATABASE.name;
+const NAMESPACE = 'grid_sensors', TABLE = 'feeder_load', MODEL = 'feeder_load', MODEL_TABLES = 3;
+const MODEL_FILE = `presentation/grid/semantic-models/${NAMESPACE}/${MODEL}.json`, QUESTIONS_FILE = MODEL_FILE.replace(/\.json$/, '.questions.sql');
+const TEAM_ADMIN = 'mila', SHARE = {name: 'feeder-load-research', recipient: 'University of Example · grid research', description: 'Synthetic feeder load with its semantic model, for congestion research'};
+const TEAM_SHARE = {name: 'feeder-load', team: 'outage-response', description: 'Feeder load with the agreed overload metrics'}, RECIPIENT = 'noor';
+const CBI_ORIGIN = 'http://localhost:3007', CBI_QUESTION = 'Which feeders ran above their rating in the week of 21 September, and for how many hours?';
+// iceberg_connect.py keeps sander's sign-in here instead of in the real ~/.config.
+const CONNECT_ENV = {...process.env, XDG_CONFIG_HOME: resolve('.local/presentation/config')};
 
 // Passwords chosen at the forced first sign-in; kept outside git so the script can run again.
 const state = existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {users: {}};
@@ -118,7 +127,7 @@ async function openNamespace(page, namespace) {
   await page.locator('.object-row').filter({hasText: namespace}).getByRole('button').click();
   await page.locator('.object-row').filter({hasText: 'TABLE'}).first().waitFor();
 }
-// The flights table and the flights semantic model share a name, so a row is found by name and kind.
+// The feeder_load table and the feeder_load semantic model share a name, so a row is found by name and kind.
 const objectRow = (page, name, kind) => page.locator('.object-row').filter({hasText: kind}).filter({has: page.locator('strong').getByText(name, {exact: true})});
 async function openTable(page, namespace, table) {
   await openNamespace(page, namespace);
@@ -143,17 +152,54 @@ async function useDevelopment(page) {
   await page.locator('#environment').selectOption('development');
   await expect(page.locator('#environment')).toHaveValue('development');
 }
-// Selecting the model in the share form selects the six tables it reads as well.
+// Selecting the model in the share form selects the tables it reads as well.
 async function pickModel(page) {
   await page.locator('.share-tree summary').filter({hasText: NAMESPACE}).click();
   await page.locator('.share-tree .share-object').filter({hasText: 'Semantic model'}).filter({hasText: MODEL}).locator('input').check();
-  await expect(page.locator('.share-selection')).toContainText('SELECTED · 7');
+  await expect(page.locator('.share-selection')).toContainText(`SELECTED · ${MODEL_TABLES + 1}`);
 }
 const toPage = (page, name) => page.locator('#workspace-nav').getByRole('button', {name, exact: true}).click();
 const openTab = (page, name) => page.getByRole('tab', {name, exact: true}).click();
 async function loadPreview(page) {
   await page.getByRole('button', {name: 'Load preview', exact: true}).click();
   await expect(page.getByRole('tabpanel')).toContainText('rows shown', {timeout: 60000});
+}
+
+function run(command, argv, {cwd, input} = {}) {
+  const result = spawnSync(command, argv, {env: CONNECT_ENV, cwd, input, stdio: [input ? 'pipe' : 'inherit', 'inherit', 'inherit']});
+  if (result.status !== 0) throw new Error(`${command} ${argv.join(' ')}: exit ${result.status}`);
+}
+// iceberg_connect.py login as the signed-in user: the device code is approved in that user's browser session.
+async function connectAs(page) {
+  const login = spawn('uv', ['run', 'user_portal/client/iceberg_connect.py', 'login'], {env: {...CONNECT_ENV, BROWSER: 'true'}});
+  const done = new Promise((resolve, reject) => login.on('exit', code => code === 0 ? resolve() : reject(new Error(`iceberg_connect.py login: exit ${code}`))));
+  const url = await new Promise((resolve, reject) => {
+    let out = '';
+    login.stdout.on('data', chunk => { out += chunk; const match = out.match(/Open (\S+) and confirm/); if (match) resolve(match[1]); });
+    login.on('exit', () => reject(new Error('iceberg_connect.py login printed no URL: ' + out)));
+  });
+  const approve = await page.context().newPage();
+  await approve.goto(url);
+  // Keycloak asks to confirm the code, then for consent; #kc-login is the confirming button on both.
+  for (let step = 0; step < 3 && !(await approve.getByText(/successful|you may close/i).count()); step++) {
+    await approve.locator('#kc-login').click();
+    await approve.waitForLoadState('networkidle');
+  }
+  await done;
+  await approve.close();
+}
+
+// The extension's own Keycloak client; a context already signed in to a portal passes straight through.
+async function cbiSignIn(page, username) {
+  await page.goto(CBI_ORIGIN + '/');
+  await page.getByRole('button', {name: /Sign in with Keycloak/}).click();
+  if (username) {
+    await page.locator('#username').fill(username);
+    await page.locator('#password').fill(state.users[username]);
+    await page.locator('#kc-login').click();
+  }
+  await page.waitForURL(url => url.origin === CBI_ORIGIN);
+  await page.locator('nav.models').waitFor({timeout: 60000});
 }
 
 try {
@@ -181,14 +227,14 @@ try {
   await useDevelopment(sharing);
   await toPage(sharing, 'Databases');
   await sharing.locator('#new-database').click();
-  await sharing.getByLabel('Database name', {exact: true}).fill(AI_DATABASE.name);
-  await sharing.getByLabel('Description (optional)').fill(AI_DATABASE.description);
+  await sharing.getByLabel('Database name', {exact: true}).fill(GRID_DATABASE.name);
+  await sharing.getByLabel('Description (optional)').fill(GRID_DATABASE.description);
   await shot(sharing, '36-user-databases-create');
   const form = sharing.locator('#database-form');
-  if ((await api(admin, 'GET', '/api/overview')).databases.some(d => d.name === AI_DATABASE.name)) await form.getByRole('button', {name: 'Cancel', exact: true}).click();
+  if ((await api(admin, 'GET', '/api/overview')).databases.some(d => d.name === GRID_DATABASE.name)) await form.getByRole('button', {name: 'Cancel', exact: true}).click();
   else {
     await form.getByRole('button', {name: 'Create database', exact: true}).click();
-    await sharing.locator('#managed-databases').getByText(AI_DATABASE.name, {exact: true}).waitFor({timeout: 120000});
+    await sharing.locator('#managed-databases').getByText(GRID_DATABASE.name, {exact: true}).waitFor({timeout: 120000});
   }
   const database = (await api(admin, 'GET', '/api/overview')).databases.find(d => d.name === DEMO_DATABASE && d.environment === 'development');
 
@@ -203,19 +249,41 @@ try {
   await workspace.locator('.catalog-summary').waitFor();
   await shot(workspace, '08-user-catalog-empty');
 
-  // Notebook 06 publishes the flights tables and their semantic model; later shots need them, so a first run never skips this.
+  if (args['seed-only']) {
+    await signOut(member);
+    console.log(`Seeded. Load the data into ${database.id} (${DEMO_DATABASE}), then run again.`);
+    process.exit(0);
+  }
+  // sander loads the SCADA export from their own computer with the DuckDB CLI, as themselves; later shots need it.
   const contents = await (await member.request.get(`${env.USER_ORIGIN}/api/contents?database=${database.id}`)).json();
-  if (!contents.namespaces.some(ns => ns[0] === NAMESPACE) || need(41, 42)) {
+  if (!contents.namespaces.some(ns => ns[0] === NAMESPACE)) {
+    await connectAs(workspace);
+    run('uv', ['run', 'presentation/grid/grid_sensors.py', '.local/presentation/scada-export']);
+    run('uv', ['run', '../../user_portal/client/iceberg_connect.py', 'shell', database.id, '--write'], {cwd: '.local/presentation', input: readFileSync('presentation/grid/load.sql')});
+  }
+  // The model comes from the semantic-model skill's work files, published only when it is missing.
+  const inNamespace = await (await member.request.get(`${env.USER_ORIGIN}/api/contents?database=${database.id}&namespace=${NAMESPACE}`)).json();
+  if (existsSync(MODEL_FILE) && !JSON.stringify(inNamespace.semanticModels ?? inNamespace).includes(`"${MODEL}"`)) {
+    await connectAs(workspace);
+    run('uv', ['run', '.agents/skills/semantic-model/scripts/semantic_model.py', 'publish', database.id, NAMESPACE, MODEL_FILE, '--name', MODEL, '--questions', QUESTIONS_FILE]);
+  }
+
+  // The starter notebook, started through the API on the feeder_load table: it lists the tables and previews it.
+  if (need(41)) {
+    const started = await member.request.post(`${env.USER_ORIGIN}/api/notebooks`, {data: {database: database.id, namespace: [NAMESPACE], table: TABLE}, headers: {'X-Portal-Request': '1'}});
+    if (!started.ok()) throw new Error(`Start notebook: ${started.status()}`);
+    await workspace.reload();
+    await workspace.locator('#workspace-screen').waitFor();
     await toPage(workspace, 'Notebooks');
     await workspace.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
-    await workspace.locator('#notebook-file').selectOption({label: NOTEBOOK});
-    await workspace.frameLocator('#frame-host iframe').locator('.cm-content').first().waitFor({timeout: 180000});
-    // With the count, so the f-string in the cell's own code does not match.
-    const notebook = await runNotebook(workspace, NOTEBOOK, /Published [\d,]+ flight instances/);
-    await toHeading(notebook, 'Publish an AI-ready flights data product');
-    await shot(workspace, '41-user-notebook-flights');
-    await toHeading(notebook, '3. Turn selected semantic rules into quality evidence');
-    await shot(workspace, '42-user-notebook-checks');
+    const starter = workspace.frameLocator('#frame-host iframe');
+    await starter.locator('.cm-content').first().waitFor({timeout: 180000});
+    await starter.locator('.cm-content').first().click();
+    await workspace.keyboard.press('Control+Shift+r');
+    await starter.getByRole('heading', {name: 'Available objects'}).first().waitFor({timeout: 180000});
+    await expect(starter.locator('[data-status="queued"], [data-status="running"]')).toHaveCount(0, {timeout: 180000});
+    await toHeading(starter, 'Available objects');
+    await shot(workspace, '41-user-notebook-grid');
     await workspace.locator('#close-notebook').click();
     await workspace.locator('#editor').waitFor({state: 'hidden'});
     await toPage(workspace, 'Catalog');
@@ -249,7 +317,7 @@ try {
   await loadPreview(workspace);
   await shot(workspace, '19-user-table-preview');
 
-  // The meaning next to the tables: the semantic model notebook 06 stored in Polaris.
+  // The meaning next to the tables: the semantic model the skill stored in Polaris.
   if (need(43, 44, 49, 51, 52)) {
     await openNamespace(workspace, NAMESPACE);
     await openModel(workspace, MODEL);
@@ -258,34 +326,14 @@ try {
     await shot(workspace, '44-user-model-diagram');
     // Hovering a dataset follows its relationships; the promo video fades between these states.
     const dataset = name => workspace.locator('.sd-box').filter({has: workspace.locator('.sd-name').getByText(name, {exact: true})});
-    await dataset('FLIGHT').hover();
-    await shot(workspace, '51-user-model-hover-flight');
-    await dataset('AIRPORT').hover();
-    await shot(workspace, '52-user-model-hover-airport');
+    await dataset('FEEDER_LOAD').hover();
+    await shot(workspace, '51-user-model-hover-feeder-load');
+    await dataset('SUBSTATION').hover();
+    await shot(workspace, '52-user-model-hover-substation');
     await workspace.mouse.move(0, 0);
     await openTab(workspace, 'Metrics & relationships');
-    await expect(workspace.getByRole('tabpanel')).toContainText('on_time_arrival_pct');
+    await expect(workspace.getByRole('tabpanel')).toContainText('overload_hours');
     await shot(workspace, '49-user-model-metrics');
-  }
-
-  // Notebook 07 answers a business question with the stored metric; the promo video shows its real numbers.
-  if (need(53)) {
-    await toPage(workspace, 'Notebooks');
-    await workspace.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
-    await workspace.locator('#notebook-file').selectOption({label: '07 · Read an AI-ready flights product'});
-    await workspace.frameLocator('#frame-host iframe').locator('.cm-content').first().waitFor({timeout: 180000});
-    const reader = await runNotebook(workspace, '07 · Read an AI-ready flights product', /Example prompt/);
-    await toHeading(reader, /Which carrier is most punctual/);
-    await shot(workspace, '53-user-notebook-carriers');
-    const carriers = await reader.locator('table').filter({hasText: 'scheduled_flights'}).filter({hasText: 'on_time_arrival_pct'}).first().evaluate(table => {
-      const [head, ...rows] = [...table.querySelectorAll('tr')].map(tr => [...tr.children].map(cell => cell.textContent.trim()));
-      return rows.map(row => Object.fromEntries(head.map((name, i) => [name, row[i]])));
-    });
-    mkdirSync('presentation/promo', {recursive: true});
-    writeFileSync('presentation/promo/data.json', JSON.stringify({source: '07 · Read an AI-ready flights product, section 4', carriers}, null, 2) + '\n');
-    console.log('presentation/promo/data.json');
-    await workspace.locator('#close-notebook').click();
-    await workspace.locator('#editor').waitFor({state: 'hidden'});
   }
 
   await signOut(member);
@@ -373,6 +421,41 @@ try {
     await signOut(recipient);
     await recipient.close();
   }
+  // Conversational BI, the first extension. Each team administrator enables it once per environment;
+  // noor then asks about the model grid-planning shared with outage-response.
+  if (need(54, 55, 56)) {
+    const chat = await owner.newPage();
+    await cbiSignIn(chat);
+    const enable = async (page, team) => {
+      const row = page.locator('nav.models .not-enabled').filter({hasText: `${team} · development`});
+      if (await row.count()) { await row.getByRole('button', {name: 'Enable', exact: true}).click(); await row.waitFor({state: 'detached'}); }
+    };
+    await chat.locator('nav.models .not-enabled').filter({hasText: `${DEMO_TEAM} · development`}).waitFor().catch(() => {});
+    await shot(chat, '54-cbi-enable');
+    await enable(chat, DEMO_TEAM);
+    await chat.locator('nav.models button.db').filter({hasText: MODEL}).first().waitFor();
+    await chat.close();
+
+    const asker = await newContext(), bi = await asker.newPage();
+    bi.setDefaultTimeout(30000);
+    await cbiSignIn(bi, RECIPIENT);
+    await enable(bi, TEAM_SHARE.team);
+    await bi.locator('nav.models .database-group', {hasText: 'Shared with your team'}).locator('button.db', {hasText: MODEL}).first().click();
+    await bi.locator('h1', {hasText: MODEL}).waitFor();
+    const input = bi.locator('[data-copilotkit] textarea').first();
+    await input.fill(CBI_QUESTION);
+    await input.press('Enter');
+    await bi.locator('.query-card').first().waitFor({timeout: 120000});
+    await bi.locator('.gen-card canvas[role=img]').first().waitFor({timeout: 120000});
+    // Chart labels are drawn on the canvas, so a feeder name in the page text means the written answer has arrived.
+    await bi.getByText(/Dockside-4 Church/).first().waitFor({timeout: 120000});
+    await bi.waitForTimeout(3000);
+    await shot(bi, '55-cbi-answer');
+    await bi.locator('.query-card summary', {hasText: 'SQL'}).first().click();
+    await bi.locator('.query-card').first().evaluate(card => card.scrollIntoView({block: 'start'}));
+    await shot(bi, '56-cbi-query');
+    await asker.close();
+  }
   await owner.close();
 
   await portal.goto(env.PORTAL_ORIGIN);
@@ -381,9 +464,16 @@ try {
     await portal.waitForLoadState('networkidle');
     await shot(portal, name);
   }
+  if (need(57)) {
+    await portal.locator('[data-page="teams"]').first().click();
+    const accounts = portal.locator('section.panel').filter({has: portal.getByRole('heading', {name: /Extension service accounts/})});
+    await accounts.waitFor();
+    await accounts.evaluate(panel => panel.scrollIntoView({block: 'center'}));
+    await shot(portal, '57-admin-extension-accounts');
+  }
   await portal.locator('[data-page="explorer"]').first().click();
   for (const node of [DEMO_DATABASE, NAMESPACE]) await portal.locator('details > summary').filter({hasText: node}).first().click();
-  await portal.locator('details').filter({hasText: 'runways'}).first().waitFor();
+  await portal.locator('details').filter({hasText: 'substation'}).first().waitFor();
   await portal.getByRole('heading', {name: 'All databases'}).evaluate(h => h.scrollIntoView({block: 'start'}));
   await shot(portal, '20-admin-explorer');
   // A dialog is small on a 2000 px page: same 4000×2500 image from a narrower viewport.
@@ -436,7 +526,7 @@ try {
   await rustfs.waitForURL(url => !url.pathname.includes('login'));
   await folder(`${NAMESPACE}/${TABLE}/metadata/`);
   await shot(rustfs, '21-rustfs-metadata-files');
-  await rustfs.getByRole('row').filter({hasText: '00001-'}).getByRole('button', {name: 'Preview', exact: true}).click();
+  await rustfs.getByRole('row').filter({hasText: '.metadata.json'}).last().getByRole('button', {name: 'Preview', exact: true}).click();
   await rustfs.getByRole('dialog').getByText('"format-version"').waitFor();
   await rustfs.getByRole('dialog').getByRole('button').first().click(); // maximize
   await shot(rustfs, '22-rustfs-metadata-json');

@@ -77,7 +77,7 @@ def blip(freq):
 scenes = TIMELINE["scenes"]
 cues = TIMELINE["cues"]
 end_card = cues["resolve"]
-demo_start = next(s["start"] for s in scenes if s["id"] == "notebook")
+demo_start = next(s["start"] for s in scenes if s["id"] == "load")
 
 # Pad: Am, F, C, G, two bars each, until the end card; quieter under the hook and the problem.
 progression = [
@@ -96,11 +96,11 @@ while start < end_card:
     chord += 1
 
 # Pulse on the beat from the first demo scene until the end card, with a quiet off-beat tick.
-evidence = next(s["start"] for s in scenes if s["id"] == "evidence")
+offbeat = next(s["start"] for s in scenes if s["id"] == "interview")
 beat = demo_start
 while beat < end_card - 1e-6:
     add(beat, kick(0.4))
-    if beat >= evidence:
+    if beat >= offbeat:
         add(beat + BEAT / 2, noise_burst(0.05, 70), 0.05, pan=0.3)
     beat += BEAT
 

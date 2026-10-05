@@ -4,6 +4,8 @@ import hashlib
 import io
 import json
 import os
+import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -15,6 +17,19 @@ import pytest
 from scripts.release import installer_source
 
 ROOT = Path(__file__).resolve().parents[1]
+CBI_SETUP = ROOT / "extensions/conversationalbi/scripts/setup.py"
+CBI_VARIABLES = runpy.run_path(str(CBI_SETUP))["PASSTHROUGH"]
+# `docker run` of the platform image: run the script on the installation directory with only the
+# variables the installer names with -e, as Docker would.
+FAKE_RUN = '''import os, subprocess, sys
+args = sys.argv[1:]
+image = next(i for i, arg in enumerate(args) if arg.startswith("ghcr.io/"))
+names = [args[i + 1] for i in range(image) if args[i] == "-e"]
+install = os.environ["ICEBERG_INSTALL_DIR"]
+command = [install + arg[len("/install"):] if arg.startswith("/install/") else arg for arg in args[image + 1:]]
+env = {"PATH": os.environ["PATH"], **{name: os.environ[name] for name in names if name in os.environ}}
+sys.exit(subprocess.run([sys.executable, *command], env=env, stdin=subprocess.DEVNULL).returncode)
+'''
 POWERSHELL = os.environ.get("ICEBERG_TEST_POWERSHELL") or shutil.which(
     "powershell" if sys.platform == "win32" else "pwsh"
 )
@@ -37,13 +52,19 @@ def installer_env(tmp_path, request):
             "iceberg_connect.py": b"# helper\n",
             ".agents/skills/quick-share/SKILL.md": b"---\nname: quick-share\n---\n",
             ".agents/skills/demo-company/SKILL.md": b"---\nname: demo-company\n---\n",
+            "conversationalbi/compose.yaml": b"name: iceberg-conversationalbi\n",
+            "conversationalbi/scripts/setup.py": CBI_SETUP.read_bytes(),
         }.items():
             info = tarfile.TarInfo("iceberg-data-platform-0.2.1-install/" + name)
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     (release / "SHA256SUMS").write_text(f"{digest}  {archive_name}\n")
-    env = os.environ | {
+    fake_run = tmp_path / "fake_run.py"
+    fake_run.write_text(FAKE_RUN)
+    # Settings of the developer's own shell must not reach the installer.
+    inherited = {k: v for k, v in os.environ.items() if k not in CBI_VARIABLES and k != "ICEBERG_EXTENSIONS"}
+    env = inherited | {
         "ICEBERG_INSTALL_DIR": str(tmp_path / "install with spaces"),
         "TEST_RELEASE": str(release),
         "TEST_DOCKER_LOG": str(tmp_path / "docker.jsonl"),
@@ -51,6 +72,7 @@ def installer_env(tmp_path, request):
         "TEST_RELEASE_TAG": request.param[0],
         "TEST_IMAGE_TAG": request.param[1],
         "TEST_PYTHON": sys.executable,
+        "TEST_FAKE_RUN": str(fake_run),
         "TEST_FAIL": "",
     }
     return env
@@ -60,7 +82,7 @@ def calls(env):
     return [json.loads(line) for line in Path(env["TEST_DOCKER_LOG"]).read_text().splitlines()]
 
 
-def assert_started(env):
+def assert_started(env, cbi=False):
     commands = calls(env)
     tag = env["TEST_RELEASE_TAG"]
     setup_image = "ghcr.io/sanderdw/iceberg-data-platform-portal:" + env["TEST_IMAGE_TAG"]
@@ -73,11 +95,13 @@ def assert_started(env):
     assert downloads == [base + prefix + "SHA256SUMS", base + archive_prefix + "iceberg-data-platform-0.2.1-install.tar.gz"]
     pulls = [i for i, args in enumerate(commands) if args[-1] == "pull"]
     starts = [(i, args) for i, args in enumerate(commands) if "up" in args]
-    assert len(starts) == 2
+    assert len(starts) == (3 if cbi else 2)
     assert pulls and max(pulls) < starts[0][0]
     assert Path(starts[0][1][starts[0][1].index("-f") + 1]).name == "compose.yaml"
     assert Path(starts[1][1][starts[1][1].index("-f") + 1]).name == "compose.users.yaml"
     assert starts[1][1][-1] == "users"
+    if cbi:
+        assert Path(starts[2][1][starts[2][1].index("-f") + 1]).parts[-2:] == ("conversationalbi", "compose.yaml")
     assert any("images" in args and args[-1] == "pull" for args in commands)
     assert all("--wait" in args and "--no-build" in args for _, args in starts)
     assert not any("down" in args for args in commands)
@@ -101,7 +125,7 @@ with open(os.environ['TEST_DOWNLOAD_LOG'], 'a') as log:
     log.write(url + '\\n')
 shutil.copyfile(pathlib.Path(os.environ['TEST_RELEASE']) / url.rsplit('/', 1)[1], args[args.index('-o') + 1])
 ''',
-        "docker": '''import json, os, pathlib, runpy, sys
+        "docker": '''import json, os, subprocess, sys
 args = sys.argv[1:]
 with open(os.environ['TEST_DOCKER_LOG'], 'a') as log:
     log.write(json.dumps(args) + '\\n')
@@ -110,7 +134,7 @@ if os.environ['TEST_FAIL'] and os.environ['TEST_FAIL'] in args:
 if args[0] == 'info':
     print('linux')
 if args[0] == 'run':
-    runpy.run_path(str(pathlib.Path(os.environ['ICEBERG_INSTALL_DIR']) / 'scripts/setup.py'))
+    sys.exit(subprocess.run([sys.executable, os.environ['TEST_FAKE_RUN'], *args]).returncode)
 ''',
     }
     for name, source in programs.items():
@@ -120,9 +144,11 @@ if args[0] == 'run':
     env = installer_env | {"PATH": str(bin_dir) + os.pathsep + os.environ["PATH"]}
 
     def run():
-        # Pipe source into sh, exactly as the documented curl command does.
+        # Pipe source into sh, exactly as the documented curl command does. A new session has no
+        # terminal, so /dev/tty cannot open: the run is unattended even under an interactive pytest.
         source = installer_source(ROOT, "install.sh", env["TEST_RELEASE_TAG"], env["TEST_IMAGE_TAG"]).decode()
-        return subprocess.run(["sh"], input=source, env=env, text=True, capture_output=True, check=False)
+        return subprocess.run(["sh"], input=source, env=env, text=True, capture_output=True, check=False,
+                              start_new_session=True)
 
     return run, env
 
@@ -222,6 +248,83 @@ def test_shell_pull_failure_does_not_start_stacks(shell_installer):
     assert not any("up" in args for args in calls(env))
 
 
+def assert_cbi_installed(result, env, model):
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert_started(env, cbi=True)
+    target = Path(env["ICEBERG_INSTALL_DIR"])
+    cbi = target / "conversationalbi"
+    commands = calls(env)
+    registrations = [i for i, args in enumerate(commands) if "--extension" in args]
+    first_up = next(i for i, args in enumerate(commands) if "up" in args)
+    assert len(registrations) == 1 and registrations[0] < first_up
+    assert "PLATFORM_EXTENSIONS=conversationalbi=http://localhost:3007" in (target / ".env").read_text()
+    for name in (".env", ".env.bridge", "llm.env"):
+        assert (cbi / name).is_file()
+        # Windows has no POSIX modes; the real setup runs in a Linux container.
+        if sys.platform != "win32":
+            assert (cbi / name).stat().st_mode & 0o777 == 0o600
+    setup = next(args for args in commands if args[0] == "run" and args[-1].endswith("conversationalbi/scripts/setup.py"))
+    assert [setup[i + 1] for i, arg in enumerate(setup) if arg == "-e"] == list(CBI_VARIABLES)
+    output = result.stdout.split("is running.")[1]
+    assert "3. Ask questions in Conversational BI\n   http://localhost:3007\n" in output
+    assert f"   Model    {model}\n" in output
+    assert "docker compose -f conversationalbi/compose.yaml up -d --wait" in output
+    assert "docker compose -f conversationalbi/compose.yaml down" in output.split("Stop")[1].split("\n")[0]
+    return cbi
+
+
+def test_shell_installs_conversational_bi_only_when_asked(shell_installer):
+    run, env = shell_installer
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Conversational BI" not in result.stdout
+    assert not (Path(env["ICEBERG_INSTALL_DIR"]) / "conversationalbi/.env").exists()
+    assert not any("conversationalbi" in " ".join(args) for args in calls(env))
+
+
+def test_shell_conversational_bi_takes_the_model_from_the_environment(shell_installer):
+    run, env = shell_installer
+    key = "sk-ant-" + "k" * 40
+    env.update(LLM_MODEL="anthropic:claude-sonnet-5-5", ANTHROPIC_API_KEY=key, OPENAI_API_KEY="o" * 20)
+    result = run()
+    cbi = assert_cbi_installed(result, env, "anthropic:claude-sonnet-5-5")
+    llm = (cbi / "llm.env").read_text()
+    assert f"LLM_MODEL=anthropic:claude-sonnet-5-5\nANTHROPIC_API_KEY={key}\n" in llm
+    assert "OPENAI_API_KEY=" not in llm
+    assert key not in Path(env["TEST_DOCKER_LOG"]).read_text() + result.stdout + result.stderr
+
+    # A rerun without settings keeps the extension, its credentials and the model.
+    for name in ("LLM_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+        del env[name]
+    kept = {name: (cbi / name).read_bytes() for name in ("llm.env", ".env.bridge")}
+    for log in ("TEST_DOCKER_LOG", "TEST_DOWNLOAD_LOG"):
+        Path(env[log]).unlink()
+    result = run()
+    assert_started(env, cbi=True)
+    assert not any("--extension" in args for args in calls(env))
+    assert {name: (cbi / name).read_bytes() for name in kept} == kept
+    assert "   Model    anthropic:claude-sonnet-5-5\n" in result.stdout
+
+    # Another model replaces the previous provider's key.
+    env.update(LLM_MODEL="openai:gpt-5.5", OPENAI_API_KEY="o" * 20)
+    assert run().returncode == 0
+    assert (cbi / "llm.env").read_text().endswith("LLM_MODEL=openai:gpt-5.5\nOPENAI_API_KEY=" + "o" * 20 + "\n")
+
+
+def test_shell_conversational_bi_without_a_model(shell_installer):
+    run, env = shell_installer
+    env["ICEBERG_EXTENSIONS"] = "conversationalbi"
+    cbi = assert_cbi_installed(run(), env, "not set: add LLM_MODEL and its key to conversationalbi/llm.env")
+    assert "LLM_MODEL" not in re.sub(r"(?m)^#.*\n", "", (cbi / "llm.env").read_text())
+
+
+def test_installers_pass_the_variables_conversational_bi_reads():
+    shell = re.search(r"^cbi_variables='([^']*)'", (ROOT / "install.sh").read_text(), re.MULTILINE).group(1).split()
+    powershell = re.findall(r"'([A-Z_]+)'", re.search(r"\$CbiVariables = @\(([^)]*)\)",
+                                                       (ROOT / "install.ps1").read_text()).group(1))
+    assert shell == powershell == list(CBI_VARIABLES)
+
+
 @pytest.fixture
 def powershell_installer(installer_env, tmp_path):
     if not POWERSHELL:
@@ -234,7 +337,7 @@ function docker {
     $global:LASTEXITCODE = 0
     if ($env:TEST_FAIL -and $args -contains $env:TEST_FAIL) { $global:LASTEXITCODE = 1; return }
     if ($args[0] -eq 'info') { 'linux' }
-    if ($args[0] -eq 'run') { & $env:TEST_PYTHON "$env:ICEBERG_INSTALL_DIR/scripts/setup.py" }
+    if ($args[0] -eq 'run') { & $env:TEST_PYTHON $env:TEST_FAKE_RUN @args }
 }
 function Invoke-WebRequest {
     param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
@@ -256,7 +359,7 @@ try {
 
     def run():
         return subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(harness)],
-                              env=env, text=True, capture_output=True, check=False)
+                              env=env, text=True, capture_output=True, check=False, stdin=subprocess.DEVNULL)
 
     return run, env
 
@@ -294,3 +397,18 @@ def test_powershell_pull_failure_does_not_start_stacks(powershell_installer):
     assert run().returncode != 0
     assert any("pull" in args for args in calls(env))
     assert not any("up" in args for args in calls(env))
+
+
+def test_powershell_conversational_bi_takes_the_model_from_the_environment(powershell_installer):
+    run, env = powershell_installer
+    env.update(LLM_MODEL="anthropic:claude-sonnet-5-5", ANTHROPIC_API_KEY="a" * 20)
+    cbi = assert_cbi_installed(run(), env, "anthropic:claude-sonnet-5-5")
+    assert "ANTHROPIC_API_KEY=" + "a" * 20 in (cbi / "llm.env").read_text()
+    del env["LLM_MODEL"], env["ANTHROPIC_API_KEY"]
+    kept = (cbi / "llm.env").read_bytes()
+    for log in ("TEST_DOCKER_LOG", "TEST_DOWNLOAD_LOG"):
+        Path(env[log]).unlink()
+    assert run().returncode == 0
+    assert_started(env, cbi=True)
+    assert not any("--extension" in args for args in calls(env))
+    assert (cbi / "llm.env").read_bytes() == kept

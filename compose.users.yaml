@@ -14,7 +14,6 @@ services:
       USER_PORT: 3002
       USER_HOST: 0.0.0.0
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
-      USER_COOKIE_SECURE: ${USER_COOKIE_SECURE:-false}
       USER_STACK_NAME: iceberg-workspaces
       POLARIS_URL: http://polaris-control-plane:8181
       # Addresses a data share recipient connects to, as handed out with a new share.
@@ -32,6 +31,9 @@ services:
       NOTEBOOK_IMAGE: iceberg-user-notebook:0.1.0
       MAX_NOTEBOOKS: ${MAX_NOTEBOOKS:-8}
       NOTEBOOK_MEMORY: ${NOTEBOOK_MEMORY:-2g}
+      USER_QUERY_SLOTS: ${USER_QUERY_SLOTS:-2}
+      USER_QUERY_WAIT_SECONDS: ${USER_QUERY_WAIT_SECONDS:-15}
+      PLATFORM_EXTENSIONS: ${PLATFORM_EXTENSIONS:-}
     ports:
       - "127.0.0.1:${USER_PORT:-3002}:3002"
     volumes:

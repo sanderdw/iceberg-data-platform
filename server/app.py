@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
+from . import extensions
 from .mcp_admin import create_admin_mcp
 from .mcp_auth import is_mcp_path, mount_mcp
 from .models import (
@@ -46,7 +47,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         raise RuntimeError(
             "Set PORTAL_PASSWORD (at least 16 characters). Run uv run python -m scripts.setup."
         )
-    secure_cookie = secure_cookie if secure_cookie is not None else os.environ.get("COOKIE_SECURE") == "true"
+    secure_cookie = bool(secure_cookie)
     owned = provider is None
     if provider is None:
         if os.environ.get("PROVIDER", "polaris") != "polaris":
@@ -76,7 +77,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
                     provider.close()
 
     app = FastAPI(
-        title="Iceberg Workspace API", version="0.6.0", lifespan=lifespan, docs_url=None, redoc_url=None,
+        title="Iceberg Workspace API", version="0.7.0", lifespan=lifespan, docs_url=None, redoc_url=None,
         description=(
             "Sign in to the administration portal first, then open /docs to call these APIs with your session. "
             "Writes require X-Portal-Request: 1 and Content-Type: application/json. "
@@ -264,13 +265,16 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
     def overview():
         health = provider.health()
         if health["status"] != "online":
-            return {"health": health, "teams": [], "databases": [], "users": [], "shares": []}
+            return {"health": health, "teams": [], "databases": [], "users": [], "shares": [],
+                    "automationPrincipals": [], "extensions": extensions.public(os.environ)}
         return {
             "health": health,
             "teams": provider.list_teams(),
             "databases": provider.list_databases(),
             "users": list_users(),
             "shares": provider.list_shares(),
+            "automationPrincipals": provider.list_automation(),
+            "extensions": extensions.public(os.environ),
         }
 
     @app.get("/api/infrastructure")
@@ -391,6 +395,18 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
     @app.delete("/api/shares/{id}")
     def delete_share(id: Annotated[str, PathParam(pattern=r"^share-[a-f0-9]{32}$")]):
         provider.delete_share(id)
+        return {"deleted": True}
+
+    # Team administrators enable extensions through the extension itself (the bridge).
+    # Here platform administrators can see and revoke their automation principals.
+    @app.get("/api/automation-principals")
+    def automation_principals():
+        return provider.list_automation()
+
+    @app.delete("/api/automation-principals/{id}")
+    def delete_automation(id: Annotated[str, PathParam(pattern=r"^svc-[a-f0-9]{32}$")]):
+        provider.require_automation(id)
+        provider.delete_automation(id)
         return {"deleted": True}
 
     if user_management:

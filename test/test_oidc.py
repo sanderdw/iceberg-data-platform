@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import hashlib
+import re
 import time
 from urllib.parse import parse_qs, urlsplit
 
@@ -209,6 +210,20 @@ def test_reject_invalid_identity_and_admin_role(issuer, kind, changes):
         response = client.get(start(client, state), follow_redirects=False)
         assert response.status_code == 403
         assert client.get("/api/teams").status_code == 401
+
+
+def test_try_again_forces_keycloak_login_form(issuer):
+    oidc, state = issuer
+    state["access_changes"] = {"resource_access": {}}
+    with TestClient(create_app(MemoryPolaris(), PASSWORD, oidc=oidc)) as client:
+        assert "prompt" not in parse_qs(urlsplit(client.get("/auth/login", follow_redirects=False).headers["location"]).query)
+        failed = client.get(start(client, state), follow_redirects=False)
+        assert failed.status_code == 403
+        retry = re.search(r'href="(/auth/login[^"]*)">Try again', failed.text).group(1)
+        location = client.get(retry, follow_redirects=False).headers["location"]
+        assert parse_qs(urlsplit(location).query)["prompt"] == ["login"]
+        forged = client.get("/auth/login?prompt=none", follow_redirects=False).headers["location"]
+        assert "prompt" not in parse_qs(urlsplit(forged).query)
 
 
 def test_reject_forged_signature_and_unbound_callback(issuer):

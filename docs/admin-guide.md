@@ -31,6 +31,10 @@ The portal's user management uses the `iceberg-provisioner` service account in t
 
 Lists refresh every 30 seconds while visible. Navigation and filters are kept in the URL.
 
+## Extension service accounts
+
+When an [extension](extensions.md) such as Conversational BI is registered, the Teams page lists its service accounts (automation principals): one per team, environment and extension, enabled by a team Administrator in the extension. **Revoke** stops the extension from acting for that team environment at once. It gets no new tokens, and tokens already issued expire within an hour.
+
 ## Data shares
 
 Team administrators create data shares in the [user portal](../user_portal/README.md#data-shares). The **Data shares** page lists every share with its database, team, objects, expiry and creator, and you can revoke any of them there. A database that has shares can't be moved until they are revoked.
@@ -47,7 +51,7 @@ Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic mode
 
 - **Access:** the Reader role of a new database gets `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ`. Writers and administrators already have `CATALOG_MANAGE_CONTENT`, which covers creating, replacing and dropping models.
 - **Deleting a database** removes its semantic models first. Polaris refuses to drop a namespace that still holds one.
-- **Where users find them:** **Catalog** in the user portal (the administration portal's **Catalog** lists their names only), the MCP tools `list_semantic_models` and `describe_semantic_model`, and example notebooks 06 (publish) and 07 (read).
+- **Where users find them:** **Catalog** in the user portal (the administration portal's **Catalog** lists their names only), the MCP tools `list_semantic_models`, `describe_semantic_model`, `query_semantic_model` and `list_dimension_values` (writers also `publish_semantic_model` and `delete_semantic_model`), the installation's `semantic-model` agent skill, and example notebooks 06 (publish) and 07 (read).
 - **Beta:** the Polaris API may change in a later release. Check the [release notes](https://polaris.apache.org/releases/1.8.0/) before upgrading Polaris.
 
 ## Infrastructure
@@ -93,9 +97,9 @@ Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Cl
 
 Every call requires the `platform-admin` role. The tools are the administration API's operations:
 
-- **Read:** `get_overview`, `list_teams`, `list_databases`, `get_database_connection`, `browse_catalog`, `list_users`, `find_accounts`, `list_shares`
+- **Read:** `get_overview`, `list_teams`, `list_databases`, `get_database_connection`, `browse_catalog`, `list_users`, `find_accounts`, `list_shares`, `list_automation_principals`
 - **Change:** `create_team`, `update_team`, `create_database`, `rename_database`, `move_database`, `create_user`, `link_user`, `update_user_access`, `retry_user_setup`
-- **Destructive:** `delete_team`, `delete_database` (requires `confirm_name`), `delete_user`, `revoke_share`
+- **Destructive:** `delete_team`, `delete_database` (requires `confirm_name`), `delete_user`, `revoke_share`, `revoke_automation_principal`
 
 `create_user` returns the one-time password in the agent's transcript. Treat that transcript as confidential, and reset the password if in doubt. Users connect to the [user portal's endpoint](../user_portal/README.md#connect-an-mcp-client) in the same way.
 
@@ -125,6 +129,8 @@ The table lists the main endpoints; `/docs` has all of them, including Keycloak 
 | PATCH | `/api/databases/{id}/name` | Rename with `{"name":"new-name"}` |
 | GET | `/api/databases/{id}/connection` | Iceberg connection details |
 | DELETE | `/api/shares/{id}` | Revoke a data share |
+| GET | `/api/automation-principals` | List extension service accounts |
+| DELETE | `/api/automation-principals/{id}` | Revoke an extension service account |
 | GET / POST | `/api/users` | List / create users |
 | PATCH / DELETE | `/api/users/{id}` | Replace memberships with `{"memberships":[{"team":"team-id","role":"writer"}]}` / revoke |
 

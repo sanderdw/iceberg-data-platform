@@ -171,6 +171,10 @@ def test_semantic_model_describes_the_six_published_tables(flights):
     assert "f." not in metrics["cancellation_pct"] and "FLIGHT.cancelled" in metrics["cancellation_pct"]
     assert json.loads(json.dumps(semantic)) == semantic
     assert isinstance(semantic["ai_context"]["instructions"], str)
+    # Ossie dimensions: the date is a time dimension, carriers group by name, measures stay unflagged.
+    flagged = {(d["name"], f["name"]): f["dimension"] for d in semantic["datasets"] for f in d["fields"] if "dimension" in f}
+    assert flagged[("FLIGHT", "date")] == {"is_time": True} and flagged[("CARRIER", "name")] == {"is_time": False}
+    assert ("FLIGHT", "dep_delay") not in flagged
 
 
 def test_stored_metrics_give_the_same_answer_as_notebook_seven(flights):

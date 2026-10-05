@@ -1,8 +1,11 @@
 """User MCP tools: catalog reads and administrator-scoped database management."""
 
+import asyncio
+import re
 import time
-from datetime import datetime
-from typing import Annotated, Any
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -24,6 +27,8 @@ from server.validation import validation_message
 
 from .directory import UserSession, validate_namespace
 from .preview import run_preview
+from .semantic.compiler import Dimension, FieldRef, Filter, Order, QuerySpec, unit
+from .semantic.compiler import Name as MetricName
 
 READ_ONLY = ToolAnnotations(
     read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False
@@ -42,9 +47,16 @@ the tables and views in one namespace, describe_table and describe_view for sche
 snapshots and view SQL, and preview_rows for up to 100 rendered rows at the current or a
 given snapshot. list_semantic_models and describe_semantic_model return the Apache Ossie
 semantic models stored next to the tables: datasets that map to tables, fields, relationships
-and metrics with their SQL expressions. Read them before writing SQL for a business question,
-so that metrics use the agreed definition. These catalog tools read with the user's Polaris
-grants and never run SQL.
+and metrics with their SQL expressions, plus what each metric can be split by. describe_semantic_model
+gives a summary by default (names, units, first sentences); narrow a large model with search or
+dataset, and ask detail="full" for every description. Answer business questions with
+query_semantic_model: name metrics, dimensions (DATASET.field, optional time grain) and filters; it
+compiles the model's agreed SQL and reads with the user's own grants. Find the exact value to filter
+on, such as a region's spelling, with list_dimension_values instead of guessing. State the metric
+definition, filters and period with every answer, and use preview_rows only to look at raw rows. All tools read with the user's Polaris grants; none runs free-form SQL.
+Writers create a semantic model with publish_semantic_model. To replace one, read it with
+describe_semantic_model first and pass its entityVersion; a newer version is refused. Ask the
+user before replacing a model or calling delete_semantic_model, which needs confirm_name.
 Only a current Administrator or Database + bucket administrator of a team may create,
 rename or delete its databases. create_database takes the owning team id and environment;
 rename_database and delete_database take the database id. Deletion immediately destroys
@@ -70,6 +82,8 @@ Namespace = Annotated[
     Field(max_length=100, description="Namespace path as a list of parts, for example ['analytics']."),
 ]
 Name = Annotated[str, Field(min_length=1, max_length=256)]
+ModelName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,256}$", description="Semantic model name: letters, digits, - and _.")]
+QUERY_ROWS = 200
 Limit = Annotated[int, Field(ge=1, le=100, description="Rows to return, at most 100.")]
 Snapshot = Annotated[
     str | None, Field(pattern=r"^[0-9]{1,19}$", description="Snapshot id from describe_table; current when omitted.")
@@ -86,6 +100,69 @@ Expiry = Annotated[datetime | None, Field(description="ISO 8601 time at which ac
 ModelTables = Annotated[
     bool, Field(description="Also select the tables that selected semantic models read, as the portal does.")
 ]
+
+
+def first_sentence(value, limit=160):
+    """The first sentence of a description, at most `limit` characters, for summaries."""
+    value = " ".join(str(value or "").split())
+    end = re.search(r"(?<=[.!?])\s", value)
+    value = value[:end.start()] if end else value
+    return value if len(value) <= limit else value[:limit].rsplit(" ", 1)[0] + " …"
+
+
+def model_digest(details, guide, detail="summary", search=None, dataset=None):
+    """describe_semantic_model's models and queryable part, narrowed by `search` and `dataset`.
+
+    A model with hundreds of fields and metrics is too large to read whole. The summary keeps what
+    an agent needs to pick names for query_semantic_model; `detail="full"` keeps every description.
+    """
+    homes, needle, full = guide.get("metrics", {}), (search or "").casefold(), detail == "full"
+    shown = {"fields": [0, 0], "metrics": [0, 0]}
+
+    def keep(kind, item):
+        shown[kind][1] += 1
+        found = not needle or any(needle in str(t).casefold()
+                                  for t in [item["name"], item["description"], *item["synonyms"]])
+        shown[kind][0] += found
+        return found
+
+    def sql(item):
+        return next((e["expression"] for e in item["expressions"] if e.get("expression")), "")
+
+    models = []
+    for model in details["models"]:
+        datasets = []
+        for d in model["datasets"]:
+            if dataset and d["name"] != dataset:
+                continue
+            fields = [f for f in d["fields"] if keep("fields", f)]
+            if not full:
+                fields = [{"name": f["name"], "datatype": f["datatype"], "dimension": f["dimension"],
+                           "timeDimension": f["timeDimension"], "summary": first_sentence(f["description"], 120)}
+                          for f in fields]
+            datasets.append({**d, "fields": fields})
+        metrics = [m for m in model["metrics"] if (not dataset or homes.get(m["name"]) == dataset)
+                   and keep("metrics", m)]
+        if not full:
+            metrics = [{"name": m["name"], "dataset": homes.get(m["name"]), "unit": unit(m["description"]),
+                        "expression": sql(m), "synonyms": m["synonyms"], "summary": first_sentence(m["description"])}
+                       for m in metrics]
+        models.append({**model, "datasets": datasets, "metrics": metrics})
+    dimensions = {home: found for home, found in guide.get("dimensions", {}).items() if not dataset or home == dataset}
+    if not full:
+        # A plain field name means: on the metric's own dataset, or one unambiguous join away.
+        dimensions = {home: [f if f.get("ambiguous") or f.get("path") else f["field"] for f in found]
+                      for home, found in dimensions.items()}
+    result = {"models": models, "queryable": {**guide, "dimensions": dimensions}}
+    if search or dataset:
+        result["matched"] = {kind: {"shown": n, "of": total} for kind, (n, total) in shown.items()}
+    return result
+
+
+def as_of(out, view):
+    """When the table that a governed query counts was last committed, as ISO 8601."""
+    committed = (out.get("snapshots", {}).get(view) or {}).get("committedAt")
+    return datetime.fromtimestamp(committed / 1000, UTC).isoformat(timespec="seconds") if committed else None
 
 
 def validated(model, path, **fields):
@@ -105,8 +182,20 @@ def session_for(access):
     )
 
 
-def create_mcp(directory, oidc, *, lock, previews):
+def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
     mcp = mcp_server("iceberg-workspaces", oidc, title="Iceberg Workspaces", instructions=INSTRUCTIONS)
+
+    @asynccontextmanager
+    async def slot(kind):
+        # Agents often ask several questions at once: wait briefly for a slot instead of failing.
+        try:
+            await asyncio.wait_for(previews.acquire(), query_wait)
+        except TimeoutError:
+            raise ToolError(f"{kind} slots are busy. Try again shortly.") from None
+        try:
+            yield
+        finally:
+            previews.release()
 
     async def query(fn, *args):
         # Directory reads share the gateway lock like every /api request.
@@ -244,19 +333,31 @@ def create_mcp(directory, oidc, *, lock, previews):
 
     @mcp.tool(annotations=READ_ONLY)
     async def describe_semantic_model(
-        database: DatabaseId, namespace: Namespace, model: Name, include_definition: bool = False
+        database: DatabaseId, namespace: Namespace, model: Name,
+        detail: Annotated[Literal["summary", "full"], Field(
+            description="summary: names, types, units and first sentences; full: every description and expression."
+        )] = "summary",
+        search: Annotated[str | None, Field(min_length=1, max_length=100, description=(
+            "Keep only the fields and metrics whose name, synonyms or description contain this text."))] = None,
+        dataset: Annotated[str | None, Field(min_length=1, max_length=128, description=(
+            "Keep only this dataset's fields and the metrics that count it."))] = None,
+        include_definition: bool = False,
     ) -> dict[str, Any]:
-        """Datasets (with their source tables and fields), relationships and metrics of a semantic model.
+        """Datasets (with their source tables and fields), relationships and metrics of a semantic model,
+        and what query_semantic_model can split each metric by.
 
-        include_definition also returns the document exactly as Polaris stores it.
+        The summary is enough to pick metric and dimension names; narrow a large model with search or
+        dataset, and ask detail="full" for every description. include_definition also returns the
+        document exactly as Polaris stores it.
         """
         parts = namespace_parts(namespace, model)
         if not parts:
             raise ToolError("Select a namespace.")
         session, _ = await resolve(database, shared=True)
         details = await query(directory.details, session, database, parts, "semantic-model", model)
-        keep = ("name", "namespace", "specVersion", "entityVersion", "models") + (("definition",) if include_definition else ())
-        return {k: details[k] for k in keep}
+        keep = ("name", "namespace", "specVersion", "entityVersion") + (("definition",) if include_definition else ())
+        guide = await query(directory.semantic_query_guide, session, database, parts, model)
+        return {**{k: details[k] for k in keep}, **model_digest(details, guide, detail, search, dataset)}
 
     @mcp.tool(annotations=READ_ONLY)
     async def preview_rows(
@@ -266,9 +367,7 @@ def create_mcp(directory, oidc, *, lock, previews):
         parts = namespace_parts(namespace, table)
         if not parts:
             raise ToolError("Select a namespace.")
-        if previews.locked():
-            raise ToolError("Preview slots are busy. Try again shortly.")
-        async with previews:
+        async with slot("Preview"):
             session, _ = await resolve(database, shared=True)
             prepared = await query(directory.preview_request, session, database, parts, table, snapshot_id, limit)
             # The sandboxed subprocess runs without the lock, like the portal preview.
@@ -276,6 +375,88 @@ def create_mcp(directory, oidc, *, lock, previews):
             # Revocation while reading discards the result, as in the portal preview.
             await query(directory.details, session, database, parts, "table", table)
             return result
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def query_semantic_model(
+        database: DatabaseId, namespace: Namespace, model: Name,
+        metrics: Annotated[list[MetricName], Field(min_length=1, max_length=5)],
+        dimensions: Annotated[list[Dimension], Field(max_length=5)] = [],  # noqa: B006
+        filters: Annotated[list[Filter], Field(max_length=10)] = [],  # noqa: B006
+        order_by: Annotated[list[Order], Field(max_length=5)] = [],  # noqa: B006
+        limit: Annotated[int, Field(ge=1, le=QUERY_ROWS)] = 100,
+    ) -> dict[str, Any]:
+        """Answer a business question with a semantic model's agreed metrics, split by dimensions
+        (DATASET.field, optional time grain and via) and filtered, read with your own permissions."""
+        parts = namespace_parts(namespace, model)
+        if not parts:
+            raise ToolError("Select a namespace.")
+        try:
+            spec = QuerySpec(metrics=metrics, dimensions=dimensions, filters=filters, order_by=order_by, limit=limit)
+        except ValidationError as exc:
+            raise ToolError(validation_message(exc.errors(), "query")) from None
+        async with slot("Query"):
+            session, _ = await resolve(database, shared=True)
+            _, compiled, job = await query(directory.semantic_query_job, session, database, parts, model, spec,
+                                           QUERY_ROWS)
+            out = await call(run_preview, job, "user_portal.semantic.worker", "Query")
+            # Revocation while reading discards the result, as for previews.
+            await query(directory.load_semantic_model, session, database, parts, model)
+        return {
+            "model": {"database": database, "namespace": parts, "name": model},
+            "columns": compiled.columns, "rows": out["rows"], "rowCount": len(out["rows"]),
+            "truncated": out["truncated"], "metrics": compiled.metrics, "joinPaths": compiled.join_paths,
+            "sql": compiled.pretty, "params": compiled.params, "dataAsOf": as_of(out, compiled.metrics[0]["dataset"]),
+        }
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def list_dimension_values(
+        database: DatabaseId, namespace: Namespace, model: Name, field: FieldRef,
+        search: Annotated[str | None, Field(min_length=1, max_length=100, description=(
+            "Keep only the values whose text contains this, ignoring case."))] = None,
+        limit: Annotated[int, Field(ge=1, le=QUERY_ROWS)] = 50,
+    ) -> dict[str, Any]:
+        """Distinct values of one dimension (DATASET.field) with their row counts, optionally only those
+        containing search, to find the exact value for a query_semantic_model filter."""
+        parts = namespace_parts(namespace, model)
+        if not parts:
+            raise ToolError("Select a namespace.")
+        async with slot("Query"):
+            session, _ = await resolve(database, shared=True)
+            compiled, job = await query(directory.semantic_values_job, session, database, parts, model, field,
+                                        search, limit)
+            out = await call(run_preview, job, "user_portal.semantic.worker", "Query")
+            # Revocation while reading discards the result, as for previews.
+            await query(directory.load_semantic_model, session, database, parts, model)
+        return {
+            "model": {"database": database, "namespace": parts, "name": model}, "field": field,
+            "values": [{"value": value, "rows": rows} for value, rows in out["rows"]],
+            "truncated": out["truncated"], "dataAsOf": as_of(out, compiled.bindings[0]["view"]),
+        }
+
+    @mcp.tool(annotations=UPDATE)
+    async def publish_semantic_model(
+        database: DatabaseId, namespace: Namespace, name: ModelName,
+        model: Annotated[dict[str, Any], Field(description="One Apache Ossie semantic model, or a document that holds one.")],
+        entity_version: Annotated[int | None, Field(description="entityVersion from describe_semantic_model; "
+                                                                "required to replace an existing model.")] = None,
+    ) -> dict[str, Any]:
+        """Create a semantic model in a namespace, or replace the version you read (Writer role)."""
+        parts = namespace_parts(namespace, name)
+        if not parts:
+            raise ToolError("Select a namespace.")
+        session, _ = await resolve(database)
+        return await query(directory.publish_semantic_model, session, database, parts, name, model, entity_version)
+
+    @mcp.tool(annotations=DESTRUCTIVE)
+    async def delete_semantic_model(
+        database: DatabaseId, namespace: Namespace, name: ModelName, confirm_name: str
+    ) -> dict[str, Any]:
+        """Permanently delete a semantic model (Writer role); confirm_name must equal its name."""
+        parts = namespace_parts(namespace, name)
+        if not parts:
+            raise ToolError("Select a namespace.")
+        session, _ = await resolve(database)
+        return await query(directory.delete_semantic_model, session, database, parts, name, confirm_name)
 
     async def owned_share(database, share):
         """A session for the share's owning database; the share must belong to it."""

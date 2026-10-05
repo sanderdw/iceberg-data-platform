@@ -1,0 +1,171 @@
+name: Conversational BI release
+# Releases of Conversational BI are independent of platform releases (v* tags): tag conversationalbi-vX.Y.Z.
+# Run workflow on a branch publishes a preview: images and a prerelease tagged BRANCH-RUN_ID-ATTEMPT.
+on:
+  push:
+    tags: ['conversationalbi-v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: conversationalbi-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  checks:
+    uses: ./.github/workflows/conversationalbi-ci.yml
+  validate:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      preview: ${{ steps.version.outputs.preview }}
+      image_tag: ${{ steps.version.outputs.image_tag }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      slug: ${{ steps.version.outputs.slug }}
+    defaults:
+      run:
+        working-directory: extensions/conversationalbi
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: '0.12.18'
+      - id: version
+        run: uv run --no-project python -m scripts.release --channel "$GITHUB_REF" >> "$GITHUB_OUTPUT"
+      - name: Check and build the source archive
+        env:
+          PREVIEW: ${{ steps.version.outputs.preview }}
+        run: |
+          if [ "$PREVIEW" = true ]; then
+            uv run --no-project python -m scripts.release --build
+          else
+            uv run --no-project python -m scripts.release --tag "$GITHUB_REF_NAME" --build
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: conversationalbi-source
+          path: extensions/conversationalbi/dist/
+          if-no-files-found: error
+  images:
+    needs: validate
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [iceberg-conversationalbi, iceberg-conversationalbi-runtime]
+        arch: [amd64, arm64]
+        include:
+          - image: iceberg-conversationalbi
+            dockerfile: extensions/conversationalbi/Dockerfile
+            context: extensions/conversationalbi
+          - image: iceberg-conversationalbi-runtime
+            dockerfile: extensions/conversationalbi/runtime/Dockerfile
+            context: extensions/conversationalbi/runtime
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Image names are explicit so that moving the extension to its own repository keeps them.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          tags: ghcr.io/sanderdw/${{ matrix.image }}:${{ needs.validate.outputs.image_tag }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.validate.outputs.image_tag }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+  publish:
+    needs: [validate, images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: conversationalbi-source
+          path: dist
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish multi-platform images
+        env:
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+        run: |
+          for image in iceberg-conversationalbi iceberg-conversationalbi-runtime; do
+            docker buildx imagetools create --tag "ghcr.io/sanderdw/${image}:${IMAGE_TAG}" \
+              "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-amd64" "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-arm64"
+          done
+      - name: The images are public
+        # The platform installer pulls them without signing in. A new GHCR package starts private:
+        # make it public in the package settings, then re-run this job.
+        env:
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+        run: |
+          for image in iceberg-conversationalbi iceberg-conversationalbi-runtime; do
+            docker --config "$(mktemp -d)" manifest inspect "ghcr.io/sanderdw/${image}:${IMAGE_TAG}" >/dev/null \
+              || { echo "ghcr.io/sanderdw/${image} is not public" >&2; exit 1; }
+          done
+      - name: Create the GitHub release
+        if: needs.validate.outputs.preview != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        # Never "latest": releases/latest/download/install.sh must stay the platform's installer.
+        run: |
+          gh release create "conversationalbi-v${VERSION}" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --latest=false \
+            --title "Conversational BI ${VERSION}" --notes "Conversational BI ${VERSION} for the Iceberg Data Platform (Bridge contract 0.1). Images: ghcr.io/sanderdw/iceberg-conversationalbi:${VERSION} and ghcr.io/sanderdw/iceberg-conversationalbi-runtime:${VERSION}."
+      - name: Create the preview prerelease
+        if: needs.validate.outputs.preview == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --latest=false --title "Conversational BI preview ${IMAGE_TAG}" \
+            --notes "Conversational BI ${VERSION} built from commit ${GITHUB_SHA} on the ${BRANCH} branch (Bridge contract 0.1). Images: ghcr.io/sanderdw/iceberg-conversationalbi:${IMAGE_TAG} and ghcr.io/sanderdw/iceberg-conversationalbi-runtime:${IMAGE_TAG}."
+      - name: Prune older previews of this branch
+        if: needs.validate.outputs.preview == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ needs.validate.outputs.slug }}
+        run: |
+          # Keep the five newest previews of this branch; run ids only increase.
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,isPrerelease --jq \
+            '("conversationalbi-" + $ENV.SLUG + "-") as $prefix
+              | [.[] | select(.isPrerelease and (.tagName | startswith($prefix)))
+              | .tagName | select(ltrimstr($prefix) | test("^[0-9]+-[0-9]+$"))]
+              | sort_by(ltrimstr($prefix) | split("-") | map(tonumber)) | reverse | .[5:][]' |
+            while read -r old; do
+              gh release delete "$old" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            done

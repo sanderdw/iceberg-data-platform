@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.12.19 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.22 AS uv
 FROM python:3.14.7-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
@@ -10,12 +10,14 @@ RUN uv sync --locked --no-dev --group users --group oidc --group mcp
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
 COPY user_portal/duckdb_extensions.py ./user_portal/
 RUN /app/.venv/bin/python user_portal/duckdb_extensions.py
-COPY server/__init__.py server/models.py server/polaris.py server/storage.py server/oidc.py server/entrypoints.py server/validation.py server/mcp_auth.py ./server/
+COPY server/__init__.py server/models.py server/polaris.py server/storage.py server/oidc.py server/entrypoints.py server/validation.py server/mcp_auth.py server/extensions.py ./server/
 COPY user_portal/__init__.py user_portal/app.py user_portal/directory.py user_portal/runtime.py user_portal/__main__.py ./user_portal/
 COPY user_portal/catalog.py user_portal/preview.py user_portal/mcp_server.py ./user_portal/
+COPY user_portal/semantic ./user_portal/semantic
 COPY user_portal/public ./user_portal/public
 COPY user_portal/client ./user_portal/client
 COPY public/fonts ./user_portal/public/fonts
 COPY public/favicon.svg ./user_portal/public/favicon.svg
+COPY public/docs.js ./user_portal/public/docs.js
 EXPOSE 3002
 CMD ["uv", "run", "--no-sync", "python", "-m", "user_portal"]

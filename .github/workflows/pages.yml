@@ -1,7 +1,7 @@
 name: Pages
 on:
   push:
-    branches: [keycloak, main]
+    branches: [main]
     paths: ['presentation/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 permissions:

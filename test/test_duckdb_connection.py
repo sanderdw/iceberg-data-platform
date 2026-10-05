@@ -67,6 +67,7 @@ def test_native_connection_uses_scoped_vended_credentials_and_internal_endpoint(
     assert "ATTACH 'team''s warehouse'" in sql
     assert "READ_ONLY" in sql and "ACCESS_DELEGATION_MODE 'none'" in sql
     assert "PERSISTENT" not in sql
+    assert "SET TimeZone = 'UTC'" in sql  # Dates derived from timestamps match the models' UTC convention.
 
 
 def test_writable_connection_to_a_new_table_waits_for_credentials(connection_setup):

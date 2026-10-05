@@ -1,0 +1,72 @@
+# Conversational BI: a separate Compose project that uses the platform only through the Extension
+# Bridge (contracts/bridge in the platform repository), Iceberg REST and S3.
+name: iceberg-conversationalbi
+
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+services:
+  # Sign-in, REST API and MCP, the chat UI, the agent (Pydantic AI) and the query worker. The only
+  # service with the LLM settings (llm.env), the Bridge credentials and a route to the platform.
+  cbi-gateway:
+    build: .
+    image: iceberg-conversationalbi:0.1.0
+    <<: *hardened
+    labels:
+      io.iceberg-platform.extension: conversationalbi
+    # LLM_MODEL and its provider's credentials, written by scripts/setup.py. Not interpolated here,
+    # so any provider's variables reach the gateway; the Bridge values win over anything in llm.env.
+    env_file: [llm.env, .env.bridge]
+    environment:
+      RUNTIME_URL: http://cbi-runtime:4000
+      RUNTIME_KEY: ${RUNTIME_KEY:?Run scripts/setup.py first}
+      BI_LLM_ROWS: ${BI_LLM_ROWS:-20}
+      BI_LLM_BYTES: ${BI_LLM_BYTES:-8192}
+      BI_MAX_ROWS: ${BI_MAX_ROWS:-5000}
+      BI_QUERY_TIMEOUT: ${BI_QUERY_TIMEOUT:-30}
+      BI_MAX_QUERIES: ${BI_MAX_QUERIES:-4}
+    ports:
+      - "127.0.0.1:${CBI_PORT:-3007}:3007"
+    networks:
+      platform: {}
+      chat:
+        aliases: [cbi-gateway]
+    mem_limit: ${CBI_MEMORY:-3g}
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3007/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # The CopilotKit runtime between the chat UI and the agent. Internal network only: no platform
+  # access, no internet, no credentials beyond the key that identifies it to the agent listener.
+  cbi-runtime:
+    build: runtime
+    image: iceberg-conversationalbi-runtime:0.1.0
+    <<: *hardened
+    labels:
+      io.iceberg-platform.extension: conversationalbi
+    environment:
+      RUNTIME_KEY: ${RUNTIME_KEY:?Run scripts/setup.py first}
+      AGENT_URL: http://cbi-gateway:3017/
+    networks:
+      chat:
+        aliases: [cbi-runtime]
+    mem_limit: 512m
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:4000/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+networks:
+  platform:
+    external: true
+    name: ${PLATFORM_NETWORK:-iceberg-platform_default}
+  chat:
+    internal: true

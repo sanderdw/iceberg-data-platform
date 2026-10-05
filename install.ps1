@@ -6,6 +6,11 @@
     $ReleaseTag = 'latest'
     $SetupImage = 'ghcr.io/sanderdw/iceberg-data-platform-portal:latest'
     $TemporaryDir = Join-Path ([IO.Path]::GetTempPath()) ('iceberg-install-' + [guid]::NewGuid().ToString('N'))
+    # Conversational BI's setup writes llm.env from these variables (names only: no value reaches a
+    # command line) or, in a terminal, from its questions.
+    $CbiVariables = @('LLM_MODEL', 'BI_ALLOW_TEST_MODEL', 'GOOGLE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION')
+    $Interactive = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and
+        -not ([Environment]::GetCommandLineArgs() | Where-Object { $_ -match '^-NonI' })
 
     function Invoke-Docker {
         & docker @args
@@ -17,6 +22,12 @@
     function Invoke-UsersCompose {
         Invoke-Docker compose --env-file "$InstallDir/.env" -f "$InstallDir/compose.users.yaml" @args
     }
+    function Invoke-CbiCompose {
+        Invoke-Docker compose --env-file "$InstallDir/conversationalbi/.env" -f "$InstallDir/conversationalbi/compose.yaml" @args
+    }
+    function Get-FileValue($Path, $Key) {
+        (Get-Content $Path | Where-Object { $_.StartsWith("$Key=") } | Select-Object -Last 1) -replace '^[^=]*=', ''
+    }
 
     Get-Command docker -ErrorAction Stop | Out-Null
     Get-Command tar -ErrorAction Stop | Out-Null
@@ -25,6 +36,15 @@
     if ($ContainerOS -ne 'linux') { throw 'Start Docker Desktop and switch to Linux containers first.' }
     if ((Test-Path "$InstallDir/.git") -or (Test-Path "$InstallDir/Dockerfile")) {
         throw 'The target is a source checkout. Set ICEBERG_INSTALL_DIR to a separate directory.'
+    }
+    # Conversational BI is optional: asked for, already installed, or accepted at the prompt.
+    $Cbi = (@($env:ICEBERG_EXTENSIONS -split ',' | ForEach-Object { $_.Trim() }) -contains 'conversationalbi') -or [bool]$env:LLM_MODEL
+    $CbiRegistered = (Test-Path "$InstallDir/conversationalbi/.env.bridge") -and (Test-Path "$InstallDir/.env") -and
+        [bool](Select-String -Path "$InstallDir/.env" -Pattern '^PLATFORM_EXTENSIONS=(.*,)?conversationalbi=' -Quiet)
+    if ($CbiRegistered) { $Cbi = $true }
+    if (-not $Cbi -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
+        $Answer = Read-Host "Add Conversational BI, a chat that answers from your semantic models with an LLM`n(OpenAI, Anthropic, Google Gemini or Amazon Bedrock)? [y/N]"
+        $Cbi = $Answer -match '^[Yy]'
     }
 
     try {
@@ -54,13 +74,14 @@
         New-Item -ItemType Directory -Path $BundleDir | Out-Null
         & tar -xzf $ArchivePath -C $BundleDir --strip-components=1
         if ($LASTEXITCODE -ne 0) { throw 'Could not extract the installation bundle.' }
-        foreach ($File in @('compose.yaml', 'compose.users.yaml', '.env.example', 'scripts/setup.py', 'pgadmin/servers.json')) {
+        foreach ($File in @('compose.yaml', 'compose.users.yaml', '.env.example', 'scripts/setup.py', 'pgadmin/servers.json',
+                'conversationalbi/compose.yaml', 'conversationalbi/scripts/setup.py')) {
             if (!(Test-Path "$BundleDir/$File" -PathType Leaf)) { throw "Installation bundle is missing $File" }
         }
 
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
         $InstallDir = (Resolve-Path $InstallDir).Path
-        foreach ($File in @('compose.yaml', 'compose.users.yaml', 'compose.lan.yaml', 'compose.users.lan.yaml')) {
+        foreach ($File in @('compose.yaml', 'compose.users.yaml', 'compose.lan.yaml', 'compose.users.lan.yaml', 'conversationalbi/compose.yaml')) {
             if (Test-Path "$InstallDir/$File") { Copy-Item "$InstallDir/$File" "$InstallDir/$File.bak" -Force }
         }
         Get-ChildItem -Force $BundleDir | Copy-Item -Destination $InstallDir -Recurse -Force
@@ -70,23 +91,39 @@
         Invoke-Docker pull $SetupImage
         Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" `
             --entrypoint python $SetupImage /install/scripts/setup.py
+        if ($Cbi) {
+            if (-not $CbiRegistered) {
+                # Before the platform starts, so it creates the extension's sign-in clients right away.
+                Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
+                    /install/scripts/setup.py --extension conversationalbi --origin http://localhost:3007 `
+                    --handshake /install/conversationalbi/.env.bridge | Out-Null
+            }
+            Write-Host "Preparing Conversational BI in $InstallDir/conversationalbi..."
+            $CbiArgs = @('run', '--rm', '--mount', "type=bind,src=$InstallDir,dst=/install", '--entrypoint', 'python')
+            foreach ($Name in $CbiVariables) { $CbiArgs += @('-e', $Name) }
+            if ($Interactive) { $CbiArgs += @('-i', '-t') }
+            Invoke-Docker @CbiArgs $SetupImage /install/conversationalbi/scripts/setup.py
+        }
 
-        Write-Host 'Pulling images for both stacks (the notebook image may take a few minutes)...'
+        Write-Host 'Pulling images (the notebook image may take a few minutes)...'
         Invoke-AdminCompose pull
         Invoke-UsersCompose --profile images pull
+        if ($Cbi) { Invoke-CbiCompose pull }
         Write-Host 'Starting administration and data services...'
         Invoke-AdminCompose up -d --no-build --wait --wait-timeout 300
         Write-Host 'Starting the user portal...'
         Invoke-UsersCompose up -d --no-build --wait --wait-timeout 300 users
+        if ($Cbi) {
+            Write-Host 'Starting Conversational BI...'
+            Invoke-CbiCompose up -d --no-build --wait --wait-timeout 300
+        }
         $ShownDir = $InstallDir
         foreach ($Separator in @('/', '\')) {
             if ($HOME -and $InstallDir.StartsWith("$HOME$Separator")) { $ShownDir = '~' + $InstallDir.Substring($HOME.Length) }
         }
         # Quote the full path when it needs quoting.
         $LocationDir = if ($ShownDir -match '^[\w~./\\:-]+$') { $ShownDir } else { "`"$InstallDir`"" }
-        function Get-EnvValue($Key) {
-            (Get-Content "$InstallDir/.env" | Where-Object { $_.StartsWith("$Key=") } | Select-Object -Last 1) -replace '^[^=]*=', ''
-        }
+        function Get-EnvValue($Key) { Get-FileValue "$InstallDir/.env" $Key }
         $Password = "the one you chose at first sign-in (initial: PLATFORM_ADMIN_PASSWORD in $ShownDir/.env)"
         if ($NewEnv) { $Password = "$(Get-EnvValue PLATFORM_ADMIN_PASSWORD)  (temporary: you choose a new one at first sign-in)" }
         # A kept .env can hold other ports or a quick-share session's public addresses.
@@ -100,9 +137,23 @@
         Write-Host "`n2. Create a team and a user, then sign in as that user in the user portal"
         Write-Host "   $UserOrigin/#guide"
         Write-Host '   Or skip the setup: the demo-company skill below creates teams, users and databases for you'
+        $Stop = ''
+        $Start = ''
+        if ($Cbi) {
+            $Model = Get-FileValue "$InstallDir/conversationalbi/llm.env" LLM_MODEL
+            if (-not $Model) { $Model = 'not set: add LLM_MODEL and its key to conversationalbi/llm.env' }
+            Write-Host "`n3. Ask questions in Conversational BI"
+            Write-Host "   $(Get-FileValue "$InstallDir/conversationalbi/.env.bridge" EXTENSION_ORIGIN)"
+            Write-Host '   A team administrator enables it once per environment: Enable, in the chat'
+            Write-Host "   Model    $Model"
+            Write-Host "   Change   edit $ShownDir/conversationalbi/llm.env, then"
+            Write-Host "            Set-Location $LocationDir; docker compose -f conversationalbi/compose.yaml up -d --wait"
+            $Stop = 'docker compose -f conversationalbi/compose.yaml down; '
+            $Start = '; docker compose -f conversationalbi/compose.yaml up -d --wait'
+        }
         Write-Host "`nInstalled in $ShownDir"
-        Write-Host "   Stop     Set-Location $LocationDir; docker compose -f compose.users.yaml down; docker compose down"
-        Write-Host "   Start    Set-Location $LocationDir; docker compose up -d --wait; docker compose -f compose.users.yaml up -d --wait users"
+        Write-Host "   Stop     Set-Location $LocationDir; $($Stop)docker compose -f compose.users.yaml down; docker compose down"
+        Write-Host "   Start    Set-Location $LocationDir; docker compose up -d --wait; docker compose -f compose.users.yaml up -d --wait users$Start"
         Write-Host '   Update   run the install command again; your data and .env are kept'
         Write-Host "`nOptional"
         Write-Host '   Connect Python, DuckDB or DBeaver (needs uv):'
@@ -110,6 +161,7 @@
         Write-Host '   Skills for coding agents such as Claude Code, Codex and GitHub Copilot:'
         Write-Host '     quick-share    Share the portals for a class or demo over temporary HTTPS links'
         Write-Host '     demo-company   Create an Energy, Webshop or Retail demo company, one account per participant'
+        Write-Host '     semantic-model Build a semantic model by interview, tested against your own data'
         Write-Host "   Open your agent in $ShownDir and ask, for example: `"Set up a demo company for my class`""
     }
     finally {
