@@ -1,4 +1,4 @@
-// Renders presentation/promo/index.html frame by frame into an MP4 with the synthesized soundtrack.
+// Renders presentation/video-promo/semantic-models/index.html frame by frame into an MP4 with the synthesized soundtrack.
 // Usage: node scripts/promo-render.mjs            full render
 //        node scripts/promo-render.mjs --stills 2,12,40   PNG stills at those seconds, no video
 import {spawn, spawnSync} from 'node:child_process';
@@ -8,9 +8,9 @@ import {parseArgs} from 'node:util';
 import {chromium} from '@playwright/test';
 
 const {values: args} = parseArgs({options: {stills: {type: 'string'}}});
-const ROOT = 'presentation', ORIGIN = 'http://promo.local/', WORK = '.local/promo';
-const OUT = 'presentation/promo/iceberg-data-platform-promo.mp4', POSTER = 'presentation/promo/poster.png', AUDIO = `${WORK}/soundtrack.wav`;
-const timeline = JSON.parse(readFileSync('presentation/promo/timeline.json', 'utf8'));
+const ROOT = 'presentation', PAGE = 'video-promo/semantic-models', ORIGIN = 'http://promo.local/', WORK = '.local/promo';
+const OUT = `${ROOT}/${PAGE}/iceberg-data-platform-promo.mp4`, POSTER = `${ROOT}/${PAGE}/poster.png`, AUDIO = `${WORK}/soundtrack.wav`;
+const timeline = JSON.parse(readFileSync(`${ROOT}/${PAGE}/timeline.json`, 'utf8'));
 const TYPES = {'.html': 'text/html', '.json': 'application/json', '.png': 'image/png', '.ttf': 'font/ttf'};
 mkdirSync(WORK, {recursive: true});
 
@@ -30,7 +30,7 @@ try {
   });
   const errors = [];
   page.on('pageerror', error => errors.push(error));
-  await page.goto(`${ORIGIN}promo/index.html?render`);
+  await page.goto(`${ORIGIN}${PAGE}/index.html?render`);
   await page.evaluate(() => window.promoReady);
   if (errors.length) throw errors[0];
 

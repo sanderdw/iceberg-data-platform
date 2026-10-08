@@ -53,3 +53,7 @@ screenshots/design-experiments/2026-10-02*
 /iceberg_connect.py
 *:Zone.Identifier
 /semantic-models/
+
+# Launch video: the synthesized music bed (regenerate with make_music.py) and review stills.
+/presentation/video-promo/platform/launch/public/music.wav
+/presentation/video-promo/platform/launch/stills/

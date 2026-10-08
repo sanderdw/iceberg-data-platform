@@ -39,9 +39,13 @@ Seeding skips what already exists, and the passwords chosen at the forced first 
 
 Export to PDF: open `index.html?print-pdf` in Chrome and print to PDF.
 
-## Promo video
+## Promo videos
 
-`promo/` holds a 60 second promo that follows the deck's demo: a coding agent loads the SCADA export with the DuckDB CLI, the semantic-model skill interviews the team and tests every question, the catalog draws the model, noor asks Conversational BI, grid-planning shares the model, and the Extension Bridge keeps the core small. `promo/iceberg-data-platform-promo.mp4` is the video with sound, and `promo/index.html` plays the same timeline live in the browser (space pauses, arrows skip). The closing slide of the deck links to the video.
+`video-promo/` holds the promo videos. Each one keeps its source next to the rendered MP4.
+
+### Semantic models
+
+`video-promo/semantic-models/` holds a 60 second promo that follows the deck's demo: a coding agent loads the SCADA export with the DuckDB CLI, the semantic-model skill interviews the team and tests every question, the catalog draws the model, noor asks Conversational BI, grid-planning shares the model, and the Extension Bridge keeps the core small. `iceberg-data-platform-promo.mp4` is the video with sound, and `index.html` plays the same timeline live in the browser (space pauses, arrows skip). The closing slide of the deck links to this video and to the launch video.
 
 The page is rendered, not recorded. Every visual is a function of time, `timeline.json` holds the scene times and sound cues, and `data.json` holds the real numbers: the row counts and the overload answer from `query_semantic_model`, the same question noor asks in captures 55 and 56. The soundtrack is synthesized from the same timeline by `scripts/promo-audio.py`, so the cuts and sounds stay in sync.
 
@@ -51,6 +55,20 @@ npm run promo:render                                     # soundtrack, 1800 fram
 node scripts/promo-render.mjs --stills 12,44             # single frames in .local/promo/stills
 ```
 
-To swap in a produced music track, replace the audio stream: `ffmpeg -i promo/iceberg-data-platform-promo.mp4 -i music.mp3 -map 0:v -map 1:a -c:v copy -c:a aac -shortest out.mp4`.
+To swap in a produced music track, replace the audio stream: `ffmpeg -i video-promo/semantic-models/iceberg-data-platform-promo.mp4 -i music.mp3 -map 0:v -map 1:a -c:v copy -c:a aac -shortest out.mp4`.
+
+### Platform launch
+
+`video-promo/platform/launch/` is a 90 second launch video built with [Remotion](https://www.remotion.dev/) (1920×1080, 30 fps). `src/Launch.tsx` holds the scenes and their frame timeline, `public/shots/` and `public/fonts/` are copies of the deck's screenshots and fonts (Remotion only serves files from `public/`), and `out/iceberg-data-platform-launch.mp4` is the rendered video, linked from the closing slide of the deck next to the semantic-models promo. The ambient music bed is synthesized by `make_music.py` into `public/music.wav`, which is git-ignored, so generate it before the first render. Remotion is free for individuals and small companies; larger companies need a [company license](https://www.remotion.dev/license).
+
+```bash
+cd video-promo/platform/launch
+npm install
+python3 make_music.py            # public/music.wav
+npm run studio                   # preview and scrub in the browser
+npm run render                   # out/iceberg-data-platform-launch.mp4
+```
+
+Stills for review go in `stills/`, which is git-ignored.
 
 The deck is published at https://sanderdw.github.io/iceberg-data-platform/ by the `Pages` workflow on every push that touches this folder. The folder is excluded from source releases.
