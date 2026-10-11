@@ -25,6 +25,9 @@
     function Invoke-CbiCompose {
         Invoke-Docker compose --env-file "$InstallDir/conversationalbi/.env" -f "$InstallDir/conversationalbi/compose.yaml" @args
     }
+    function Invoke-DbtCompose {
+        Invoke-Docker compose --env-file "$InstallDir/dbt/.env" -f "$InstallDir/dbt/compose.yaml" @args
+    }
     function Get-FileValue($Path, $Key) {
         (Get-Content $Path | Where-Object { $_.StartsWith("$Key=") } | Select-Object -Last 1) -replace '^[^=]*=', ''
     }
@@ -45,6 +48,15 @@
     if (-not $Cbi -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
         $Answer = Read-Host "Add Conversational BI, a chat that answers from your semantic models with an LLM`n(OpenAI, Anthropic, Google Gemini or Amazon Bedrock)? [y/N]"
         $Cbi = $Answer -match '^[Yy]'
+    }
+    # The dbt extension likewise.
+    $Dbt = @($env:ICEBERG_EXTENSIONS -split ',' | ForEach-Object { $_.Trim() }) -contains 'dbt'
+    $DbtRegistered = (Test-Path "$InstallDir/dbt/.env.bridge") -and (Test-Path "$InstallDir/.env") -and
+        [bool](Select-String -Path "$InstallDir/.env" -Pattern '^PLATFORM_EXTENSIONS=(.*,)?dbt=' -Quiet)
+    if ($DbtRegistered) { $Dbt = $true }
+    if (-not $Dbt -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
+        $Answer = Read-Host "Add dbt pipelines, where AI agents build and test dbt models on your tables? Its launcher`nuses the Docker socket to start each run in an isolated container. [y/N]"
+        $Dbt = $Answer -match '^[Yy]'
     }
 
     try {
@@ -75,13 +87,15 @@
         & tar -xzf $ArchivePath -C $BundleDir --strip-components=1
         if ($LASTEXITCODE -ne 0) { throw 'Could not extract the installation bundle.' }
         foreach ($File in @('compose.yaml', 'compose.users.yaml', '.env.example', 'scripts/setup.py', 'pgadmin/servers.json',
-                'conversationalbi/compose.yaml', 'conversationalbi/scripts/setup.py')) {
+                'conversationalbi/compose.yaml', 'conversationalbi/scripts/setup.py', 'dbt/compose.yaml', 'dbt/scripts/setup.py',
+                'dbt/iceberg_dbt.py')) {
             if (!(Test-Path "$BundleDir/$File" -PathType Leaf)) { throw "Installation bundle is missing $File" }
         }
 
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
         $InstallDir = (Resolve-Path $InstallDir).Path
-        foreach ($File in @('compose.yaml', 'compose.users.yaml', 'compose.lan.yaml', 'compose.users.lan.yaml', 'conversationalbi/compose.yaml')) {
+        foreach ($File in @('compose.yaml', 'compose.users.yaml', 'compose.lan.yaml', 'compose.users.lan.yaml', 'conversationalbi/compose.yaml',
+                'dbt/compose.yaml')) {
             if (Test-Path "$InstallDir/$File") { Copy-Item "$InstallDir/$File" "$InstallDir/$File.bak" -Force }
         }
         Get-ChildItem -Force $BundleDir | Copy-Item -Destination $InstallDir -Recurse -Force
@@ -104,11 +118,25 @@
             if ($Interactive) { $CbiArgs += @('-i', '-t') }
             Invoke-Docker @CbiArgs $SetupImage /install/conversationalbi/scripts/setup.py
         }
+        if ($Dbt) {
+            if (-not $DbtRegistered) {
+                Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
+                    /install/scripts/setup.py --extension dbt --origin http://localhost:3004 `
+                    --handshake /install/dbt/.env.bridge | Out-Null
+            }
+            Write-Host "Preparing dbt pipelines in $InstallDir/dbt..."
+            Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
+                /install/dbt/scripts/setup.py | Out-Null
+            # dbt commands from a terminal, next to iceberg_connect.py.
+            Copy-Item "$InstallDir/dbt/iceberg_dbt.py" "$InstallDir/iceberg_dbt.py" -Force
+        }
 
         Write-Host 'Pulling images (the notebook image may take a few minutes)...'
         Invoke-AdminCompose pull
         Invoke-UsersCompose --profile images pull
         if ($Cbi) { Invoke-CbiCompose pull }
+        # The images profile adds the runner image, which the launcher starts for every run.
+        if ($Dbt) { Invoke-DbtCompose --profile images pull }
         Write-Host 'Starting administration and data services...'
         Invoke-AdminCompose up -d --no-build --wait --wait-timeout 300
         Write-Host 'Starting the user portal...'
@@ -116,6 +144,10 @@
         if ($Cbi) {
             Write-Host 'Starting Conversational BI...'
             Invoke-CbiCompose up -d --no-build --wait --wait-timeout 300
+        }
+        if ($Dbt) {
+            Write-Host 'Starting dbt pipelines...'
+            Invoke-DbtCompose up -d --no-build --wait --wait-timeout 300
         }
         $ShownDir = $InstallDir
         foreach ($Separator in @('/', '\')) {
@@ -139,10 +171,11 @@
         Write-Host '   Or skip the setup: the demo-company skill below creates teams, users and databases for you'
         $Stop = ''
         $Start = ''
+        $Step = 3
         if ($Cbi) {
             $Model = Get-FileValue "$InstallDir/conversationalbi/llm.env" LLM_MODEL
             if (-not $Model) { $Model = 'not set: add LLM_MODEL and its key to conversationalbi/llm.env' }
-            Write-Host "`n3. Ask questions in Conversational BI"
+            Write-Host "`n$Step. Ask questions in Conversational BI"
             Write-Host "   $(Get-FileValue "$InstallDir/conversationalbi/.env.bridge" EXTENSION_ORIGIN)"
             Write-Host '   A team administrator enables it once per environment: Enable, in the chat'
             Write-Host "   Model    $Model"
@@ -150,6 +183,18 @@
             Write-Host "            Set-Location $LocationDir; docker compose -f conversationalbi/compose.yaml up -d --wait"
             $Stop = 'docker compose -f conversationalbi/compose.yaml down; '
             $Start = '; docker compose -f conversationalbi/compose.yaml up -d --wait'
+            $Step++
+        }
+        if ($Dbt) {
+            $DbtOrigin = (Get-FileValue "$InstallDir/dbt/.env.bridge" EXTENSION_ORIGIN).TrimEnd('/')
+            Write-Host "`n$Step. Build pipelines with dbt"
+            Write-Host "   $DbtOrigin"
+            Write-Host '   A team administrator enables it once per environment: ask your agent (enable_environment)'
+            Write-Host "   Agent    claude mcp add --transport http --client-id ext-dbt-mcp --callback-port 3010 iceberg-dbt $DbtOrigin/mcp"
+            Write-Host '   Skill    dbt-platform: ask your agent, for example "Build a pipeline for my sales data"'
+            Write-Host "   Terminal Set-Location $LocationDir; uv run iceberg_dbt.py login (dbt commands that run on the platform)"
+            $Stop = "docker compose -f dbt/compose.yaml down; $Stop"
+            $Start = "$Start; docker compose -f dbt/compose.yaml up -d --wait"
         }
         Write-Host "`nInstalled in $ShownDir"
         Write-Host "   Stop     Set-Location $LocationDir; $($Stop)docker compose -f compose.users.yaml down; docker compose down"

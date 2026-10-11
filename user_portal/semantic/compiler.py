@@ -92,7 +92,7 @@ class Filter(Input):
 
 
 class Order(Input):
-    name: str = Field(max_length=300, description="An output column: a metric name or a dimension's column name.")
+    name: str = Field(max_length=300, description="An output column: a metric name, or a dimension as DATASET.field.")
     desc: bool = False
 
 

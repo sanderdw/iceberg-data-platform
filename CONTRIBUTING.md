@@ -69,6 +69,7 @@ npm run test:connect
 ## Pull requests
 
 - Keep pull requests focused, and describe the behaviour before and after the change plus the checks you ran.
+- Check the change against the [five principles](README.md#principles): clean UX, API first, AI native, open source and loosely coupled. A new feature has a documented API route and, where agents need it, an MCP tool.
 - Add regression tests for behaviour changes, especially around authorization, grants, cleanup and data operations.
 - Never include credentials, `.env` files, notebook output or screenshots that show secrets.
 - Never delete volumes wholesale on a shared development environment.

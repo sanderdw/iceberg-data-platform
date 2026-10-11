@@ -1,9 +1,9 @@
 # Extensions
 
 The core platform stays small: catalog, storage, identity, portals and notebooks. Larger
-capabilities, such as conversational BI, live in **extensions**. Each one has its own Compose
-project, dependencies, images, version, changelog and CI, and talks to the core only through the
-**Extension Bridge**. The core and an extension are released independently and work together as
+capabilities, such as conversational BI and dbt pipelines, live in **extensions**. Each one has its
+own Compose project, dependencies, images, version, changelog and CI, and talks to the core only
+through the **Extension Bridge**. The core and an extension are released independently and work together as
 long as both support the same contract version.
 
 ```mermaid
@@ -31,7 +31,8 @@ flowchart LR
 The [Extension Bridge contract](../contracts/bridge/README.md) ships with every core release. It
 gives an extension the signed-in user's teams and databases, and automation principals: service
 accounts that act for one team in one environment, enabled only by that team's Administrators,
-with one-hour catalog tokens. Team shares the team received reach their read role. Extensions sign
+with short-lived catalog tokens whose lifetime the platform sets
+(`POLARIS_TOKEN_LIFETIME`, one hour by default; each token reports it in `expiresIn`). Team shares the team received reach their read role. Extensions sign
 in through their own Keycloak clients, whose tokens Polaris refuses. Any producer may describe a
 table with the [table-property conventions](../contracts/bridge/v1/table-properties.md), which the
 catalog shows as **Produced by**. See the [resource model](CONTEXT.md#automation-principals) for how
@@ -56,6 +57,12 @@ clients are disabled on the next start.
 | Extension | Folder | What it adds |
 | --- | --- | --- |
 | Conversational BI | `extensions/conversationalbi` | Ask questions about your own and shared semantic models in a chat. Answers come from governed queries compiled from the model, shown as generative UI: query cards, charts, tables and KPIs. Also an API and MCP server |
+| dbt pipelines | `extensions/dbt` | AI agents build, test and schedule dbt v2 pipelines on your team's tables through an API and MCP server. Each run is an isolated container that writes as the team's service account. A viewer shows each pipeline per environment, and writers edit a model there on a branch. Tables it builds show where they come from under **Produced by** |
 
 Each extension documents its own installation in its folder. The release installer can also add
-Conversational BI; see [installation](install.md#add-conversational-bi).
+both; see [Conversational BI](install.md#add-conversational-bi) and
+[dbt pipelines](install.md#add-dbt-pipelines).
+
+Proposed, not built: an [ingestion extension](proposals/ingestion-extension.md) that loads other
+Iceberg catalogs, PostgreSQL and MariaDB databases, REST APIs and files on a schedule, for dbt to
+transform.

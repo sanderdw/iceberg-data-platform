@@ -121,7 +121,7 @@ Connect an AI agent to the MCP server:
 
 ```bash
 claude mcp add --transport http --client-id ext-conversationalbi-mcp --callback-port 3010 \
-  conversationalbi http://localhost:3007/mcp
+  iceberg-conversationalbi http://localhost:3007/mcp
 ```
 
 ## What it can read

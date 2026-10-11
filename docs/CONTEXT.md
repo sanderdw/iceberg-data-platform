@@ -62,11 +62,11 @@ A data share gives another team, an external party, or both read access to selec
 ## Automation principals
 
 An automation principal is the service account through which an extension, such as
-Conversational BI, acts for one team in one environment. A team Administrator enables it through the
+Conversational BI or dbt, acts for one team in one environment. A team Administrator enables it through the
 extension (the [Bridge](extensions.md)). There is at most one per team, environment and extension.
 It follows the team's databases in that environment: creating, moving and deleting a database
 update its grants like a member's. It is never a user, member or portal login. Deleting the team
 revokes it, and platform administrators can revoke it on the Teams page. Its secret is never
-stored; the Bridge resets it when it starts and issues one-hour tokens that carry either the
+stored; the Bridge resets it when it starts and issues short-lived tokens (`POLARIS_TOKEN_LIFETIME`, one hour by default) that carry either the
 writer or the read-only role. Team shares that its team received from a database in the same environment
 are also granted to its read-only role, never to the writer role, and end with the share.

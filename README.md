@@ -22,8 +22,19 @@ Teams create, own and share their databases. People, notebooks and AI agents all
 - **Data shares:** share selected tables, views and semantic models with another team or with an external party, who gets a credential and a DuckDB script.
 - **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Seven example notebooks cover PyIceberg, DuckDB, Iceberg v3 and a data product whose semantic model lives in Polaris.
 - **MCP servers:** AI agents such as Claude Code sign in through Keycloak to explore data and semantic models, manage databases and data shares, or administer the platform.
+- **Extensions:** add Conversational BI, a chat over your semantic models, and dbt pipelines that agents build and test on your tables. Each is released on its own; see [extensions](docs/extensions.md).
 
 This is an **educational local development platform**. Read [the security model](SECURITY.md) before deploying it elsewhere.
+
+## Principles
+
+Five principles behind every choice. Check a change against all five.
+
+1. **Clean UX.** One design system. From sign-in to a notebook in a few clicks, one design language in both portals, and a Getting started page in each.
+2. **API first.** The portal is just a client. Every button is a documented route with an OpenAPI schema, so a script can do everything a person can.
+3. **AI native.** Agents are first-class users. Both portals serve MCP with the user's own identity, data products carry their meaning in a semantic model, and agent skills ship with the installer.
+4. **Open source.** No licences. Every building block is Apache-2.0 or MIT, and so is the platform. No vendor account and no trial clock.
+5. **Loosely coupled.** Open interfaces between the components: Iceberg REST, S3, OIDC and MCP, so you can replace one block without touching the others. Bigger capabilities come as extensions behind one contract, so the core stays small.
 
 ## Quick start
 
@@ -39,7 +50,7 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/dow
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to set up a demo company and to share the portals with a class over the internet. The installer can also add the [Conversational BI extension](docs/install.md#add-conversational-bi), a chat over your semantic models.
+The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to set up a demo company and to share the portals with a class over the internet. The installer can also add the [Conversational BI extension](docs/install.md#add-conversational-bi), a chat over your semantic models, and the [dbt extension](docs/install.md#add-dbt-pipelines), where AI agents build and test pipelines on your tables.
 
 ### Run from source
 
@@ -72,6 +83,7 @@ Rerun the three Docker commands after source changes. Save your notebook work fi
 | pgAdmin                   | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD`                                                                                         |
 | Extension Bridge          | http://localhost:3005/bridge/v1   | Tokens of registered [extensions](docs/extensions.md) only                                                                   |
 | Conversational BI         | http://localhost:3007             | Optional extension; Keycloak account                                                                                         |
+| dbt pipelines             | http://localhost:3004             | Optional extension; Keycloak account, MCP through the `ext-dbt-mcp` client                                                   |
 
 Credentials are in `.env`. All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [deploying beyond localhost](SECURITY.md#deploying-beyond-localhost) or the [quick-share skill](docs/install.md#agent-skills).
 

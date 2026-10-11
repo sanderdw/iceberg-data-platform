@@ -5,7 +5,9 @@ The user portal serves a [Model Context Protocol](https://modelcontextprotocol.i
 describes every tool, then the choices behind them and why they were made. To register the
 endpoint in a coding agent, see [connect an MCP client](../user_portal/README.md#connect-an-mcp-client).
 Platform administrators have a separate endpoint on the administration portal, described in the
-[administration guide](admin-guide.md#connect-an-mcp-client).
+[administration guide](admin-guide.md#connect-an-mcp-client). [Extensions](extensions.md) serve their
+own: Conversational BI at `http://localhost:3007/mcp` (client `ext-conversationalbi-mcp`) and dbt at
+`http://localhost:3004/mcp` (client `ext-dbt-mcp`).
 
 ## How every tool works
 

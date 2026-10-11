@@ -10,6 +10,7 @@ Out of the box every portal listens on `127.0.0.1` only. This skill starts two f
 - **Participants** need only the user portal address. It also carries the Iceberg catalog and S3 storage, so DuckDB, PyIceberg and DBeaver on their own laptops work too.
 - **The administration address** serves the administration portal and Keycloak sign-in.
 - **With Conversational BI installed**, a third tunnel gives the chat its own address. Participants open it from the link in the user portal.
+- **The dbt extension is not shared.** Its `.env.bridge` keeps the local sign-in address, so signing in to its viewer and MCP server fails while the session runs. Undo restores it. Tell the user this when `.env` has `dbt=` in `PLATFORM_EXTENSIONS`.
 
 A small gateway in front of the tunnels routes each request and keeps internal consoles off the internet.
 

@@ -9,7 +9,8 @@ main() {
         1)
             if [ "$1" = --help ]; then
                 printf 'Usage: sh install.sh [--dir DIRECTORY]\nDefault: ~/iceberg-data-platform (or ICEBERG_INSTALL_DIR)\nRequires Linux or macOS, Docker with Compose v2, curl and tar.\n'
-                printf '\nConversational BI (optional): ICEBERG_EXTENSIONS=conversationalbi, or LLM_MODEL with its key,\nfor example LLM_MODEL=anthropic:claude-sonnet-5-5 ANTHROPIC_API_KEY=... In a terminal the\ninstaller asks; ICEBERG_EXTENSIONS=none skips the question.\nVariables: %s\n' "$cbi_variables"
+                printf '\nExtensions (optional): ICEBERG_EXTENSIONS=conversationalbi,dbt names the ones to add. In a\nterminal the installer asks; ICEBERG_EXTENSIONS=none skips the questions.\n'
+                printf '\nConversational BI also starts with LLM_MODEL and its key, for example\nLLM_MODEL=anthropic:claude-sonnet-5-5 ANTHROPIC_API_KEY=...\nVariables: %s\n' "$cbi_variables"
                 return
             fi
             fail 'Expected --dir DIRECTORY; use --help for usage.'
@@ -57,6 +58,21 @@ main() {
         read -r answer </dev/tty || answer=
         case $answer in [Yy]*) cbi=true ;; esac
     fi
+    # The dbt extension likewise.
+    dbt=false
+    dbt_registered=false
+    case ",${ICEBERG_EXTENSIONS:-}," in *,dbt,*) dbt=true ;; esac
+    if [ -f "$install_dir/dbt/.env.bridge" ] && [ -f "$install_dir/.env" ] &&
+        grep -Eq '^PLATFORM_EXTENSIONS=(.*,)?dbt=' "$install_dir/.env"; then
+        dbt=true
+        dbt_registered=true
+    fi
+    if [ "$dbt" = false ] && [ -z "${ICEBERG_EXTENSIONS+set}" ] && has_tty; then
+        printf 'Add dbt pipelines, where AI agents build and test dbt models on your tables? Its launcher\nuses the Docker socket to start each run in an isolated container. [y/N] ' >/dev/tty
+        answer=
+        read -r answer </dev/tty || answer=
+        case $answer in [Yy]*) dbt=true ;; esac
+    fi
 
     umask 077
     temporary_dir=$(mktemp -d)
@@ -89,14 +105,16 @@ main() {
     tar -xzf "$temporary_dir/$archive" -C "$temporary_dir/bundle" --strip-components=1
     bundle_dir=$temporary_dir/bundle
     for file in compose.yaml compose.users.yaml .env.example scripts/setup.py pgadmin/servers.json \
-        conversationalbi/compose.yaml conversationalbi/scripts/setup.py; do
+        conversationalbi/compose.yaml conversationalbi/scripts/setup.py dbt/compose.yaml dbt/scripts/setup.py \
+        dbt/iceberg_dbt.py; do
         [ -f "$bundle_dir/$file" ] || fail "Installation bundle is missing $file"
     done
 
     mkdir -p "$install_dir"
     install_dir=$(cd "$install_dir" && pwd)
     # Back up generated configuration when rerunning; never replace .env.
-    for file in compose.yaml compose.users.yaml compose.lan.yaml compose.users.lan.yaml conversationalbi/compose.yaml; do
+    for file in compose.yaml compose.users.yaml compose.lan.yaml compose.users.lan.yaml conversationalbi/compose.yaml \
+        dbt/compose.yaml; do
         if [ -f "$install_dir/$file" ]; then
             cp "$install_dir/$file" "$install_dir/$file.bak"
         fi
@@ -118,11 +136,24 @@ main() {
         printf 'Preparing Conversational BI in %s/conversationalbi...\n' "$install_dir"
         cbi_setup
     fi
+    if [ "$dbt" = true ]; then
+        if [ "$dbt_registered" = false ]; then
+            setup_run "$setup_image" /install/scripts/setup.py --extension dbt \
+                --origin http://localhost:3004 --handshake /install/dbt/.env.bridge >/dev/null
+        fi
+        printf 'Preparing dbt pipelines in %s/dbt...\n' "$install_dir"
+        setup_run "$setup_image" /install/dbt/scripts/setup.py >/dev/null
+        # dbt commands from a terminal, next to iceberg_connect.py; executable for the dbt MCP server's DBT_PATH.
+        cp "$install_dir/dbt/iceberg_dbt.py" "$install_dir/iceberg_dbt.py"
+        chmod +x "$install_dir/iceberg_dbt.py"
+    fi
 
     printf 'Pulling images (the notebook image may take a few minutes)...\n'
     admin_compose pull
     users_compose --profile images pull
     [ "$cbi" = false ] || cbi_compose pull
+    # The images profile adds the runner image, which the launcher starts for every run.
+    [ "$dbt" = false ] || dbt_compose --profile images pull
     printf 'Starting administration and data services...\n'
     admin_compose up -d --no-build --wait --wait-timeout 300
     printf 'Starting the user portal...\n'
@@ -130,6 +161,10 @@ main() {
     if [ "$cbi" = true ]; then
         printf 'Starting Conversational BI...\n'
         cbi_compose up -d --no-build --wait --wait-timeout 300
+    fi
+    if [ "$dbt" = true ]; then
+        printf 'Starting dbt pipelines...\n'
+        dbt_compose up -d --no-build --wait --wait-timeout 300
     fi
     shown_dir=$install_dir
     if [ -n "${HOME:-}" ] && [ "$HOME" != / ]; then
@@ -154,14 +189,26 @@ main() {
     printf '\n2. Create a team and a user, then sign in as that user in the user portal\n   %s/#guide\n   Or skip the setup: the demo-company skill below creates teams, users and databases for you\n' "${user_origin%/}"
     stop=
     start=
+    step=3
     if [ "$cbi" = true ]; then
         model=$(file_value "$install_dir/conversationalbi/llm.env" LLM_MODEL)
-        printf '\n3. Ask questions in Conversational BI\n   %s\n' "$(file_value "$install_dir/conversationalbi/.env.bridge" EXTENSION_ORIGIN)"
+        printf '\n%s. Ask questions in Conversational BI\n   %s\n' "$step" "$(file_value "$install_dir/conversationalbi/.env.bridge" EXTENSION_ORIGIN)"
         printf '   A team administrator enables it once per environment: Enable, in the chat\n'
         printf '   Model    %s\n' "${model:-not set: add LLM_MODEL and its key to conversationalbi/llm.env}"
         printf '   Change   edit %s/conversationalbi/llm.env, then\n            cd %s && docker compose -f conversationalbi/compose.yaml up -d --wait\n' "$shown_dir" "$cd_dir"
         stop='docker compose -f conversationalbi/compose.yaml down && '
         start=' && docker compose -f conversationalbi/compose.yaml up -d --wait'
+        step=$((step + 1))
+    fi
+    if [ "$dbt" = true ]; then
+        dbt_origin=$(file_value "$install_dir/dbt/.env.bridge" EXTENSION_ORIGIN)
+        printf '\n%s. Build pipelines with dbt\n   %s\n' "$step" "$dbt_origin"
+        printf '   A team administrator enables it once per environment: ask your agent (enable_environment)\n'
+        printf '   Agent    claude mcp add --transport http --client-id ext-dbt-mcp --callback-port 3010 iceberg-dbt %s/mcp\n' "${dbt_origin%/}"
+        printf '   Skill    dbt-platform: ask your agent, for example "Build a pipeline for my sales data"\n'
+        printf '   Terminal cd %s && uv run iceberg_dbt.py login (dbt commands that run on the platform)\n' "$cd_dir"
+        stop="docker compose -f dbt/compose.yaml down && $stop"
+        start="$start && docker compose -f dbt/compose.yaml up -d --wait"
     fi
     printf '\nInstalled in %s\n' "$shown_dir"
     printf '   Stop     cd %s && %sdocker compose -f compose.users.yaml down && docker compose down\n' "$cd_dir" "$stop"
@@ -232,6 +279,10 @@ users_compose() {
 
 cbi_compose() {
     docker compose --env-file "$install_dir/conversationalbi/.env" -f "$install_dir/conversationalbi/compose.yaml" "$@"
+}
+
+dbt_compose() {
+    docker compose --env-file "$install_dir/dbt/.env" -f "$install_dir/dbt/compose.yaml" "$@"
 }
 
 # Keep execution last so a truncated download cannot start a partial install.

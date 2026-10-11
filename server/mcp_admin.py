@@ -215,7 +215,10 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def revoke_automation_principal(principal: AutomationPrincipalId) -> dict[str, Any]:
-        """Stop an extension from acting for a team environment. It gets no new tokens; issued ones expire within an hour."""
+        """Stop an extension from acting for a team environment.
+
+        It gets no new tokens; issued ones expire within POLARIS_TOKEN_LIFETIME (one hour by default).
+        """
         def revoke():
             provider.require_automation(principal)
             provider.delete_automation(principal)

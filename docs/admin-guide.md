@@ -33,7 +33,7 @@ Lists refresh every 30 seconds while visible. Navigation and filters are kept in
 
 ## Extension service accounts
 
-When an [extension](extensions.md) such as Conversational BI is registered, the Teams page lists its service accounts (automation principals): one per team, environment and extension, enabled by a team Administrator in the extension. **Revoke** stops the extension from acting for that team environment at once. It gets no new tokens, and tokens already issued expire within an hour.
+When an [extension](extensions.md) such as Conversational BI is registered, the Teams page lists its service accounts (automation principals): one per team, environment and extension, enabled by a team Administrator in the extension. **Revoke** stops the extension from acting for that team environment at once. It gets no new tokens, and tokens already issued expire within `POLARIS_TOKEN_LIFETIME` (one hour by default).
 
 ## Data shares
 

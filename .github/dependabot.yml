@@ -19,3 +19,24 @@ updates:
       - /user_portal/notebook
     schedule:
       interval: weekly
+  # Extensions are released on their own; their updates land before their next release.
+  - package-ecosystem: uv
+    directories:
+      - /extensions/dbt
+      - /extensions/conversationalbi
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directories:
+      - /extensions/conversationalbi/web
+      - /extensions/conversationalbi/runtime
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directories:
+      - /extensions/dbt
+      - /extensions/dbt/runner
+      - /extensions/conversationalbi
+      - /extensions/conversationalbi/runtime
+    schedule:
+      interval: weekly

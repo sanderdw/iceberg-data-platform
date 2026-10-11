@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0 - 2026-10-07
+
+- **dbt pipelines**, the second extension: AI agents create dbt v2 projects for a team (a new project starts empty), write models and tests on a branch, build them in development and schedule them, through an API and MCP server. A team administrator enables it per environment and merges to `main`; acceptance and production build only `main`. Each run is an isolated container that writes as the team's service account with a short-lived token. The installer can add it. See [installation](docs/install.md#add-dbt-pipelines).
+- **Follow and edit pipelines in the dbt viewer.** It shows each pipeline per environment and branch (`main` unless you pick another) with the status and tests of every model, follows running builds live and lets you filter the graph, focus a model's lineage, preview its rows and build it with its upstream or downstream. A Files view edits any project file on a branch, schedules are managed in the viewer, and Settings enables environments and cleans up branches. Writers create projects and open a model, edit it, save it to a branch and build that branch in development; team administrators merge it to `main` and delete projects. Deleting a project leaves its tables, views and semantic models in place.
+- **`POLARIS_TOKEN_LIFETIME` sets how long service-account tokens and vended storage credentials last** (one hour by default). Raise it, for example to 7200, for dbt runs longer than 45 minutes: a run ends 15 minutes before its token expires. A revoked service account then keeps its issued tokens up to that long.
+- **dbt from your terminal.** Download `iceberg_dbt.py` from the dbt viewer and type `build`, `test` or `show` as in the dbt docs; the commands run on the platform and stream the log back. They build `main`; `push --branch` and `--ref` bring your local edits along. The local dbt MCP server can use it too.
+- In the catalog, a table a dbt build produces links to its pipeline under **Produced by**. The user portal links to the viewer as **Pipelines**.
+- The installation folder has a fourth agent skill, `dbt-platform`: your coding agent builds, tests and schedules dbt pipelines, and offers a semantic model for each finished mart.
+- Updated dependencies, including FastAPI 0.142.2 and uv 0.12.23.
+
 ## 0.7.0 - 2026-10-04
 
 - **Extensions.** Separately released extensions add capabilities through the Extension Bridge. Team administrators enable them per team and environment; they never receive secrets or storage keys. See [extensions](docs/extensions.md).

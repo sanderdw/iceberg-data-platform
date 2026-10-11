@@ -15,7 +15,7 @@ Branches listed under `on.push.branches` in `.github/workflows/release.yml` publ
 
 The workflow runs the full CI suite and builds AMD64 and ARM64 images. Only then does it publish the exact prerelease and update the `SLUG-preview` installers. A failed run leaves the previous preview in place.
 
-A preview also builds the Conversational BI images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add Conversational BI without a Conversational BI release.
+A preview also builds the Conversational BI and dbt images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add both extensions without their own releases.
 
 `SLUG` is the branch name in lowercase, with characters other than letters, digits, `.`, `_` and `-` replaced by `-`, up to 60 characters. Branch names that start with `v` plus a digit are rejected. The workflow keeps the five newest builds per branch. Delete the `SLUG-preview` release after merging.
 
@@ -36,7 +36,11 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
    npm audit
    ```
 
-3. Merge into `main`, wait for CI, then [release Conversational BI](#release-an-extension) if its version changed. The installation bundle installs Conversational BI from its own release, so a stable core release requires the tag `conversationalbi-v<version>` of the version in `extensions/conversationalbi/pyproject.toml`, unchanged `compose.yaml` and `scripts/setup.py` in that folder since the tag, and public images. A branch preview only warns.
+3. Merge into `main`, wait for CI, then [release each extension](#release-an-extension) whose version changed. The installation bundle installs the extensions from their own releases, so a stable core release requires, for each one, the tag `<id>-v<version>` of the version in its `pyproject.toml`, unchanged bundled files since that tag, and public images:
+   - Conversational BI: `conversationalbi-v<version>`, with `compose.yaml` and `scripts/setup.py` in `extensions/conversationalbi`.
+   - dbt: `dbt-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/dbt`.
+
+   A branch preview skips this check, because it builds the extension images itself.
 4. Tag the core commit on `main`:
 
    ```bash
@@ -73,6 +77,20 @@ The **Conversational BI release** workflow runs its CI, builds `ghcr.io/sanderdw
 
 To publish Conversational BI from a branch without a release, run **Actions → Conversational BI release → Run workflow** on that branch, or `gh workflow run "Conversational BI release" --ref BRANCH`. It tags both images `:SLUG-RUN_ID-ATTEMPT` and publishes a prerelease `conversationalbi-SLUG-RUN_ID-ATTEMPT` with the source archive, never the version tag. It keeps the five newest previews per branch.
 
+The dbt extension works the same way:
+
+1. In `extensions/dbt`, update the version in `pyproject.toml`, `uv.lock` (`uv lock`), `dbt_portal/config.py`, the image tags in `compose.yaml` (both `iceberg-dbt` lines, the runner image and the `RUNNER_IMAGE` default) and the API contract (`uv run python -m scripts.api_contract`). Date its `CHANGELOG.md` section. `uv run python -m scripts.release` rejects a mismatch.
+2. After the merge into `main`, tag that commit:
+
+   ```bash
+   git tag -a dbt-vX.Y.Z -m "dbt extension X.Y.Z"
+   git push origin dbt-vX.Y.Z
+   ```
+
+The **dbt extension release** workflow runs its CI, builds `ghcr.io/sanderdw/iceberg-dbt` and `iceberg-dbt-runner` for AMD64 and ARM64, checks that both are public and publishes the release with its source archive. On the first publication, set both packages to **Public** and rerun the failed job. Its branch previews are named `dbt-SLUG-RUN_ID-ATTEMPT`.
+
+Release each extension whose version changed before the core: tag it on `main`, wait for its workflow, then tag `vX.Y.Z`.
+
 ## Package visibility
 
-On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**, including `iceberg-conversationalbi` and `iceberg-conversationalbi-runtime`. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.
+On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**, including `iceberg-conversationalbi`, `iceberg-conversationalbi-runtime`, `iceberg-dbt` and `iceberg-dbt-runner`. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.

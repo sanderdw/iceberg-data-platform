@@ -43,9 +43,6 @@ notebooktest/
 /personal/*
 docs/local_only/*
 
-# The dbt extension is held back from the 0.7.0 release; it stays on disk, untracked
-extensions/dbt/
-.github/workflows/dbt-*.yml
 screenshots/design-experiments/skills/*
 screenshots/design-experiments/2026-10-02*
 

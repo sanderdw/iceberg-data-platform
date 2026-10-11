@@ -330,6 +330,12 @@ header .nav-item[aria-current='page']::after { content: ']'; }
 /* Links to extensions (PLATFORM_EXTENSIONS) look like the other sections, with an outward arrow. */
 header a.nav-item.extension-link { display: inline-flex; align-items: center; min-height: 44px; font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; text-decoration: none; }
 header a.nav-item.extension-link::after { content: ' ↗'; }
+/* Wide screens keep the actions whole, so an overflowing header stacks its navigation instead (app.js fitHeader).
+   Phones wrap the actions, as before. */
+@media (min-width: 701px) { .header-actions { flex-shrink: 0; } }
+#identity button { white-space: nowrap; }
+header.stacked { flex-wrap: wrap; gap: 16px 24px; }
+header.stacked #workspace-nav { order: 3; width: 100%; }
 #notebooks-page .saved:first-child { margin-top: 0; }
 .team-description { max-width: 720px; margin-bottom: 24px; overflow-wrap: anywhere; }
 #team-name { overflow-wrap: anywhere; min-width: 0; }

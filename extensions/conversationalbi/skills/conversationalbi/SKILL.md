@@ -5,7 +5,7 @@ description: Answer business questions with governed queries on the Iceberg Data
 
 # Conversational BI on the Iceberg Data Platform
 
-The MCP server `conversationalbi` (`http://localhost:3007/mcp`) answers questions with queries
+The MCP server `iceberg-conversationalbi` (`http://localhost:3007/mcp`) answers questions with queries
 compiled from Apache Ossie semantic models. You pick metric and field names; the platform writes
 the SQL, applies the model owner's joins and definitions, and reads with a read-only token.
 
