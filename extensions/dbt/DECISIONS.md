@@ -240,3 +240,56 @@ changing the default.
   (`uvx dbt-mcp`) uses the script as its `DBT_PATH`.
 - Not available remotely: `show --inline`, `list`, `debug`, `deps` and `clean`. `target/` is not
   copied back; the viewer shows each run's results and lineage.
+
+## Development is one shared sandbox per team (2026-10-11)
+
+Every branch builds into the same development tables: a build of a branch replaces what a build of
+`main` wrote, and the newest build wins. The pipeline viewer shows `main` and draws only `main`'s
+runs, so after a branch build or a merge the tables and the picture can differ.
+
+### Decision: keep it shared, and say so
+
+Development stays one sandbox per team and environment. The platform makes the sharing visible
+instead of hiding it:
+
+- A build of a branch other than `main` in development returns a `hint` that it replaces the
+  tables `main` builds.
+- A branch's pipeline (`get_pipeline` with `ref`) carries `overwrittenBy` when another branch built
+  development's tables after this branch's last build; the viewer turns it into a notice.
+- `merge_to_main` returns a `hint` while `main` has no successful build of the merged revision in
+  development, and the viewer offers **Build main in Development** after a merge.
+- With nothing to draw on a branch, the pipeline names the branches that have a pipeline
+  (`refsWithPipeline`) and the viewer offers to show them.
+
+### Alternative set aside: a namespace per branch
+
+Non-`main` branches could build into `<namespace>__<branch>`. That isolates people, but it changes
+the `generate_schema_name` macro in every project, leaves tables behind when a branch is deleted
+and its cleanup fails, and data shares and semantic models only ever point at `main`'s tables. It
+can return as an option without changing the default.
+
+## Semantic models live in the project (2026-10-11)
+
+A semantic model describes a mart, so it changes with it. Published by hand, it lived outside Git:
+not reviewed with the pipeline, not merged by a team administrator, and not rebuilt per environment.
+
+### Decision: `semantic_models/` is published by the run
+
+- A model is an Apache Ossie document at `semantic_models/<database>/<namespace…>/<name>.yml`. The
+  first folder is the database's display name with `-` as `_`, as in `+catalog_name`; the folders
+  after it are the namespace levels; the file name is the model's name. dbt does not read the
+  folder.
+- After a successful `build` or `run`, the runner (`runner/semantic.py`) stores each model in
+  Polaris (`/api/catalog/polaris/v1/{warehouse}/namespaces/{ns}/semantic-models`) with the run's own
+  write token, which already holds the Writer role. No Bridge change is needed. A failed run
+  publishes nothing.
+- The file wins: a model changed elsewhere is replaced on the next build. An unchanged model is
+  left alone, so its version moves only when the file does. Removing a file does not delete the
+  model; deleting stays an explicit, confirmed action in the user portal.
+- The run reports `created`, `updated`, `unchanged` and `errors` under `summary.semanticModels`.
+  Like table metadata, a publishing problem never fails the run.
+- The platform's quality checks for models (descriptions, instructions, metric rules) stay in the
+  user portal, which an extension may not import. The run checks only the file's place and shape;
+  `describe_semantic_model` shows the result. Dataset and field descriptions a model leaves out
+  come from the dbt descriptions of the models it reads, as the user portal's publish fills them
+  from table comments and column docs.

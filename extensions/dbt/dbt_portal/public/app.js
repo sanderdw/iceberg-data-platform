@@ -214,8 +214,6 @@ function openDelete() {
 function renderProjectBar() {
   $('#project-team').textContent = `${teamName(project.team)} · ${project.role}`;
   $('#project-name').textContent = project.name;
-  $('#delete-project').hidden = !ADMINS.includes(project.role);
-  $('#delete-project').onclick = openDelete;
   const enabled = new Map(project.environments.map(e => [e.environment, e.enabled]));
   $('#environments').replaceChildren(...ENVIRONMENTS.map(env => h('button', {
     type: 'button', role: 'tab', 'aria-selected': String(env === route.environment),
@@ -241,7 +239,12 @@ async function renderPipeline() {
   }});
   const empty = !pipeline.nodes.length;
   $('#graph-empty').hidden = !empty;
-  if (empty) $('#graph-empty').replaceChildren(h('div', {}, h('h2', {text: 'No pipeline drawn yet'}), h('p', {text: pipeline.hint})));
+  const others = pipeline.refsWithPipeline || [];
+  if (empty) $('#graph-empty').replaceChildren(h('div', {}, h('h2', {text: 'No pipeline drawn yet'}), h('p', {text: pipeline.hint}),
+    others.length ? h('div', {class: 'tabs'}, ...others.map(ref => h('button', {type: 'button', class: 'quiet', onclick: () => go({ref, node: null, run: null}), text: `Show ${ref}`}))) : null));
+  // Development is shared: say when another branch built its tables after this one.
+  const over = pipeline.overwrittenBy;
+  if (over && $('#notice').hidden) notice(`Development's tables were last built from ${over.ref} (${when(over.at)}), so they may not match ${route.ref}.`);
   await loadOverlay();
   graph.reserve = route.node ? panelWidth() : 0;
   drawGraph();
@@ -327,7 +330,7 @@ function focusOn(selector) {
 function drawGraph() {
   const focus = filters.focus ? focusSet(filters.focus) : null;
   const shown = pipeline.nodes.filter(n => (!focus || focus.keep.has(n.id))
-    && !filters.hiddenStatus.has(statusGroup(overlay?.get(n.id) || n.status))
+    && (n.status === 'external' || !filters.hiddenStatus.has(statusGroup(overlay?.get(n.id) || n.status)))
     && !filters.hiddenTypes.has(n.type));
   const ids = new Set(shown.map(n => n.id));
   graph.render(shown, pipeline.edges.filter(e => ids.has(e.from) && ids.has(e.to)), overlay);
@@ -466,7 +469,7 @@ async function renderPanel() {
   fill(panel,
     h('button', {class: 'ghost close', type: 'button', 'aria-label': 'Close', onclick: () => go({node: null}, true), text: '✕'}),
     h('div', {}, h('p', {class: 'eyebrow', text: `${node.type}${node.materialized ? ' · ' + node.materialized : ''}`}), h('h2', {text: node.name})),
-    h('div', {class: 'chips'}, chip(status), node.tests.pass ? h('span', {class: 'chip success', text: `✓ ${node.tests.pass} test${node.tests.pass === 1 ? '' : 's'}`}) : null,
+    h('div', {class: 'chips'}, status === 'external' ? null : chip(status), node.tests.pass ? h('span', {class: 'chip success', text: `✓ ${node.tests.pass} test${node.tests.pass === 1 ? '' : 's'}`}) : null,
       node.tests.fail ? h('span', {class: 'chip failed', text: `✕ ${node.tests.fail} failing`}) : null,
       node.tests.warn ? h('span', {class: 'chip running', text: `! ${node.tests.warn} warning${node.tests.warn === 1 ? '' : 's'}`}) : null),
     actions,
@@ -580,12 +583,26 @@ async function openEditor(node, box) {
     } catch (error) { say(error.message, true); button.disabled = false; }
   }
 
+  async function buildMain(button) {
+    button.disabled = true;
+    try {
+      const run = await api(`/projects/${id}/runs`, {method: 'POST', body: JSON.stringify({command: 'build', environment: 'development', ref: 'main'})});
+      say(`Building main in Development (${run.id})…`);
+      const done = await api(`/runs/${run.id}?wait=600`);
+      if (done.status === 'running' || done.status === 'queued') return say(`Run ${run.id} is still going. Follow it under Runs.`);
+      go({environment: 'development', view: 'pipeline', ref: 'main', run: run.id, node: node.id});
+    } catch (error) { say(error.message, true); button.disabled = false; }
+  }
+
   async function merge(button, name) {
     if (!confirm(`Merge ${name} into main? Acceptance and production build main.`)) return;
     button.disabled = true;
     try {
       const result = await api(`/projects/${id}/merge`, {method: 'POST', body: JSON.stringify({branch: name})});
-      say(result.merged ? `Merged ${name} into main @ ${result.revision.slice(0, 7)}.` : `main already contains ${name}.`);
+      say((result.merged ? `Merged ${name} into main @ ${result.revision.slice(0, 7)}.` : `main already contains ${name}.`)
+        + (result.hint ? ' The pipeline shows main once main is built in Development.' : ''));
+      const development = project.environments.find(e => e.environment === 'development');
+      if (result.hint && development?.enabled) after.replaceChildren(h('button', {class: 'quiet', type: 'button', onclick: event => buildMain(event.currentTarget), text: 'Build main in Development'}));
     } catch (error) {
       say(error.code === 'merge_conflict' ? `${error.message} Conflicting: ${(error.detail?.files || []).join(', ')}.` : error.message, true);
       button.disabled = false;

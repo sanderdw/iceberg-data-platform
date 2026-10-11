@@ -7,7 +7,8 @@
 - **`POLARIS_TOKEN_LIFETIME` sets how long service-account tokens and vended storage credentials last** (one hour by default). Raise it, for example to 7200, for dbt runs longer than 45 minutes: a run ends 15 minutes before its token expires. A revoked service account then keeps its issued tokens up to that long.
 - **dbt from your terminal.** Download `iceberg_dbt.py` from the dbt viewer and type `build`, `test` or `show` as in the dbt docs; the commands run on the platform and stream the log back. They build `main`; `push --branch` and `--ref` bring your local edits along. The local dbt MCP server can use it too.
 - In the catalog, a table a dbt build produces links to its pipeline under **Produced by**. The user portal links to the viewer as **Pipelines**.
-- The installation folder has a fourth agent skill, `dbt-platform`: your coding agent builds, tests and schedules dbt pipelines, and offers a semantic model for each finished mart.
+- The installation folder has a fourth agent skill, `dbt-platform`: your coding agent builds, tests and schedules dbt pipelines, and offers a semantic model for each finished mart. The semantic model can live in the dbt project, so it is reviewed and merged with the pipeline and published by every build.
+- Publishing a semantic model fills the dataset and field descriptions it leaves out from the table comment and column docs, such as those a dbt build writes.
 - Updated dependencies, including FastAPI 0.142.2 and uv 0.12.23.
 
 ## 0.7.0 - 2026-10-04

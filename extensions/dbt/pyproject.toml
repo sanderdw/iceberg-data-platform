@@ -19,7 +19,8 @@ dependencies = [
 [dependency-groups]
 # The launcher is the only component with the Docker socket.
 launcher = ["docker==7.2.0"]
-# The isolated run image: dbt v2 OSS with its DuckDB driver and extensions, and PyIceberg for metadata.
+# The isolated run image: dbt v2 OSS with its DuckDB driver and extensions, PyIceberg for metadata and
+# PyYAML for the project's semantic models.
 runner = [
   "dbt-oss==2.0.5",
   "duckdb==1.5.5",
@@ -27,8 +28,9 @@ runner = [
   "duckdb-extension-httpfs==1.5.5",
   "duckdb-extension-avro==1.5.5",
   "pyiceberg>=0.12.0",
+  "pyyaml>=6.0.2",
 ]
-dev = [{include-group = "launcher"}, "pytest>=9.1.1", "ruff>=0.16.8", "pyiceberg>=0.12.0"]
+dev = [{include-group = "launcher"}, "pytest>=9.1.1", "ruff>=0.16.8", "pyiceberg>=0.12.0", "pyyaml>=6.0.2"]
 
 [tool.iceberg-dbt]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).

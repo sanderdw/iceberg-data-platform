@@ -162,6 +162,8 @@ refuse, and reads each dataset's table:
   model with "is not a column of the table".
 - A table that is missing or that you cannot read does not block the model. It becomes a warning
   instead.
+- A dataset without a description gets the table's comment, and a plain-column field without one
+  gets the column's doc, such as those a dbt build writes. Derived fields never inherit.
 
 **Why:** A typo in a field otherwise surfaces only later, as a failing query in someone else's chat.
 A missing table is only a warning because a model may be written before its tables are loaded.

@@ -2,7 +2,8 @@
 
 The structure (nodes, edges, descriptions, columns, tests) comes from the most recent run in the
 environment that produced `target/info_schema/v1`. Each node's status is its latest result across
-runs, so a partial run (`--select`) updates only what it touched.
+runs, so a partial run (`--select`) updates only what it touched. A source without a result is
+`external`: dbt reads it but never builds it.
 """
 
 import threading
@@ -111,8 +112,10 @@ def graph(structure, latest, *, catalogs, detail=False):
         for test in tests_by_node.get(id, []):
             counts[test["status"]] += 1
         item = {k: v for k, v in node.items() if detail or k not in ("sql", "compiledSql", "columns")}
+        # dbt reads a source but never builds it, so "never run" would read as a problem.
+        default = "external" if node["type"] == "source" else "never_run"
         item.update(
-            databaseId=catalogs.get(node["database"]), status=result.get("status", "never_run"),
+            databaseId=catalogs.get(node["database"]), status=result.get("status", default),
             lastRun=result.get("run"), lastRunAt=result.get("finished_at"),
             executionTime=result.get("execution_time"), rowsAffected=result.get("rows_affected"),
             message=result.get("message") if result.get("status") in ("error", "fail") else None,

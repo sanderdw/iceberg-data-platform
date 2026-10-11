@@ -16,12 +16,22 @@
   share: a catalog proxy in the run points vended storage at the internal endpoint.
 - `replace_table` materialization that keeps Iceberg table identity, data shares and docs.
 - Producer, lineage and quality table properties and column docs after every build.
+- Semantic models as code: Apache Ossie documents at `semantic_models/<database>/<namespace>/<name>.yml`
+  are published to the run's environment after every successful build or run, and reported in the
+  run's summary. The file wins over edits made elsewhere; an unchanged model keeps its version.
+- `whoami` lists where dbt is enabled per team (`enabledEnvironments`), and a new project says when
+  development still has to be enabled before it can build.
+- Development is one shared sandbox per team. A branch build says it replaces the tables `main`
+  builds, a branch's pipeline says when another branch built those tables since, and a merge says
+  when `main` still needs a build before the viewer shows it.
 - REST API and MCP server with the same capabilities; pipeline graph and lineage from dbt's
   Parquet information schema.
 - Pipeline viewer, full window width: pick a branch to see its pipeline, node statuses and runs
   (`main` by default; `ref` in the API and MCP tools). Filter the graph by status and node type,
   focus it with dbt's `+name+` operators, preview a model's rows and build a node with its upstream
-  or downstream from its panel. Statuses and the run list follow running builds live, and a writer
+  or downstream from its panel. Sources show no status dot: dbt reads them but never builds them
+  (`external` in the API). With nothing drawn on a branch, the viewer offers the branches that have a
+  pipeline. Statuses and the run list follow running builds live, and a writer
   stops a run in any phase (it ends `cancelled`). The timeline leaves out previews.
 - Files view: every project file at a branch, YAML, seeds and tests included. Writers edit, add
   and delete files on a branch; `main` is read-only there.

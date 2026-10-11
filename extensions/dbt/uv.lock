@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 
 [[package]]
@@ -518,6 +518,7 @@ dev = [
     { name = "docker" },
     { name = "pyiceberg" },
     { name = "pytest" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 launcher = [
@@ -530,6 +531,7 @@ runner = [
     { name = "duckdb-extension-httpfs" },
     { name = "duckdb-extension-iceberg" },
     { name = "pyiceberg" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -548,6 +550,7 @@ dev = [
     { name = "docker", specifier = "==7.2.0" },
     { name = "pyiceberg", specifier = ">=0.12.0" },
     { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ruff", specifier = ">=0.16.8" },
 ]
 launcher = [{ name = "docker", specifier = "==7.2.0" }]
@@ -558,6 +561,7 @@ runner = [
     { name = "duckdb-extension-httpfs", specifier = "==1.5.5" },
     { name = "duckdb-extension-iceberg", specifier = "==1.5.5" },
     { name = "pyiceberg", specifier = ">=0.12.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 
 [[package]]

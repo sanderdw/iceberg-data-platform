@@ -128,9 +128,12 @@
         const meta = el('text', {class: 'meta', x: 14, y: 50}, g);
         const tests = node.tests || {}, plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
         const testText = tests.fail ? `✕ ${tests.fail} failing` : (tests.warn ? `! ${plural(tests.warn, 'warning')}` : (tests.pass ? `✓ ${plural(tests.pass, 'test')}` : ''));
-        meta.textContent = shorten([node.namespace && node.table ? `${node.namespace}.${node.table}` : '', testText].filter(Boolean).join('  '), 36);
-        el('circle', {class: status, cx: W - 16, cy: 16, r: 5}, g);
-        const title = el('title', {}, g); title.textContent = `${node.id}\n${status.replace('_', ' ')}`;
+        // The table name gives way to the test count, which is the part people scan for.
+        const table = node.namespace && node.table ? `${node.namespace}.${node.table}` : '';
+        meta.textContent = testText ? [shorten(table, 34 - testText.length), testText].filter(Boolean).join('  ') : shorten(table, 36);
+        // A source is read, never built, so it has no status of its own.
+        if (status !== 'external') el('circle', {class: status, cx: W - 16, cy: 16, r: 5}, g);
+        const title = el('title', {}, g); title.textContent = `${node.id}\n${status === 'external' ? 'read by dbt, not built' : status.replace('_', ' ')}`;
         g.addEventListener('click', event => { event.stopPropagation(); this.select(node.id); });
         g.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.select(node.id); } });
         this.nodes.set(node.id, {node, g});

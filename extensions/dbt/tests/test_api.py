@@ -387,3 +387,41 @@ def test_a_build_stopped_while_the_launcher_starts_it_is_stopped_once_it_runs(st
     run = stack.call("POST", f"/projects/{id}/runs", "bob", json={"command": "build"}).json()
     done = wait_for(stack, run["id"], lambda r: r["status"] not in ("queued", "running"))
     assert done["status"] == "cancelled" and stack.launcher.killed == [run["id"]]
+
+
+def test_where_dbt_is_enabled_is_visible_before_the_first_run(stack):
+    def enabled():
+        found = stack.call("GET", "/me", "carol").json()["enabledEnvironments"]
+        return next(e["environments"] for e in found if e["team"] == TEAM)
+
+    assert enabled() == []
+    project = create(stack)
+    assert "enable_environment" in project["hint"]
+    enable(stack)
+    assert enabled() == ["development"]
+    second = stack.call("POST", "/projects", "bob", json={"team": TEAM, "name": "second"}).json()
+    assert "hint" not in second
+
+
+def test_development_is_shared_and_the_viewer_points_at_what_built_it(stack):
+    id = create(stack)["id"]
+    enable(stack)
+    stack.call("POST", f"/projects/{id}/branches", "bob", json={"name": "wip"})
+    wip = stack.call("POST", f"/projects/{id}/runs", "bob", json={"command": "build", "ref": "wip", "wait": 30}).json()
+    assert "Development is shared" in wip["hint"]
+    # main has nothing to draw yet, so the viewer names the branches that do.
+    main = stack.call("GET", f"/projects/{id}/pipeline?ref=main", "carol").json()
+    assert main["refsWithPipeline"] == ["wip"] and "wip" in main["hint"]
+    # A merge says main still needs a build before the viewer shows it.
+    merged = stack.call("POST", f"/projects/{id}/merge", "alice", json={"branch": "wip"}).json()
+    assert "Build main in development" in merged["hint"]
+    built = stack.call("POST", f"/projects/{id}/runs", "bob", json={"command": "build", "wait": 30}).json()
+    assert "hint" not in built
+    main = stack.call("GET", f"/projects/{id}/pipeline?ref=main", "carol").json()
+    assert main["overwrittenBy"] is None
+    assert {n["id"]: n["status"] for n in main["nodes"]}["source.shop.raw.events"] == "external"
+    # A later build of the branch replaces main's tables, and main's pipeline says so.
+    stack.call("POST", f"/projects/{id}/runs", "bob", json={"command": "build", "ref": "wip", "wait": 30})
+    main = stack.call("GET", f"/projects/{id}/pipeline?ref=main", "carol").json()
+    assert main["overwrittenBy"]["ref"] == "wip"
+    assert "hint" not in stack.call("POST", f"/projects/{id}/merge", "alice", json={"branch": "wip"}).json()

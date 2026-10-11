@@ -144,6 +144,7 @@ def summarize(directory):
     return {
         "exitCode": result.get("exitCode"), "counts": counts, "nodes": len(nodes),
         "published": result.get("published"),
+        "semanticModels": result.get("semanticModels"),
         "infoSchema": (directory / "out" / "target" / "info_schema" / "v1" / "dbt.dag_nodes.parquet").exists(),
         "docs": (directory / "out" / "docs").is_dir(),
     }, nodes

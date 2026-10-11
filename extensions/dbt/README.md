@@ -122,8 +122,8 @@ sequenceDiagram
   follows running builds live, filters and focuses the graph (`+name+`), previews a model's rows and
   builds a node with its upstream or downstream. **Files** edits any project file on a branch,
   **Schedules** manages schedules and **Settings** enables environments and deletes branches.
-  Writers create projects there. Team administrators delete them: the project, its history and the
-  dbt properties on its tables go, the tables stay. Writers can edit a node's file from its panel,
+  Writers create projects there. Team administrators delete them under **Settings**: the project,
+  its history and the dbt properties on its tables go, the tables stay. Writers can edit a node's file from its panel,
   save it to a branch and build that branch in development. Team administrators can merge it to
   `main`.
 - **Runs** execute as the team's **automation principal** for one environment. Only a team
@@ -267,7 +267,13 @@ Not available on the platform: `show --inline`, `list`, `debug`, `deps` and `cle
 - `profiles.yml` and `catalogs.yml` are generated for every run. `packages.yml` is not supported,
   because runs have no internet.
 - Model and column descriptions become the table comment and column docs; tests become its quality
-  status.
+  status. Generic tests take their parameters under `arguments:`, as dbt v2 requires.
+- Development is one shared sandbox per team: every branch builds the same tables, and the newest
+  build wins. The viewer shows `main`, so build `main` after a merge to see it there.
+- Semantic models are Apache Ossie documents at `semantic_models/<database>/<namespace>/<name>.yml`.
+  Every successful build or run publishes them to its environment, next to the tables, and lists
+  them in the run's summary. Descriptions a model leaves out come from the dbt models it reads.
+  The file wins over edits made elsewhere; deleting the file does not delete the model.
 
 ## Develop
 

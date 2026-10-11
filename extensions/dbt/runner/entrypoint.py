@@ -2,7 +2,8 @@
 
 The launcher stages /work with the project at a fixed revision, generated `profiles/` and
 `catalogs.yml`, and `job.json`. This runs dbt, collects its artifacts into /work/out, and for
-builds stamps table metadata as the automation principal (runner/publish.py). The catalog token
+builds stamps table metadata and publishes the project's semantic models as the automation principal
+(runner/publish.py, runner/semantic.py). The catalog token
 arrives in DBT_ENV_SECRET_POLARIS_TOKEN, which dbt scrubs from its logs.
 """
 
@@ -19,6 +20,8 @@ from runner import catalog_proxy, forward
 WORK = Path(os.environ.get("RUNNER_WORK", "/work"))
 COMMANDS = {"build", "run", "test", "seed", "compile", "show", "parse", "docs"}
 INFO_SCHEMA = {"build", "run", "test", "seed", "compile", "parse"}
+# Semantic models are published after a successful build or run (runner/semantic.py).
+SEMANTIC = {"build", "run"}
 MAX_LOG = 5_000_000
 
 
@@ -102,6 +105,16 @@ def main():
             result["published"] = publish.main(job["publish"], out / "target", token)
         except Exception as exc:  # noqa: BLE001 - Metadata never fails a run; the error is reported.
             result["published"] = {"error": type(exc).__name__}
+    if job.get("publish") and job["command"][0] in SEMANTIC and result["exitCode"] == 0:
+        from runner import semantic
+
+        try:
+            docs = semantic.dbt_docs(out / "target") if (out / "target" / "info_schema").is_dir() else {}
+            models = semantic.main(job["publish"], project, os.environ["DBT_ENV_SECRET_POLARIS_TOKEN"], docs=docs)
+            if any(models.values()):
+                result["semanticModels"] = models
+        except Exception as exc:  # noqa: BLE001 - Like table metadata, models never fail a run.
+            result["semanticModels"] = {"error": type(exc).__name__}
     result["finishedAt"] = time.time()
     (out / "result.json").write_text(json.dumps(result))
     return result["exitCode"]

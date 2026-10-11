@@ -26,9 +26,10 @@ and tell the user to run the installer again with `ICEBERG_EXTENSIONS=dbt`.
 
 ## Workflow
 
-1. `whoami`: find the team, your role there (reader, writer or admin) and its databases per
-   environment. `list_environments` shows where dbt is enabled; only a team admin can
-   `enable_environment`.
+1. `whoami`: find the team, your role there (reader, writer or admin), its databases per
+   environment and `enabledEnvironments`: where dbt may compile and build. Nothing compiles or
+   builds in an environment that is not enabled. Only a team admin can `enable_environment`; ask
+   the user first, because it lets dbt act for the whole team there.
 2. Find what to build on with the user portal's tools: `list_tables` and `describe_table` for
    columns, and `preview_rows` for a few rows. Ask the user what the result must answer before you
    write SQL. Data that is not in the platform yet (an API, a file, another database) cannot be
@@ -41,16 +42,26 @@ and tell the user to run the installer again with `ICEBERG_EXTENSIONS=dbt`.
    (one commit per call; `null` deletes). `main` is never written directly.
 5. `compile` the changed models, then `run` with `command="build"`, `ref=<branch>` in
    development. On failure read `get_run_logs`, fix, commit again, and rebuild with
-   `select="<model>+"`.
+   `select="<model>+"`. Development is one shared sandbox per team: every branch builds the same
+   tables, so your build replaces what a build of `main` wrote. Build `main` again when you are done
+   with a branch that was not merged.
 6. Check the result: `preview_model` for rows, `get_pipeline` with `ref=<branch>` for the DAG and
    statuses of your branch, `get_model` for columns and tests. Without `ref` it shows the latest run
    of any branch; the pipeline viewer shows `main` unless the person picks a branch.
-7. Ask a team admin to `merge_to_main`. Acceptance and production build only `main`; ask the
-   user before building or scheduling there.
+7. Ask a team admin to `merge_to_main`. Then build `main` in development: the pipeline viewer
+   shows `main` and draws only what a run of `main` produced (the merge's `hint` says so).
+   Acceptance and production build only `main`; ask the user before building or scheduling there.
 8. When a mart answers business questions, offer to build its semantic model with the
    `semantic-model` skill (`.agents/skills/semantic-model`). Then Conversational BI and
    `query_semantic_model` answer from the mart's agreed metrics. `replace_table` keeps the table's
-   identity on every build, so the model stays valid.
+   identity on every build, so the model stays valid. Keep the model in the project, so it is
+   reviewed and merged with the pipeline: write the Ossie document to
+   `semantic_models/<database>/<namespace>/<name>.yml` (database by display name with `-` as `_`).
+   Every successful `build` or `run` publishes it to that environment; `get_run` lists it under
+   `summary.semanticModels` with any errors. Check it with the user portal's
+   `describe_semantic_model`, whose publish warnings the run does not repeat. Field and dataset
+   descriptions you leave out come from the column docs and table comment dbt wrote. The file wins
+   over edits made elsewhere; deleting it does not delete the published model.
 
 ## From a terminal
 
@@ -93,7 +104,22 @@ platform: `show --inline`, `list`, `debug`, `deps` and `clean`.
 - Never add `profiles.yml`, `catalogs.yml` or `packages.yml`.
 - Describe every model and its important columns in YAML, and add `not_null`/`unique`/
   `accepted_values`/`relationships` tests. Descriptions become the table comment and column docs
-  in the platform catalog; test results become the table's quality status.
+  in the platform catalog; test results become the table's quality status. dbt v2 refuses test
+  parameters at the top level: put them under `arguments:`.
+
+  ```yaml
+  data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('stg_carriers')
+          field: carrier_code
+    - accepted_values:
+        arguments:
+          values: ['XA', 'XB', 'XC']
+  ```
+- A project without seeds gets dbt's `UnusedResourceConfigPath` warning for `seeds.<project>`:
+  `dbt_project.yml` sets `+catalog_name` for seeds ahead of the first one. It is harmless; keep it.
 - SQL is DuckDB SQL.
 - A run ends 15 minutes before its catalog token expires: after 45 minutes unless the platform
   administrator raised `POLARIS_TOKEN_LIFETIME`. Split long pipelines with `select`, or use

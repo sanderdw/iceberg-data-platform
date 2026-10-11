@@ -1,5 +1,5 @@
 'use strict';
-// Schedules and Settings (environments, branches). Uses the helpers of app.js, which loads after this file.
+// Schedules and Settings (environments, branches, deleting the project). Uses the helpers of app.js, which loads after this file.
 
 const COMMANDS = ['build', 'run', 'test', 'seed'];
 // Development schedules are for writers; acceptance and production for team administrators, on main.
@@ -109,5 +109,10 @@ async function renderSettings() {
           h('button', {type: 'button', class: 'quiet', onclick: () => go({view: 'pipeline', environment: 'development', ref: branch.name}), text: 'Pipeline'}),
           h('button', {type: 'button', class: 'quiet', onclick: () => go({view: 'files', ref: branch.name, file: null}), text: 'Files'}),
           writer && branch.name !== 'main' ? h('button', {type: 'button', class: 'danger', onclick: () => remove(branch), text: 'Delete'}) : null)))))));
-  fill($('#settings-view'), environments, branchTable, status);
+  // Last, and only for team administrators: the one action here that cannot be undone.
+  const removal = admin ? h('section', {class: 'card'},
+    h('h2', {text: 'Delete project'}),
+    h('p', {class: 'small', text: 'Forgets the project: its Git history, runs, schedules and the dbt properties on the tables it built. The tables, their data, docs and semantic models stay.'}),
+    h('div', {}, h('button', {type: 'button', class: 'danger', onclick: openDelete, text: 'Delete project'}))) : null;
+  fill($('#settings-view'), environments, branchTable, removal, status);
 }

@@ -89,11 +89,22 @@ class Services:
 
     # Discovery
 
+    async def enabled(self, caller, teams):
+        """{team: [environment, ...]} where dbt is enabled, as list_environments sees it."""
+        found = {}
+        for team in teams:
+            envs = {p["environment"] for p in await self.bridge.team_automation(caller.token, team)}
+            found[team] = [env for env in ENVIRONMENTS if env in envs]
+        return found
+
     async def whoami(self, caller):
         me = await self.me(caller)
         discovery = await self.bridge.discovery()
+        enabled = await self.enabled(caller, [m["team"] for m in me["memberships"]])
         return {**me, "extension": self.settings.extension_id, "origin": self.settings.origin,
-                "environments": list(ENVIRONMENTS), "userPortalUrl": discovery.get("userPortalUrl", "")}
+                "environments": list(ENVIRONMENTS),
+                "enabledEnvironments": [{"team": team, "environments": envs} for team, envs in enabled.items()],
+                "userPortalUrl": discovery.get("userPortalUrl", "")}
 
     async def environments(self, caller, team):
         me = await self.me(caller)
@@ -148,7 +159,11 @@ class Services:
         except Exception:
             self.store.delete_project(project["id"])
             raise
-        return self.public(project, self.role(me, team))
+        result = self.public(project, self.role(me, team))
+        if "development" not in (await self.enabled(caller, [team]))[team]:
+            result["hint"] = ("dbt is not enabled for development in this team yet, so the project cannot compile "
+                              "or build. A team administrator enables it with enable_environment.")
+        return result
 
     async def get_project(self, caller, project_id):
         project, _, role = await self.project_for(caller, project_id)
@@ -253,7 +268,14 @@ class Services:
 
     async def merge_to_main(self, caller, project_id, branch, message=""):
         _, me, _ = await self.project_for(caller, project_id, "admin")
-        return await asyncio.to_thread(self.repos.merge, project_id, branch, message, self.author(caller, me))
+        result = await asyncio.to_thread(self.repos.merge, project_id, branch, message, self.author(caller, me))
+        built = next((r for r in self.store.runs(project_id, "development", 200, "main")
+                      if r["command"] in WRITE_COMMANDS and r["status"] == "success"), None)
+        if not built or built["revision"] != result.get("revision"):
+            # The viewer shows main, and it draws only what a run of main produced.
+            result["hint"] = ("main has no build of this revision in development yet, so the pipeline viewer "
+                              "still shows the previous one. Build main in development to draw it.")
+        return result
 
     # Runs
 
@@ -290,13 +312,18 @@ class Services:
         run = self.runs.start(project=project, principal=principal, environment=environment, command=command,
                               args=args, ref=ref, revision=revision, triggered_by=name, agent=agent,
                               schedule=schedule, selector=select)
+        if environment == "development" and command in WRITE_COMMANDS and ref != "main":
+            # Development is one shared sandbox per team: every branch writes the same tables.
+            run = {**run, "hint": f"Development is shared: this build of {ref} replaces the tables that builds of "
+                                  "main and other branches write in development. Build main again to restore them."}
         return run
 
     async def run(self, caller, project_id, command, environment, ref="main", select="", full_refresh=False,
                   wait=0):
         run = await self.start_run(caller, project_id, command, environment, ref, select, full_refresh)
         if wait:
-            run = await self.runs.wait(run["id"], min(wait, 600))
+            hint = {"hint": run["hint"]} if "hint" in run else {}
+            run = {**await self.runs.wait(run["id"], min(wait, 600)), **hint}
         return run
 
     async def run_for(self, caller, run_id):
@@ -420,10 +447,17 @@ class Services:
         if not structure:
             hint = (f"Run build, compile or parse on {ref} in this environment to draw its pipeline." if ref
                     else "Run build, compile or parse in this environment to draw the pipeline.")
+            # Branches that do have a pipeline here, newest first, so the viewer can offer them.
+            others = list(dict.fromkeys(r["ref"] for r in self.store.runs(project_id, environment, 200)
+                                        if r["ref"] != ref and (r["summary"] or {}).get("infoSchema")))
+            if ref and others:
+                hint += f" Branches with a pipeline here: {', '.join(others[:5])}."
             return {"project": project_id, "environment": environment, "ref": ref, "nodes": [], "edges": [],
-                    "structureRun": None, "runs": runs, "hint": hint}
+                    "structureRun": None, "runs": runs, "hint": hint, "refsWithPipeline": others[:5]}
         latest = self.store.latest_nodes(project_id, environment, ref)
         result = lineage.graph(structure, latest, catalogs=run["summary"].get("catalogs", {}), detail=bool(node))
+        if ref and environment == "development":
+            result["overwrittenBy"] = self.overwritten_by(project_id, ref)
         if node:
             result["nodes"] = [n for n in result["nodes"] if n["id"] == node]
             if not result["nodes"]:
@@ -433,6 +467,19 @@ class Services:
             result["hint"] = "This project has no models yet. Ask your agent to add sources, models and tests."
         return {"project": project_id, "environment": environment, "ref": ref, "structureRun": run["id"],
                 "revision": run["revision"], "runs": runs, **result}
+
+    def overwritten_by(self, project_id, ref):
+        """The newest write run of another branch in development after this branch's last one, if any.
+
+        Development is shared, so its tables hold what the newest build wrote, whichever branch it was.
+        """
+        for run in self.store.runs(project_id, "development", 200):
+            if run["command"] not in WRITE_COMMANDS or run["status"] not in ("success", "failed"):
+                continue
+            if run["ref"] == ref:
+                return None
+            return {"ref": run["ref"], "run": run["id"], "at": run["finished_at"]}
+        return None
 
     async def model(self, caller, project_id, node, environment="development", ref=None):
         pipeline = await self.pipeline(caller, project_id, environment, node, ref)

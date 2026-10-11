@@ -30,12 +30,17 @@ DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idemp
                               open_world_hint=False)
 INSTRUCTIONS = """dbt pipelines on the Iceberg Data Platform (dbt v2 OSS with DuckDB on Apache Iceberg).
 
-Start with whoami (your teams, roles and databases) and list_projects. Find the tables to build
+Start with whoami (your teams, roles, databases and where dbt is enabled) and list_projects. dbt
+compiles and builds only in environments a team administrator enabled: whoami lists them in
+enabledEnvironments, list_environments shows one team, and enable_environment turns one on (ask
+the user first: runs act for the whole team). Find the tables to build
 on with the platform's user portal MCP server (list_tables, describe_table, preview_rows). A project belongs to one
 team and is a Git repository. main is protected: create_branch, then write_files (one commit per
 call; paths map to full file contents, null deletes), compile to check, run with
 command=build in development on your branch, read get_run and get_run_logs, and ask a team
-administrator to merge_to_main. Acceptance and production only build main.
+administrator to merge_to_main. Acceptance and production only build main. Development is one
+shared sandbox per team: every branch builds the same tables, so the newest build wins. After a
+merge, build main in development: the pipeline viewer shows main and draws only main's runs.
 
 Runs have no internet access: they read only the team's Iceberg tables. Data from outside (an
 API, a file, another database) is loaded first, as the user, into a raw namespace with the
@@ -47,12 +52,16 @@ display name with '-' as '_'. Keep `+materialized: replace_table` (keeps table i
 shares and column docs) or use incremental. Iceberg views are not supported. Never add
 profiles.yml or catalogs.yml: they are generated for each run. Document models and columns in
 YAML: descriptions become table comments and column docs in the platform catalog, and tests
-become the table's quality status.
+become the table's quality status. Generic tests take their parameters under `arguments:`
+(dbt v2), for example `- relationships: {arguments: {to: ref('stg_carriers'), field: carrier_code}}`.
 
 get_pipeline returns the DAG with each node's latest status; pass ref to see one branch (the
 pipeline viewer shows main unless the user picks a branch). get_model and get_lineage explain
 one node. When a mart answers business questions, offer a semantic model for it (the platform's
-semantic-model skill), so agents and Conversational BI answer from its agreed metrics.
+semantic-model skill), so agents and Conversational BI answer from its agreed metrics. Keep it in
+the project as semantic_models/<database>/<namespace>/<name>.yml (an Apache Ossie document): every
+successful build or run publishes those files to that environment, and get_run reports them under
+summary.semanticModels. The project's file wins over edits made elsewhere.
 
 Runs act for the whole team: ask the user before running in acceptance or production, before
 merge_to_main, and before any tool marked destructive."""
@@ -105,7 +114,8 @@ def create_mcp(settings, services, verifier):
 
     @mcp.tool(annotations=READ)
     async def whoami() -> dict[str, Any]:
-        """Your teams with your role in each, their databases per environment, and this extension."""
+        """Your teams with your role in each, their databases per environment, where dbt is enabled, and this
+        extension."""
         return await call(services.whoami)
 
     @mcp.tool(annotations=READ)
@@ -197,7 +207,8 @@ def create_mcp(settings, services, verifier):
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def merge_to_main(project: ProjectId, branch: str, message: str = "") -> dict[str, Any]:
-        """Merge a branch into main (team administrators). Acceptance and production build main."""
+        """Merge a branch into main (team administrators). Acceptance and production build main; the hint
+        says when main still needs a build in development for the pipeline viewer."""
         return await call(services.merge_to_main, project, branch, message)
 
     @mcp.tool(annotations=READ)

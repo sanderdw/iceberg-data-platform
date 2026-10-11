@@ -11,6 +11,6 @@ Font License 1.1 and copyright notices:
 
 Python dependencies are resolved from `uv.lock`. The runner image installs dbt v2 OSS (`dbt-oss`,
 Apache-2.0) with its Rust engine wheel from dbt Labs' GitHub release, DuckDB and its `iceberg`,
-`avro` and `httpfs` extensions (MIT), and PyIceberg (Apache-2.0). Their upstream licenses remain
+`avro` and `httpfs` extensions (MIT), PyIceberg (Apache-2.0) and PyYAML (MIT). Their upstream licenses remain
 applicable. Container images built here include the installed dependencies and their distribution
 metadata.
