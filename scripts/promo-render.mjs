@@ -1,4 +1,4 @@
-// Renders presentation/promo/index.html frame by frame into an MP4 with the synthesized soundtrack.
+// Renders presentation/video-promo/semantic-models/index.html frame by frame into an MP4 with the synthesized soundtrack.
 // Usage: node scripts/promo-render.mjs            full render
 //        node scripts/promo-render.mjs --4k       3840×2160 for upload, in .local/promo (not published with the deck)
 //        node scripts/promo-render.mjs --stills 2,12,40   PNG stills at those seconds, no video
@@ -9,12 +9,12 @@ import {parseArgs} from 'node:util';
 import {chromium} from '@playwright/test';
 
 const {values: args} = parseArgs({options: {stills: {type: 'string'}, '4k': {type: 'boolean'}}});
-const ROOT = 'presentation', ORIGIN = 'http://promo.local/', WORK = '.local/promo';
+const ROOT = 'presentation', PAGE = 'video-promo/semantic-models', ORIGIN = 'http://promo.local/', WORK = '.local/promo';
 // The stage is 1920×1080 CSS pixels; 4K renders it at a 2× pixel ratio, and the captures are 2× already.
 const SCALE = args['4k'] ? 2 : 1;
-const OUT = args['4k'] ? `${WORK}/iceberg-data-platform-promo-4k.mp4` : 'presentation/promo/iceberg-data-platform-promo.mp4';
-const POSTER = 'presentation/promo/poster.png', AUDIO = `${WORK}/soundtrack.wav`;
-const timeline = JSON.parse(readFileSync('presentation/promo/timeline.json', 'utf8'));
+const OUT = args['4k'] ? `${WORK}/iceberg-data-platform-promo-4k.mp4` : `${ROOT}/${PAGE}/iceberg-data-platform-promo.mp4`;
+const POSTER = `${ROOT}/${PAGE}/poster.png`, AUDIO = `${WORK}/soundtrack.wav`;
+const timeline = JSON.parse(readFileSync(`${ROOT}/${PAGE}/timeline.json`, 'utf8'));
 const TYPES = {'.html': 'text/html', '.json': 'application/json', '.png': 'image/png', '.ttf': 'font/ttf'};
 mkdirSync(WORK, {recursive: true});
 
@@ -34,7 +34,7 @@ try {
   });
   const errors = [];
   page.on('pageerror', error => errors.push(error));
-  await page.goto(`${ORIGIN}promo/index.html?render`);
+  await page.goto(`${ORIGIN}${PAGE}/index.html?render`);
   await page.evaluate(() => window.promoReady);
   if (errors.length) throw errors[0];
 

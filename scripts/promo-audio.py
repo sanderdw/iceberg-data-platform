@@ -1,4 +1,4 @@
-"""Synthesizes the promo video's soundtrack from presentation/promo/timeline.json.
+"""Synthesizes the promo video's soundtrack from presentation/video-promo/semantic-models/timeline.json.
 
 A quiet A-minor pad, a low pulse once the demo starts, blips for the dot-matrix type, key clicks while
 text types in, a tick on every cut, and four rising notes that resolve on the end card. Deterministic: the same
@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 RATE = 48_000
-TIMELINE = json.loads(Path("presentation/promo/timeline.json").read_text())
+TIMELINE = json.loads(Path("presentation/video-promo/semantic-models/timeline.json").read_text())
 DURATION = TIMELINE["duration"]
 BEAT = 60 / TIMELINE["bpm"]
 rng = np.random.default_rng(6)
