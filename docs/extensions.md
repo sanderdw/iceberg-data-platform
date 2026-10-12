@@ -1,7 +1,7 @@
 # Extensions
 
 The core platform stays small: catalog, storage, identity, portals and notebooks. Larger
-capabilities, such as conversational BI and dbt pipelines, live in **extensions**. Each one has its
+capabilities, such as conversational BI, dbt pipelines and ingestion with dlt, live in **extensions**. Each one has its
 own Compose project, dependencies, images, version, changelog and CI, and talks to the core only
 through the **Extension Bridge**. The core and an extension are released independently and work together as
 long as both support the same contract version.
@@ -58,11 +58,10 @@ clients are disabled on the next start.
 | --- | --- | --- |
 | Conversational BI | `extensions/conversationalbi` | Ask questions about your own and shared semantic models in a chat. Answers come from governed queries compiled from the model, shown as generative UI: query cards, charts, tables and KPIs. Also an API and MCP server |
 | dbt pipelines | `extensions/dbt` | AI agents build, test and schedule dbt v2 pipelines on your team's tables through an API and MCP server. Each run is an isolated container that writes as the team's service account. A viewer shows each pipeline per environment, and writers edit a model there on a branch. Tables it builds show where they come from under **Produced by** |
+| Ingestion (dlt) | `extensions/ingestion` | Load REST APIs, PostgreSQL and MySQL or MariaDB tables, and CSV, JSONL or Parquet files into your team's databases with declarative [dlt](https://dlthub.com/docs) pipelines, on demand or on a schedule. Through a page, an API and an MCP server. Each run is an isolated container that writes as the team's service account. Tables it loads show **Produced by dlt** |
 
 Each extension documents its own installation in its folder. The release installer can also add
-both; see [Conversational BI](install.md#add-conversational-bi) and
-[dbt pipelines](install.md#add-dbt-pipelines).
-
-Proposed, not built: an [ingestion extension](proposals/ingestion-extension.md) that loads other
-Iceberg catalogs, PostgreSQL and MariaDB databases, REST APIs and files on a schedule, for dbt to
-transform.
+Conversational BI and dbt pipelines; see [Conversational BI](install.md#add-conversational-bi) and
+[dbt pipelines](install.md#add-dbt-pipelines). Ingestion (dlt) is installed from its folder; see
+[Add Ingestion (dlt)](install.md#add-ingestion-dlt). The tables it loads are ordinary Iceberg tables,
+so a dbt project declares them as sources.

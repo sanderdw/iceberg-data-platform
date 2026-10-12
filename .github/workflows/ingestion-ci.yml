@@ -1,0 +1,181 @@
+name: Ingestion extension CI
+# The Ingestion extension (extensions/ingestion) is tested and released on its own. It runs when the extension, the
+# Bridge contract it depends on, or the Bridge implementation changes.
+on:
+  push:
+    branches: [main]
+    paths: ['extensions/ingestion/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py', '.github/workflows/ingestion-*.yml']
+  pull_request:
+    paths: ['extensions/ingestion/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py', '.github/workflows/ingestion-*.yml']
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: ingestion-ci-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    working-directory: extensions/ingestion
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: '0.12.23'
+          enable-cache: true
+          cache-dependency-glob: extensions/ingestion/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - run: uv sync --locked
+      - run: uv run pytest
+      - run: uv run ruff check .
+      - run: uv run python -m scripts.release
+      - run: node --check ingestion/public/app.js
+      - name: Audit Python dependencies
+        run: |
+          uv export --locked --all-groups --no-hashes --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt" > /dev/null
+          uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+
+  runner-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build -f runner/Dockerfile -t runner-check .
+      - name: dlt and its sources load without network, read-only, as the runner user
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+            --user 10001:10001 --entrypoint python runner-check -c "import dlt, pyiceberg, pg8000, pymysql, s3fs; \
+          from dlt.sources.rest_api import rest_api_source; from dlt.sources.sql_database import sql_database; \
+          from dlt.sources.filesystem import filesystem; import runner.entrypoint; print('dlt', dlt.__version__)"
+
+  integration:
+    # The platform from this commit and the Ingestion extension, end to end through MCP.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: '0.12.23'
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+      - run: uv run python -m scripts.setup --demo --extension ingestion --origin http://localhost:3008 --handshake extensions/ingestion/.env.bridge
+      - run: docker compose up -d --build --wait
+      - run: docker compose run --build --rm keycloak-bootstrap --demo
+      - name: Make demo-admin an administrator of demo-team (test fixture)
+        run: |
+          uv run --all-groups python - <<'PY'
+          import os
+          from dotenv import load_dotenv
+          load_dotenv(".env")
+          from server.polaris import PolarisProvider
+          from server.storage import RustFSStorage
+          provider = PolarisProvider(os.environ, RustFSStorage(os.environ))
+          team = next(t for t in provider.list_teams() if t["name"] == "demo-team")["id"]
+          admin = next(u for u in provider.list_users() if u["name"] == "demo-admin")
+          provider.update_memberships(admin["id"], {**{m["team"]: m["role"] for m in admin["memberships"]}, team: "admin"})
+          PY
+      - name: A test-only PostgreSQL source on the host
+        run: docker run -d --name ing-e2e-postgres -e POSTGRES_USER=e2e -e POSTGRES_PASSWORD=e2e -e POSTGRES_DB=e2e -p 55432:5432 --health-cmd "pg_isready -U e2e" --health-interval 2s postgres:18-alpine
+      - name: Start the Ingestion extension (private sources allowed for the host's test sources)
+        working-directory: extensions/ingestion
+        env:
+          ING_ALLOW_PRIVATE_SOURCES: 'true'
+        run: |
+          uv sync --locked
+          uv run python -m scripts.setup
+          docker compose --profile images build
+          docker compose up -d --build --wait
+      - name: End-to-end through MCP
+        working-directory: extensions/ingestion
+        env:
+          E2E_POSTGRES_PORT: '55432'
+        run: uv run python -m scripts.e2e_smoke
+      - name: Logs on failure
+        if: failure()
+        working-directory: extensions/ingestion
+        run: docker compose logs --tail 200
+      - name: Clean up
+        if: always()
+        run: |
+          (cd extensions/ingestion && docker compose down --remove-orphans --volumes) || true
+          docker rm -f ing-e2e-postgres || true
+          docker compose down --remove-orphans --volumes || true
+
+  compat:
+    # The same checks against the newest platform release that ships the Bridge: the extension
+    # must work with released platforms, not only with the commit it was changed with.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Find the newest platform release with the Bridge
+        id: core
+        run: |
+          for tag in $(git tag --list 'v*' --sort=-version:refname); do
+            if git cat-file -e "$tag:contracts/bridge/v1/openapi.yaml" 2>/dev/null; then echo "tag=$tag" >> "$GITHUB_OUTPUT"; exit 0; fi
+          done
+          echo "No platform release ships the Bridge yet; the integration job covers this commit." >> "$GITHUB_STEP_SUMMARY"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: steps.core.outputs.tag
+        with:
+          version: '0.12.23'
+      - name: Start that platform release
+        if: steps.core.outputs.tag
+        env:
+          TAG: ${{ steps.core.outputs.tag }}
+        run: |
+          git worktree add ../core-release "$TAG"
+          cd ../core-release
+          uv sync --locked --all-groups
+          uv run python -m scripts.setup --demo --extension ingestion --origin http://localhost:3008 --handshake "$GITHUB_WORKSPACE/extensions/ingestion/.env.bridge"
+          docker compose up -d --build --wait
+          docker compose run --build --rm keycloak-bootstrap --demo
+          uv run --all-groups python - <<'PY'
+          import os
+          from dotenv import load_dotenv
+          load_dotenv(".env")
+          from server.polaris import PolarisProvider
+          from server.storage import RustFSStorage
+          provider = PolarisProvider(os.environ, RustFSStorage(os.environ))
+          team = next(t for t in provider.list_teams() if t["name"] == "demo-team")["id"]
+          admin = next(u for u in provider.list_users() if u["name"] == "demo-admin")
+          provider.update_memberships(admin["id"], {**{m["team"]: m["role"] for m in admin["memberships"]}, team: "admin"})
+          PY
+      - name: This commit's Ingestion extension against it
+        if: steps.core.outputs.tag
+        working-directory: extensions/ingestion
+        env:
+          ING_ALLOW_PRIVATE_SOURCES: 'true'
+        run: |
+          uv sync --locked
+          uv run python -m scripts.setup
+          docker compose --profile images build
+          docker compose up -d --build --wait
+          PLATFORM_ENV=../../../core-release/.env uv run python -m scripts.e2e_smoke
+      - name: Clean up
+        if: always() && steps.core.outputs.tag
+        run: |
+          (cd extensions/ingestion && docker compose down --remove-orphans --volumes) || true
+          (cd ../core-release && docker compose down --remove-orphans --volumes) || true

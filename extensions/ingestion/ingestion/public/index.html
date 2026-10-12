@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#000000">
+<link rel="preload" href="/fonts/doto.ttf" as="font" type="font/ttf" crossorigin>
+<title>Ingestion · Iceberg Data Platform</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="site">
+  <a class="brand" href="#/"><img src="/favicon.svg" alt="">iceberg<span>/ ingestion</span></a>
+  <nav id="crumbs" aria-label="Location"></nav>
+  <div class="header-actions">
+    <a id="portal-link" class="quiet-link" target="_blank" rel="noopener" hidden>User portal <span aria-hidden="true">↗</span></a>
+    <button id="theme" class="ghost" type="button">Light / ○</button>
+    <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
+  </div>
+</header>
+
+<main id="loading" class="initial"><p class="eyebrow" role="status">[ LOADING ]</p></main>
+
+<main id="signin" hidden>
+  <section class="login">
+    <div class="eyebrow">YOUR SOURCES. YOUR TABLES.</div>
+    <h1>Ingestion<span class="dot-accent">.</span></h1>
+    <p>Load REST APIs, PostgreSQL and MySQL tables, and CSV, JSONL or Parquet files into your team's Iceberg databases with declarative dlt pipelines.</p>
+    <a class="button wide" id="signin-link" href="/auth/login">Sign in with Keycloak <span aria-hidden="true">↗</span></a>
+    <p class="hint">Use your linked Keycloak account.</p>
+  </section>
+  <aside class="intro">
+    <div class="eyebrow">FROM SOURCE TO TABLE</div>
+    <h2>Configuration, never code.</h2>
+    <p>A pipeline says where the data is and where it lands. Runs load it as your team's service account, isolated from everything else.</p>
+    <ol>
+      <li><span>[ 01 ]</span>Start from a template</li>
+      <li><span>[ 02 ]</span>Set the source's secrets</li>
+      <li><span>[ 03 ]</span>Run it now or on a schedule</li>
+    </ol>
+  </aside>
+</main>
+
+<main id="page" hidden>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div id="content"></div>
+</main>
+
+<dialog id="dialog" class="card" aria-labelledby="dialog-title"></dialog>
+</body>
+</html>

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 - 2026-10-12
+
+- **Ingestion (dlt)**, the third extension: load REST APIs, PostgreSQL and MySQL or MariaDB tables, and CSV, JSONL or Parquet files over HTTPS or S3 into your team's databases with declarative [dlt](https://dlthub.com/docs) pipelines, on demand or on a schedule. A page, an API and an MCP server offer the same actions. Team administrators enable it per environment, create pipelines and set their secrets, which are encrypted and write-only; writers start runs. Each run is an isolated container that writes as the team's service account, and tables keep their identity across runs, so data shares and semantic models keep working. Loaded tables show **Produced by dlt** in the catalog, and the user portal links to the extension as **Ingestion (dlt)**. It is installed from its folder; see [installation](docs/install.md#add-ingestion-dlt).
+- **Load data with dlt in a notebook.** The new example 08 loads paged API data into `raw_dlt_demo` with your own identity, splits nested lists into child tables and merges on a key, so a rerun adds no duplicates. `user_portal.notebook.connection` gains `dlt_destination()` for your own dlt pipelines, and the notebook image includes dlt 1.31 with its usage statistics switched off.
+- The user portal's MCP server and `AGENTS.md` point agents to the Ingestion extension for loading outside data when it is installed.
+- Smaller images: uv's download cache no longer ships inside them. The notebook image shrinks from 3.3 to 2.1 GB, the user portal's from 0.9 to 0.66 GB and the portal's from 0.6 to 0.45 GB.
+
 ## 0.8.0 - 2026-10-07
 
 - **dbt pipelines**, the second extension: AI agents create dbt v2 projects for a team (a new project starts empty), write models and tests on a branch, build them in development and schedule them, through an API and MCP server. A team administrator enables it per environment and merges to `main`; acceptance and production build only `main`. Each run is an isolated container that writes as the team's service account with a short-lived token. The installer can add it. See [installation](docs/install.md#add-dbt-pipelines).

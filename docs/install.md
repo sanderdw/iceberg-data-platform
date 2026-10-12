@@ -77,6 +77,32 @@ Each build runs in its own container, with no internet and a read-only file syst
 
 A run ends 15 minutes before its catalog token expires, so after 45 minutes by default. For longer runs, raise the platform's token lifetime in `.env`, for example `POLARIS_TOKEN_LIFETIME=7200` for runs up to 1h45, and restart the platform with `docker compose up -d --wait`. A revoked service account or data share then keeps its issued tokens up to that long.
 
+## Add Ingestion (dlt)
+
+The Ingestion extension (`extensions/ingestion` in the repository) loads data from outside into your teams' databases with declarative [dlt](https://dlthub.com/docs) pipelines: REST APIs, PostgreSQL and MySQL or MariaDB tables, and CSV, JSONL or Parquet files over HTTPS or S3. The installer doesn't add it yet. Install it from a source checkout with [uv](https://docs.astral.sh/uv/), next to a platform started from the same checkout:
+
+```bash
+uv run python -m scripts.setup --extension ingestion --origin http://localhost:3008 --handshake extensions/ingestion/.env.bridge
+docker compose up -d --wait
+docker compose -f compose.users.yaml up -d --wait users
+cd extensions/ingestion
+uv run python -m scripts.setup
+docker compose --profile images build
+docker compose up -d --wait
+```
+
+Its page opens on `http://localhost:3008`, and the user portal links to it as **Ingestion (dlt)**. A team administrator enables it once per environment, creates pipelines and enters their secrets, such as an API key or a database password. Secrets are write-only: no page, API or MCP response returns them. Writers start runs; a schedule starts them too. Connect your agent to its MCP server:
+
+```bash
+claude mcp add --transport http --client-id ext-ingestion-mcp --callback-port 3010 iceberg-ingestion http://localhost:3008/mcp
+```
+
+Each run is its own container with a read-only file system that writes as the team's service account. It reaches the catalog, storage and the internet, but not the platform's other services. Sources on private, loopback or link-local addresses are refused. For a demo against a database on your own computer, set `ING_ALLOW_PRIVATE_SOURCES=true` in `extensions/ingestion/.env` and restart the extension; the run then reaches your computer as `host.docker.internal`.
+
+Runs end 15 minutes before their catalog token expires, as [dbt runs](#add-dbt-pipelines) do. Raise `POLARIS_TOKEN_LIFETIME` for longer loads.
+
+Stop the extension with `docker compose down` in `extensions/ingestion` before you stop the platform, and start it after the platform.
+
 ## Agent skills
 
 The installation folder contains four skills for coding agents in `.agents/skills`, in the open [Agent Skills](https://agentskills.io) format, and an `AGENTS.md` (with a `CLAUDE.md` pointer) that explains `iceberg_connect.py`, the MCP servers and semantic models to any agent started there. Start your agent in the installation folder and ask it to use a skill, for example "Set up a demo company for my class".
@@ -103,7 +129,7 @@ The skills are updated with the installer. Keep your own changes in a copy under
 Replace `latest/download` with `download/vX.Y.Z`. The bundle, Compose files and images are all pinned to that version:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.8.0/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.9.0/install.sh | sh
 ```
 
 ## Test a branch

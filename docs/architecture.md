@@ -13,7 +13,7 @@ flowchart LR
         Docker[Trusted Docker daemon]
         Notebook[Session marimo container]
     end
-    subgraph Extension[Extension, e.g. Conversational BI or dbt · own Compose project]
+    subgraph Extension[Extension, e.g. Conversational BI, dbt or Ingestion · own Compose project]
         ExtApp[Gateway: UI, API and /mcp<br/>Keycloak clients of the extension]
         Worker[Query worker]
     end
@@ -72,6 +72,7 @@ The third party never signs in to a portal. A team administrator hands over the 
 | `compose.users.yaml` | `iceberg-workspaces` | User portal, plus the notebook image build |
 | `extensions/conversationalbi/compose.yaml` | `iceberg-conversationalbi` | Optional Conversational BI extension, released separately (see [extensions](extensions.md)) |
 | `extensions/dbt/compose.yaml` | `iceberg-dbt` | Optional dbt extension: API, MCP and viewer, and the launcher of isolated run containers, released separately |
+| `extensions/ingestion/compose.yaml` | `iceberg-ingestion` | Optional Ingestion (dlt) extension: page, API and MCP, and the launcher of isolated run containers, released separately |
 
 - **Keycloak** signs in people and MCP clients. **Polaris** holds all application metadata (teams, users, databases, shares) and enforces data permissions; see the [resource model](CONTEXT.md). There is no separate application database. Polaris also stores the Apache Ossie semantic models of each namespace (beta in Polaris 1.8, see [semantic models](../user_portal/README.md#semantic-models)).
 - **The user portal** joins the platform network and doesn't depend on the admin portal. Catalog browsing and notebooks use the signed-in user's own token. The portal uses its platform identity only for directory lookups and for the database and share actions of team administrators.
@@ -89,7 +90,7 @@ only through the Extension Bridge (`bridge` service, `/bridge/v1`), Iceberg REST
 - Each session and database runs in its own container on a private network with the portal, Polaris and RustFS. The container runs as a non-root user with a read-only root filesystem and resource limits, and it never receives the Docker socket or platform secrets.
 - Logging out, switching team or environment, or losing access stops that session's containers. Saved files persist.
 
-The user portal controls Docker and is therefore a trusted service. The same goes for the internal `monitor` collector, which feeds the admin portal's Infrastructure page, and for the dbt extension's `dbt-launcher`, which starts its isolated run containers. See the [security model](../SECURITY.md).
+The user portal controls Docker and is therefore a trusted service. The same goes for the internal `monitor` collector, which feeds the admin portal's Infrastructure page, and for the launchers of the dbt and Ingestion extensions (`dbt-launcher`, `ing-launcher`), which start their isolated run containers. See the [security model](../SECURITY.md).
 
 ## Repository layout
 
@@ -105,6 +106,6 @@ The user portal controls Docker and is therefore a trusted service. The same goe
 | `test/` | Unit and authorization tests |
 | `docs/` | Documentation |
 | `contracts/bridge/` | Extension Bridge contract: OpenAPI, table-property, network and handshake conventions |
-| `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi` and `extensions/dbt` |
+| `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi`, `extensions/dbt` and `extensions/ingestion` |
 | `presentation/` | reveal.js deck, published to GitHub Pages and excluded from source releases |
 | `screenshots/` | Design experiment captures, kept for reference and excluded from source releases |

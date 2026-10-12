@@ -6,8 +6,9 @@ describes every tool, then the choices behind them and why they were made. To re
 endpoint in a coding agent, see [connect an MCP client](../user_portal/README.md#connect-an-mcp-client).
 Platform administrators have a separate endpoint on the administration portal, described in the
 [administration guide](admin-guide.md#connect-an-mcp-client). [Extensions](extensions.md) serve their
-own: Conversational BI at `http://localhost:3007/mcp` (client `ext-conversationalbi-mcp`) and dbt at
-`http://localhost:3004/mcp` (client `ext-dbt-mcp`).
+own: Conversational BI at `http://localhost:3007/mcp` (client `ext-conversationalbi-mcp`), dbt at
+`http://localhost:3004/mcp` (client `ext-dbt-mcp`) and Ingestion (dlt) at `http://localhost:3008/mcp`
+(client `ext-ingestion-mcp`).
 
 ## How every tool works
 

@@ -55,7 +55,7 @@ table.append(arrow_table)                             # a pyarrow.Table matching
 
 ### Loading data from somewhere else
 
-The MCP tools cannot upload files or fetch URLs, and dbt runs (dbt extension) have no internet. To copy data in from another database, files or a web API, write a small `uv` script that reads the source in batches and appends each batch with PyIceberg (or `INSERT INTO` through a writable DuckDB connection):
+The MCP tools cannot upload files or fetch URLs, and dbt runs (dbt extension) have no internet. With the Ingestion (dlt) extension installed, a team administrator can set up a scheduled load from a REST API, a PostgreSQL or MySQL table, or CSV, JSONL or Parquet files through its MCP server (see the table below). Otherwise, to copy data in from another database, files or a web API, write a small `uv` script that reads the source in batches and appends each batch with PyIceberg (or `INSERT INTO` through a writable DuckDB connection):
 
 - Land outside data as-is in a raw namespace (such as `cbs_raw`) and transform it from there, with dbt or SQL. With dbt, keep the loader in the project under `scripts/` so the whole chain is code.
 
@@ -77,6 +77,7 @@ Both portals serve a Model Context Protocol endpoint at `/mcp`, and so does each
 | `iceberg-admin` | `http://localhost:3000/mcp` | platform administrators | teams, users, databases and shares across the platform (`get_overview`, `create_team`, `create_user`, `create_database`, …) |
 | `conversationalbi` | `http://localhost:3007/mcp` | with Conversational BI installed (client id `ext-conversationalbi-mcp`) | governed questions over semantic models: `list_models`, `describe_model`, `query`, `get_result`; team admins also `enable_environment` |
 | `dbt` | `http://localhost:3004/mcp` | with the dbt extension installed (client id `ext-dbt-mcp`) | dbt pipelines of the person's teams: `create_project`, `create_branch`, `write_files`, `compile`, `run`, `get_pipeline`, `set_schedule`, …; follow the `dbt-platform` skill. People who prefer a terminal use `iceberg_dbt.py` from the dbt viewer: dbt's commands, run on the platform |
+| `ingestion` | `http://localhost:3008/mcp` | with the Ingestion (dlt) extension installed (client id `ext-ingestion-mcp`) | declarative dlt pipelines that load REST APIs, SQL tables and files into the person's team databases: `list_templates`, `validate_pipeline`, `create_pipeline`, `set_pipeline_secrets` (write-only), `run_pipeline`, `get_run`, `set_schedule`, …; team admins create pipelines and set secrets, writers run them |
 
 Register a server in your agent (replace `iceberg-user` and the address for another server; extensions use their own client id from the table):
 

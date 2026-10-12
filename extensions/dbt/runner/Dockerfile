@@ -6,7 +6,7 @@ WORKDIR /opt/runner
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/runner/.venv PYTHONDONTWRITEBYTECODE=1
 COPY pyproject.toml uv.lock LICENSE NOTICE THIRD_PARTY_NOTICES.md ./
 # dbt-oss verifies the sha256 of the platform wheel it installs (see its sdist's assets.json).
-RUN uv sync --locked --no-dev --only-group runner --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --only-group runner --no-install-project
 ENV HOME=/opt/runner/home ADBC_DRIVER_PATH=/opt/runner/adbc PYTHONPATH=/opt/runner
 COPY runner ./runner
 RUN /opt/runner/.venv/bin/python -m runner.install && /opt/runner/.venv/bin/dbt --version

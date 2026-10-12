@@ -57,7 +57,7 @@ LOCAL_DIRS = ("docs/local_only/",)
 # GitHub Pages workflow; extensions and their workflows are versioned and released on their own;
 # screenshots are design references for contributors.
 TRACKED_UNRELEASED = ("presentation/", "extensions/", ".github/workflows/conversationalbi-", ".github/workflows/dbt-",
-                      "screenshots/")
+                      ".github/workflows/ingestion-", "screenshots/")
 
 
 def release_files(root=ROOT):

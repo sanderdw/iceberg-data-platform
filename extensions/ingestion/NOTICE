@@ -1,0 +1,9 @@
+Ingestion (dlt) for the Iceberg Data Platform
+Copyright 2026 Iceberg Data Platform contributors
+
+Licensed under the Apache License, Version 2.0.
+
+This is an independent project, not an Apache Software Foundation project, and not affiliated with
+dltHub. Apache Iceberg and Apache Polaris are trademarks of the Apache Software Foundation. dlt is
+a trademark of dltHub, Inc.
+Bundled third-party licenses are listed in THIRD_PARTY_NOTICES.md.

@@ -1,5 +1,11 @@
 # Ingestion extension (proposed, 2026-10-07)
 
+**Superseded (2026-10-12).** The extension was built as `extensions/ingestion` (Ingestion (dlt), core
+0.9.0) on dlt's native Iceberg destination: dlt reads and writes, with its bookkeeping kept inside
+the run. See its [README](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/ingestion#readme) and
+[DECISIONS.md](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/ingestion/DECISIONS.md). The DuckDB readers, per-endpoint forwarders,
+the other-catalog source and OLake below remain ideas. The rest of this page is kept as history.
+
 Not implemented. This records how a team loads external data into the platform on a schedule, as a
 third extension next to Conversational BI and dbt. It covers four kinds of source:
 - other Apache Iceberg catalogs

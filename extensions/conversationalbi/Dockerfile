@@ -13,7 +13,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1 DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
 COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --locked --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --no-install-project
 COPY conversationalbi ./conversationalbi
 RUN /app/.venv/bin/python -m conversationalbi.duckdb_extensions
 COPY contracts ./contracts

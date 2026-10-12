@@ -42,7 +42,7 @@ def _():
 def _(mo):
     mo.md("""
     # Write Iceberg v3 with DuckDB
-    **Example 4 of 7**
+    **Example 4 of 8**
 
     DuckDB creates and writes an Iceberg **format-version 3** table through Polaris,
     using your own permissions. The table uses what v3 adds: a `VARIANT` column for

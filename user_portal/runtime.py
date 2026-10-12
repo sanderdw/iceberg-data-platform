@@ -72,6 +72,7 @@ class Workspace:
                     "title": "07 · Read an AI-ready flights product",
                     "url": self.url + "?file=07_duckdb_flights_read.py",
                 },
+                {"title": "08 · Load data with dlt", "url": self.url + "?file=08_dlt_ingest.py"},
             ],
         }
 

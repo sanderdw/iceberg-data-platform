@@ -1,0 +1,55 @@
+[project]
+name = "iceberg-ingestion"
+version = "0.1.0"
+description = "Ingestion (dlt) for the Iceberg Data Platform: declarative dlt pipelines that load REST APIs, databases and files into Iceberg, with a UI, API and MCP server"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi==0.142.2",
+  "uvicorn[standard]>=0.53.0",
+  "httpx>=0.28.1",
+  "joserfc>=1.7.5",
+  "mcp>=2.2.0,<3",
+  "croniter>=6.2.4",
+  "cryptography>=46.0.0",
+]
+
+[dependency-groups]
+# The launcher is the only component with the Docker socket.
+launcher = ["docker==7.2.0"]
+# The isolated run image: dlt with its Iceberg destination and the three declarative sources.
+# PostgreSQL goes through pg8000 and MySQL/MariaDB through PyMySQL (no copyleft drivers).
+runner = [
+  "dlt[pyiceberg,sql_database]==1.31.0",
+  "pyiceberg>=0.12.0",
+  "pg8000>=1.31.5",
+  "pymysql>=1.1.2",
+  "s3fs>=2025.9.0",
+]
+dev = [
+  {include-group = "launcher"},
+  {include-group = "runner"},
+  "pytest>=9.1.1",
+  "ruff>=0.16.8",
+]
+
+[tool.iceberg-ingestion]
+# Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
+bridge-contract = ">=0.1,<0.2"
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "C4", "RUF"]
+ignore = ["RUF001", "RUF002"]

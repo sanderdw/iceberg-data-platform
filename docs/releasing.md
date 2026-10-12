@@ -15,7 +15,7 @@ Branches listed under `on.push.branches` in `.github/workflows/release.yml` publ
 
 The workflow runs the full CI suite and builds AMD64 and ARM64 images. Only then does it publish the exact prerelease and update the `SLUG-preview` installers. A failed run leaves the previous preview in place.
 
-A preview also builds the Conversational BI and dbt images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add both extensions without their own releases.
+A preview also builds the Conversational BI and dbt images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add both extensions without their own releases. Ingestion (dlt) is not in the installer yet; it publishes previews through its own workflow.
 
 `SLUG` is the branch name in lowercase, with characters other than letters, digits, `.`, `_` and `-` replaced by `-`, up to 60 characters. Branch names that start with `v` plus a digit are rejected. The workflow keeps the five newest builds per branch. Delete the `SLUG-preview` release after merging.
 
@@ -40,7 +40,7 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
    - Conversational BI: `conversationalbi-v<version>`, with `compose.yaml` and `scripts/setup.py` in `extensions/conversationalbi`.
    - dbt: `dbt-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/dbt`.
 
-   A branch preview skips this check, because it builds the extension images itself.
+   A branch preview skips this check, because it builds the extension images itself. Ingestion (dlt) is not bundled yet, so a core release does not wait for it.
 4. Tag the core commit on `main`:
 
    ```bash
@@ -89,8 +89,20 @@ The dbt extension works the same way:
 
 The **dbt extension release** workflow runs its CI, builds `ghcr.io/sanderdw/iceberg-dbt` and `iceberg-dbt-runner` for AMD64 and ARM64, checks that both are public and publishes the release with its source archive. On the first publication, set both packages to **Public** and rerun the failed job. Its branch previews are named `dbt-SLUG-RUN_ID-ATTEMPT`.
 
+The Ingestion extension works the same way:
+
+1. In `extensions/ingestion`, update the version in `pyproject.toml`, `uv.lock` (`uv lock`), `ingestion/config.py`, the image tags in `compose.yaml` (both `iceberg-ingestion` lines, the runner image and the `RUNNER_IMAGE` default) and the API contract (`uv run python -m scripts.api_contract`). Date its `CHANGELOG.md` section. `uv run python -m scripts.release` rejects a mismatch.
+2. After the merge into `main`, tag that commit:
+
+   ```bash
+   git tag -a ingestion-vX.Y.Z -m "Ingestion (dlt) X.Y.Z"
+   git push origin ingestion-vX.Y.Z
+   ```
+
+The **Ingestion release** workflow runs its CI, builds `ghcr.io/sanderdw/iceberg-ingestion` and `iceberg-ingestion-runner` for AMD64 and ARM64, checks that both are public and publishes the release with its source archive. On the first publication, set both packages to **Public** and rerun the failed job. Its branch previews are named `ingestion-SLUG-RUN_ID-ATTEMPT`.
+
 Release each extension whose version changed before the core: tag it on `main`, wait for its workflow, then tag `vX.Y.Z`.
 
 ## Package visibility
 
-On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**, including `iceberg-conversationalbi`, `iceberg-conversationalbi-runtime`, `iceberg-dbt` and `iceberg-dbt-runner`. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.
+On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**, including `iceberg-conversationalbi`, `iceberg-conversationalbi-runtime`, `iceberg-dbt`, `iceberg-dbt-runner`, `iceberg-ingestion` and `iceberg-ingestion-runner`. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.

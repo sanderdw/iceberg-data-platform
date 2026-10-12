@@ -34,7 +34,7 @@ def _():
 def _(mo):
     mo.md("""
     # From flight records to an AI-ready data product
-    **Example 7 of 7 · Semantic model and Iceberg tables from Polaris**
+    **Example 7 of 8 · Semantic model and Iceberg tables from Polaris**
 
     Run **06 · Write an AI-ready flights product** first in the same database.
     This notebook needs no local files: everything comes from Polaris, with your own
