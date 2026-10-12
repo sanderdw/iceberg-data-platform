@@ -7,36 +7,36 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.142.2",
+  "fastapi==0.143.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
-  "boto3>=1.43.101",
-  "python-dotenv>=1.2.3",
+  "boto3>=1.43.112",
+  "python-dotenv>=1.2.4",
   "psycopg[binary]>=3.3.6,<4",
 ]
 
 [dependency-groups]
 oidc = ["Authlib==1.8.0", "httpx2>=2.13.1"]
 mcp = [
-    "mcp>=2.2.0,<3",
-    "sqlglot>=30.21.0",
+    "mcp>=2.3.0,<3",
+    "sqlglot>=30.22.0",
 ]
-dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.16.8"]
-data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "numpy>=2.5.3"]
+dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.17.0"]
+data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "numpy>=2.5.4"]
 users = [
     "docker==7.2.0",
     "duckdb==1.5.6",
-    "pytz>=2026.4",
+    "pytz>=2026.5",
 ]
 notebook = [
     "altair>=6.3.0",
     "dlt[pyiceberg]==1.31.0",
     "duckdb==1.5.6",
-    "marimo[sql]==0.25.0",
+    "marimo[sql]==0.25.1",
     "matplotlib>=3.11.2",
     "nbformat>=5.11.1",
     "pandas>=3.0.6",
-    "polars>=1.44.2",
+    "polars>=2.0.0",
     "pyyaml>=6.0.3",
     "pyiceberg[duckdb,pyarrow]>=0.12.0",
 ]

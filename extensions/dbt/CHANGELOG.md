@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - 2026-10-07
+## 0.1.0 - 2026-10-12
 
 - First version of the dbt extension for the Iceberg Data Platform, on Extension Bridge contract 0.1.
 - dbt v2 OSS 2.0.5 with DuckDB 1.5.5 on Iceberg REST, installed without run-time downloads.

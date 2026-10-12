@@ -25,12 +25,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: '0.12.23'
+          version: '0.13.0'
           enable-cache: true
           cache-dependency-glob: extensions/ingestion/uv.lock
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
       - run: uv sync --locked
@@ -69,9 +69,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: '0.12.23'
+          version: '0.13.0'
           enable-cache: true
       - run: uv sync --locked --all-groups
       - run: uv run python -m scripts.setup --demo --extension ingestion --origin http://localhost:3008 --handshake extensions/ingestion/.env.bridge
@@ -137,10 +137,10 @@ jobs:
             if git cat-file -e "$tag:contracts/bridge/v1/openapi.yaml" 2>/dev/null; then echo "tag=$tag" >> "$GITHUB_OUTPUT"; exit 0; fi
           done
           echo "No platform release ships the Bridge yet; the integration job covers this commit." >> "$GITHUB_STEP_SUMMARY"
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         if: steps.core.outputs.tag
         with:
-          version: '0.12.23'
+          version: '0.13.0'
       - name: Start that platform release
         if: steps.core.outputs.tag
         env:

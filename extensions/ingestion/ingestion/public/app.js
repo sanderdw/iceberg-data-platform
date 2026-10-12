@@ -76,7 +76,6 @@ function target(p) {
            h('span', {class: 'visually-hidden', text: ' namespace '}), p.namespace);
 }
 function teamName(id) { return (me?.memberships.find(m => m.team === id) || {}).teamName || id; }
-function roleIn(team) { return (me?.memberships.find(m => m.team === team) || {}).role; }
 const isAdmin = role => ADMINS.includes(role);
 const isWriter = role => WRITERS.includes(role);
 function enabledIn(team) { return (me?.enabledEnvironments.find(e => e.team === team) || {}).environments || []; }

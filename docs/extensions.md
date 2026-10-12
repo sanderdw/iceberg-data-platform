@@ -61,7 +61,6 @@ clients are disabled on the next start.
 | Ingestion (dlt) | `extensions/ingestion` | Load REST APIs, PostgreSQL and MySQL or MariaDB tables, and CSV, JSONL or Parquet files into your team's databases with declarative [dlt](https://dlthub.com/docs) pipelines, on demand or on a schedule. Through a page, an API and an MCP server. Each run is an isolated container that writes as the team's service account. Tables it loads show **Produced by dlt** |
 
 Each extension documents its own installation in its folder. The release installer can also add
-Conversational BI and dbt pipelines; see [Conversational BI](install.md#add-conversational-bi) and
-[dbt pipelines](install.md#add-dbt-pipelines). Ingestion (dlt) is installed from its folder; see
-[Add Ingestion (dlt)](install.md#add-ingestion-dlt). The tables it loads are ordinary Iceberg tables,
-so a dbt project declares them as sources.
+all three; see [Conversational BI](install.md#add-conversational-bi),
+[dbt pipelines](install.md#add-dbt-pipelines) and [Ingestion (dlt)](install.md#add-ingestion-dlt).
+The tables Ingestion loads are ordinary Iceberg tables, so a dbt project declares them as sources.

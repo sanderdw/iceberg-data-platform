@@ -75,9 +75,9 @@ Both portals serve a Model Context Protocol endpoint at `/mcp`, and so does each
 |---|---|---|---|
 | `iceberg-user` | `http://localhost:3002/mcp` | everyone | `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `preview_rows` (up to 100 rows), `list_semantic_models`, `describe_semantic_model`, `query_semantic_model`, `list_dimension_values`, `list_shares`, `list_received_shares`, `list_share_teams`; writers also `publish_semantic_model`, `delete_semantic_model`; team admins also `create_database`, `rename_database`, `delete_database`, `create_share`, `update_share`, `rotate_share_credential`, `delete_share` |
 | `iceberg-admin` | `http://localhost:3000/mcp` | platform administrators | teams, users, databases and shares across the platform (`get_overview`, `create_team`, `create_user`, `create_database`, …) |
-| `conversationalbi` | `http://localhost:3007/mcp` | with Conversational BI installed (client id `ext-conversationalbi-mcp`) | governed questions over semantic models: `list_models`, `describe_model`, `query`, `get_result`; team admins also `enable_environment` |
-| `dbt` | `http://localhost:3004/mcp` | with the dbt extension installed (client id `ext-dbt-mcp`) | dbt pipelines of the person's teams: `create_project`, `create_branch`, `write_files`, `compile`, `run`, `get_pipeline`, `set_schedule`, …; follow the `dbt-platform` skill. People who prefer a terminal use `iceberg_dbt.py` from the dbt viewer: dbt's commands, run on the platform |
-| `ingestion` | `http://localhost:3008/mcp` | with the Ingestion (dlt) extension installed (client id `ext-ingestion-mcp`) | declarative dlt pipelines that load REST APIs, SQL tables and files into the person's team databases: `list_templates`, `validate_pipeline`, `create_pipeline`, `set_pipeline_secrets` (write-only), `run_pipeline`, `get_run`, `set_schedule`, …; team admins create pipelines and set secrets, writers run them |
+| `iceberg-conversationalbi` | `http://localhost:3007/mcp` | with Conversational BI installed (client id `ext-conversationalbi-mcp`) | governed questions over semantic models: `list_models`, `describe_model`, `query`, `get_result`; team admins also `enable_environment` |
+| `iceberg-dbt` | `http://localhost:3004/mcp` | with the dbt extension installed (client id `ext-dbt-mcp`) | dbt pipelines of the person's teams: `create_project`, `create_branch`, `write_files`, `compile`, `run`, `get_pipeline`, `set_schedule`, …; follow the `dbt-platform` skill. People who prefer a terminal use `iceberg_dbt.py` from the dbt viewer: dbt's commands, run on the platform |
+| `iceberg-ingestion` | `http://localhost:3008/mcp` | with the Ingestion (dlt) extension installed (client id `ext-ingestion-mcp`) | declarative dlt pipelines that load REST APIs, SQL tables and files into the person's team databases: `list_templates`, `validate_pipeline`, `create_pipeline`, `set_pipeline_secrets` (write-only), `run_pipeline`, `get_run`, `set_schedule`, …; team admins create pipelines and set secrets, writers run them |
 
 Register a server in your agent (replace `iceberg-user` and the address for another server; extensions use their own client id from the table):
 
@@ -124,6 +124,7 @@ The portal shows models under **Catalog** (with a **Diagram** of the joins), dat
 |---|---|
 | `semantic-model` | create or improve a semantic model, with an interview and quality checks |
 | `dbt-platform` | build, test and schedule dbt pipelines on your tables (needs the dbt extension and its MCP server) |
+| `ingestion` | load data from an API, a database or files into your tables (needs the Ingestion extension and its MCP server) |
 | `demo-company` | fill the platform with a fictional company and accounts for a class (needs the admin MCP server) |
 | `quick-share` | make the portals reachable from anywhere for a temporary session, and undo that |
 

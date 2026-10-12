@@ -11,9 +11,9 @@ Python, uv and PyIceberg stack. Its REST, SQL and file sources are declarative, 
 configuration rather than code. Batch only. SeaTunnel stays the candidate for bulk database copies
 and change data capture, which would need long-lived credentials from the Bridge.
 
-The earlier proposal in the platform (`docs/proposals/ingestion-extension.md`) used DuckDB and dlt
-only as readers, with the extension's own writer and a forwarder per endpoint. This extension uses
-dlt's own Iceberg destination instead, which keeps the code small.
+The earlier proposal in the platform (`docs/proposals/ingestion-extension.md`, in git history up to
+commit 96c75f7) used DuckDB and dlt only as readers, with the extension's own writer and a forwarder
+per endpoint. This extension uses dlt's own Iceberg destination instead, which keeps the code small.
 
 ## dlt's Iceberg destination on Polaris: what it needs
 
@@ -60,7 +60,7 @@ runs that short.
 
 ## Isolation and the network
 
-Runs reuse the dbt extension's launcher: the only container with the Docker socket, fixed image,
+Runs use a launcher forked from the dbt extension's: the only container with the Docker socket, fixed image,
 flags and mounts, one container per run (read-only, no capabilities, user 10001, memory, CPU and
 process limits). Each run gets two networks:
 

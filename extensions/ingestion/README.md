@@ -123,6 +123,9 @@ docker compose --profile images build
 docker compose up -d --wait
 ```
 
+The release installer of the platform can also add this extension; see `docs/install.md` in the
+platform repository.
+
 Open `http://localhost:3008`, sign in, and as a team administrator enable an environment. The user
 portal links to the page as **Ingestion (dlt)**. Options are listed in [.env.example](.env.example).
 Keep `.env`: `ING_SECRET_KEY` decrypts the pipelines' secrets.

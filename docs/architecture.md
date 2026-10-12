@@ -108,4 +108,3 @@ The user portal controls Docker and is therefore a trusted service. The same goe
 | `contracts/bridge/` | Extension Bridge contract: OpenAPI, table-property, network and handshake conventions |
 | `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi`, `extensions/dbt` and `extensions/ingestion` |
 | `presentation/` | reveal.js deck, published to GitHub Pages and excluded from source releases |
-| `screenshots/` | Design experiment captures, kept for reference and excluded from source releases |

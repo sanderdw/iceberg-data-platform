@@ -5,17 +5,17 @@ The `Release` workflow publishes three container images (`ghcr.io/sanderdw/icebe
 | Channel | Published by | Release | Image tags | Installer |
 | --- | --- | --- | --- | --- |
 | Stable | `vX.Y.Z` tag on `main` | `vX.Y.Z`, marked Latest if highest | `:X.Y.Z`, `:latest` | `/releases/latest/download/install.sh` or `/releases/download/vX.Y.Z/install.sh` |
-| Branch preview | Push to a listed branch, or **Run workflow** | Prerelease `SLUG-RUN_ID-ATTEMPT` plus rolling `SLUG-preview` | `:SLUG-RUN_ID-ATTEMPT` | `/releases/download/SLUG-preview/install.sh` |
+| Branch preview | **Run workflow** on the branch | Prerelease `SLUG-RUN_ID-ATTEMPT` plus rolling `SLUG-preview` | `:SLUG-RUN_ID-ATTEMPT` | `/releases/download/SLUG-preview/install.sh` |
 
 Every installer is pinned to its own release and image tag. Previews never become Latest and never write `:latest`.
 
 ## Publish a branch for testers
 
-Branches listed under `on.push.branches` in `.github/workflows/release.yml` publish on every push. Any other branch publishes on demand, either through **Actions → Release → Run workflow** or with `gh workflow run Release --ref BRANCH`.
+A branch publishes on demand, either through **Actions → Release → Run workflow** or with `gh workflow run Release --ref BRANCH`. To publish a branch on every push, add it under `on.push.branches` in `.github/workflows/release.yml`.
 
 The workflow runs the full CI suite and builds AMD64 and ARM64 images. Only then does it publish the exact prerelease and update the `SLUG-preview` installers. A failed run leaves the previous preview in place.
 
-A preview also builds the Conversational BI and dbt images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add both extensions without their own releases. Ingestion (dlt) is not in the installer yet; it publishes previews through its own workflow.
+A preview also builds the Conversational BI, dbt and Ingestion (dlt) images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add all three extensions without their own releases.
 
 `SLUG` is the branch name in lowercase, with characters other than letters, digits, `.`, `_` and `-` replaced by `-`, up to 60 characters. Branch names that start with `v` plus a digit are rejected. The workflow keeps the five newest builds per branch. Delete the `SLUG-preview` release after merging.
 
@@ -39,8 +39,9 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
 3. Merge into `main`, wait for CI, then [release each extension](#release-an-extension) whose version changed. The installation bundle installs the extensions from their own releases, so a stable core release requires, for each one, the tag `<id>-v<version>` of the version in its `pyproject.toml`, unchanged bundled files since that tag, and public images:
    - Conversational BI: `conversationalbi-v<version>`, with `compose.yaml` and `scripts/setup.py` in `extensions/conversationalbi`.
    - dbt: `dbt-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/dbt`.
+   - Ingestion (dlt): `ingestion-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/ingestion`.
 
-   A branch preview skips this check, because it builds the extension images itself. Ingestion (dlt) is not bundled yet, so a core release does not wait for it.
+   A branch preview skips this check, because it builds the extension images itself.
 4. Tag the core commit on `main`:
 
    ```bash

@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CBI_SETUP = ROOT / "extensions/conversationalbi/scripts/setup.py"
 CBI_VARIABLES = runpy.run_path(str(CBI_SETUP))["PASSTHROUGH"]
 DBT_SETUP = ROOT / "extensions/dbt/scripts/setup.py"
+ING_SETUP = ROOT / "extensions/ingestion/scripts/setup.py"
 # `docker run` of the platform image: run the script on the installation directory with only the
 # variables the installer names with -e, as Docker would.
 FAKE_RUN = '''import os, subprocess, sys
@@ -59,6 +60,9 @@ def installer_env(tmp_path, request):
             "dbt/scripts/setup.py": DBT_SETUP.read_bytes(),
             "dbt/iceberg_dbt.py": b"# dbt from a terminal\n",
             ".agents/skills/dbt-platform/SKILL.md": b"---\nname: dbt-platform\n---\n",
+            "ingestion/compose.yaml": b"name: iceberg-ingestion\n",
+            "ingestion/scripts/setup.py": ING_SETUP.read_bytes(),
+            ".agents/skills/ingestion/SKILL.md": b"---\nname: ingestion\n---\n",
         }.items():
             info = tarfile.TarInfo("iceberg-data-platform-0.2.1-install/" + name)
             info.size = len(data)
@@ -87,7 +91,7 @@ def calls(env):
     return [json.loads(line) for line in Path(env["TEST_DOCKER_LOG"]).read_text().splitlines()]
 
 
-def assert_started(env, cbi=False, dbt=False):
+def assert_started(env, cbi=False, dbt=False, ingestion=False):
     commands = calls(env)
     tag = env["TEST_RELEASE_TAG"]
     setup_image = "ghcr.io/sanderdw/iceberg-data-platform-portal:" + env["TEST_IMAGE_TAG"]
@@ -100,7 +104,8 @@ def assert_started(env, cbi=False, dbt=False):
     assert downloads == [base + prefix + "SHA256SUMS", base + archive_prefix + "iceberg-data-platform-0.2.1-install.tar.gz"]
     pulls = [i for i, args in enumerate(commands) if args[-1] == "pull"]
     starts = [(i, args) for i, args in enumerate(commands) if "up" in args]
-    extensions = [name for name, wanted in (("conversationalbi", cbi), ("dbt", dbt)) if wanted]
+    extensions = [name for name, wanted in (("conversationalbi", cbi), ("dbt", dbt), ("ingestion", ingestion))
+                  if wanted]
     assert len(starts) == 2 + len(extensions)
     assert pulls and max(pulls) < starts[0][0]
     assert Path(starts[0][1][starts[0][1].index("-f") + 1]).name == "compose.yaml"
@@ -324,9 +329,9 @@ def test_shell_conversational_bi_without_a_model(shell_installer):
     assert "LLM_MODEL" not in re.sub(r"(?m)^#.*\n", "", (cbi / "llm.env").read_text())
 
 
-def assert_dbt_installed(result, env, cbi=False):
+def assert_dbt_installed(result, env, cbi=False, ingestion=False):
     assert result.returncode == 0, result.stdout + result.stderr
-    assert_started(env, cbi=cbi, dbt=True)
+    assert_started(env, cbi=cbi, dbt=True, ingestion=ingestion)
     target = Path(env["ICEBERG_INSTALL_DIR"])
     commands = calls(env)
     registration = next(i for i, args in enumerate(commands) if "--extension" in args and "dbt" in args)
@@ -386,6 +391,70 @@ def test_shell_installs_both_extensions(shell_installer):
     assert "3. Ask questions in Conversational BI" in result.stdout
     text = (Path(env["ICEBERG_INSTALL_DIR"]) / ".env").read_text()
     assert "conversationalbi=http://localhost:3007" in text and "dbt=http://localhost:3004" in text
+
+
+def assert_ingestion_installed(result, env, cbi=False, dbt=False):
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert_started(env, cbi=cbi, dbt=dbt, ingestion=True)
+    target = Path(env["ICEBERG_INSTALL_DIR"])
+    commands = calls(env)
+    registration = next(i for i, args in enumerate(commands) if "--extension" in args and "ingestion" in args)
+    assert registration < next(i for i, args in enumerate(commands) if "up" in args)
+    assert re.search(r"(?m)^PLATFORM_EXTENSIONS=(.*,)?ingestion=http://localhost:3008", (target / ".env").read_text())
+    for name in (".env", ".env.bridge"):
+        assert (target / "ingestion" / name).is_file()
+        if sys.platform != "win32":
+            assert (target / "ingestion" / name).stat().st_mode & 0o777 == 0o600
+    config = (target / "ingestion/.env").read_text()
+    assert "LAUNCHER_TOKEN=" in config and "ING_SECRET_KEY=" in config and "ING_PORT=3008" in config
+    # The runner image comes with the images profile, before anything starts.
+    pull = next(i for i, args in enumerate(commands) if args[-1] == "pull" and "images" in args
+                and any(a.endswith("compose.yaml") and "ingestion" in a for a in args))
+    assert pull < next(i for i, args in enumerate(commands) if "up" in args)
+    output = result.stdout.split("is running.")[1]
+    step = 3 + cbi + dbt
+    assert f"{step}. Load data with Ingestion (dlt)\n   http://localhost:3008\n" in output
+    assert "--client-id ext-ingestion-mcp --callback-port 3010 iceberg-ingestion http://localhost:3008/mcp" in output
+    assert "docker compose -f ingestion/compose.yaml up -d --wait" in output
+    stop = output.split("Stop")[1].split("\n")[0]
+    assert stop.index("docker compose -f ingestion/compose.yaml down") < stop.index("docker compose -f compose.users.yaml down")
+    return target / "ingestion"
+
+
+def test_shell_installs_ingestion_only_when_asked(shell_installer):
+    run, env = shell_installer
+    env["ICEBERG_EXTENSIONS"] = "dbt"
+    result = run()
+    assert_dbt_installed(result, env)
+    assert "Ingestion (dlt)" not in result.stdout
+    assert not (Path(env["ICEBERG_INSTALL_DIR"]) / "ingestion/.env").exists()
+    assert not any("ingestion/compose.yaml" in " ".join(args) or "ingestion" in args for args in calls(env))
+
+
+def test_shell_installs_ingestion_and_keeps_it_on_rerun(shell_installer):
+    run, env = shell_installer
+    env["ICEBERG_EXTENSIONS"] = "ingestion"
+    ingestion = assert_ingestion_installed(run(), env)
+    kept = {name: (ingestion / name).read_bytes() for name in (".env", ".env.bridge")}
+    del env["ICEBERG_EXTENSIONS"]
+    for log in ("TEST_DOCKER_LOG", "TEST_DOWNLOAD_LOG"):
+        Path(env[log]).unlink()
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert_started(env, ingestion=True)
+    assert not any("--extension" in args for args in calls(env))
+    # The secret key decrypts the pipelines' secrets, so a rerun keeps it.
+    assert {name: (ingestion / name).read_bytes() for name in kept} == kept
+
+
+def test_shell_installs_all_extensions(shell_installer):
+    run, env = shell_installer
+    env["ICEBERG_EXTENSIONS"] = "conversationalbi,dbt,ingestion"
+    result = run()
+    assert_dbt_installed(result, env, cbi=True, ingestion=True)
+    assert_ingestion_installed(result, env, cbi=True, dbt=True)
+    stop = result.stdout.split("Stop")[-1].split("\n")[0]
+    assert stop.index("ingestion/compose.yaml down") < stop.index("dbt/compose.yaml down")
 
 
 def test_installers_pass_the_variables_conversational_bi_reads():
@@ -469,16 +538,17 @@ def test_powershell_pull_failure_does_not_start_stacks(powershell_installer):
     assert not any("up" in args for args in calls(env))
 
 
-def test_powershell_installs_both_extensions(powershell_installer):
+def test_powershell_installs_all_extensions(powershell_installer):
     run, env = powershell_installer
-    env["ICEBERG_EXTENSIONS"] = "conversationalbi,dbt"
+    env["ICEBERG_EXTENSIONS"] = "conversationalbi,dbt,ingestion"
     result = run()
-    assert_dbt_installed(result, env, cbi=True)
+    assert_dbt_installed(result, env, cbi=True, ingestion=True)
+    assert_ingestion_installed(result, env, cbi=True, dbt=True)
     for log in ("TEST_DOCKER_LOG", "TEST_DOWNLOAD_LOG"):
         Path(env[log]).unlink()
     del env["ICEBERG_EXTENSIONS"]
     assert run().returncode == 0
-    assert_started(env, cbi=True, dbt=True)
+    assert_started(env, cbi=True, dbt=True, ingestion=True)
     assert not any("--extension" in args for args in calls(env))
 
 

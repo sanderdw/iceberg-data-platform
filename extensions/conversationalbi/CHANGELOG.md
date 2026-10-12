@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 - 2026-10-12
+
+- Updated dependencies, including FastAPI 0.143.0, Pydantic AI 2.55.0, the MCP SDK 2.3.0,
+  CopilotKit 1.79.0, Python 3.14.8 and uv 0.13.0.
+- A smaller gateway image, 0.9 instead of 1.3 GB: uv's download cache no longer ships inside it.
+- The README and the skill register the MCP server as `iceberg-conversationalbi`, the name the
+  platform's installer and `AGENTS.md` use.
+
 ## 0.1.0 - 2026-10-04
 
 - First version of Conversational BI for the Iceberg Data Platform, on Extension Bridge contract 0.1.

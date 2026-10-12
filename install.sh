@@ -9,7 +9,7 @@ main() {
         1)
             if [ "$1" = --help ]; then
                 printf 'Usage: sh install.sh [--dir DIRECTORY]\nDefault: ~/iceberg-data-platform (or ICEBERG_INSTALL_DIR)\nRequires Linux or macOS, Docker with Compose v2, curl and tar.\n'
-                printf '\nExtensions (optional): ICEBERG_EXTENSIONS=conversationalbi,dbt names the ones to add. In a\nterminal the installer asks; ICEBERG_EXTENSIONS=none skips the questions.\n'
+                printf '\nExtensions (optional): ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion names the ones to add. In a\nterminal the installer asks; ICEBERG_EXTENSIONS=none skips the questions.\n'
                 printf '\nConversational BI also starts with LLM_MODEL and its key, for example\nLLM_MODEL=anthropic:claude-sonnet-5-5 ANTHROPIC_API_KEY=...\nVariables: %s\n' "$cbi_variables"
                 return
             fi
@@ -73,6 +73,21 @@ main() {
         read -r answer </dev/tty || answer=
         case $answer in [Yy]*) dbt=true ;; esac
     fi
+    # And the Ingestion (dlt) extension.
+    ing=false
+    ing_registered=false
+    case ",${ICEBERG_EXTENSIONS:-}," in *,ingestion,*) ing=true ;; esac
+    if [ -f "$install_dir/ingestion/.env.bridge" ] && [ -f "$install_dir/.env" ] &&
+        grep -Eq '^PLATFORM_EXTENSIONS=(.*,)?ingestion=' "$install_dir/.env"; then
+        ing=true
+        ing_registered=true
+    fi
+    if [ "$ing" = false ] && [ -z "${ICEBERG_EXTENSIONS+set}" ] && has_tty; then
+        printf 'Add Ingestion (dlt), which loads REST APIs, databases and files into your tables? Its launcher\nuses the Docker socket to start each run in an isolated container. [y/N] ' >/dev/tty
+        answer=
+        read -r answer </dev/tty || answer=
+        case $answer in [Yy]*) ing=true ;; esac
+    fi
 
     umask 077
     temporary_dir=$(mktemp -d)
@@ -106,7 +121,7 @@ main() {
     bundle_dir=$temporary_dir/bundle
     for file in compose.yaml compose.users.yaml .env.example scripts/setup.py pgadmin/servers.json \
         conversationalbi/compose.yaml conversationalbi/scripts/setup.py dbt/compose.yaml dbt/scripts/setup.py \
-        dbt/iceberg_dbt.py; do
+        dbt/iceberg_dbt.py ingestion/compose.yaml ingestion/scripts/setup.py; do
         [ -f "$bundle_dir/$file" ] || fail "Installation bundle is missing $file"
     done
 
@@ -114,7 +129,7 @@ main() {
     install_dir=$(cd "$install_dir" && pwd)
     # Back up generated configuration when rerunning; never replace .env.
     for file in compose.yaml compose.users.yaml compose.lan.yaml compose.users.lan.yaml conversationalbi/compose.yaml \
-        dbt/compose.yaml; do
+        dbt/compose.yaml ingestion/compose.yaml; do
         if [ -f "$install_dir/$file" ]; then
             cp "$install_dir/$file" "$install_dir/$file.bak"
         fi
@@ -147,6 +162,14 @@ main() {
         cp "$install_dir/dbt/iceberg_dbt.py" "$install_dir/iceberg_dbt.py"
         chmod +x "$install_dir/iceberg_dbt.py"
     fi
+    if [ "$ing" = true ]; then
+        if [ "$ing_registered" = false ]; then
+            setup_run "$setup_image" /install/scripts/setup.py --extension ingestion \
+                --origin http://localhost:3008 --handshake /install/ingestion/.env.bridge >/dev/null
+        fi
+        printf 'Preparing Ingestion (dlt) in %s/ingestion...\n' "$install_dir"
+        setup_run "$setup_image" /install/ingestion/scripts/setup.py >/dev/null
+    fi
 
     printf 'Pulling images (the notebook image may take a few minutes)...\n'
     admin_compose pull
@@ -154,6 +177,7 @@ main() {
     [ "$cbi" = false ] || cbi_compose pull
     # The images profile adds the runner image, which the launcher starts for every run.
     [ "$dbt" = false ] || dbt_compose --profile images pull
+    [ "$ing" = false ] || ing_compose --profile images pull
     printf 'Starting administration and data services...\n'
     admin_compose up -d --no-build --wait --wait-timeout 300
     printf 'Starting the user portal...\n'
@@ -165,6 +189,10 @@ main() {
     if [ "$dbt" = true ]; then
         printf 'Starting dbt pipelines...\n'
         dbt_compose up -d --no-build --wait --wait-timeout 300
+    fi
+    if [ "$ing" = true ]; then
+        printf 'Starting Ingestion (dlt)...\n'
+        ing_compose up -d --no-build --wait --wait-timeout 300
     fi
     shown_dir=$install_dir
     if [ -n "${HOME:-}" ] && [ "$HOME" != / ]; then
@@ -209,6 +237,16 @@ main() {
         printf '   Terminal cd %s && uv run iceberg_dbt.py login (dbt commands that run on the platform)\n' "$cd_dir"
         stop="docker compose -f dbt/compose.yaml down && $stop"
         start="$start && docker compose -f dbt/compose.yaml up -d --wait"
+        step=$((step + 1))
+    fi
+    if [ "$ing" = true ]; then
+        ing_origin=$(file_value "$install_dir/ingestion/.env.bridge" EXTENSION_ORIGIN)
+        printf '\n%s. Load data with Ingestion (dlt)\n   %s\n' "$step" "$ing_origin"
+        printf '   A team administrator enables it once per environment: Enable, on the page\n'
+        printf '   Agent    claude mcp add --transport http --client-id ext-ingestion-mcp --callback-port 3010 iceberg-ingestion %s/mcp\n' "${ing_origin%/}"
+        printf '   Skill    ingestion: ask your agent, for example "Load the orders table from our PostgreSQL"\n'
+        stop="docker compose -f ingestion/compose.yaml down && $stop"
+        start="$start && docker compose -f ingestion/compose.yaml up -d --wait"
     fi
     printf '\nInstalled in %s\n' "$shown_dir"
     printf '   Stop     cd %s && %sdocker compose -f compose.users.yaml down && docker compose down\n' "$cd_dir" "$stop"
@@ -283,6 +321,10 @@ cbi_compose() {
 
 dbt_compose() {
     docker compose --env-file "$install_dir/dbt/.env" -f "$install_dir/dbt/compose.yaml" "$@"
+}
+
+ing_compose() {
+    docker compose --env-file "$install_dir/ingestion/.env" -f "$install_dir/ingestion/compose.yaml" "$@"
 }
 
 # Keep execution last so a truncated download cannot start a partial install.

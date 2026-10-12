@@ -5,7 +5,6 @@ and replace the `"$secret:<name>"` placeholders. Write dispositions, keys and pa
 the pipeline's resource hints, never from the source configuration.
 """
 
-import os
 import re
 import ssl
 from pathlib import Path
@@ -14,7 +13,7 @@ from urllib.parse import unquote, urlsplit
 SECRET = re.compile(r"^\$secret:([a-z][a-z0-9_]{0,63})$")
 FORMATS = {"csv", "jsonl", "parquet"}
 CHUNK = 10_000
-MAX_DOWNLOAD = int(os.environ.get("ING_MAX_DOWNLOAD_BYTES", str(2 * 1024**3)))
+MAX_DOWNLOAD = 2 * 1024**3
 
 
 class SourceError(ValueError):

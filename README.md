@@ -20,7 +20,7 @@ Teams create, own and share their databases. People, notebooks and AI agents all
 - **User portal:** sign in with Keycloak, pick a team and environment, and manage databases, browse catalogs, open notebooks and share data.
 - **Catalog details:** table schemas, snapshots, branches and tags, partitioning, view SQL and a 100-row preview, plus semantic models with a diagram of their datasets and relationships, all with your own permissions.
 - **Data shares:** share selected tables, views and semantic models with another team or with an external party, who gets a credential and a DuckDB script.
-- **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Seven example notebooks cover PyIceberg, DuckDB, Iceberg v3 and a data product whose semantic model lives in Polaris.
+- **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Eight example notebooks cover PyIceberg, DuckDB, Iceberg v3, a data product whose semantic model lives in Polaris, and loading API data with dlt.
 - **MCP servers:** AI agents such as Claude Code sign in through Keycloak to explore data and semantic models, manage databases and data shares, or administer the platform.
 - **Extensions:** add Conversational BI, a chat over your semantic models, dbt pipelines that agents build and test on your tables, and Ingestion (dlt) that loads APIs, databases and files into them. Each is released on its own; see [extensions](docs/extensions.md).
 
@@ -50,7 +50,7 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/dow
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to set up a demo company and to share the portals with a class over the internet. The installer can also add the [Conversational BI extension](docs/install.md#add-conversational-bi), a chat over your semantic models, and the [dbt extension](docs/install.md#add-dbt-pipelines), where AI agents build and test pipelines on your tables.
+The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to set up a demo company and to share the portals with a class over the internet. The installer can also add the [Conversational BI extension](docs/install.md#add-conversational-bi), a chat over your semantic models, the [dbt extension](docs/install.md#add-dbt-pipelines), where AI agents build and test pipelines on your tables, and [Ingestion (dlt)](docs/install.md#add-ingestion-dlt), which loads APIs, databases and files into them.
 
 ### Run from source
 

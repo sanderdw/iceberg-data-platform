@@ -67,7 +67,7 @@ $env:ICEBERG_EXTENSIONS = 'dbt'
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-`ICEBERG_EXTENSIONS=conversationalbi,dbt` adds both. The viewer opens on `http://localhost:3004`, and the user portal links to it as **Pipelines**. A team administrator enables dbt once per environment through an agent (`enable_environment`). Connect your agent to its MCP server; the `dbt-platform` skill in `.agents/skills` teaches it the platform's conventions:
+`ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion` adds all three extensions. The viewer opens on `http://localhost:3004`, and the user portal links to it as **Pipelines**. A team administrator enables dbt once per environment through an agent (`enable_environment`). Connect your agent to its MCP server; the `dbt-platform` skill in `.agents/skills` teaches it the platform's conventions:
 
 ```bash
 claude mcp add --transport http --client-id ext-dbt-mcp --callback-port 3010 iceberg-dbt http://localhost:3004/mcp
@@ -79,33 +79,30 @@ A run ends 15 minutes before its catalog token expires, so after 45 minutes by d
 
 ## Add Ingestion (dlt)
 
-The Ingestion extension (`extensions/ingestion` in the repository) loads data from outside into your teams' databases with declarative [dlt](https://dlthub.com/docs) pipelines: REST APIs, PostgreSQL and MySQL or MariaDB tables, and CSV, JSONL or Parquet files over HTTPS or S3. The installer doesn't add it yet. Install it from a source checkout with [uv](https://docs.astral.sh/uv/), next to a platform started from the same checkout:
+The installer can also add the Ingestion extension (`extensions/ingestion` in the repository). It loads data from outside into your teams' databases with declarative [dlt](https://dlthub.com/docs) pipelines: REST APIs, PostgreSQL and MySQL or MariaDB tables, and CSV, JSONL or Parquet files over HTTPS or S3. In a terminal the installer asks whether to add it. To install without questions:
 
 ```bash
-uv run python -m scripts.setup --extension ingestion --origin http://localhost:3008 --handshake extensions/ingestion/.env.bridge
-docker compose up -d --wait
-docker compose -f compose.users.yaml up -d --wait users
-cd extensions/ingestion
-uv run python -m scripts.setup
-docker compose --profile images build
-docker compose up -d --wait
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.sh | ICEBERG_EXTENSIONS=ingestion sh
 ```
 
-Its page opens on `http://localhost:3008`, and the user portal links to it as **Ingestion (dlt)**. A team administrator enables it once per environment, creates pipelines and enters their secrets, such as an API key or a database password. Secrets are write-only: no page, API or MCP response returns them. Writers start runs; a schedule starts them too. Connect your agent to its MCP server:
+```powershell
+$env:ICEBERG_EXTENSIONS = 'ingestion'
+irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
+```
+
+Its page opens on `http://localhost:3008`, and the user portal links to it as **Ingestion (dlt)**. A team administrator enables it once per environment with **Enable** on the page, creates pipelines and enters their secrets, such as an API key or a database password. Secrets are write-only: no page, API or MCP response returns them. Writers start runs; a schedule starts them too. Connect your agent to its MCP server; the `ingestion` skill in `.agents/skills` guides it from a template to a first load:
 
 ```bash
 claude mcp add --transport http --client-id ext-ingestion-mcp --callback-port 3010 iceberg-ingestion http://localhost:3008/mcp
 ```
 
-Each run is its own container with a read-only file system that writes as the team's service account. It reaches the catalog, storage and the internet, but not the platform's other services. Sources on private, loopback or link-local addresses are refused. For a demo against a database on your own computer, set `ING_ALLOW_PRIVATE_SOURCES=true` in `extensions/ingestion/.env` and restart the extension; the run then reaches your computer as `host.docker.internal`.
+Each run is its own container with a read-only file system that writes as the team's service account, from the runner image the installer pulls. It reaches the catalog, storage and the internet, but not the platform's other services. Sources on private, loopback or link-local addresses are refused. For a demo against a database on your own computer, set `ING_ALLOW_PRIVATE_SOURCES=true` in `ingestion/.env` in the installation directory and restart the extension; the run then reaches your computer as `host.docker.internal`.
 
-Runs end 15 minutes before their catalog token expires, as [dbt runs](#add-dbt-pipelines) do. Raise `POLARIS_TOKEN_LIFETIME` for longer loads.
-
-Stop the extension with `docker compose down` in `extensions/ingestion` before you stop the platform, and start it after the platform.
+`ingestion/.env` holds `ING_SECRET_KEY`, which decrypts the pipelines' secrets. Rerunning the installer keeps it, with the extension, its pipelines and their runs. Runs end 15 minutes before their catalog token expires, as [dbt runs](#add-dbt-pipelines) do. Raise `POLARIS_TOKEN_LIFETIME` for longer loads.
 
 ## Agent skills
 
-The installation folder contains four skills for coding agents in `.agents/skills`, in the open [Agent Skills](https://agentskills.io) format, and an `AGENTS.md` (with a `CLAUDE.md` pointer) that explains `iceberg_connect.py`, the MCP servers and semantic models to any agent started there. Start your agent in the installation folder and ask it to use a skill, for example "Set up a demo company for my class".
+The installation folder contains five skills for coding agents in `.agents/skills`, in the open [Agent Skills](https://agentskills.io) format, and an `AGENTS.md` (with a `CLAUDE.md` pointer) that explains `iceberg_connect.py`, the MCP servers and semantic models to any agent started there. Start your agent in the installation folder and ask it to use a skill, for example "Set up a demo company for my class".
 
 - **Read `.agents/skills` by themselves:** Codex, GitHub Copilot (VS Code and CLI), Gemini CLI and Cursor.
 - **Claude Code** only reads `.claude/skills`. The installer adds a pointer there for each skill, so it finds them too.
@@ -115,12 +112,13 @@ The skills that use the platform's MCP server explain how to connect each agent.
 - [`quick-share`](../.agents/skills/quick-share/SKILL.md) makes the portals reachable from anywhere for a temporary session, such as a class with `demo-company`. It starts two free Cloudflare quick tunnels with public `trycloudflare.com` addresses and trusted certificates, so nobody installs an app or imports a certificate.
   - Participants use only the user portal address. It also carries the Iceberg catalog and S3 API, so DuckDB and PyIceberg on their own laptops work too.
   - The other address serves the administration portal and sign-in.
-  - With Conversational BI installed, a third address serves the chat, linked from the user portal. The dbt extension is not shared this way.
+  - With Conversational BI installed, a third address serves the chat, linked from the user portal. The dbt and Ingestion extensions are not shared this way.
   - A gateway keeps the Keycloak administration console, the Polaris management API and the RustFS console off the internet.
   - The addresses are random, public and change whenever the tunnels restart, so end the session with the skill's undo.
 - [`demo-company`](../.agents/skills/demo-company/SKILL.md) sets up a fictional Energy, Webshop or Retail company for a class or training through the [administration MCP server](admin-guide.md#connect-an-mcp-client). It creates one account for each of up to 48 participants in teams of about 4, each with its own databases, gives the platform administrator read-only access to every team, and ends with a printable page of sign-in slips. Connect the agent to the administration MCP server first; the skill explains how.
 - [`semantic-model`](../.agents/skills/semantic-model/SKILL.md) creates or improves a [semantic model](../user_portal/README.md#semantic-models) for tables you can write. It first interviews you about the business questions the model must answer, profiles the data, drafts datasets, joins, metrics and AI instructions, runs every question and metric against the real tables, and publishes to Polaris only after you approve. It signs in through `iceberg_connect.py` as you.
 - `dbt-platform` builds, tests and schedules dbt pipelines through the [dbt extension](#add-dbt-pipelines)'s MCP server. It finds the source tables with the user portal's MCP tools, works on a branch, and offers a semantic model for each finished mart. Without the dbt extension it tells you how to add it.
+- `ingestion` loads data from an API, a database or files through the [Ingestion extension](#add-ingestion-dlt)'s MCP server. It starts from a template, keeps secrets out of the pipeline definition, runs the load and checks the result with the user portal's MCP tools. Without the extension it tells you how to add it.
 
 The skills are updated with the installer. Keep your own changes in a copy under another name.
 
@@ -170,6 +168,7 @@ docker compose up -d --wait
 docker compose -f compose.users.yaml up -d --wait users
 docker compose -f conversationalbi/compose.yaml up -d --wait   # with Conversational BI
 docker compose -f dbt/compose.yaml up -d --wait                # with dbt pipelines
+docker compose -f ingestion/compose.yaml up -d --wait          # with Ingestion (dlt)
 ```
 
 ## Stop and preserve data
@@ -179,6 +178,7 @@ Stop the workspaces first so the user portal can close its notebooks:
 ```bash
 docker compose -f conversationalbi/compose.yaml down   # with Conversational BI
 docker compose -f dbt/compose.yaml down                # with dbt pipelines
+docker compose -f ingestion/compose.yaml down          # with Ingestion (dlt)
 docker compose -f compose.users.yaml down
 docker compose down
 ```

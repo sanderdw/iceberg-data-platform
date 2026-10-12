@@ -31,8 +31,6 @@ updates:
     directories:
       - /extensions/conversationalbi/web
       - /extensions/conversationalbi/runtime
-      - /extensions/ingestion
-      - /extensions/ingestion/runner
     schedule:
       interval: weekly
   - package-ecosystem: docker
@@ -41,5 +39,7 @@ updates:
       - /extensions/dbt/runner
       - /extensions/conversationalbi
       - /extensions/conversationalbi/runtime
+      - /extensions/ingestion
+      - /extensions/ingestion/runner
     schedule:
       interval: weekly

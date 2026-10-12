@@ -1,7 +1,7 @@
 # The isolated run image. Built with context extensions/ingestion. Each run reaches only the
 # platform's catalog and storage on an internal network, and its source through an egress network.
-FROM ghcr.io/astral-sh/uv:0.12.23 AS uv
-FROM python:3.14.7-slim
+FROM ghcr.io/astral-sh/uv:0.13.0 AS uv
+FROM python:3.14.8-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /opt/runner
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/runner/.venv PYTHONDONTWRITEBYTECODE=1

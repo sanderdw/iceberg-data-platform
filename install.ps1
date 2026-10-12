@@ -28,6 +28,9 @@
     function Invoke-DbtCompose {
         Invoke-Docker compose --env-file "$InstallDir/dbt/.env" -f "$InstallDir/dbt/compose.yaml" @args
     }
+    function Invoke-IngestionCompose {
+        Invoke-Docker compose --env-file "$InstallDir/ingestion/.env" -f "$InstallDir/ingestion/compose.yaml" @args
+    }
     function Get-FileValue($Path, $Key) {
         (Get-Content $Path | Where-Object { $_.StartsWith("$Key=") } | Select-Object -Last 1) -replace '^[^=]*=', ''
     }
@@ -57,6 +60,15 @@
     if (-not $Dbt -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
         $Answer = Read-Host "Add dbt pipelines, where AI agents build and test dbt models on your tables? Its launcher`nuses the Docker socket to start each run in an isolated container. [y/N]"
         $Dbt = $Answer -match '^[Yy]'
+    }
+    # And the Ingestion (dlt) extension.
+    $Ingestion = @($env:ICEBERG_EXTENSIONS -split ',' | ForEach-Object { $_.Trim() }) -contains 'ingestion'
+    $IngestionRegistered = (Test-Path "$InstallDir/ingestion/.env.bridge") -and (Test-Path "$InstallDir/.env") -and
+        [bool](Select-String -Path "$InstallDir/.env" -Pattern '^PLATFORM_EXTENSIONS=(.*,)?ingestion=' -Quiet)
+    if ($IngestionRegistered) { $Ingestion = $true }
+    if (-not $Ingestion -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
+        $Answer = Read-Host "Add Ingestion (dlt), which loads REST APIs, databases and files into your tables? Its launcher`nuses the Docker socket to start each run in an isolated container. [y/N]"
+        $Ingestion = $Answer -match '^[Yy]'
     }
 
     try {
@@ -88,14 +100,14 @@
         if ($LASTEXITCODE -ne 0) { throw 'Could not extract the installation bundle.' }
         foreach ($File in @('compose.yaml', 'compose.users.yaml', '.env.example', 'scripts/setup.py', 'pgadmin/servers.json',
                 'conversationalbi/compose.yaml', 'conversationalbi/scripts/setup.py', 'dbt/compose.yaml', 'dbt/scripts/setup.py',
-                'dbt/iceberg_dbt.py')) {
+                'dbt/iceberg_dbt.py', 'ingestion/compose.yaml', 'ingestion/scripts/setup.py')) {
             if (!(Test-Path "$BundleDir/$File" -PathType Leaf)) { throw "Installation bundle is missing $File" }
         }
 
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
         $InstallDir = (Resolve-Path $InstallDir).Path
         foreach ($File in @('compose.yaml', 'compose.users.yaml', 'compose.lan.yaml', 'compose.users.lan.yaml', 'conversationalbi/compose.yaml',
-                'dbt/compose.yaml')) {
+                'dbt/compose.yaml', 'ingestion/compose.yaml')) {
             if (Test-Path "$InstallDir/$File") { Copy-Item "$InstallDir/$File" "$InstallDir/$File.bak" -Force }
         }
         Get-ChildItem -Force $BundleDir | Copy-Item -Destination $InstallDir -Recurse -Force
@@ -130,6 +142,16 @@
             # dbt commands from a terminal, next to iceberg_connect.py.
             Copy-Item "$InstallDir/dbt/iceberg_dbt.py" "$InstallDir/iceberg_dbt.py" -Force
         }
+        if ($Ingestion) {
+            if (-not $IngestionRegistered) {
+                Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
+                    /install/scripts/setup.py --extension ingestion --origin http://localhost:3008 `
+                    --handshake /install/ingestion/.env.bridge | Out-Null
+            }
+            Write-Host "Preparing Ingestion (dlt) in $InstallDir/ingestion..."
+            Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
+                /install/ingestion/scripts/setup.py | Out-Null
+        }
 
         Write-Host 'Pulling images (the notebook image may take a few minutes)...'
         Invoke-AdminCompose pull
@@ -137,6 +159,7 @@
         if ($Cbi) { Invoke-CbiCompose pull }
         # The images profile adds the runner image, which the launcher starts for every run.
         if ($Dbt) { Invoke-DbtCompose --profile images pull }
+        if ($Ingestion) { Invoke-IngestionCompose --profile images pull }
         Write-Host 'Starting administration and data services...'
         Invoke-AdminCompose up -d --no-build --wait --wait-timeout 300
         Write-Host 'Starting the user portal...'
@@ -148,6 +171,10 @@
         if ($Dbt) {
             Write-Host 'Starting dbt pipelines...'
             Invoke-DbtCompose up -d --no-build --wait --wait-timeout 300
+        }
+        if ($Ingestion) {
+            Write-Host 'Starting Ingestion (dlt)...'
+            Invoke-IngestionCompose up -d --no-build --wait --wait-timeout 300
         }
         $ShownDir = $InstallDir
         foreach ($Separator in @('/', '\')) {
@@ -195,6 +222,17 @@
             Write-Host "   Terminal Set-Location $LocationDir; uv run iceberg_dbt.py login (dbt commands that run on the platform)"
             $Stop = "docker compose -f dbt/compose.yaml down; $Stop"
             $Start = "$Start; docker compose -f dbt/compose.yaml up -d --wait"
+            $Step++
+        }
+        if ($Ingestion) {
+            $IngestionOrigin = (Get-FileValue "$InstallDir/ingestion/.env.bridge" EXTENSION_ORIGIN).TrimEnd('/')
+            Write-Host "`n$Step. Load data with Ingestion (dlt)"
+            Write-Host "   $IngestionOrigin"
+            Write-Host '   A team administrator enables it once per environment: Enable, on the page'
+            Write-Host "   Agent    claude mcp add --transport http --client-id ext-ingestion-mcp --callback-port 3010 iceberg-ingestion $IngestionOrigin/mcp"
+            Write-Host '   Skill    ingestion: ask your agent, for example "Load the orders table from our PostgreSQL"'
+            $Stop = "docker compose -f ingestion/compose.yaml down; $Stop"
+            $Start = "$Start; docker compose -f ingestion/compose.yaml up -d --wait"
         }
         Write-Host "`nInstalled in $ShownDir"
         Write-Host "   Stop     Set-Location $LocationDir; $($Stop)docker compose -f compose.users.yaml down; docker compose down"

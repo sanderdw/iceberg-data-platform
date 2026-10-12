@@ -52,6 +52,7 @@ New filespaces receive these notebooks. Existing ones receive only the files the
 | 05 · Read Iceberg v3 with DuckDB | Reading those v3 features, row lineage and time travel | No |
 | 06 · Write an AI-ready flights product | Publishing synthetic flight tables after quality checks, and their Apache Ossie semantic model in Polaris | Yes |
 | 07 · Read an AI-ready flights product | Reading the semantic model from Polaris, checking the data against it, and answering questions with its joins and metrics; no local files | No |
+| 08 · Load data with dlt | Loading paged API data into `raw_dlt_demo` with dlt, nested lists as child tables, merging on a key | Yes |
 
 Run the write notebook before its reader.
 
