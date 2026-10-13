@@ -37,6 +37,26 @@ WORK = "/work"
 ALIASES = {"catalog": "polaris-control-plane", "storage": "rustfs"}
 
 
+class Chunks(io.RawIOBase):
+    """Docker's archive stream as a file, so tarfile reads it piece by piece instead of all in memory."""
+
+    def __init__(self, chunks):
+        self.chunks, self.chunk = iter(chunks), memoryview(b"")
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        while not self.chunk:
+            chunk = next(self.chunks, None)
+            if chunk is None:
+                return 0
+            self.chunk = memoryview(chunk)
+        size = min(len(buffer), len(self.chunk))
+        buffer[:size], self.chunk = self.chunk[:size], self.chunk[size:]
+        return size
+
+
 class RunInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=RUN_ID)
@@ -144,8 +164,9 @@ class Launcher:
         target.mkdir(parents=True)
         try:
             stream, _ = container.get_archive(f"{WORK}/out")
-            with tarfile.open(fileobj=io.BytesIO(b"".join(stream))) as tar:
-                for member in tar.getmembers():
+            # Streamed ("r|"): a large build's artifacts never sit in memory whole.
+            with tarfile.open(fileobj=io.BufferedReader(Chunks(stream), 1 << 20), mode="r|") as tar:
+                for member in tar:
                     # Only regular files and directories under out/, never links or absolute paths.
                     name = Path(member.name)
                     if name.is_absolute() or ".." in name.parts or not (member.isfile() or member.isdir()):

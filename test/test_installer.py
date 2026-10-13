@@ -22,7 +22,8 @@ CBI_VARIABLES = runpy.run_path(str(CBI_SETUP))["PASSTHROUGH"]
 DBT_SETUP = ROOT / "extensions/dbt/scripts/setup.py"
 ING_SETUP = ROOT / "extensions/ingestion/scripts/setup.py"
 # `docker run` of the platform image: run the script on the installation directory with only the
-# variables the installer names with -e, as Docker would.
+# variables the installer names with -e, as Docker would. Without -i the container's stdin is no
+# terminal; an empty pipe, because Windows reports NUL (DEVNULL) as one.
 FAKE_RUN = '''import os, subprocess, sys
 args = sys.argv[1:]
 image = next(i for i, arg in enumerate(args) if arg.startswith("ghcr.io/"))
@@ -30,7 +31,7 @@ names = [args[i + 1] for i in range(image) if args[i] == "-e"]
 install = os.environ["ICEBERG_INSTALL_DIR"]
 command = [install + arg[len("/install"):] if arg.startswith("/install/") else arg for arg in args[image + 1:]]
 env = {"PATH": os.environ["PATH"], **{name: os.environ[name] for name in names if name in os.environ}}
-sys.exit(subprocess.run([sys.executable, *command], env=env, stdin=subprocess.DEVNULL).returncode)
+sys.exit(subprocess.run([sys.executable, *command], env=env, input=b"").returncode)
 '''
 POWERSHELL = os.environ.get("ICEBERG_TEST_POWERSHELL") or shutil.which(
     "powershell" if sys.platform == "win32" else "pwsh"

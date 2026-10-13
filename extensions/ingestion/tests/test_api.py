@@ -113,6 +113,8 @@ def test_secrets_are_write_only_and_encrypted(stack):
     path = f"/pipelines/{pipeline['id']}/secrets"
     assert stack.call("PUT", path, "bob", json={"secrets": {"token": SECRET}}).json()["code"] == "forbidden_role"
     assert stack.call("PUT", path, json={"secrets": {"other": SECRET}}).json()["code"] == "invalid_pipeline"
+    # The log scrubbers do not mask values this short.
+    assert stack.call("PUT", path, json={"secrets": {"token": "abc"}}).json()["code"] == "invalid_pipeline"
     response = stack.call("PUT", path, json={"secrets": {"token": SECRET}})
     assert response.json()["secretsSet"] == ["token"] and response.json()["secretsMissing"] == []
     for text in (response.text, stack.call("GET", f"/pipelines/{pipeline['id']}").text,
@@ -184,6 +186,9 @@ def test_one_run_per_pipeline_and_cancel(stack):
         asyncio.run(asyncio.sleep(0))
     assert stack.call("POST", f"/pipelines/{pipeline['id']}/runs", "bob").json()["code"] == "run_in_progress"
     assert stack.call("PATCH", f"/pipelines/{pipeline['id']}", json={"name": "x"}).json()["code"] == "run_in_progress"
+    # Two requests that pass the check together still get one run.
+    assert stack.services.store.create_run(pipeline=pipeline["id"], team=TEAM, environment="development",
+                                           revision=1, triggered_by="bob") is None
     assert stack.call("POST", f"/runs/{run['id']}/cancel", "carol").json()["code"] == "forbidden_role"
     assert stack.call("POST", f"/runs/{run['id']}/cancel", "bob").json()["cancelling"]
     done = stack.services.runs.wait(run["id"], 10)
@@ -198,6 +203,9 @@ def test_changing_where_a_pipeline_connects_removes_its_secrets(stack):
     assert renamed["name"] == "crm api" and renamed["secretsSet"] == ["token"] and "hint" not in renamed
     stale = stack.call("PATCH", path, json={"description": "x", "expected_revision": 2}).json()
     assert stale["code"] == "revision_conflict"
+    # A move that fails keeps dlt's state.
+    stale_move = stack.call("PATCH", path, json={"namespace": "raw_crm_v2", "expected_revision": 2}).json()
+    assert stale_move["code"] == "revision_conflict" and stack.services.store.state(pipeline["id"]) is not None
     moved = stack.call("PATCH", path, json={"source": {**REST, "client": {**REST["client"],
                                                                            "base_url": "https://evil.example.org/"}}})
     assert moved.json()["secretsMissing"] == ["token"] and "secrets were removed" in moved.json()["hint"]

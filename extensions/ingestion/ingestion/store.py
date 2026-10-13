@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS runs (
   summary TEXT NOT NULL DEFAULT '{}', error TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS runs_by_pipeline ON runs (pipeline, created_at DESC);
+-- One pipeline never runs twice at once, even when two requests start it together.
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_run ON runs (pipeline) WHERE status IN ('queued', 'running');
 CREATE TABLE IF NOT EXISTS dlt_state (
   pipeline TEXT PRIMARY KEY REFERENCES pipelines(id) ON DELETE CASCADE,
   archive BLOB NOT NULL, run TEXT NOT NULL, updated_at REAL NOT NULL
@@ -110,18 +112,33 @@ class Store:
         rows = self.query(f"SELECT * FROM pipelines WHERE team IN ({marks}) ORDER BY name, environment", *teams)
         return [decode(row) for row in rows]
 
-    def update_pipeline(self, id, expected_revision=None, **fields):
-        """Bumps the revision; with expected_revision, only when nobody changed the pipeline in between."""
+    def update_pipeline(self, id, expected_revision=None, forget_state=False, **fields):
+        """Bumps the revision; with expected_revision, only when nobody changed the pipeline in between.
+
+        forget_state drops dlt's state in the same transaction, only when the update succeeds and no run
+        is queued or running."""
         sets = {**fields, "updated_at": time.time()}
         values = [json.dumps(v) if k in JSON_FIELDS else v for k, v in sets.items()]
         sql = f"UPDATE pipelines SET {', '.join(f'{k} = ?' for k in sets)}, revision = revision + 1 WHERE id = ?"
         args = [*values, id]
         if expected_revision is not None:
             sql, args = sql + " AND revision = ?", [*args, expected_revision]
-        try:
-            changed = self.execute(sql, *args)
-        except sqlite3.IntegrityError:
-            return None
+        if forget_state:
+            sql += " AND NOT EXISTS (SELECT 1 FROM runs WHERE pipeline = ? AND status IN ('queued', 'running'))"
+            args.append(id)
+        with self.lock:
+            self.db.execute("BEGIN IMMEDIATE")
+            try:
+                changed = self.db.execute(sql, args).rowcount
+                if changed and forget_state:
+                    self.db.execute("DELETE FROM dlt_state WHERE pipeline = ?", (id,))
+            except sqlite3.IntegrityError:
+                self.db.execute("ROLLBACK")
+                return None
+            except BaseException:
+                self.db.execute("ROLLBACK")
+                raise
+            self.db.execute("COMMIT")
         return self.pipeline(id) if changed else False
 
     def delete_pipeline(self, id):
@@ -130,8 +147,12 @@ class Store:
     # Runs
 
     def create_run(self, **fields):
+        """The new run, or None while the pipeline has a queued or running one."""
         id = new_id("run")
-        self.insert("runs", {"id": id, "created_at": time.time(), "status": "queued", **fields})
+        try:
+            self.insert("runs", {"id": id, "created_at": time.time(), "status": "queued", **fields})
+        except sqlite3.IntegrityError:
+            return None
         return self.run(id)
 
     def update_run(self, id, **fields):
@@ -178,9 +199,6 @@ class Store:
     def save_state(self, pipeline, archive, run):
         self.execute("INSERT OR REPLACE INTO dlt_state (pipeline, archive, run, updated_at) VALUES (?, ?, ?, ?)",
                      pipeline, archive, run, time.time())
-
-    def forget_state(self, pipeline):
-        return self.execute("DELETE FROM dlt_state WHERE pipeline = ?", pipeline)
 
     # Schedules: at most one per pipeline
 

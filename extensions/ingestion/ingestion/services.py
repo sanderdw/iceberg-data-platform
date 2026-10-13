@@ -268,17 +268,19 @@ class Services:
             hints.append("The pipeline now connects elsewhere, so its secrets were removed. Set them again.")
         else:
             fields["secrets"] = {k: v for k, v in pipeline["secrets"].items() if k in checked["secrets"]}
-        if (fields.get("namespace", pipeline["namespace"]) != pipeline["namespace"] or
-                fields.get("database", pipeline["database"]) != pipeline["database"] or
-                fields.get("source_type", pipeline["source_type"]) != pipeline["source_type"]):
-            # dlt's state describes the old tables; the next run starts from scratch.
-            self.store.forget_state(pipeline_id)
+        # dlt's state describes the old tables; the next run starts from scratch.
+        moved = (fields.get("namespace", pipeline["namespace"]) != pipeline["namespace"] or
+                 fields.get("database", pipeline["database"]) != pipeline["database"] or
+                 fields.get("source_type", pipeline["source_type"]) != pipeline["source_type"])
+        if moved:
             hints.append("The pipeline loads into a new place, so its next run starts from scratch.")
-        updated = self.store.update_pipeline(pipeline_id, expected_revision, **fields)
+        updated = self.store.update_pipeline(pipeline_id, expected_revision, forget_state=moved, **fields)
         if updated is None:
             raise IngestionError(409, "A pipeline with this name already exists in this team and environment.",
                                  "name_taken")
         if updated is False:
+            if moved and self.store.active_run(pipeline_id):
+                raise IngestionError(409, "The pipeline is running. Change it after the run.", "run_in_progress")
             raise IngestionError(409, "The pipeline changed since you read it. Read it again.", "revision_conflict")
         result = self.public(updated, me, role)
         return {**result, "hint": " ".join(hints)} if hints else result

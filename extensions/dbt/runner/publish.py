@@ -15,6 +15,7 @@ import duckdb
 PREFIX = "iceberg-data-platform."
 MATERIALIZED = {"model", "seed", "snapshot"}
 MAX_INPUTS = 50
+QUALITY = tuple(PREFIX + "quality." + name for name in ("status", "summary", "checked-at"))
 
 
 def load(target):
@@ -60,6 +61,14 @@ def quality(node, results, tests):
                                                                 ("warning", outcome["warn"]),
                                                                 ("failed", outcome["fail"])) if count)
     return status, summary
+
+
+def stale_quality(node, tests, current):
+    """The quality properties to remove from a model that has no tests any more: left, they would read
+    as this run's outcome. A model whose tests only did not run this time (dbt run) keeps its last one."""
+    if node in tests.values():
+        return []
+    return [key for key in QUALITY if key in current]
 
 
 def properties(job, node, nodes, parents, results, tests, now):
@@ -115,6 +124,9 @@ def main(job, target, token):
             docs = columns.get(node["unique_id"], {})
             with table.transaction() as transaction:
                 transaction.set_properties(properties(job, node, nodes, parents, results, tests, now))
+                stale = stale_quality(node["unique_id"], tests, table.properties)
+                if stale:
+                    transaction.remove_properties(*stale)
                 fields = {f.name: f for f in table.schema().fields}
                 changed = {name: text[:1000] for name, text in docs.items()
                            if name in fields and (fields[name].doc or "") != text[:1000]}

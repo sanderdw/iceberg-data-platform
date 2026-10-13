@@ -347,11 +347,13 @@ def test_missing_descriptions_come_from_the_table_comment_and_column_docs():
         {"name": "carrier", "expression": "carrier"},
         {"name": "late", "expression": "arr_delay >= 15"},
         {"name": "arr_delay", "expression": "arr_delay", "description": "Kept as written."},
+        {"name": "delay_minutes", "expression": "arr_delay"},
     ]}]}
     docs = {"FLIGHT": {"comment": "One row per flight.",
                        "columns": {"carrier": "Operating carrier.", "arr_delay": "Arrival delay in minutes."}}}
     filled = rules.inherit_descriptions(model, docs)
     dataset = filled["datasets"][0]
     assert dataset["description"] == "One row per flight."
-    assert [f.get("description") for f in dataset["fields"]] == ["Operating carrier.", None, "Kept as written."]
+    assert [f.get("description") for f in dataset["fields"]] == ["Operating carrier.", None, "Kept as written.",
+                                                                 "Arrival delay in minutes."]
     assert "description" not in model["datasets"][0]  # the caller's model is left as it was

@@ -28,6 +28,8 @@ IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]{0,127}$")
 HOST = re.compile(r"^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,62})(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}))*\.?$")
 MAX_SOURCE = 64 * 1024
 MAX_SECRET = 16 * 1024
+# Both log scrubbers (secrets.MIN_SCRUB, runner/scrub.py) mask only values at least this long.
+MIN_SECRET = 4
 PAGINATORS = {
     "json_link": {"next_url_path"},
     "header_link": {"links_next_key"},
@@ -429,8 +431,8 @@ def secret_values(values, needed=None):
     for name, value in values.items():
         if not SECRET_NAME.match(name):
             fail("Secret names are lowercase letters, digits and _.", "secrets")
-        if value is not None and (not isinstance(value, str) or not value or len(value) > MAX_SECRET):
-            fail(f"Secret {name} must be text of at most 16 KiB, or null to remove it.", f"secrets.{name}")
+        if value is not None and (not isinstance(value, str) or not MIN_SECRET <= len(value) <= MAX_SECRET):
+            fail(f"Secret {name} must be text of 4 characters to 16 KiB, or null to remove it.", f"secrets.{name}")
         if needed is not None and value is not None and name not in needed:
             fail(f"The pipeline does not refer to $secret:{name}.", f"secrets.{name}")
     return values

@@ -68,6 +68,11 @@ def test_publish_stamps_the_bridge_table_property_conventions(tmp_path):
     failing = publish.properties(job, nodes["model.shop.stg_regions"], nodes, parents,
                                  {**results, "test.shop.unique_stg_regions_region_id": "fail"}, tests, "now")
     assert failing[key + "quality.status"] == "fail"
+    current = {key + "quality.status": "pass", key + "quality.summary": "1 passed", key + "owner": "x"}
+    # Tests that did not run this time (dbt run) leave the last outcome; a model without tests loses it.
+    assert publish.stale_quality("model.shop.stg_regions", tests, current) == []
+    assert publish.stale_quality("model.shop.untested", tests, current) == [key + "quality.status",
+                                                                           key + "quality.summary"]
 
 
 def test_replace_table_ends_statements_after_the_model_sql():

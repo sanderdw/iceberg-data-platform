@@ -75,7 +75,8 @@ def inherit_descriptions(model, docs):
     """Fill missing dataset and field descriptions from the table comment and column docs.
 
     `docs` maps a dataset name to `{"comment": str, "columns": {column: doc}}`. Only fields whose
-    expression is the bare column inherit, so a derived field never borrows a column's meaning.
+    expression is a bare column inherit, under any field name, so a derived field never borrows a
+    column's meaning.
     """
     model = copy.deepcopy(model)
     for dataset in dicts(model.get("datasets")):
@@ -86,7 +87,7 @@ def inherit_descriptions(model, docs):
             dataset["description"] = table["comment"]
         for field in dicts(dataset.get("fields")):
             doc = table.get("columns", {}).get(sql_of(field) or "")
-            if not text(field.get("description")) and sql_of(field) == field.get("name") and text(doc):
+            if not text(field.get("description")) and text(doc):
                 field["description"] = doc
     return model
 

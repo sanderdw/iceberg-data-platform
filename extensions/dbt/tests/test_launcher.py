@@ -78,7 +78,9 @@ def test_collect_keeps_only_regular_files(tmp_path):
             info.size = 0 if kind == tarfile.SYMTYPE else 2
             tar.addfile(info, io.BytesIO(b"{}") if kind == tarfile.REGTYPE else None)
     container = MagicMock()
-    container.get_archive.return_value = ([buffer.getvalue()], {})
+    # A stream of small chunks, as Docker sends it: never joined in memory.
+    data = buffer.getvalue()
+    container.get_archive.return_value = ((data[i:i + 100] for i in range(0, len(data), 100)), {})
     container.logs.return_value = b"log"
     Launcher({"ARTIFACTS_DIR": str(tmp_path)}, client).collect(RUN, container)
     assert (tmp_path / RUN / "out" / "result.json").exists()

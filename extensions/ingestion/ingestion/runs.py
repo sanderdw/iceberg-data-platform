@@ -142,11 +142,13 @@ class RunManager:
                                   error="The Ingestion extension restarted while this run was in progress.")
 
     def start(self, *, pipeline, principal, triggered_by, agent="", schedule="", full_refresh=False):
-        """Queue a run. One pipeline never runs twice at once; the caller checks that first (409)."""
+        """Queue a run. One pipeline never runs twice at once: the store refuses a second (409)."""
         run = self.store.create_run(
             pipeline=pipeline["id"], team=pipeline["team"], environment=pipeline["environment"],
             revision=pipeline["revision"], full_refresh=int(full_refresh), triggered_by=triggered_by, agent=agent,
             schedule=schedule)
+        if run is None:
+            raise IngestionError(409, "This pipeline is already running.", "run_in_progress")
         self.phase[run["id"]] = "waiting"
         self.tasks[run["id"]] = asyncio.create_task(self.execute(run, pipeline, principal))
         self.tasks[run["id"]].add_done_callback(lambda _: self.forget(run["id"]))
