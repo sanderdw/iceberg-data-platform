@@ -1,0 +1,88 @@
+# The documentation site, published with the presentation by .github/workflows/pages.yml.
+# Preview: npm run docs:serve. Build: npm run docs:build.
+[project]
+site_name = "Iceberg Data Platform"
+site_description = "An open lakehouse you actually own: Apache Iceberg with open, replaceable building blocks, on one laptop."
+site_url = "https://sanderdw.github.io/iceberg-data-platform/"
+repo_url = "https://github.com/sanderdw/iceberg-data-platform"
+repo_name = "sanderdw/iceberg-data-platform"
+edit_uri = "edit/main/docs/"
+copyright = "Apache-2.0. An independent project, not an Apache Software Foundation project."
+docs_dir = "docs"
+site_dir = "site"
+# Git-ignored personal notes; never published.
+exclude_docs = """
+/local_only/
+"""
+extra_css = ["stylesheets/extra.css"]
+extra_javascript = ["javascripts/deck-redirect.js"]
+# No markdown_extensions: setting them replaces Zensical's defaults, which already
+# include Mermaid diagrams, admonitions, tabs and heading permalinks.
+nav = [
+  { "Guide" = [
+    "index.md",
+    { "Get started" = ["install.md", "first-steps.md", "agent-skills.md"] },
+    { "Use the platform" = [
+      "user-portal.md", "notebooks.md", "semantic-models.md", "data-shares.md",
+      "connect.md", "ai-agents.md", "mcp.md",
+    ] },
+    { "Administer" = ["admin-guide.md", "configuration.md", "security.md"] },
+    { "Extensions" = ["extensions.md", "conversational-bi.md", "dbt.md", "ingestion.md"] },
+  ] },
+  { "Develop" = [
+    "develop/index.md",
+    "develop/run-from-source.md",
+    "develop/contributing.md",
+    "develop/architecture.md",
+    "develop/resource-model.md",
+    "develop/keycloak.md",
+    "develop/form-validation.md",
+    "develop/extension-bridge.md",
+    { "Extension internals" = ["develop/conversational-bi.md", "develop/dbt.md", "develop/ingestion.md"] },
+    "develop/releasing.md",
+  ] },
+  { "Releases" = [
+    "changelog.md",
+    "releases/0.9.0.md",
+    "releases/0.7.0.md",
+    "releases/0.6.0.md",
+    "releases/0.5.3.md",
+    "releases/0.5.2.md",
+    "releases/0.5.1.md",
+    "releases/0.5.0.md",
+  ] },
+  { "Presentation" = "https://sanderdw.github.io/iceberg-data-platform/presentation/" },
+]
+
+[project.theme]
+language = "en"
+# The fonts are self-hosted from docs/assets/fonts, as in the portals; no Google Fonts.
+font = false
+favicon = "assets/favicon.svg"
+logo = "assets/favicon.svg"
+features = [
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.indexes",
+  "navigation.top",
+  "navigation.footer",
+  "navigation.instant",
+  "search.highlight",
+  "toc.follow",
+  "content.code.copy",
+  "content.action.edit",
+]
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Light"
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Dark"

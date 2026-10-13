@@ -55,25 +55,31 @@ table.append(arrow_table)                             # a pyarrow.Table matching
 
 ### Loading data from somewhere else
 
-To copy data in from another database or files, write a small `uv` script that reads the source in batches and appends each batch with PyIceberg (or `INSERT INTO` through a writable DuckDB connection):
+The MCP tools cannot upload files or fetch URLs, and dbt runs (dbt extension) have no internet. With the Ingestion (dlt) extension installed, a team administrator can set up a scheduled load from a REST API, a PostgreSQL or MySQL table, or CSV, JSONL or Parquet files through its MCP server (see the table below). Otherwise, to copy data in from another database, files or a web API, write a small `uv` script that reads the source in batches and appends each batch with PyIceberg (or `INSERT INTO` through a writable DuckDB connection):
+
+- Land outside data as-is in a raw namespace (such as `cbs_raw`) and transform it from there, with dbt or SQL. With dbt, keep the loader in the project under `scripts/` so the whole chain is code.
 
 - Create the namespace and table with an explicit schema first (`create_table_if_not_exists`), with lower-case column names.
 - Clean while copying: trim `char(n)` padding, convert time zones to UTC (`timestamptz`), map sentinel values when the owner agrees.
 - Read in batches of about 100,000 to 250,000 rows with a server-side cursor; every append is one Iceberg snapshot.
-- Appends are not idempotent: running the same copy twice duplicates rows. Drop and recreate the table for a full reload, or filter on a timestamp for incremental loads.
+- Appends are not idempotent: running the same copy twice duplicates rows. Use `table.overwrite(data)` for a full reload, or filter on a timestamp for incremental loads.
+- pyarrow's `pa.Table.from_pylist(rows)` takes its columns from the first row: when rows have different keys (JSON from an API), pass the union of keys or an explicit schema.
 - Keep source credentials in environment variables, never in the script or the table.
 - Verify afterwards: compare row counts and spot-check rows with `describe_table` and `preview_rows`.
 
 ## 2. Use the MCP servers
 
-Both portals serve a Model Context Protocol endpoint at `/mcp`. On the first tool call the agent opens Keycloak in the browser and the person signs in with their own account.
+Both portals serve a Model Context Protocol endpoint at `/mcp`, and so does each installed extension. On the first tool call the agent opens Keycloak in the browser and the person signs in with their own account.
 
 | Server | Address (local default) | For | Main tools |
 |---|---|---|---|
 | `iceberg-user` | `http://localhost:3002/mcp` | everyone | `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `preview_rows` (up to 100 rows), `list_semantic_models`, `describe_semantic_model`, `query_semantic_model`, `list_dimension_values`, `list_shares`, `list_received_shares`, `list_share_teams`; writers also `publish_semantic_model`, `delete_semantic_model`; team admins also `create_database`, `rename_database`, `delete_database`, `create_share`, `update_share`, `rotate_share_credential`, `delete_share` |
 | `iceberg-admin` | `http://localhost:3000/mcp` | platform administrators | teams, users, databases and shares across the platform (`get_overview`, `create_team`, `create_user`, `create_database`, …) |
+| `iceberg-conversationalbi` | `http://localhost:3007/mcp` | with Conversational BI installed (client id `ext-conversationalbi-mcp`) | governed questions over semantic models: `list_models`, `describe_model`, `query`, `get_result`; team admins also `enable_environment` |
+| `iceberg-dbt` | `http://localhost:3004/mcp` | with the dbt extension installed (client id `ext-dbt-mcp`) | dbt pipelines of the person's teams: `create_project`, `create_branch`, `write_files`, `compile`, `run`, `get_pipeline`, `set_schedule`, …; follow the `dbt-platform` skill. People who prefer a terminal use `iceberg_dbt.py` from the dbt viewer: dbt's commands, run on the platform |
+| `iceberg-ingestion` | `http://localhost:3008/mcp` | with the Ingestion (dlt) extension installed (client id `ext-ingestion-mcp`) | declarative dlt pipelines that load REST APIs, SQL tables and files into the person's team databases: `list_templates`, `validate_pipeline`, `create_pipeline`, `set_pipeline_secrets` (write-only), `run_pipeline`, `get_run`, `set_schedule`, …; team admins create pipelines and set secrets, writers run them |
 
-Register a server in your agent (replace `iceberg-user` and the address for the admin server):
+Register a server in your agent (replace `iceberg-user` and the address for another server; extensions use their own client id from the table):
 
 - **Claude Code:** `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-user http://localhost:3002/mcp`
 - **Codex:** in `~/.codex/config.toml` add `[mcp_servers.iceberg-user]` with `url` and `scopes = ["openid", "profile", "offline_access"]`, and `[mcp_servers.iceberg-user.oauth]` with `client_id = "iceberg-mcp"`; then `codex mcp login iceberg-user`
@@ -117,10 +123,12 @@ The portal shows models under **Catalog** (with a **Diagram** of the joins), dat
 | Skill in `.agents/skills` | Use it to |
 |---|---|
 | `semantic-model` | create or improve a semantic model, with an interview and quality checks |
+| `dbt-platform` | build, test and schedule dbt pipelines on your tables (needs the dbt extension and its MCP server) |
+| `ingestion` | load data from an API, a database or files into your tables (needs the Ingestion extension and its MCP server) |
 | `demo-company` | fill the platform with a fictional company and accounts for a class (needs the admin MCP server) |
 | `quick-share` | make the portals reachable from anywhere for a temporary session, and undo that |
 
-Claude Code reads skills from `.claude/skills`; the pointers there lead to `.agents/skills`. See "Agent skills" in `docs/install.md`.
+Claude Code reads skills from `.claude/skills`; the pointers there lead to `.agents/skills`. See [agent skills](https://sanderdw.github.io/iceberg-data-platform/agent-skills/) in the documentation.
 
 ## 5. When something fails
 

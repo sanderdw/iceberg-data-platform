@@ -1,6 +1,6 @@
 # Administration guide
 
-The administration portal at http://localhost:3000 manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role. For start-up commands and the service list, see the [README](../README.md#quick-start).
+The administration portal at http://localhost:3000 manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role. For the service list, see the [first steps](first-steps.md#services); to start and stop the platform, see [installation](install.md#update-or-restart).
 
 You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). The portal's **Getting started** page has instructions and examples for each, using this installation's address.
 
@@ -33,13 +33,13 @@ Lists refresh every 30 seconds while visible. Navigation and filters are kept in
 
 ## Extension service accounts
 
-When an [extension](extensions.md) such as Conversational BI is registered, the Teams page lists its service accounts (automation principals): one per team, environment and extension, enabled by a team Administrator in the extension. **Revoke** stops the extension from acting for that team environment at once. It gets no new tokens, and tokens already issued expire within an hour.
+When an [extension](extensions.md) such as Conversational BI is registered, the Teams page lists its service accounts (automation principals): one per team, environment and extension, enabled by a team Administrator in the extension. **Revoke** stops the extension from acting for that team environment at once. It gets no new tokens, and tokens already issued expire within `POLARIS_TOKEN_LIFETIME` (one hour by default).
 
 ## Data shares
 
-Team administrators create data shares in the [user portal](../user_portal/README.md#data-shares). The **Data shares** page lists every share with its database, team, objects, expiry and creator, and you can revoke any of them there. A database that has shares can't be moved until they are revoked.
+Team administrators create data shares in the [user portal](data-shares.md). The **Data shares** page lists every share with its database, team, objects, expiry and creator, and you can revoke any of them there. A database that has shares can't be moved until they are revoked.
 
-Recipients outside this machine need addresses they can reach: see [deploying beyond localhost](../SECURITY.md#deploying-beyond-localhost). For a temporary class or demo, the [quick-share skill](install.md#agent-skills) sets this up through Cloudflare quick tunnels.
+Recipients outside this machine need addresses they can reach: see [deploying beyond localhost](security.md#deploying-beyond-localhost). For a temporary class or demo, the [quick-share skill](agent-skills.md) sets this up through Cloudflare quick tunnels.
 
 ## Catalog browser
 
@@ -101,7 +101,7 @@ Every call requires the `platform-admin` role. The tools are the administration 
 - **Change:** `create_team`, `update_team`, `create_database`, `rename_database`, `move_database`, `create_user`, `link_user`, `update_user_access`, `retry_user_setup`
 - **Destructive:** `delete_team`, `delete_database` (requires `confirm_name`), `delete_user`, `revoke_share`, `revoke_automation_principal`
 
-`create_user` returns the one-time password in the agent's transcript. Treat that transcript as confidential, and reset the password if in doubt. Users connect to the [user portal's endpoint](../user_portal/README.md#connect-an-mcp-client) in the same way.
+`create_user` returns the one-time password in the agent's transcript. Treat that transcript as confidential, and reset the password if in doubt. Users connect to the [user portal's endpoint](ai-agents.md) in the same way.
 
 ## API
 
@@ -138,7 +138,7 @@ Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, in
 
 ## Operations
 
-- Run one portal replica; see [deployment boundaries](keycloak.md#deployment-boundaries).
+- Run one portal replica; see [deployment boundaries](develop/keycloak.md#deployment-boundaries).
 - Creations and moves roll back when Polaris or RustFS fails. Database deletion can always be resumed.
 - Polaris 1.8 does not create the PostgreSQL schema when it bootstraps, so `compose.yaml` names it (`currentSchema=public` in the JDBC URL). A different schema must exist before the first start.
 - List calls return pages when a client sends a `pageToken` (`LIST_PAGINATION_ENABLED`). Without a token the answer is complete, as the Iceberg REST specification requires, so DuckDB and PyIceberg see every table.

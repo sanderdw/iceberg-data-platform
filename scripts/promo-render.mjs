@@ -1,5 +1,6 @@
 // Renders presentation/video-promo/semantic-models/index.html frame by frame into an MP4 with the synthesized soundtrack.
 // Usage: node scripts/promo-render.mjs            full render
+//        node scripts/promo-render.mjs --4k       3840×2160 for upload, in .local/promo (not published with the deck)
 //        node scripts/promo-render.mjs --stills 2,12,40   PNG stills at those seconds, no video
 import {spawn, spawnSync} from 'node:child_process';
 import {mkdirSync, readFileSync, statSync} from 'node:fs';
@@ -7,9 +8,12 @@ import {extname, join, normalize} from 'node:path';
 import {parseArgs} from 'node:util';
 import {chromium} from '@playwright/test';
 
-const {values: args} = parseArgs({options: {stills: {type: 'string'}}});
+const {values: args} = parseArgs({options: {stills: {type: 'string'}, '4k': {type: 'boolean'}}});
 const ROOT = 'presentation', PAGE = 'video-promo/semantic-models', ORIGIN = 'http://promo.local/', WORK = '.local/promo';
-const OUT = `${ROOT}/${PAGE}/iceberg-data-platform-promo.mp4`, POSTER = `${ROOT}/${PAGE}/poster.png`, AUDIO = `${WORK}/soundtrack.wav`;
+// The stage is 1920×1080 CSS pixels; 4K renders it at a 2× pixel ratio, and the captures are 2× already.
+const SCALE = args['4k'] ? 2 : 1;
+const OUT = args['4k'] ? `${WORK}/iceberg-data-platform-promo-4k.mp4` : `${ROOT}/${PAGE}/iceberg-data-platform-promo.mp4`;
+const POSTER = `${ROOT}/${PAGE}/poster.png`, AUDIO = `${WORK}/soundtrack.wav`;
 const timeline = JSON.parse(readFileSync(`${ROOT}/${PAGE}/timeline.json`, 'utf8'));
 const TYPES = {'.html': 'text/html', '.json': 'application/json', '.png': 'image/png', '.ttf': 'font/ttf'};
 mkdirSync(WORK, {recursive: true});
@@ -21,7 +25,7 @@ function run(command, argv) {
 
 const browser = await chromium.launch({headless: true});
 try {
-  const page = await browser.newPage({viewport: {width: 1920, height: 1080}, deviceScaleFactor: 1});
+  const page = await browser.newPage({viewport: {width: 1920, height: 1080}, deviceScaleFactor: SCALE});
   // Serve presentation/ from memory, so fetch() works without a web server.
   await page.route(`${ORIGIN}**`, route => {
     const path = normalize(decodeURIComponent(new URL(route.request().url()).pathname)).replace(/^[/\\]+/, '');
@@ -59,8 +63,7 @@ try {
     await done;
     process.stdout.write('\n');
     // The end card doubles as the poster for the video element and link previews.
-    await page.evaluate(t => window.seek(t), 58);
-    await page.screenshot({path: POSTER});
+    if (SCALE === 1) { await page.evaluate(t => window.seek(t), 58); await page.screenshot({path: POSTER}); }
     run('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,width,height,r_frame_rate:format=duration,size', '-of', 'compact', OUT]);
     console.log(`${OUT} · ${(statSync(OUT).size / 1e6).toFixed(1)} MB`);
   }

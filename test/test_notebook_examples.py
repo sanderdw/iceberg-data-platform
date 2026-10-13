@@ -137,3 +137,86 @@ def test_plain_writer_runs_without_a_button_and_skips_existing_rows(monkeypatch)
     assert first["write_message"] == "Created and populated: 26,880 rows."
     assert second["write_message"] == "Table already contains 26,880 rows; append skipped."
     table.append.assert_called_once()
+
+
+def test_catalog_properties_sign_in_as_the_notebook_owner(monkeypatch):
+    pytest.importorskip("pyiceberg")
+    from user_portal.notebook import connection
+
+    for name, value in {
+        "ICEBERG_DATABASE": "db-1", "ICEBERG_CATALOG_URI": "http://polaris:8181/api/catalog",
+        "ICEBERG_TOKEN_URI": "http://polaris:8181/api/catalog/v1/oauth/tokens",
+        "ICEBERG_S3_ENDPOINT": "http://rustfs:9000",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("ICEBERG_SESSION_TOKEN_URL", raising=False)
+    monkeypatch.setenv("ICEBERG_ACCESS_TOKEN", "owner-token")
+    properties = connection.catalog_properties()
+    assert properties["type"] == "rest" and properties["warehouse"] == "db-1"
+    assert properties["token"] == "owner-token"
+    assert properties["header.X-Iceberg-Access-Delegation"] == "vended-credentials"
+    assert properties["py-io-impl"] == "user_portal.notebook.connection.InternalS3FileIO"
+
+    monkeypatch.setenv("ICEBERG_SESSION_TOKEN_URL", "http://workspace-gateway:3002/internal/notebooks/n/token")
+    monkeypatch.setattr(connection, "access_token", lambda: "fresh")
+    properties = connection.catalog_properties()
+    assert "token" not in properties
+    assert properties["auth"] == {"type": "custom", "impl": "user_portal.notebook.connection.SessionAuthManager"}
+
+
+def test_dlt_tables_take_the_catalog_location(monkeypatch):
+    pytest.importorskip("dlt")
+    import dlt.common.libs.pyiceberg as dlt_iceberg
+
+    from user_portal.notebook import connection
+
+    calls = []
+    monkeypatch.setattr(dlt_iceberg, "create_table", lambda catalog, table_id, location, *a, **kw: calls.append(location))
+    connection.patch_dlt_table_location()
+    connection.patch_dlt_table_location()
+    dlt_iceberg.create_table("catalog", "raw.stations", "file:///tmp/local/raw/stations/", schema=None)
+    # Wrapped once, and Polaris chooses the location inside the database's bucket.
+    assert calls == [None]
+
+
+def test_dlt_notebook_loads_and_merges_without_duplicates(monkeypatch, tmp_path):
+    pytest.importorskip("marimo")
+    pytest.importorskip("dlt")
+    import importlib.util
+    from pathlib import Path
+
+    import dlt
+    import dlt.common.libs.pyiceberg as dlt_iceberg
+    from pyiceberg.catalog.sql import SqlCatalog
+
+    from user_portal.notebook import connection
+
+    # Undo the notebook's wrapper after the test.
+    monkeypatch.setattr(dlt_iceberg, "create_table", dlt_iceberg.create_table)
+    config = {"type": "sql", "uri": f"sqlite:///{tmp_path}/catalog.db", "warehouse": f"file://{tmp_path}/warehouse"}
+    monkeypatch.setenv("ICEBERG_DATABASE", "test_database")
+    monkeypatch.setenv("RUNTIME__DLTHUB_TELEMETRY", "false")
+
+    def local_destination(local_dir):
+        # The notebook's destination, with a local SQL catalog in place of Polaris.
+        dlt.config["iceberg_catalog.iceberg_catalog_type"] = "sql"
+        dlt.config["iceberg_catalog.iceberg_catalog_config"] = dict(config)
+        connection.patch_dlt_table_location()
+        return dlt.destinations.filesystem(bucket_url=f"file://{local_dir}")
+
+    monkeypatch.setattr("user_portal.notebook.connection.dlt_destination", local_destination)
+    monkeypatch.setattr("user_portal.notebook.connection.connect", lambda: SqlCatalog("default", **config))
+    path = Path(__file__).parents[1] / "user_portal/notebook/examples/08_dlt_ingest.py"
+    spec = importlib.util.spec_from_file_location("dlt_ingest", path)
+    notebook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(notebook)
+    first = notebook.app.run()[1]
+    second = notebook.app.run()[1]
+    assert first["load_message"] == "Loaded 12 stations and 24 sensors. The table now holds 12 stations."
+    assert second["load_message"] == "Loaded 12 stations and 24 sensors. The table now holds 12 stations."
+    stations = second["stored_table"].scan().to_arrow()
+    assert sorted(stations["station_id"].to_pylist()) == list(range(1, 13))
+    assert {"_dlt_id", "_dlt_load_id"} <= set(stations.column_names)
+    # The bookkeeping stayed in the run's local folder.
+    assert SqlCatalog("default", **config).list_tables("raw_dlt_demo") == [
+        ("raw_dlt_demo", "stations"), ("raw_dlt_demo", "stations__sensors")]

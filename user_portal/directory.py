@@ -540,7 +540,10 @@ class UserDirectory:
         """Create a model, or replace the version the caller read; Polaris checks the Writer role."""
         targets = [(d.get("name"), *target) for d in rules.dicts(rules.first_model(model).get("datasets"))
                    if (target := ossie.dataset_target(d.get("source"), namespace))]
-        schemas, unreadable = self.semantic_tables(session, database, targets)
+        docs = {}
+        schemas, unreadable = self.semantic_tables(session, database, targets, docs)
+        # Descriptions a model leaves out come from the table comment and column docs (dbt writes both).
+        model = rules.inherit_descriptions(rules.first_model(model), docs)
         model, warnings = rules.validate(model, {name: set(columns) for name, columns in schemas.items()})
         warnings = [f"Table {table} is missing or not readable, so its fields were not checked against its columns."
                     for table in unreadable] + warnings
@@ -590,8 +593,11 @@ class UserDirectory:
                 "dimensions": {home: compiler.reachable(model, home) for home in sorted({h for h in homes.values() if h})},
                 "problems": problems}
 
-    def semantic_tables(self, session, database, targets):
-        """{dataset: {column: Iceberg type}} for `(dataset, namespace, table)` targets, and the tables not readable."""
+    def semantic_tables(self, session, database, targets, docs=None):
+        """{dataset: {column: Iceberg type}} for `(dataset, namespace, table)` targets, and the tables not readable.
+
+        With a `docs` dict, also collects each dataset's table comment and column docs into it.
+        """
         schemas, unreadable = {}, []
         for dataset, namespace, table in targets:
             try:
@@ -602,6 +608,9 @@ class UserDirectory:
                 unreadable.append(".".join([*namespace, table]))
                 continue
             schemas[dataset] = {c["name"]: c["type"] for c in found["columns"] if "." not in c["name"]}
+            if docs is not None:
+                docs[dataset] = {"comment": found.get("comment", ""),
+                                 "columns": {c["name"]: c.get("doc") or "" for c in found["columns"]}}
         return schemas, unreadable
 
     def semantic_job(self, session, database, compiled, unreadable):

@@ -1,9 +1,8 @@
 name: Release
 on:
   push:
-    # Branches listed here publish a preview on every push. Any other branch publishes
-    # on demand with "Run workflow"; stable releases come from vX.Y.Z tags on main.
-    branches: [keycloak]
+    # Stable releases come from vX.Y.Z tags on main; a branch publishes a preview on demand
+    # with "Run workflow".
     tags: ['v*']
     paths-ignore: ['presentation/**']
   workflow_dispatch:
@@ -31,9 +30,9 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: '0.12.22'
+          version: '0.13.0'
       - name: Select stable release or branch preview
         id: version
         run: python3 -m scripts.release --channel "$GITHUB_REF" >> "$GITHUB_OUTPUT"
@@ -62,6 +61,44 @@ jobs:
           if [ -n "$problem" ]; then
             echo "$problem. Release Conversational BI first." >&2; exit 1
           fi
+      - name: dbt extension release is published
+        # The same for the dbt extension: its tag, its bundled files and its public images.
+        if: steps.version.outputs.preview != 'true'
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('extensions/dbt/pyproject.toml', 'rb'))['project']['version'])")
+          problem=
+          if ! git rev-parse -q --verify "refs/tags/dbt-v$version" >/dev/null; then
+            problem="Tag dbt-v$version does not exist"
+          elif ! git diff --quiet "dbt-v$version" HEAD -- extensions/dbt/compose.yaml extensions/dbt/scripts/setup.py extensions/dbt/skills; then
+            problem="The bundled dbt files changed since dbt-v$version"
+          else
+            for image in iceberg-dbt iceberg-dbt-runner; do
+              docker --config "$(mktemp -d)" manifest inspect "ghcr.io/sanderdw/$image:$version" >/dev/null \
+                || problem="ghcr.io/sanderdw/$image:$version is not public"
+            done
+          fi
+          if [ -n "$problem" ]; then
+            echo "$problem. Release the dbt extension first." >&2; exit 1
+          fi
+      - name: Ingestion release is published
+        # The same for Ingestion (dlt): its tag, its bundled files and its public images.
+        if: steps.version.outputs.preview != 'true'
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('extensions/ingestion/pyproject.toml', 'rb'))['project']['version'])")
+          problem=
+          if ! git rev-parse -q --verify "refs/tags/ingestion-v$version" >/dev/null; then
+            problem="Tag ingestion-v$version does not exist"
+          elif ! git diff --quiet "ingestion-v$version" HEAD -- extensions/ingestion/compose.yaml extensions/ingestion/scripts/setup.py extensions/ingestion/skills; then
+            problem="The bundled Ingestion files changed since ingestion-v$version"
+          else
+            for image in iceberg-ingestion iceberg-ingestion-runner; do
+              docker --config "$(mktemp -d)" manifest inspect "ghcr.io/sanderdw/$image:$version" >/dev/null \
+                || problem="ghcr.io/sanderdw/$image:$version is not public"
+            done
+          fi
+          if [ -n "$problem" ]; then
+            echo "$problem. Release Ingestion first." >&2; exit 1
+          fi
       - run: uv sync --locked --all-groups
       - run: uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
       - name: Build matching source, bundle and installers
@@ -70,7 +107,7 @@ jobs:
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
           PREVIEW: ${{ steps.version.outputs.preview }}
         run: |
-          # A preview installs the Conversational BI images built below from this same commit.
+          # A preview installs the extension images built below from this same commit.
           extension=()
           [ "$PREVIEW" != true ] || extension=(--extension-image-tag "$IMAGE_TAG")
           uv run python -m scripts.release --build --install --release-tag "$RELEASE_TAG" --image-tag "$IMAGE_TAG" "${extension[@]}"
@@ -84,7 +121,7 @@ jobs:
           "$RUNNER_TEMP/gitleaks" dir "$RUNNER_TEMP/source-scan" --redact --no-banner
         env:
           VERSION: ${{ steps.version.outputs.version }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-bundles
           path: dist/
@@ -137,8 +174,9 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
   extension-images:
-    # Previews only: Conversational BI from this commit, under the preview's image tag. Stable
-    # releases install the images of its own release (conversationalbi-release.yml).
+    # Previews only: the extensions from this commit, under the preview's image tag. Stable
+    # releases install the images of their own releases (conversationalbi-release.yml, dbt-release.yml,
+    # ingestion-release.yml).
     needs: validate
     if: needs.validate.outputs.preview == 'true'
     permissions:
@@ -147,7 +185,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [iceberg-conversationalbi, iceberg-conversationalbi-runtime]
+        image: [iceberg-conversationalbi, iceberg-conversationalbi-runtime, iceberg-dbt, iceberg-dbt-runner,
+                iceberg-ingestion, iceberg-ingestion-runner]
         arch: [amd64, arm64]
         include:
           - image: iceberg-conversationalbi
@@ -156,6 +195,18 @@ jobs:
           - image: iceberg-conversationalbi-runtime
             dockerfile: extensions/conversationalbi/runtime/Dockerfile
             context: extensions/conversationalbi/runtime
+          - image: iceberg-dbt
+            dockerfile: extensions/dbt/Dockerfile
+            context: extensions/dbt
+          - image: iceberg-dbt-runner
+            dockerfile: extensions/dbt/runner/Dockerfile
+            context: extensions/dbt
+          - image: iceberg-ingestion
+            dockerfile: extensions/ingestion/Dockerfile
+            context: extensions/ingestion
+          - image: iceberg-ingestion-runner
+            dockerfile: extensions/ingestion/runner/Dockerfile
+            context: extensions/ingestion
           - arch: amd64
             runner: ubuntu-24.04
           - arch: arm64
@@ -196,7 +247,7 @@ jobs:
       contents: write
       packages: write
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-bundles
           path: dist
@@ -222,7 +273,8 @@ jobs:
               "${image}:${IMAGE_TAG}-amd64" "${image}:${IMAGE_TAG}-arm64"
           done
           if [ "$PREVIEW" = true ]; then
-            for image in iceberg-conversationalbi iceberg-conversationalbi-runtime; do
+            for image in iceberg-conversationalbi iceberg-conversationalbi-runtime iceberg-dbt iceberg-dbt-runner \
+              iceberg-ingestion iceberg-ingestion-runner; do
               docker buildx imagetools create --tag "ghcr.io/sanderdw/${image}:${IMAGE_TAG}" \
                 "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-amd64" "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-arm64"
             done
@@ -238,7 +290,8 @@ jobs:
             docker --config "$anonymous_config" manifest inspect "${REGISTRY}-${component}:${IMAGE_TAG}" > /dev/null
           done
           # New GHCR packages start private: make them public in the package settings, then re-run.
-          for image in iceberg-conversationalbi iceberg-conversationalbi-runtime; do
+          for image in iceberg-conversationalbi iceberg-conversationalbi-runtime iceberg-dbt iceberg-dbt-runner \
+              iceberg-ingestion iceberg-ingestion-runner; do
             docker --config "$anonymous_config" manifest inspect "ghcr.io/sanderdw/${image}:${IMAGE_TAG}" > /dev/null \
               || { echo "ghcr.io/sanderdw/${image} is not public" >&2; exit 1; }
           done
@@ -267,7 +320,7 @@ jobs:
 
           Requires Docker with Compose v2 and a fresh installation. Uses the same project names, volumes and ports as stable; use a separate Docker environment to test alongside an existing installation.
 
-          The installer can also add Conversational BI, built from the same commit: it asks in a terminal, or set ICEBERG_EXTENSIONS=conversationalbi, or LLM_MODEL with its key (see docs/install.md).
+          The installer can also add the Conversational BI, dbt and Ingestion (dlt) extensions, built from the same commit: it asks in a terminal, or set ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion (see https://sanderdw.github.io/iceberg-data-platform/extensions/).
 
           Open http://localhost:3000 and use PLATFORM_ADMIN_USERNAME and PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Change the initial password, then create a team, database and user. The user portal is http://localhost:3002 and Keycloak is http://localhost:8080/admin. No demo accounts or data are created automatically.
 
@@ -328,7 +381,7 @@ jobs:
 
           \`irm https://github.com/${GH_REPO}/releases/latest/download/install.ps1 | iex\`
 
-          The installer creates configuration and random credentials, pulls the images of this release and starts both Compose projects. It can also add the separately released Conversational BI extension; see docs/install.md. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
+          The installer creates configuration and random credentials, pulls the images of this release and starts both Compose projects. It can also add the separately released Conversational BI, dbt and Ingestion (dlt) extensions; see https://sanderdw.github.io/iceberg-data-platform/extensions/. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
 
           The commands above always install the newest release. To install exactly this version, replace \`latest/download\` with \`download/v${VERSION}\`; its installers, Compose files and images are pinned to ${VERSION}.
 

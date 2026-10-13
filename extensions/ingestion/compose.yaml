@@ -1,0 +1,90 @@
+# The Ingestion (dlt) extension: a separate Compose project that uses the platform only through the
+# Extension Bridge (contracts/bridge in the platform repository), Iceberg REST and S3.
+name: iceberg-ingestion
+
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+services:
+  ing-gateway:
+    build: .
+    image: iceberg-ingestion:0.1.0
+    <<: *hardened
+    labels:
+      io.iceberg-platform.extension: ingestion
+    env_file: [.env.bridge]
+    environment:
+      LAUNCHER_URL: http://ing-launcher:3018
+      LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
+      ING_SECRET_KEY: ${ING_SECRET_KEY:?Run uv run python -m scripts.setup first}
+      ING_MAX_CONCURRENT_RUNS: ${ING_MAX_CONCURRENT_RUNS:-4}
+      ING_MAX_RUNS_PER_TEAM: ${ING_MAX_RUNS_PER_TEAM:-2}
+      ING_RUN_RETENTION: ${ING_RUN_RETENTION:-30}
+      ING_RUN_TIMEOUT_SECONDS: ${ING_RUN_TIMEOUT_SECONDS:-43200}
+      ING_ALLOW_PRIVATE_SOURCES: ${ING_ALLOW_PRIVATE_SOURCES:-false}
+    ports:
+      - "127.0.0.1:${ING_PORT:-3008}:3008"
+    volumes:
+      - ing-state:/data
+      - ing-artifacts:/data/artifacts:ro
+    networks: [platform, launch]
+    depends_on:
+      ing-launcher:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3008/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # The only container with the Docker socket. It launches the pinned runner image, with fixed
+  # isolation: a private network holding only the platform's catalog and storage, and a separate
+  # network to reach the sources.
+  ing-launcher:
+    image: iceberg-ingestion:0.1.0
+    <<: *hardened
+    command: ["/app/.venv/bin/uvicorn", "launcher.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3018", "--no-access-log"]
+    user: "0:0"
+    labels:
+      io.iceberg-platform.extension: ingestion
+    environment:
+      LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-ingestion-runner:0.1.0}
+      ARTIFACTS_DIR: /artifacts
+      BRIDGE_EXTENSION_ID: ingestion
+      RUN_MEMORY: ${RUN_MEMORY:-2g}
+      RUN_CPUS: ${RUN_CPUS:-2}
+      ING_ALLOW_PRIVATE_SOURCES: ${ING_ALLOW_PRIVATE_SOURCES:-false}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ing-artifacts:/artifacts
+    networks: [launch]
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3018/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # The isolated image every run uses: built or pulled with --profile images, never started here.
+  runner-image:
+    image: iceberg-ingestion-runner:0.1.0
+    build:
+      context: .
+      dockerfile: runner/Dockerfile
+    profiles: [images]
+
+networks:
+  platform:
+    external: true
+    name: ${PLATFORM_NETWORK:-iceberg-platform_default}
+  launch:
+    internal: true
+
+volumes:
+  ing-state:
+  ing-artifacts:

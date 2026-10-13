@@ -5,6 +5,7 @@ semantic_model.py`), which runs on people's own computers without this package; 
 in step. A model arrives from an agent, so every value is checked for its type first.
 """
 
+import copy
 import json
 import re
 
@@ -68,6 +69,27 @@ def source_table(dataset):
     if len(parts) < 3:
         raise ValueError(f"Dataset {dataset.get('name')} needs a source like lakehouse.namespace.table.")
     return parts[1:-1], parts[-1]
+
+
+def inherit_descriptions(model, docs):
+    """Fill missing dataset and field descriptions from the table comment and column docs.
+
+    `docs` maps a dataset name to `{"comment": str, "columns": {column: doc}}`. Only fields whose
+    expression is a bare column inherit, under any field name, so a derived field never borrows a
+    column's meaning.
+    """
+    model = copy.deepcopy(model)
+    for dataset in dicts(model.get("datasets")):
+        table = docs.get(dataset.get("name"))
+        if not table:
+            continue
+        if not text(dataset.get("description")) and text(table.get("comment")):
+            dataset["description"] = table["comment"]
+        for field in dicts(dataset.get("fields")):
+            doc = table.get("columns", {}).get(sql_of(field) or "")
+            if not text(field.get("description")) and text(doc):
+                field["description"] = doc
+    return model
 
 
 def check_structure(model, columns=None):

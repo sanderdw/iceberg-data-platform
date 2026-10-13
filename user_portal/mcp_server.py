@@ -54,6 +54,11 @@ query_semantic_model: name metrics, dimensions (DATASET.field, optional time gra
 compiles the model's agreed SQL and reads with the user's own grants. Find the exact value to filter
 on, such as a region's spelling, with list_dimension_values instead of guessing. State the metric
 definition, filters and period with every answer, and use preview_rows only to look at raw rows. All tools read with the user's Polaris grants; none runs free-form SQL.
+No tool uploads files or fetches URLs. To load data from elsewhere (a file, an API, another
+database), use the Ingestion (dlt) extension's MCP server when it is installed, or write a uv
+script with the platform's iceberg_connect.py: it writes with PyIceberg or a writable DuckDB
+connection under the user's own grants (AGENTS.md, "Loading data from somewhere else"). Land
+outside data as-is in a raw namespace and transform it from there.
 Writers create a semantic model with publish_semantic_model. To replace one, read it with
 describe_semantic_model first and pass its entityVersion; a newer version is refused. Ask the
 user before replacing a model or calling delete_semantic_model, which needs confirm_name.

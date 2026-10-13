@@ -20,7 +20,7 @@ def _():
 def _(mo):
     mo.md("""
     # Read Iceberg v3 with DuckDB
-    **Example 5 of 7**
+    **Example 5 of 8**
 
     Query the Iceberg **format-version 3** table from example 4 directly with DuckDB
     SQL. Each section shows one thing v3 adds. Run **04 · Write Iceberg v3 with

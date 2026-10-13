@@ -1,27 +1,27 @@
 [project]
 name = "iceberg-conversationalbi"
-version = "0.1.0"
+version = "0.1.1"
 description = "Conversational BI for the Iceberg Data Platform: ask questions of your own and shared semantic models"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.141.1",
+  "fastapi==0.143.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
   "joserfc>=1.7.5",
-  "mcp>=2.2.0,<3",
-  "sqlglot>=30.21.0",
+  "mcp>=2.3.0,<3",
+  "sqlglot>=30.22.0",
   "pyyaml>=6.0.3",
   "duckdb==1.5.5",
   "duckdb-extension-iceberg==1.5.5",
   "duckdb-extension-httpfs==1.5.5",
   "duckdb-extension-avro==1.5.5",
-  "pydantic-ai-slim[ag-ui,spec,google,openai,anthropic,bedrock,bedrock-mantle]>=2.52.0,<3",
+  "pydantic-ai-slim[ag-ui,spec,google,openai,anthropic,bedrock,bedrock-mantle]>=2.55.0,<3",
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.1.1", "ruff>=0.16.8"]
+dev = ["pytest>=9.1.1", "ruff>=0.17.0"]
 
 [tool.iceberg-conversationalbi]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).

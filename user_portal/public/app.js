@@ -122,16 +122,27 @@ function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="butt
 async function api(path, method = 'GET', body) { const response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); const result = await response.json(); if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
 // Extensions open in their own origin; the portal only links to them.
-const extensionLabels = {conversationalbi: 'Conversational BI'};
+const extensionLabels = {conversationalbi: 'Conversational BI', dbt: 'Pipelines', ingestion: 'Ingestion (dlt)'};
 function renderExtensions() {
   document.querySelectorAll('#workspace-nav .extension-link').forEach(link => link.remove());
   for (const extension of state.extensions || []) {
-    const link = element('a', extensionLabels[extension.id] || extension.id, 'nav-item extension-link');
+    const label = extensionLabels[extension.id] || extension.id;
+    const link = element('a', label, 'nav-item extension-link');
     link.href = extension.origin + '/'; link.target = '_blank'; link.rel = 'noopener';
-    link.title = `Open ${extension.id} in a new tab`; link.dataset.extension = extension.id;
+    link.title = `Open ${label} in a new tab`; link.dataset.extension = extension.id;
     $('#workspace-nav').append(link);
   }
+  fitHeader();
 }
+// With extension links the sections may not fit beside the actions: then the navigation takes its own row.
+function fitHeader() {
+  const header = document.querySelector('header');
+  header.classList.remove('stacked');
+  header.classList.toggle('stacked', header.scrollWidth > header.clientWidth);
+}
+const refitHeader = () => { if (!$('#workspace-nav').hidden) fitHeader(); };
+window.addEventListener('resize', refitHeader);
+document.fonts?.ready.then(refitHeader);
 function renderState() {
   $('#login-screen').hidden = true; $('#identity').hidden = false; $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; $('#workspace-nav').hidden = false; $('#guide-nav').hidden = false; placeNotice();
   renderExtensions();

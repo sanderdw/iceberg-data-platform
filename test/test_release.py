@@ -18,6 +18,8 @@ from scripts.release import (
     build_install,
     check,
     conversationalbi_bundle,
+    dbt_bundle,
+    ingestion_bundle,
     installer_source,
     release_channel,
     release_files,
@@ -36,6 +38,17 @@ def release_tree(tmp_path):
         target = root / "extensions/conversationalbi" / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / "extensions/conversationalbi" / name, target)
+    # And the dbt extension's compose file, setup, agent skill and terminal script.
+    for name in ("pyproject.toml", "compose.yaml", "scripts/setup.py", "skills/dbt-platform/SKILL.md",
+                 "dbt_portal/client/iceberg_dbt.py"):
+        target = root / "extensions/dbt" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "extensions/dbt" / name, target)
+    # And the Ingestion extension's compose file, setup and agent skill.
+    for name in ("pyproject.toml", "compose.yaml", "scripts/setup.py", "skills/ingestion/SKILL.md"):
+        target = root / "extensions/ingestion" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "extensions/ingestion" / name, target)
     return root
 
 
@@ -76,6 +89,81 @@ def test_conversationalbi_credentials_never_reach_the_bundle(release_tree, env_f
         build_install(release_tree)
 
 
+def test_dbt_bundle_uses_its_published_images(release_tree):
+    version, files = dbt_bundle(release_tree)
+    compose = files["dbt/compose.yaml"].decode()
+    assert compose.count(f"image: ghcr.io/sanderdw/iceberg-dbt:{version}\n") == 2
+    assert f"image: ghcr.io/sanderdw/iceberg-dbt-runner:{version}\n" in compose
+    # The launcher starts runs from the published runner image, not a locally built one.
+    assert f"RUNNER_IMAGE: ${{RUNNER_IMAGE:-ghcr.io/sanderdw/iceberg-dbt-runner:{version}}}" in compose
+    assert "build:" not in compose and "context:" not in compose
+    assert files["dbt/scripts/setup.py"] == (release_tree / "extensions/dbt/scripts/setup.py").read_bytes()
+    assert files["dbt/iceberg_dbt.py"] == (release_tree / "extensions/dbt/dbt_portal/client/iceberg_dbt.py").read_bytes()
+    assert files[".agents/skills/dbt-platform/SKILL.md"] == (
+        release_tree / "extensions/dbt/skills/dbt-platform/SKILL.md").read_bytes()
+
+
+def test_a_preview_bundle_uses_the_dbt_images_of_its_build(release_tree):
+    compose = dbt_bundle(release_tree, "branch-12-1")[1]["dbt/compose.yaml"].decode()
+    assert compose.count(":branch-12-1") == 4 and ":0." not in compose
+    with pytest.raises(ValueError, match="Invalid dbt image tag"):
+        dbt_bundle(release_tree, "x;rm -rf /")
+
+
+def test_dbt_bundle_needs_the_versioned_images(release_tree):
+    compose = release_tree / "extensions/dbt/compose.yaml"
+    compose.write_text(compose.read_text().replace("iceberg-dbt-runner:0", "iceberg-dbt-runner:9", 1))
+    with pytest.raises(ValueError, match="must use"):
+        dbt_bundle(release_tree)
+
+
+@pytest.mark.parametrize("env_file", [".env", ".env.bridge"])
+def test_dbt_credentials_never_reach_the_bundle(release_tree, env_file):
+    secret = secrets.token_hex(24)
+    (release_tree / "extensions/dbt" / env_file).write_text(f"LAUNCHER_TOKEN={secret}\n")
+    setup = release_tree / "extensions/dbt/scripts/setup.py"
+    setup.write_text(setup.read_text() + f"# {secret}\n")
+    with pytest.raises(ValueError, match="bundled dbt/scripts/setup.py"):
+        build_install(release_tree)
+
+
+def test_ingestion_bundle_uses_its_published_images(release_tree):
+    version, files = ingestion_bundle(release_tree)
+    compose = files["ingestion/compose.yaml"].decode()
+    assert compose.count(f"image: ghcr.io/sanderdw/iceberg-ingestion:{version}\n") == 2
+    assert f"image: ghcr.io/sanderdw/iceberg-ingestion-runner:{version}\n" in compose
+    assert f"RUNNER_IMAGE: ${{RUNNER_IMAGE:-ghcr.io/sanderdw/iceberg-ingestion-runner:{version}}}" in compose
+    assert "build:" not in compose and "context:" not in compose
+    assert files["ingestion/scripts/setup.py"] == (release_tree / "extensions/ingestion/scripts/setup.py").read_bytes()
+    assert files[".agents/skills/ingestion/SKILL.md"] == (
+        release_tree / "extensions/ingestion/skills/ingestion/SKILL.md").read_bytes()
+
+
+def test_a_preview_bundle_uses_the_ingestion_images_of_its_build(release_tree):
+    compose = ingestion_bundle(release_tree, "branch-12-1")[1]["ingestion/compose.yaml"].decode()
+    assert compose.count(":branch-12-1") == 4 and ":0." not in compose
+    with pytest.raises(ValueError, match="Invalid ingestion image tag"):
+        ingestion_bundle(release_tree, "x;rm -rf /")
+
+
+def test_ingestion_bundle_needs_the_versioned_images(release_tree):
+    compose = release_tree / "extensions/ingestion/compose.yaml"
+    compose.write_text(compose.read_text().replace("iceberg-ingestion-runner:0", "iceberg-ingestion-runner:9", 1))
+    with pytest.raises(ValueError, match="must use"):
+        ingestion_bundle(release_tree)
+
+
+@pytest.mark.parametrize("env_file", [".env", ".env.bridge"])
+@pytest.mark.parametrize("key", ["LAUNCHER_TOKEN", "ING_SECRET_KEY"])
+def test_ingestion_credentials_never_reach_the_bundle(release_tree, env_file, key):
+    secret = secrets.token_hex(24)
+    (release_tree / "extensions/ingestion" / env_file).write_text(f"{key}={secret}\n")
+    setup = release_tree / "extensions/ingestion/scripts/setup.py"
+    setup.write_text(setup.read_text() + f"# {secret}\n")
+    with pytest.raises(ValueError, match="bundled ingestion/scripts/setup.py"):
+        build_install(release_tree)
+
+
 def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
     (release_tree / ".env").write_text("LOCAL_PASSWORD=" + secrets.token_hex(24))
     (release_tree / ".venv").mkdir()
@@ -84,7 +172,6 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
     nested_environment.mkdir(parents=True)
     (nested_environment / ".lock").write_text("local environment lock")
     (nested_environment / "private.py").write_text("private local environment content")
-    (release_tree / "docs" / "conversation.md").write_text("Private local development conversation")
     local_only = release_tree / "docs" / "local_only"
     local_only.mkdir()
     (local_only / "LAN.md").write_text("Private notes for 192.168" + ".1.20 in /home" + "/someone/")
@@ -103,7 +190,6 @@ def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
         screenshot = next(name for name in members if name.endswith("/docs/portal.png"))
         assert archive.extractfile(screenshot).read() == (release_tree / "docs" / "portal.png").read_bytes()
         assert not any(name.endswith("/.env") or "/.venv/" in name or "/dist/" in name for name in members)
-        assert not any(name.endswith("/docs/conversation.md") for name in members)
         assert not any("/docs/local_only/" in name for name in members)
 
 
@@ -146,6 +232,10 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
     assert ".env" not in files
     assert "scripts/setup.py" in files
     assert {"conversationalbi/compose.yaml", "conversationalbi/scripts/setup.py"} <= set(files)
+    assert {"dbt/compose.yaml", "dbt/scripts/setup.py", ".agents/skills/dbt-platform/SKILL.md"} <= set(files)
+    assert b"Read `.agents/skills/dbt-platform/SKILL.md`" in files[".claude/skills/dbt-platform/SKILL.md"]
+    assert {"ingestion/compose.yaml", "ingestion/scripts/setup.py", ".agents/skills/ingestion/SKILL.md"} <= set(files)
+    assert b"Read `.agents/skills/ingestion/SKILL.md`" in files[".claude/skills/ingestion/SKILL.md"]
     assert "pgadmin/servers.json" in files
     assert files["iceberg_connect.py"] == (release_tree / "user_portal/client/iceberg_connect.py").read_bytes()
     assert files["AGENTS.md"] == (release_tree / "user_portal/client/AGENTS.md").read_bytes()
@@ -231,6 +321,31 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
     assert gateway["environment"]["RUNTIME_KEY"] == cbi["services"]["cbi-runtime"]["environment"]["RUNTIME_KEY"]
     assert "ANTHROPIC_API_KEY" not in cbi["services"]["cbi-runtime"]["environment"]
     assert cbi["networks"]["platform"]["name"] == platform_model["networks"]["default"]["name"]
+    # The dbt extension the same way.
+    subprocess.run([sys.executable, str(installed / "scripts/setup.py"), "--extension", "dbt",
+                    "--origin", "http://localhost:3004", "--handshake", str(installed / "dbt/.env.bridge")],
+                   check=True, capture_output=True)
+    subprocess.run([sys.executable, str(installed / "dbt/scripts/setup.py")], check=True, capture_output=True)
+    dbt = json.loads(subprocess.check_output(["docker", "compose", "-f", "dbt/compose.yaml", "--profile", "images",
+                                              "config", "--format", "json"], cwd=installed))
+    assert dbt["services"]["dbt-portal"]["image"].startswith("ghcr.io/sanderdw/iceberg-dbt:")
+    assert dbt["services"]["runner-image"]["image"] == dbt["services"]["dbt-launcher"]["environment"]["RUNNER_IMAGE"]
+    assert dbt["services"]["dbt-portal"]["environment"]["LAUNCHER_TOKEN"] == (
+        dbt["services"]["dbt-launcher"]["environment"]["LAUNCHER_TOKEN"])
+    assert dbt["networks"]["platform"]["name"] == platform_model["networks"]["default"]["name"]
+    # And Ingestion.
+    subprocess.run([sys.executable, str(installed / "scripts/setup.py"), "--extension", "ingestion",
+                    "--origin", "http://localhost:3008", "--handshake", str(installed / "ingestion/.env.bridge")],
+                   check=True, capture_output=True)
+    subprocess.run([sys.executable, str(installed / "ingestion/scripts/setup.py")], check=True, capture_output=True)
+    ing = json.loads(subprocess.check_output(["docker", "compose", "-f", "ingestion/compose.yaml", "--profile",
+                                              "images", "config", "--format", "json"], cwd=installed))
+    assert ing["services"]["ing-gateway"]["image"].startswith("ghcr.io/sanderdw/iceberg-ingestion:")
+    assert ing["services"]["runner-image"]["image"] == ing["services"]["ing-launcher"]["environment"]["RUNNER_IMAGE"]
+    assert ing["services"]["ing-gateway"]["environment"]["LAUNCHER_TOKEN"] == (
+        ing["services"]["ing-launcher"]["environment"]["LAUNCHER_TOKEN"])
+    assert ing["services"]["ing-gateway"]["environment"]["ING_SECRET_KEY"]
+    assert ing["networks"]["platform"]["name"] == platform_model["networks"]["default"]["name"]
     assert workspace_model["services"]["users"]["environment"]["NOTEBOOK_IMAGE"] == (
         f"ghcr.io/sanderdw/iceberg-data-platform-notebook:{image_tag}"
     )

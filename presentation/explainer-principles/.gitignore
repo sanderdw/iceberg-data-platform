@@ -1,0 +1,8 @@
+node_modules/
+out/
+.env
+tts/cache/
+tts/samples/
+public/voice/
+public/music/
+public/sfx/

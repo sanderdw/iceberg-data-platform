@@ -41,6 +41,7 @@ ROOT_FILES = (
     "playwright.config.mjs",
     "pyproject.toml",
     "uv.lock",
+    "zensical.toml",
 )
 SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", "contracts", ".github", ".agents")
 # Agent skills ship in the installation bundle at the same paths.
@@ -50,13 +51,12 @@ PLAIN_NAMES = {"Dockerfile", "Caddyfile"}
 BINARY_SUFFIXES = {".png", ".ttf"}
 SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml"} | BINARY_SUFFIXES
 IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv"}
-LOCAL_FILES = {"docs/conversation.md", "docs/dbaas-reference-architecture.drawio"}
 # Git-ignored personal notes; never scanned or released.
 LOCAL_DIRS = ("docs/local_only/",)
 # Tracked in git but not part of the core source release: the presentation is published by the
-# GitHub Pages workflow; extensions and their workflows are versioned and released on their own;
-# screenshots are design references for contributors.
-TRACKED_UNRELEASED = ("presentation/", "extensions/", ".github/workflows/conversationalbi-", "screenshots/")
+# GitHub Pages workflow; extensions and their workflows are versioned and released on their own.
+TRACKED_UNRELEASED = ("presentation/", "extensions/", ".github/workflows/conversationalbi-", ".github/workflows/dbt-",
+                      ".github/workflows/ingestion-")
 
 
 def release_files(root=ROOT):
@@ -64,7 +64,7 @@ def release_files(root=ROOT):
     for directory in SOURCE_DIRS:
         for path in (root / directory).rglob("*"):
             relative = path.relative_to(root)
-            if (relative.as_posix() in LOCAL_FILES or relative.as_posix().startswith(LOCAL_DIRS)
+            if (relative.as_posix().startswith(LOCAL_DIRS)
                     or relative.as_posix().startswith(TRACKED_UNRELEASED)
                     or any(part in IGNORED for part in relative.parts)):
                 continue
@@ -221,6 +221,57 @@ def conversationalbi_bundle(root=ROOT, image_tag=None):
                      "conversationalbi/scripts/setup.py": (root / CBI / "scripts/setup.py").read_bytes()}
 
 
+DBT = "extensions/dbt"
+DBT_SKILL = "skills/dbt-platform/SKILL.md"
+ING = "extensions/ingestion"
+ING_SKILL = "skills/ingestion/SKILL.md"
+
+
+def launcher_compose(root, directory, image, image_tag=None):
+    """An extension with a gateway, a launcher and a runner image, on its published images.
+
+    The gateway and launcher share one image; the launcher starts runs from the runner image, which
+    the installer pulls through the `images` profile. Like Conversational BI, a strict text rewrite.
+    """
+    version = tomllib.loads((root / directory / "pyproject.toml").read_text())["project"]["version"]
+    if image_tag is not None and not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", image_tag):
+        raise ValueError(f"Invalid {Path(directory).name} image tag")
+    tag = image_tag or version
+    text = (root / directory / "compose.yaml").read_text()
+    for local, published, count in (
+        (f"    image: {image}:{version}\n", f"    image: ghcr.io/sanderdw/{image}:{tag}\n", 2),
+        (f"    image: {image}-runner:{version}\n", f"    image: ghcr.io/sanderdw/{image}-runner:{tag}\n", 1),
+        (f"${{RUNNER_IMAGE:-{image}-runner:{version}}}", f"${{RUNNER_IMAGE:-ghcr.io/sanderdw/{image}-runner:{tag}}}", 1),
+    ):
+        if text.count(local) != count:
+            raise ValueError(f"{directory}/compose.yaml must use {local.strip()} {count} time(s)")
+        text = text.replace(local, published)
+    text, simple = re.subn(r"(?m)^    build: \S+\n", "", text)
+    text, runner = re.subn(r"(?m)^    build:\n(?:      \S.*\n)+", "", text)
+    if (simple, runner) != (1, 1) or "build:" in text:
+        raise ValueError(f"Unexpected build sections in {directory}/compose.yaml")
+    return version, text.encode()
+
+
+def dbt_bundle(root=ROOT, image_tag=None):
+    """The dbt extension for the installer: its compose file on the published images, its setup and skill."""
+    version, compose = launcher_compose(root, DBT, "iceberg-dbt", image_tag)
+    return version, {"dbt/compose.yaml": compose,
+                     "dbt/scripts/setup.py": (root / DBT / "scripts/setup.py").read_bytes(),
+                     # dbt commands from a terminal; the installer puts it next to iceberg_connect.py.
+                     "dbt/iceberg_dbt.py": (root / DBT / "dbt_portal/client/iceberg_dbt.py").read_bytes(),
+                     # Next to the platform's skills, so agents find it the same way (pointer below).
+                     f"{SKILLS_DIR}/dbt-platform/SKILL.md": (root / DBT / DBT_SKILL).read_bytes()}
+
+
+def ingestion_bundle(root=ROOT, image_tag=None):
+    """The Ingestion (dlt) extension for the installer: its compose file on the published images, its setup and skill."""
+    version, compose = launcher_compose(root, ING, "iceberg-ingestion", image_tag)
+    return version, {"ingestion/compose.yaml": compose,
+                     "ingestion/scripts/setup.py": (root / ING / "scripts/setup.py").read_bytes(),
+                     f"{SKILLS_DIR}/ingestion/SKILL.md": (root / ING / ING_SKILL).read_bytes()}
+
+
 def local_secrets(paths, words=()):
     """Credential values in local env files, to make sure no released file contains them.
 
@@ -268,30 +319,35 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
         # JSON is valid YAML; keep Compose's normalized model without another dependency.
         contents[filename] = (json.dumps(model, indent=2) + "\n").encode()
     for filename in (".env.example", "scripts/setup.py", "pgadmin/servers.json", "compose.lan.yaml",
-                     "compose.users.lan.yaml", "LICENSE", "NOTICE", "docs/install.md", "docs/keycloak.md"):
+                     "compose.users.lan.yaml", "LICENSE", "NOTICE"):
         contents[filename] = (root / filename).read_bytes()
     # Connect your own tools; its defaults match a local installation.
     contents["iceberg_connect.py"] = (root / "user_portal/client/iceberg_connect.py").read_bytes()
     # Orientation for coding agents started in the installation directory; Claude Code reads CLAUDE.md only.
     contents["AGENTS.md"] = (root / "user_portal/client/AGENTS.md").read_bytes()
     contents["CLAUDE.md"] = b"@AGENTS.md\n"
-    # Conversational BI, installed only when asked for: pinned to its own release, or to this preview's build.
+    # Extensions, installed only when asked for: pinned to their own releases, or to this preview's build.
     contents.update(conversationalbi_bundle(root, extension_image_tag)[1])
+    contents.update(dbt_bundle(root, extension_image_tag)[1])
+    contents.update(ingestion_bundle(root, extension_image_tag)[1])
     # Getting-started skills for coding agents, opened in the installation directory.
     for path in files:
         relative = path.relative_to(root).as_posix()
         if relative.startswith(SKILLS_DIR + "/"):
             contents[relative] = path.read_bytes()
-            if path.name == "SKILL.md":
-                # Claude Code reads .claude/skills only; point it to the same skill.
-                skill = path.parent.name
-                frontmatter = path.read_text().split("---\n", 2)[1]
-                contents[f".claude/skills/{skill}/SKILL.md"] = (
-                    f"---\n{frontmatter}---\n\nRead `{SKILLS_DIR}/{skill}/SKILL.md` and follow it. "
-                    f"Paths in that skill are relative to `{SKILLS_DIR}/{skill}/`.\n"
-                ).encode()
+    for name, data in list(contents.items()):
+        if name.startswith(SKILLS_DIR + "/") and name.endswith("/SKILL.md"):
+            # Claude Code reads .claude/skills only; point it to the same skill.
+            skill = name.split("/")[-2]
+            frontmatter = data.decode().split("---\n", 2)[1]
+            contents[f".claude/skills/{skill}/SKILL.md"] = (
+                f"---\n{frontmatter}---\n\nRead `{SKILLS_DIR}/{skill}/SKILL.md` and follow it. "
+                f"Paths in that skill are relative to `{SKILLS_DIR}/{skill}/`.\n"
+            ).encode()
     found = [*local_secrets(root.glob(".env*")),
-             *local_secrets([*(root / CBI).glob(".env*"), root / CBI / "llm.env"], words=("KEY", "TOKEN"))]
+             *local_secrets([*(root / CBI).glob(".env*"), root / CBI / "llm.env"], words=("KEY", "TOKEN")),
+             *local_secrets((root / DBT).glob(".env*"), words=("TOKEN",)),
+             *local_secrets((root / ING).glob(".env*"), words=("TOKEN",))]
     for filename, data in contents.items():
         if any(secret.encode() in data for secret in found):
             raise ValueError(f"Local credential found in bundled {filename}; value suppressed")
@@ -325,7 +381,7 @@ def main():
     parser.add_argument("--install", action="store_true", help="Also build a Docker-only installation bundle")
     parser.add_argument("--release-tag", default="latest", help="GitHub release to download from the generated installers")
     parser.add_argument("--image-tag", default="latest", help="Matching application image tag for the installation bundle")
-    parser.add_argument("--extension-image-tag", help="Conversational BI image tag for a preview (default: its release)")
+    parser.add_argument("--extension-image-tag", help="Extension image tag for a preview (default: each extension's release)")
     parser.add_argument("--channel", metavar="REF", help="Only print the release names for a Git ref as key=value lines")
     args = parser.parse_args()
     try:

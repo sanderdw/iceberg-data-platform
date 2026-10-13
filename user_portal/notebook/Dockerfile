@@ -1,15 +1,17 @@
-FROM ghcr.io/astral-sh/uv:0.12.22 AS uv
-FROM python:3.14.7-slim
+FROM ghcr.io/astral-sh/uv:0.13.0 AS uv
+FROM python:3.14.8-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md ./
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-dev --group notebook
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --group notebook
 # CPU quotas do not constrain host CPU discovery in native numerical libraries.
 # Bound each kernel's pools so several open notebooks fit the runtime's PID limit.
 ENV OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 NUMEXPR_NUM_THREADS=2 ARROW_IO_THREADS=2
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
+# dlt (example 08) would otherwise send anonymous usage data to dltHub.
+ENV RUNTIME__DLTHUB_TELEMETRY=false
 COPY user_portal/duckdb_extensions.py ./user_portal/
 RUN /app/.venv/bin/python user_portal/duckdb_extensions.py
 COPY user_portal/__init__.py ./user_portal/

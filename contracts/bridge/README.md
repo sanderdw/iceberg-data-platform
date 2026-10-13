@@ -37,13 +37,13 @@ An extension reaches the core through four doors:
 | --- | --- | --- |
 | `user-context` | 0.1 | `GET /me` |
 | `automation-principals` | 0.1 | Enable, list and revoke automation principals per team and environment |
-| `automation-tokens` | 0.1 | One-hour `read` or `write` catalog tokens for an automation principal |
+| `automation-tokens` | 0.1 | Short-lived `read` or `write` catalog tokens for an automation principal. `expiresIn` is the lifetime the platform sets, one hour by default |
 | `shared-data` | 0.1 | Received team shares on the read role, `sharedDatabases` in the scope, `sharedObjects` in `/me` |
 
 ## Registering an extension
 
 `scripts.setup --extension <id> --origin <url> --handshake <file>` registers an extension and writes
-its [handshake file](v1/handshake.md). See [extensions](../../docs/extensions.md#register-an-extension)
+its [handshake file](v1/handshake.md). See [extensions](../../docs/develop/extension-bridge.md#register-an-extension)
 for the full steps.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for versioning and [CHANGELOG.md](CHANGELOG.md) for changes.

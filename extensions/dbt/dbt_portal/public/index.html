@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#000000">
+<link rel="preload" href="/fonts/doto.ttf" as="font" type="font/ttf" crossorigin>
+<title>Pipelines · Iceberg Data Platform</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="/style.css">
+<script src="/graph.js" defer></script>
+<script src="/files.js" defer></script>
+<script src="/manage.js" defer></script>
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="site">
+  <a class="brand" href="#/"><img src="/favicon.svg" alt="">iceberg<span>/ pipelines</span></a>
+  <nav id="crumbs" aria-label="Location"></nav>
+  <div class="header-actions">
+    <button id="theme" class="ghost" type="button">Light / ○</button>
+    <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
+  </div>
+</header>
+
+<main id="loading" class="initial"><p class="eyebrow">[ LOADING ]</p></main>
+
+<main id="signin" hidden>
+  <section class="login">
+    <div class="eyebrow">YOUR MODELS. YOUR PIPELINES.</div>
+    <h1>Pipelines<span class="dot-accent">.</span></h1>
+    <p>See the dbt pipelines of your teams: what they build, how the last runs went and where each table comes from.</p>
+    <a class="button wide" id="signin-link" href="/auth/login">Sign in with Keycloak <span aria-hidden="true">↗</span></a>
+    <p class="hint">Use your linked Keycloak account.</p>
+  </section>
+  <aside class="intro">
+    <div class="eyebrow">FROM MODEL TO TABLE</div>
+    <h2>Agents build the pipeline. You see every step.</h2>
+    <p>Projects, models and schedules are created through the API and the MCP server, with your permissions.</p>
+    <ol>
+      <li><span>[ 01 ]</span>Connect your AI agent</li>
+      <li><span>[ 02 ]</span>Ask it to model your data</li>
+      <li><span>[ 03 ]</span>Follow each run and table here</li>
+    </ol>
+  </aside>
+</main>
+
+<main id="projects" hidden>
+  <section class="page-heading">
+    <div><p class="eyebrow">PROJECTS</p><h1>Your pipelines<span class="dot-accent">.</span></h1>
+    <p>dbt projects of your teams. Open one to see its pipeline per environment.</p></div>
+    <div><button id="new-project" type="button" hidden>New project</button></div>
+  </section>
+  <form id="new-project-form" class="card new-project" hidden></form>
+  <div id="project-list" class="grid"></div>
+  <section class="card agent-hint">
+    <h2>Build with an AI agent</h2>
+    <p>Everything here is created and changed through the dbt MCP server or the REST API. Connect your agent, sign in through Keycloak and ask it to model your data.</p>
+    <pre id="mcp-command"></pre>
+    <p class="small">API reference: <a href="/api/v1/openapi.json">/api/v1/openapi.json</a> · MCP: <code>/mcp</code></p>
+  </section>
+  <section class="card agent-hint">
+    <h2>From your terminal</h2>
+    <p>Type dbt commands in your own terminal; they run here, as your team's service account. Commands build <code>main</code>; put your local edits on a branch with <code>push --branch</code> and build it with <code>--ref</code>.</p>
+    <pre id="cli-commands"></pre>
+    <p class="small actions"><a class="button quiet" href="/iceberg_dbt.py" download>Download iceberg_dbt.py</a> <span>Needs <a href="https://docs.astral.sh/uv/" target="_blank" rel="noopener">uv</a>. The dbt MCP server (<code>uvx dbt-mcp</code>) can use it as <code>DBT_PATH</code>.</span></p>
+  </section>
+</main>
+
+<main id="project" hidden>
+  <section class="project-bar">
+    <div class="project-title"><p class="eyebrow" id="project-team"></p><h1 id="project-name"></h1></div>
+    <div id="environments" class="segmented" role="tablist" aria-label="Environment"></div>
+    <div id="views" class="segmented" role="tablist" aria-label="View">
+      <button type="button" data-view="pipeline" role="tab">Pipeline</button>
+      <button type="button" data-view="files" role="tab">Files</button>
+      <button type="button" data-view="runs" role="tab">Runs</button>
+      <button type="button" data-view="schedules" role="tab">Schedules</button>
+      <button type="button" data-view="settings" role="tab">Settings</button>
+    </div>
+  </section>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+  <section id="pipeline-view" class="pipeline">
+    <div class="toolbar">
+      <label class="branch"><span class="eyebrow">Branch</span><select id="branch"></select></label>
+      <label class="search"><span class="visually-hidden">Find a node, or focus with +name+</span><input id="find" type="search" placeholder="Find a node · +name+ focuses its lineage" autocomplete="off"></label>
+      <div id="focus" class="chip focus" hidden></div>
+      <div id="legend" class="legend" role="group" aria-label="Filter the graph"></div>
+      <div class="toolbar-actions">
+        <button id="fit" class="quiet" type="button">Fit</button>
+        <a id="docs-link" class="button quiet" target="_blank" rel="noopener" hidden>dbt docs</a>
+        <button id="run-now" type="button" hidden>Build now</button>
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <svg id="graph" role="img" aria-label="Pipeline graph"></svg>
+      <div id="graph-empty" class="empty" hidden></div>
+      <aside id="panel" class="panel" hidden aria-label="Node details"></aside>
+    </div>
+    <div id="timeline" class="timeline" aria-label="Recent runs"></div>
+  </section>
+
+  <section id="runs-view" hidden><div id="run-table"></div><div id="run-detail" class="card" hidden></div></section>
+  <section id="files-view" hidden></section>
+  <section id="schedules-view" hidden><div id="schedule-table"></div></section>
+  <section id="settings-view" class="settings" hidden></section>
+  <dialog id="delete-dialog" class="card" aria-labelledby="delete-title"></dialog>
+</main>
+</body>
+</html>

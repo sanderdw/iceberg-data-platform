@@ -2,36 +2,54 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ['presentation/**', '.github/workflows/pages.yml']
+    paths: ['docs/**', 'zensical.toml', 'presentation/**', 'CHANGELOG.md', 'pyproject.toml', 'uv.lock', '.github/workflows/pages.yml']
+  pull_request:
+    paths: ['docs/**', 'zensical.toml', 'presentation/**', 'CHANGELOG.md', 'pyproject.toml', 'uv.lock', '.github/workflows/pages.yml']
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   publish:
-    # Copies presentation/ onto the gh-pages branch, which GitHub Pages serves.
+    # Builds the documentation with the presentation under /presentation/ and copies it onto the
+    # gh-pages branch, which GitHub Pages serves. Pull requests only build.
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Publish presentation/ to gh-pages
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.13.0'
+          enable-cache: true
+      - name: Check documentation links and the release allowlist
+        run: python3 -m scripts.release
+      - name: Build the documentation
+        run: uv run --locked --only-group docs zensical build --clean --strict
+      - name: Add the presentation
+        run: |
+          set -euo pipefail
+          test ! -e site/presentation
+          cp -R presentation site/presentation
+          touch site/.nojekyll
+          test -f site/index.html && test -f site/presentation/index.html
+      - name: Publish site/ to gh-pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
           ACTOR_ID: ${{ github.actor_id }}
         run: |
           set -euo pipefail
-          site="$(mktemp -d)"
-          cp -R presentation/. "$site/"
-          touch "$site/.nojekyll"
-          cd "$site"
+          cd site
           git init -q -b gh-pages
           git config user.name "$ACTOR"
           git config user.email "${ACTOR_ID}+${ACTOR}@users.noreply.github.com"
           git add -A
-          git commit -q -m "Publish presentation from ${GITHUB_REF_NAME} at ${GITHUB_SHA::7}"
+          git commit -q -m "Publish documentation and presentation from ${GITHUB_REF_NAME} at ${GITHUB_SHA::7}"
           git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
