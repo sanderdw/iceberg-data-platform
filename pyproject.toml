@@ -23,6 +23,8 @@ mcp = [
 ]
 dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.17.0"]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "numpy>=2.5.4"]
+# The documentation site; see docs/develop/contributing.md.
+docs = ["zensical==0.0.70"]
 users = [
     "docker==7.2.0",
     "duckdb==1.5.6",

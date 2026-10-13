@@ -3,7 +3,7 @@
 The user portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at
 `/mcp`, so an AI agent works with your databases, semantic models and data shares as you. This page
 describes every tool, then the choices behind them and why they were made. To register the
-endpoint in a coding agent, see [connect an MCP client](../user_portal/README.md#connect-an-mcp-client).
+endpoint in a coding agent, see [AI agents](ai-agents.md).
 Platform administrators have a separate endpoint on the administration portal, described in the
 [administration guide](admin-guide.md#connect-an-mcp-client). [Extensions](extensions.md) serve their
 own: Conversational BI at `http://localhost:3007/mcp` (client `ext-conversationalbi-mcp`), dbt at
@@ -153,7 +153,7 @@ away, four of six parallel questions failed, and agents retried in a loop or gav
 
 The portal's own **Preview** button still fails at once with HTTP 429, because a person can simply
 click again. Raise `USER_QUERY_SLOTS` when the host has the memory for it. Both settings are in
-[configuration](../user_portal/README.md#configuration).
+[configuration](configuration.md).
 
 ### Publishing checks fields against the table's columns
 
@@ -189,7 +189,7 @@ instructions, such as: "Add up over regions of one level within one year; never 
 
 - **Uploading data through MCP.** Files can be large, a URL fetched by the server opens the door to
   server-side request forgery, and inferring a schema needs decisions only the owner can make. Load
-  data with [`iceberg_connect.py`](../user_portal/README.md#connect-from-your-computer) and PyIceberg
+  data with [`iceberg_connect.py`](connect.md) and PyIceberg
   or DuckDB, which write with your own grants. Then describe the tables with a semantic model.
 - **Time zones in governed queries.** Local time needs `timezone()` or `AT TIME ZONE`, which the
   allow-list refuses, and every session runs in UTC. A model can still offer local time as a stored

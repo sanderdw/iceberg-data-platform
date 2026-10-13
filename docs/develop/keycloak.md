@@ -1,14 +1,14 @@
 # Keycloak identity and access
 
-Keycloak handles sign-in for both portals, notebook tokens for Polaris and MCP clients. Polaris handles teams and data permissions. Startup runs `keycloak-bootstrap`, which provisions the `iceberg` realm, its clients and the `platform-admin` account. It creates no demo users, teams or databases. To manage accounts, see the [administration guide](admin-guide.md#teams-databases-and-users).
+Keycloak handles sign-in for both portals, notebook tokens for Polaris and MCP clients. Polaris handles teams and data permissions. Startup runs `keycloak-bootstrap`, which provisions the `iceberg` realm, its clients and the `platform-admin` account. It creates no demo users, teams or databases. To manage accounts, see the [administration guide](../admin-guide.md#teams-databases-and-users).
 
 ## Configuration
 
 `scripts.setup` derives `PORTAL_ORIGIN`, `USER_ORIGIN`, `KEYCLOAK_ORIGIN` and `OIDC_ISSUER` from `PORT`, `USER_PORT` and `KEYCLOAK_PORT`. Set the ports before the first setup. If you change a port later, you must also update the origins and the client redirect and logout URIs in Keycloak, because an existing realm is never re-imported. Issuer and redirect origins must match exactly, so use `localhost`.
 
-Keycloak access beyond localhost needs HTTPS and matching issuer and redirect URLs; see [deploying beyond localhost](../SECURITY.md#deploying-beyond-localhost). For a class or demo, the [quick-share skill](install.md#agent-skills) sets this up.
+Keycloak access beyond localhost needs HTTPS and matching issuer and redirect URLs; see [deploying beyond localhost](../security.md#deploying-beyond-localhost). For a class or demo, the [quick-share skill](../agent-skills.md) sets this up.
 
-To run a portal directly from source, see [contributing](../CONTRIBUTING.md).
+To run a portal directly from source, see [contributing](contributing.md).
 
 ## Authentication and data access
 
@@ -62,7 +62,7 @@ uv run python -m scripts.setup --demo
 docker compose run --build --rm keycloak-bootstrap --demo
 ```
 
-This creates `demo-admin`, `demo-writer`, `demo-reader` and `demo-outsider`, with their `DEMO_*_PASSWORD` credentials in `.env`. Writers and readers can access `demo-demo`. `demo-private` belongs to another team, and the outsider has no platform identity. See [Contributing](../CONTRIBUTING.md#tests) for the tests that use them.
+This creates `demo-admin`, `demo-writer`, `demo-reader` and `demo-outsider`, with their `DEMO_*_PASSWORD` credentials in `.env`. Writers and readers can access `demo-demo`. `demo-private` belongs to another team, and the outsider has no platform identity. See [Contributing](contributing.md#tests) for the tests that use them.
 
 ## References
 

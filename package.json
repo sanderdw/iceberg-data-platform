@@ -22,6 +22,8 @@
     "test:navigation-ui": "node scripts/navigation-browser.mjs",
     "test:examples": "USER_EXAMPLE_TEST=1 USER_BROWSER_TEST=1 uv run --all-groups python -m scripts.users_smoke",
     "check:release": "uv run --all-groups python -m scripts.release",
+    "docs:serve": "uv run --only-group docs zensical serve",
+    "docs:build": "uv run --only-group docs zensical build --clean --strict",
     "release:source": "uv run --all-groups python -m scripts.release --build",
     "test:keycloak": "node scripts/keycloak-smoke.mjs && node scripts/keycloak-lifecycle-smoke.mjs",
     "presentation:screenshots": "node scripts/presentation-screenshots.mjs",

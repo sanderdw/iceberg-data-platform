@@ -320,7 +320,7 @@ jobs:
 
           Requires Docker with Compose v2 and a fresh installation. Uses the same project names, volumes and ports as stable; use a separate Docker environment to test alongside an existing installation.
 
-          The installer can also add the Conversational BI, dbt and Ingestion (dlt) extensions, built from the same commit: it asks in a terminal, or set ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion (see docs/install.md).
+          The installer can also add the Conversational BI, dbt and Ingestion (dlt) extensions, built from the same commit: it asks in a terminal, or set ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion (see https://sanderdw.github.io/iceberg-data-platform/extensions/).
 
           Open http://localhost:3000 and use PLATFORM_ADMIN_USERNAME and PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Change the initial password, then create a team, database and user. The user portal is http://localhost:3002 and Keycloak is http://localhost:8080/admin. No demo accounts or data are created automatically.
 
@@ -381,7 +381,7 @@ jobs:
 
           \`irm https://github.com/${GH_REPO}/releases/latest/download/install.ps1 | iex\`
 
-          The installer creates configuration and random credentials, pulls the images of this release and starts both Compose projects. It can also add the separately released Conversational BI, dbt and Ingestion (dlt) extensions; see docs/install.md. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
+          The installer creates configuration and random credentials, pulls the images of this release and starts both Compose projects. It can also add the separately released Conversational BI, dbt and Ingestion (dlt) extensions; see https://sanderdw.github.io/iceberg-data-platform/extensions/. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
 
           The commands above always install the newest release. To install exactly this version, replace \`latest/download\` with \`download/v${VERSION}\`; its installers, Compose files and images are pinned to ${VERSION}.
 

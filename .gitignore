@@ -26,6 +26,8 @@ test-results/
 playwright-report/
 dist/
 build/
+# The documentation site; npm run docs:build.
+/site/
 *.egg-info/
 .coverage
 htmlcov/

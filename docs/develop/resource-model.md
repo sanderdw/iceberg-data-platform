@@ -63,7 +63,7 @@ A data share gives another team, an external party, or both read access to selec
 
 An automation principal is the service account through which an extension, such as
 Conversational BI, dbt or Ingestion, acts for one team in one environment. A team Administrator enables it through the
-extension (the [Bridge](extensions.md)). There is at most one per team, environment and extension.
+extension (the [Bridge](extension-bridge.md)). There is at most one per team, environment and extension.
 It follows the team's databases in that environment: creating, moving and deleting a database
 update its grants like a member's. It is never a user, member or portal login. Deleting the team
 revokes it, and platform administrators can revoke it on the Teams page. Its secret is never

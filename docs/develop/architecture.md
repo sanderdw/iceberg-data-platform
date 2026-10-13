@@ -60,7 +60,7 @@ flowchart LR
 
 The two portals are separate applications with separate sign-ins. The **admin portal** accepts only Keycloak accounts with the `platform-admin` role and manages teams, users, databases and storage. The **user portal** accepts only Keycloak accounts linked to a platform user, and serves catalog browsing, shares and notebooks. Signing in with an account meant for the other portal fails: `platform-admin` is not a platform user, and a platform user is not an administrator.
 
-**Extensions** are a third kind of application, for platform users. Each one runs in its own Compose project and signs in through its own Keycloak clients, whose tokens Polaris refuses. It reaches the core only through the **Extension Bridge**, which runs in the platform project next to the admin portal. The user portal links to each registered extension. See [extensions](extensions.md).
+**Extensions** are a third kind of application, for platform users. Each one runs in its own Compose project and signs in through its own Keycloak clients, whose tokens Polaris refuses. It reaches the core only through the **Extension Bridge**, which runs in the platform project next to the admin portal. The user portal links to each registered extension. See the [Extension Bridge](extension-bridge.md).
 
 The third party never signs in to a portal. A team administrator hands over the share credential, and the recipient reads only the shared tables, views and semantic models through Polaris and RustFS.
 
@@ -70,19 +70,19 @@ The third party never signs in to a portal. A team administrator hands over the 
 | --- | --- | --- |
 | `compose.yaml` | `iceberg-platform` | Admin portal, Extension Bridge, Keycloak, Polaris, PostgreSQL, RustFS, pgAdmin, monitoring |
 | `compose.users.yaml` | `iceberg-workspaces` | User portal, plus the notebook image build |
-| `extensions/conversationalbi/compose.yaml` | `iceberg-conversationalbi` | Optional Conversational BI extension, released separately (see [extensions](extensions.md)) |
+| `extensions/conversationalbi/compose.yaml` | `iceberg-conversationalbi` | Optional Conversational BI extension, released separately (see [extensions](../extensions.md)) |
 | `extensions/dbt/compose.yaml` | `iceberg-dbt` | Optional dbt extension: API, MCP and viewer, and the launcher of isolated run containers, released separately |
 | `extensions/ingestion/compose.yaml` | `iceberg-ingestion` | Optional Ingestion (dlt) extension: page, API and MCP, and the launcher of isolated run containers, released separately |
 
-- **Keycloak** signs in people and MCP clients. **Polaris** holds all application metadata (teams, users, databases, shares) and enforces data permissions; see the [resource model](CONTEXT.md). There is no separate application database. Polaris also stores the Apache Ossie semantic models of each namespace (beta in Polaris 1.8, see [semantic models](../user_portal/README.md#semantic-models)).
+- **Keycloak** signs in people and MCP clients. **Polaris** holds all application metadata (teams, users, databases, shares) and enforces data permissions; see the [resource model](resource-model.md). There is no separate application database. Polaris also stores the Apache Ossie semantic models of each namespace (beta in Polaris 1.8, see [semantic models](../semantic-models.md)).
 - **The user portal** joins the platform network and doesn't depend on the admin portal. Catalog browsing and notebooks use the signed-in user's own token. The portal uses its platform identity only for directory lookups and for the database and share actions of team administrators.
 - **Both portals** keep sessions in memory ([deployment boundaries](keycloak.md#deployment-boundaries)) and serve `/mcp` for MCP clients, which authenticate every request with their own bearer token.
 
 ## Extensions
 
 Extensions add functionality in their own Compose project and release cycle, and reach the core
-only through the Extension Bridge (`bridge` service, `/bridge/v1`), Iceberg REST and S3. See
-[extensions](extensions.md).
+only through the Extension Bridge (`bridge` service, `/bridge/v1`), Iceberg REST and S3. See the
+[Extension Bridge](extension-bridge.md).
 
 ## Notebooks
 
@@ -90,7 +90,7 @@ only through the Extension Bridge (`bridge` service, `/bridge/v1`), Iceberg REST
 - Each session and database runs in its own container on a private network with the portal, Polaris and RustFS. The container runs as a non-root user with a read-only root filesystem and resource limits, and it never receives the Docker socket or platform secrets.
 - Logging out, switching team or environment, or losing access stops that session's containers. Saved files persist.
 
-The user portal controls Docker and is therefore a trusted service. The same goes for the internal `monitor` collector, which feeds the admin portal's Infrastructure page, and for the launchers of the dbt and Ingestion extensions (`dbt-launcher`, `ing-launcher`), which start their isolated run containers. See the [security model](../SECURITY.md).
+The user portal controls Docker and is therefore a trusted service. The same goes for the internal `monitor` collector, which feeds the admin portal's Infrastructure page, and for the launchers of the dbt and Ingestion extensions (`dbt-launcher`, `ing-launcher`), which start their isolated run containers. See the [security model](../security.md).
 
 ## Repository layout
 
@@ -104,7 +104,7 @@ The user portal controls Docker and is therefore a trusted service. The same goe
 | `scripts/` | Setup, integration checks and release tooling |
 | `pgadmin/` | Preconfigured pgAdmin connection |
 | `test/` | Unit and authorization tests |
-| `docs/` | Documentation |
+| `docs/` | Documentation site, built with Zensical (`zensical.toml`): installer users at the top level, `docs/develop/` for building and internals |
 | `contracts/bridge/` | Extension Bridge contract: OpenAPI, table-property, network and handshake conventions |
 | `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi`, `extensions/dbt` and `extensions/ingestion` |
-| `presentation/` | reveal.js deck, published to GitHub Pages and excluded from source releases |
+| `presentation/` | reveal.js deck, published under `/presentation/` of the documentation site and excluded from source releases |

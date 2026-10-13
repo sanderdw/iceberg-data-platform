@@ -22,19 +22,9 @@ Teams create, own and share their databases. People, notebooks and AI agents all
 - **Data shares:** share selected tables, views and semantic models with another team or with an external party, who gets a credential and a DuckDB script.
 - **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Eight example notebooks cover PyIceberg, DuckDB, Iceberg v3, a data product whose semantic model lives in Polaris, and loading API data with dlt.
 - **MCP servers:** AI agents such as Claude Code sign in through Keycloak to explore data and semantic models, manage databases and data shares, or administer the platform.
-- **Extensions:** add Conversational BI, a chat over your semantic models, dbt pipelines that agents build and test on your tables, and Ingestion (dlt) that loads APIs, databases and files into them. Each is released on its own; see [extensions](docs/extensions.md).
+- **Extensions:** add Conversational BI, a chat over your semantic models, dbt pipelines that agents build and test on your tables, and Ingestion (dlt) that loads APIs, databases and files into them. Each is released on its own; see [extensions](https://sanderdw.github.io/iceberg-data-platform/extensions/).
 
-This is an **educational local development platform**. Read [the security model](SECURITY.md) before deploying it elsewhere.
-
-## Principles
-
-Five principles behind every choice. Check a change against all five.
-
-1. **Clean UX.** One design system. From sign-in to a notebook in a few clicks, one design language in both portals, and a Getting started page in each.
-2. **API first.** The portal is just a client. Every button is a documented route with an OpenAPI schema, so a script can do everything a person can.
-3. **AI native.** Agents are first-class users. Both portals serve MCP with the user's own identity, data products carry their meaning in a semantic model, and agent skills ship with the installer.
-4. **Open source.** No licences. Every building block is Apache-2.0 or MIT, and so is the platform. No vendor account and no trial clock.
-5. **Loosely coupled.** Open interfaces between the components: Iceberg REST, S3, OIDC and MCP, so you can replace one block without touching the others. Bigger capabilities come as extensions behind one contract, so the core stays small.
+This is an **educational local development platform**. Read [the security model](https://sanderdw.github.io/iceberg-data-platform/security/) before deploying it elsewhere.
 
 ## Quick start
 
@@ -50,71 +40,22 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/dow
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. See the [installation guide](docs/install.md) for pinned versions, branch previews, updates and stopping. The installation folder includes [agent skills](docs/install.md#agent-skills) to set up a demo company and to share the portals with a class over the internet. The installer can also add the [Conversational BI extension](docs/install.md#add-conversational-bi), a chat over your semantic models, the [dbt extension](docs/install.md#add-dbt-pipelines), where AI agents build and test pipelines on your tables, and [Ingestion (dlt)](docs/install.md#add-ingestion-dlt), which loads APIs, databases and files into them.
-
-### Run from source
-
-Requires Docker with Compose v2, [uv](https://docs.astral.sh/uv/getting-started/installation/) and at least 4 GiB of Docker memory.
-
-```bash
-uv python install
-uv sync --locked --all-groups
-uv run python -m scripts.setup      # generates .env with random credentials; never commit it
-docker compose up -d --build --wait
-docker compose -f compose.users.yaml --profile images build
-docker compose -f compose.users.yaml up -d --wait users
-```
-
-Rerun the three Docker commands after source changes. Save your notebook work first: recreating the user portal stops running notebooks.
-
-### Services
-
-
-| Service                   | URL                               | Login                                                                                                                        |
-| ------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Administration portal     | http://localhost:3000             | `platform-admin` + initial `PLATFORM_ADMIN_PASSWORD`                                                                         |
-| User portal               | http://localhost:3002             | Keycloak account created or linked by an administrator                                                                       |
-| API documentation         | `/docs` on either portal          | Portal session                                                                                                               |
-| User MCP server           | http://localhost:3002/mcp         | Keycloak sign-in through the `iceberg-mcp` client, your own permissions                                                       |
-| Administration MCP server | http://localhost:3000/mcp         | Keycloak sign-in through the `iceberg-mcp` client, `platform-admin` role                                                      |
-| Keycloak console          | http://localhost:8080/admin       | `admin` + `KEYCLOAK_ADMIN_PASSWORD`                                                                                          |
-| Polaris Iceberg REST API  | http://localhost:8181/api/catalog | Keycloak bearer token ([connect from your computer](user_portal/README.md#connect-from-your-computer)) or client credentials |
-| RustFS console            | http://localhost:9001             | `RUSTFS_ACCESS_KEY` + `RUSTFS_SECRET_KEY`                                                                                    |
-| pgAdmin                   | http://localhost:5050             | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD`                                                                                         |
-| Extension Bridge          | http://localhost:3005/bridge/v1   | Tokens of registered [extensions](docs/extensions.md) only                                                                   |
-| Conversational BI         | http://localhost:3007             | Optional extension; Keycloak account                                                                                         |
-| dbt pipelines             | http://localhost:3004             | Optional extension; Keycloak account, MCP through the `ext-dbt-mcp` client                                                   |
-| Ingestion (dlt)           | http://localhost:3008             | Optional extension; Keycloak account, MCP through the `ext-ingestion-mcp` client                                             |
-
-Credentials are in `.env`. All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [deploying beyond localhost](SECURITY.md#deploying-beyond-localhost) or the [quick-share skill](docs/install.md#agent-skills).
-
-### Connect an AI agent
-
-Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`. On the first tool call the agent opens Keycloak in your browser. For Codex, GitHub Copilot and other clients, see [the user MCP server](user_portal/README.md#connect-an-mcp-client) and [the administration MCP server](docs/admin-guide.md#connect-an-mcp-client). [MCP tools](docs/mcp.md) describes every tool of the user server.
-
-### First steps
-
-1. Open the administration portal, sign in as `platform-admin` and change the temporary password.
-2. Create a team, a database for that team, and a user in that team with the **Read & write** role.
-3. Open the user portal, sign in as that user with the one-time password, and change it.
-4. Open **Notebooks** and pick an example from the notebook selector. Start with **01**, which creates the data that the later examples read.
+The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. Open http://localhost:3000 and follow the [first steps](https://sanderdw.github.io/iceberg-data-platform/first-steps/).
 
 ## Documentation
 
-- [Installation](docs/install.md)
-- [User portal and notebooks](user_portal/README.md)
-- [Administration guide](docs/admin-guide.md)
-- [MCP tools](docs/mcp.md)
-- [Keycloak identity and access](docs/keycloak.md)
-- [Resource model: users, teams, roles, databases, shares](docs/CONTEXT.md)
-- [Form validation rules](docs/form-validation.md)
-- [Architecture](docs/architecture.md)
-- [Extensions and the Extension Bridge](docs/extensions.md)
-- [Security model](SECURITY.md)
-- [Contributing and tests](CONTRIBUTING.md)
-- [Publishing a release](docs/releasing.md)
-- [Changelog](CHANGELOG.md)
-- [Presentation](https://sanderdw.github.io/iceberg-data-platform/)
+The documentation is at **https://sanderdw.github.io/iceberg-data-platform/**.
+
+- [Installation](https://sanderdw.github.io/iceberg-data-platform/install/): pinned versions, branch previews, updates and stopping
+- [First steps](https://sanderdw.github.io/iceberg-data-platform/first-steps/) and the [services](https://sanderdw.github.io/iceberg-data-platform/first-steps/#services)
+- Use the platform: [user portal](https://sanderdw.github.io/iceberg-data-platform/user-portal/), [notebooks](https://sanderdw.github.io/iceberg-data-platform/notebooks/), [semantic models](https://sanderdw.github.io/iceberg-data-platform/semantic-models/), [data shares](https://sanderdw.github.io/iceberg-data-platform/data-shares/), [your own tools](https://sanderdw.github.io/iceberg-data-platform/connect/) and [AI agents](https://sanderdw.github.io/iceberg-data-platform/ai-agents/)
+- [Administration guide](https://sanderdw.github.io/iceberg-data-platform/admin-guide/), [configuration](https://sanderdw.github.io/iceberg-data-platform/configuration/) and the [security model](https://sanderdw.github.io/iceberg-data-platform/security/)
+- [Extensions](https://sanderdw.github.io/iceberg-data-platform/extensions/): Conversational BI, dbt pipelines and Ingestion (dlt)
+- [Develop](https://sanderdw.github.io/iceberg-data-platform/develop/): principles, [run from source](https://sanderdw.github.io/iceberg-data-platform/develop/run-from-source/), [contributing](https://sanderdw.github.io/iceberg-data-platform/develop/contributing/), architecture and internals
+- [Changelog](https://sanderdw.github.io/iceberg-data-platform/changelog/)
+- [Presentation](https://sanderdw.github.io/iceberg-data-platform/presentation/)
+
+The pages are in [`docs/`](docs/), built with [Zensical](https://zensical.org).
 
 ## License
 

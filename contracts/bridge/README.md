@@ -43,7 +43,7 @@ An extension reaches the core through four doors:
 ## Registering an extension
 
 `scripts.setup --extension <id> --origin <url> --handshake <file>` registers an extension and writes
-its [handshake file](v1/handshake.md). See [extensions](../../docs/extensions.md#register-an-extension)
+its [handshake file](v1/handshake.md). See [extensions](../../docs/develop/extension-bridge.md#register-an-extension)
 for the full steps.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for versioning and [CHANGELOG.md](CHANGELOG.md) for changes.

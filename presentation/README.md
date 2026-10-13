@@ -71,4 +71,4 @@ npm run render                   # out/iceberg-data-platform-launch.mp4
 
 Stills for review go in `stills/`, which is git-ignored.
 
-The deck is published at https://sanderdw.github.io/iceberg-data-platform/ by the `Pages` workflow on every push that touches this folder. The folder is excluded from source releases.
+The deck is published at https://sanderdw.github.io/iceberg-data-platform/presentation/ by the `Pages` workflow, together with the documentation site, on every push to main that touches this folder or the documentation. The folder is excluded from source releases.

@@ -27,8 +27,8 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
 
 ## Publish a stable release
 
-1. Update the version in `pyproject.toml`, `package.json`, both fields in `package-lock.json`, `uv.lock` (`uv lock`) and the API versions in `server/app.py` and `user_portal/app.py`. `npm run check:release` rejects any mismatch. Update `CHANGELOG.md`, add the release notes in `docs/releases/X.Y.Z.md` and update the version in the install examples. Record Bridge contract changes in `contracts/bridge/CHANGELOG.md` and the version in `server/bridge.py` (see [COMPATIBILITY.md](../contracts/bridge/COMPATIBILITY.md)); the Bridge has no release of its own.
-2. Run the [checks](../CONTRIBUTING.md#tests) and the dependency audits:
+1. Update the version in `pyproject.toml`, `package.json`, both fields in `package-lock.json`, `uv.lock` (`uv lock`) and the API versions in `server/app.py` and `user_portal/app.py`. `npm run check:release` rejects any mismatch. Update `docs/changelog.md`, add the release notes in `docs/releases/X.Y.Z.md` and to `nav` in `zensical.toml` and update the version in the install examples. Record Bridge contract changes in `contracts/bridge/CHANGELOG.md` and the version in `server/bridge.py` (see [COMPATIBILITY.md](https://github.com/sanderdw/iceberg-data-platform/blob/main/contracts/bridge/COMPATIBILITY.md)); the Bridge has no release of its own.
+2. Run the [checks](contributing.md#tests) and the dependency audits:
 
    ```bash
    uv export --locked --all-groups --no-hashes --no-emit-project --format requirements-txt -o /tmp/iceberg-requirements.txt

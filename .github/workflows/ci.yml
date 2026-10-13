@@ -6,6 +6,8 @@ on:
     paths:
       - '**'
       - '!presentation/**'
+      - '!docs/**'
+      - '!zensical.toml'
       - '!extensions/**'
       - 'extensions/conversationalbi/compose.yaml'
       - 'extensions/conversationalbi/scripts/setup.py'

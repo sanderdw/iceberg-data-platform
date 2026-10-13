@@ -128,7 +128,7 @@ The portal shows models under **Catalog** (with a **Diagram** of the joins), dat
 | `demo-company` | fill the platform with a fictional company and accounts for a class (needs the admin MCP server) |
 | `quick-share` | make the portals reachable from anywhere for a temporary session, and undo that |
 
-Claude Code reads skills from `.claude/skills`; the pointers there lead to `.agents/skills`. See "Agent skills" in `docs/install.md`.
+Claude Code reads skills from `.claude/skills`; the pointers there lead to `.agents/skills`. See [agent skills](https://sanderdw.github.io/iceberg-data-platform/agent-skills/) in the documentation.
 
 ## 5. When something fails
 

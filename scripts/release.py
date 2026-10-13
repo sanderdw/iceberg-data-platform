@@ -41,6 +41,7 @@ ROOT_FILES = (
     "playwright.config.mjs",
     "pyproject.toml",
     "uv.lock",
+    "zensical.toml",
 )
 SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", "contracts", ".github", ".agents")
 # Agent skills ship in the installation bundle at the same paths.
@@ -318,7 +319,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
         # JSON is valid YAML; keep Compose's normalized model without another dependency.
         contents[filename] = (json.dumps(model, indent=2) + "\n").encode()
     for filename in (".env.example", "scripts/setup.py", "pgadmin/servers.json", "compose.lan.yaml",
-                     "compose.users.lan.yaml", "LICENSE", "NOTICE", "docs/install.md", "docs/keycloak.md"):
+                     "compose.users.lan.yaml", "LICENSE", "NOTICE"):
         contents[filename] = (root / filename).read_bytes()
     # Connect your own tools; its defaults match a local installation.
     contents["iceberg_connect.py"] = (root / "user_portal/client/iceberg_connect.py").read_bytes()
