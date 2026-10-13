@@ -202,7 +202,7 @@
     <p class="lede">Apache Iceberg as the table format, with every other building block open source, replaceable, and running on a single laptop.</p>
     <div class="label">Sander de Wildt<br>Apache Iceberg · Polaris · Keycloak<br>RustFS · marimo · DuckDB</div>
   </div>
-  <aside class="notes">Three parts: what Iceberg is and is not, why the all open source approach matters for autonomy and portability, and a demo of the platform itself, with Conversational BI as its first extension. Three parts: Iceberg, the platform, and one demo from raw data to answers. The model diagram and the Conversational BI answer have full-screen views below them (arrow down).</aside>
+  <aside class="notes">Three parts: what Iceberg is and is not, why the all open source approach matters for autonomy and portability, and a demo of the platform itself, with Conversational BI as one of its three extensions. Three parts: Iceberg, the platform, and one demo from raw data to answers. The model diagram and the Conversational BI answer have full-screen views below them (arrow down).</aside>
 </section>
 
 <section>
@@ -237,7 +237,7 @@
     <div class="layer"><span class="n">4 · Open source</span><span class="d"><strong>No licences.</strong> Every building block is Apache-2.0 or MIT, and so is the platform. No vendor account and no trial clock.</span></div>
     <div class="layer"><span class="n">5 · Loosely coupled</span><span class="d"><strong>Open interfaces between the components.</strong> Iceberg REST, S3, OIDC and MCP, so you can replace one block without touching the others. Bigger capabilities come as extensions behind one contract, so the core stays small.</span></div>
   </div>
-  <aside class="notes">This is the lens for the rest of the talk. Clean UX: team members serve themselves; destructive actions ask for the exact name. API first: the UI has no private backdoor, the OpenAPI schema comes from the same code. AI native: MCP on both portals, tokens issued to the iceberg-mcp client, and two skills in the Agent Skills format in the installation folder. Loosely coupled: every connection between building blocks is an open standard, which is what makes swapping possible. The same idea one level up: Conversational BI is an extension with its own release, and it reaches the core only through the Extension Bridge.</aside>
+  <aside class="notes">This is the lens for the rest of the talk. Clean UX: team members serve themselves; destructive actions ask for the exact name. API first: the UI has no private backdoor, the OpenAPI schema comes from the same code. AI native: MCP on both portals, tokens issued to the iceberg-mcp client, and agent skills in the Agent Skills format in the installation folder, such as semantic-model, dbt-platform and ingestion. Loosely coupled: every connection between building blocks is an open standard, which is what makes swapping possible. The same idea one level up: Conversational BI, dbt pipelines and Ingestion are extensions with their own release, and they reach the core only through the Extension Bridge.</aside>
 </section>
 
 <section class="title">
@@ -303,15 +303,17 @@
     <tbody>
       <tr><td>Table format</td><td>Apache Iceberg (PyIceberg)</td><td class="num">spec v2 and v3 · 0.12</td><td class="mono">Apache-2.0</td><td>The standard itself, engines come and go.</td></tr>
       <tr><td>Catalog and permissions</td><td>Apache Polaris</td><td class="num">1.8.0</td><td class="mono">Apache-2.0</td><td>Lakekeeper, Nessie, Gravitino, Unity Catalog OSS, AWS Glue</td></tr>
-      <tr><td>Identity (OIDC)</td><td>Keycloak</td><td class="num">26.7.4</td><td class="mono">Apache-2.0</td><td>Entra ID, Okta, any OIDC provider</td></tr>
-      <tr><td>Object storage (S3 API)</td><td>RustFS</td><td class="num">1.0.0</td><td class="mono">Apache-2.0</td><td>AWS S3, MinIO, Ceph, Cloudflare R2, on-prem</td></tr>
+      <tr><td>Identity (OIDC)</td><td>Keycloak</td><td class="num">26.8.0</td><td class="mono">Apache-2.0</td><td>Entra ID, Okta, any OIDC provider</td></tr>
+      <tr><td>Object storage (S3 API)</td><td>RustFS</td><td class="num">1.0.1</td><td class="mono">Apache-2.0</td><td>AWS S3, MinIO, Ceph, Cloudflare R2, on-prem</td></tr>
       <tr><td>Catalog metadata store</td><td>PostgreSQL</td><td class="num">18</td><td class="mono">PostgreSQL</td><td>Managed Postgres anywhere</td></tr>
-      <tr><td>Notebooks</td><td>marimo</td><td class="num">0.25.0</td><td class="mono">Apache-2.0</td><td>Jupyter, VS Code, any Python client</td></tr>
+      <tr><td>Notebooks</td><td>marimo</td><td class="num">0.25.1</td><td class="mono">Apache-2.0</td><td>Jupyter, VS Code, any Python client</td></tr>
       <tr><td>Query engine</td><td>DuckDB with the iceberg extension, reads and writes</td><td class="num">1.5.6</td><td class="mono">MIT</td><td>Trino, Spark, Flink, Polars, ClickHouse</td></tr>
-      <tr><td>Portals and API</td><td>FastAPI, Python 3.14</td><td class="num">0.141</td><td class="mono">MIT</td><td>Built here, deliberately thin.</td></tr>
+      <tr><td>Portals and API</td><td>FastAPI, Python 3.14</td><td class="num">0.143</td><td class="mono">MIT</td><td>Built here, deliberately thin.</td></tr>
       <tr><td>Semantic models</td><td>Apache Ossie (incubating), stored by Polaris</td><td class="num">spec 0.2.0</td><td class="mono">Apache-2.0</td><td>Any tool that reads the open specification</td></tr>
-      <tr><td>Agent interface</td><td>Model Context Protocol, Python SDK</td><td class="num">2.2</td><td class="mono">MIT</td><td>Any MCP client: Claude Code, IDEs, a custom agent</td></tr>
-      <tr><td>Conversational BI (extension)</td><td>Pydantic AI, CopilotKit, Chart.js, DuckDB</td><td class="num">2.52 · 1.76 · 4.5 · 1.5.5</td><td class="mono">MIT</td><td>Any LLM provider: OpenAI, Anthropic, Gemini, Bedrock</td></tr>
+      <tr><td>Agent interface</td><td>Model Context Protocol, Python SDK</td><td class="num">2.3</td><td class="mono">MIT</td><td>Any MCP client: Claude Code, IDEs, a custom agent</td></tr>
+      <tr><td>Conversational BI (extension)</td><td>Pydantic AI, CopilotKit, Chart.js, DuckDB</td><td class="num">2.55 · 1.79 · 4.5 · 1.5.5</td><td class="mono">MIT</td><td>Any LLM provider: OpenAI, Anthropic, Gemini, Bedrock</td></tr>
+      <tr><td>dbt pipelines (extension)</td><td>dbt v2 OSS on DuckDB</td><td class="num">2.0.5 · 1.5.5</td><td class="mono">Apache-2.0</td><td>Any dbt adapter for an Iceberg engine</td></tr>
+      <tr><td>Ingestion (extension)</td><td>dlt with its Iceberg destination</td><td class="num">1.31</td><td class="mono">Apache-2.0</td><td>Airbyte, Meltano, any Iceberg REST writer</td></tr>
     </tbody>
   </table>
 </section>
@@ -356,13 +358,13 @@
       <text class="lbl" x="560" y="40">bucket and IAM provisioning (S3 API)</text>
       <text class="lbl" x="725" y="275">token validation (JWKS)</text>
       <text class="lbl" x="725" y="405">vended, table-scoped credentials</text>
-      <rect class="out" x="920" y="80" width="240" height="70" rx="8" style="stroke-dasharray:4 4"/><text x="1040" y="110" text-anchor="middle">Conversational BI</text><text class="sub" x="1040" y="134" text-anchor="middle">extension · :3007 · own release</text>
+      <rect class="out" x="920" y="80" width="240" height="70" rx="8" style="stroke-dasharray:4 4"/><text x="1040" y="110" text-anchor="middle">Extensions</text><text class="sub" x="1040" y="134" text-anchor="middle">Conversational BI · dbt · dlt</text>
       <rect x="920" y="190" width="240" height="70" rx="8"/><text x="1040" y="220" text-anchor="middle">Extension Bridge</text><text class="sub" x="1040" y="244" text-anchor="middle">/bridge/v1 · contract 0.1</text>
       <line x1="1040" y1="150" x2="1040" y2="190"/>
       <line x1="920" y1="225" x2="820" y2="210"/>
     </svg>
   </div>
-  <div class="caption foot">iceberg-platform (admin, identity, data, Bridge) and iceberg-workspaces (gateway, notebooks) · both portals serve /mcp · extensions run beside them</div>
+  <div class="caption foot">iceberg-platform (admin, identity, data, Bridge) and iceberg-workspaces (gateway, notebooks) · both portals serve /mcp · extensions run beside them, each with its own release</div>
 </section>
 
 <section>
@@ -498,8 +500,8 @@
       <text class="never" x="520" y="482">secrets · storage keys · core source code</text><text class="never" x="520" y="502">container names · the Polaris management API</text>
     </svg>
   </div>
-  <div class="caption foot">Big capabilities never land in the core · an extension has its own Compose project and release · it refuses to start outside its contract range, &gt;=0.1,&lt;0.2</div>
-  <aside class="notes">This is the loosely coupled principle one level up. An LLM chat brings a heavy dependency tree, a model provider and a fast release cycle; none of that belongs in the catalog and identity layer every team depends on. The core stays small: catalog, storage, identity, portals and notebooks. Sources: contracts/bridge/README.md and COMPATIBILITY.md in the core, and the AGENTS.md of the extension. The Bridge capabilities are user-context, automation-principals, automation-tokens and shared-data. An automation principal is a service account for one team in one environment; only that team's administrators create it, and it reaches the data shares the team received through their read role. Its catalog tokens last an hour. Conversational BI asks only for read tokens. The extension signs people in through its own Keycloak clients, whose tokens Polaris refuses, so a chat session can never be replayed against the catalog. Any producer can describe a table with the table-property conventions, which the catalog shows as Produced by.</aside>
+  <div class="caption foot">Three extensions today: Conversational BI, dbt pipelines and Ingestion (dlt) · each has its own Compose project and release · it refuses to start outside its contract range, &gt;=0.1,&lt;0.2</div>
+  <aside class="notes">This is the loosely coupled principle one level up. An LLM chat brings a heavy dependency tree, a model provider and a fast release cycle; none of that belongs in the catalog and identity layer every team depends on. The core stays small: catalog, storage, identity, portals and notebooks. Sources: contracts/bridge/README.md and COMPATIBILITY.md in the core, and the AGENTS.md of the extension. The Bridge capabilities are user-context, automation-principals, automation-tokens and shared-data. An automation principal is a service account for one team in one environment; only that team's administrators create it, and it reaches the data shares the team received through their read role. Its catalog tokens last an hour. Conversational BI asks only for read tokens. dbt pipelines and Ingestion (dlt) write: each run is an isolated container that writes as the team's service account with a short-lived token, and Ingestion keeps pipeline secrets encrypted and write-only. The extension signs people in through its own Keycloak clients, whose tokens Polaris refuses, so a chat session can never be replayed against the catalog. Any producer can describe a table with the table-property conventions, which the catalog shows as Produced by.</aside>
 </section>
 
 <section class="shot-slide">
@@ -525,7 +527,7 @@
       <li>Revoking a membership stops the affected runtimes within 30 seconds.</li>
       <li>A data share holds one read grant per table, view or semantic model. A receiving team never gets administration; an external secret is shown once, never stored.</li>
       <li>MCP accepts only tokens issued to the <code>iceberg-mcp</code> client, verified on every call: an agent never holds more than its user.</li>
-      <li>Extensions get no secrets or storage keys: a team's service account, enabled by its administrators and revocable by the platform administrator.</li>
+      <li>Extensions get no platform secrets or storage keys: a team's service account, enabled by its administrators and revocable by the platform administrator. dbt and Ingestion runs are isolated containers with a short-lived token.</li>
     </ul>
   </div>
   <div class="caption foot">This build is meant for local development. HTTPS, persistent sessions and hostile-tenant isolation are on the roadmap, and the boundaries are documented.</div>
@@ -563,7 +565,7 @@
     <div style="font-size:0.85em">
       <div class="group"><div class="label tight">Your agent</div><p class="secondary">Claude Code, Codex, GitHub Copilot or any other agent with MCP and a terminal. Registered once against the user portal, it works as <em>you</em>.</p></div>
       <div class="group"><div class="label tight">Your tools</div><p class="secondary"><code>iceberg_connect.py</code> attaches a database to the DuckDB CLI, PyIceberg or DBeaver with the user's own grants. Read-only unless <code>--write</code> is set, and writing needs the Writer role.</p></div>
-      <div class="group"><div class="label tight">Your data</div><p class="secondary">Here Parquet files in a folder. CSV, an S3 bucket or a URL work the same way: DuckDB reads them all.</p></div>
+      <div class="group"><div class="label tight">Your data</div><p class="secondary">Here Parquet files in a folder. CSV, an S3 bucket or a URL work the same way: DuckDB reads them all. For a recurring load, the Ingestion extension runs it on a schedule.</p></div>
     </div>
   </div>
   <div class="caption foot">Real commands and output, run as sander on the demo stack · shortened · the prompts were written for the demo · next: the semantic-model skill takes over</div>
@@ -742,7 +744,7 @@ Questions
     <li><strong>Meaning belongs next to the data.</strong> A semantic model is part of the data product: owned by the team, checked before it is published, and shared and governed like the tables.</li>
     <li><strong>Self-service only works with clear ownership.</strong> Teams create, own and share their databases, while the platform team owns the building blocks.</li>
     <li><strong>Agents use the same front door.</strong> They get the same identity and grants as the people they work for.</li>
-    <li><strong>Keep the core small, grow through extensions.</strong> New capabilities such as Conversational BI come with their own release, behind one versioned contract.</li>
+    <li><strong>Keep the core small, grow through extensions.</strong> New capabilities such as Conversational BI, dbt pipelines and Ingestion come with their own release, behind one versioned contract.</li>
   </ul>
 </section>
 
@@ -752,7 +754,7 @@ Questions
   <div class="meta-row">
     <div>
       <p class="lede">Want to run this yourself, or see a gap I missed? Let me know. We'll take it from there.</p>
-      <p class="link-row"><a class="url" href="video-promo/platform/launch/out/iceberg-data-platform-launch.mp4" target="_blank" rel="noopener">Watch the 90s launch video: six open building blocks, one platform</a><br><a class="url" href="video-promo/semantic-models/iceberg-data-platform-promo.mp4" target="_blank" rel="noopener">Watch the 60s semantic model promo: Conversational BI</a></p>
+      <p class="link-row"><a class="url" href="https://sanderdw.github.io/iceberg-data-platform/" target="_blank" rel="noopener">Read the documentation: install, use and extend the platform</a><br><a class="url" href="video-promo/platform/launch/out/iceberg-data-platform-launch.mp4" target="_blank" rel="noopener">Watch the 90s launch video: six open building blocks, one platform</a><br><a class="url" href="video-promo/semantic-models/iceberg-data-platform-promo.mp4" target="_blank" rel="noopener">Watch the 60s semantic model promo: Conversational BI</a></p>
     </div>
     <div class="label">Regards, Sander<br>github.com/sanderdw/iceberg-data-platform<br>Apache-2.0</div>
   </div>
