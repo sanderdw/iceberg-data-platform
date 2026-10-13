@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - 2026-10-12
+## 0.1.0 - 2026-10-13
 
 - First version of Ingestion (dlt) for the Iceberg Data Platform, on Extension Bridge contract 0.1.
 - Declarative dlt 1.31 pipelines, never code: REST APIs (dlt's `rest_api` source with bearer, API

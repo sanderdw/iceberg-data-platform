@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1 - 2026-10-12
+## 0.1.1 - 2026-10-13
 
 - Updated dependencies, including FastAPI 0.143.0, Pydantic AI 2.55.0, the MCP SDK 2.3.0,
   CopilotKit 1.79.0, Python 3.14.8 and uv 0.13.0.
