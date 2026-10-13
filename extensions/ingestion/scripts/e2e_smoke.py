@@ -7,7 +7,7 @@ serves on the host as host.docker.internal:
 
 - a paginated JSON API with a bearer token (started here, E2E_API_PORT, 8765 by default);
 - a PostgreSQL database, if E2E_POSTGRES_PORT is set (a test-only container published on the host,
-  user, password and database `e2e`).
+  user and database `e2e`, password `e2e-password`).
 
 It loads both twice, to prove that incremental state carries over and merge does not duplicate
 rows, reads the tables back as the team's automation principal (a Bridge read token), checks the
@@ -291,7 +291,7 @@ async def postgres(env, admin, writer, team, database, namespace, tables, create
     import pg8000.native
 
     port = int(env["E2E_POSTGRES_PORT"])
-    db = pg8000.native.Connection("e2e", password="e2e", database="e2e", host="localhost", port=port)
+    db = pg8000.native.Connection("e2e", password="e2e-password", database="e2e", host="localhost", port=port)
     db.run("DROP TABLE IF EXISTS orders")
     db.run("CREATE TABLE orders (id integer primary key, amount numeric(10,2), updated_at timestamptz not null)")
     db.run("INSERT INTO orders VALUES (1, 10, '2026-10-01'), (2, 20, '2026-10-02'), (3, 30, '2026-10-03')")
@@ -303,7 +303,7 @@ async def postgres(env, admin, writer, team, database, namespace, tables, create
                 "tables": [{"name": "orders", "incremental": {"cursor": "updated_at"}}]},
         resources={"orders": {"writeDisposition": "merge", "primaryKey": ["id"]}})
     created.append(pipeline)
-    await admin.call("set_pipeline_secrets", pipeline=pipeline["id"], secrets={"password": "e2e"})
+    await admin.call("set_pipeline_secrets", pipeline=pipeline["id"], secrets={"password": "e2e-password"})
     first = await run(writer, pipeline["id"])
     assert {t["name"]: t["rows"] for t in first["summary"]["tables"]}["orders"] == 3, first["summary"]
     db.run("UPDATE orders SET amount = 25, updated_at = '2026-10-05' WHERE id = 2")

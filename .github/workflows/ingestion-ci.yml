@@ -91,7 +91,7 @@ jobs:
           provider.update_memberships(admin["id"], {**{m["team"]: m["role"] for m in admin["memberships"]}, team: "admin"})
           PY
       - name: A test-only PostgreSQL source on the host
-        run: docker run -d --name ing-e2e-postgres -e POSTGRES_USER=e2e -e POSTGRES_PASSWORD=e2e -e POSTGRES_DB=e2e -p 55432:5432 --health-cmd "pg_isready -U e2e" --health-interval 2s postgres:18-alpine
+        run: docker run -d --name ing-e2e-postgres -e POSTGRES_USER=e2e -e POSTGRES_PASSWORD=e2e-password -e POSTGRES_DB=e2e -p 55432:5432 --health-cmd "pg_isready -U e2e" --health-interval 2s postgres:18-alpine
       - name: Start the Ingestion extension (private sources allowed for the host's test sources)
         working-directory: extensions/ingestion
         env:
