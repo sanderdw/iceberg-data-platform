@@ -46,7 +46,7 @@ def _():
 def _(mo):
     mo.md("""
     # Publish an AI-ready flights data product
-    **Example 6 of 8 · Native DuckDB → Iceberg → Polaris**
+    **Example 6 of 10 · Native DuckDB → Iceberg → Polaris**
 
     A useful data product combines **data, meaning, quality evidence and access**.
     This notebook generates **12,000 synthetic flight instances** plus airports,

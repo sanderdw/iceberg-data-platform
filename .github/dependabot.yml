@@ -25,6 +25,7 @@ updates:
       - /extensions/dbt
       - /extensions/conversationalbi
       - /extensions/ingestion
+      - /extensions/openmetadata
     schedule:
       interval: weekly
   - package-ecosystem: npm
@@ -41,5 +42,6 @@ updates:
       - /extensions/conversationalbi/runtime
       - /extensions/ingestion
       - /extensions/ingestion/runner
+      - /extensions/openmetadata
     schedule:
       interval: weekly

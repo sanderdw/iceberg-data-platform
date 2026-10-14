@@ -56,7 +56,7 @@ LOCAL_DIRS = ("docs/local_only/",)
 # Tracked in git but not part of the core source release: the presentation is published by the
 # GitHub Pages workflow; extensions and their workflows are versioned and released on their own.
 TRACKED_UNRELEASED = ("presentation/", "extensions/", ".github/workflows/conversationalbi-", ".github/workflows/dbt-",
-                      ".github/workflows/ingestion-")
+                      ".github/workflows/ingestion-", ".github/workflows/openmetadata-")
 
 
 def release_files(root=ROOT):

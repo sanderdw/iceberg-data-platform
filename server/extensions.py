@@ -2,6 +2,8 @@
 
 The list is static configuration: both portals and the bridge read it from their own
 environment, so no service depends on another to know which extensions exist.
+`PLATFORM_LISTING_EXTENSIONS=openmetadata,...` names the registered extensions that publish
+listed data shares to a data catalog (Bridge capability `listings`).
 """
 
 import re
@@ -34,6 +36,17 @@ def extensions(env):
     return {id: origin(url) for id, url in parse(env.get("PLATFORM_EXTENSIONS", "")).items()}
 
 
+def listing_extensions(env):
+    """Registered extensions that may read listings, in configuration order."""
+    known = extensions(env)
+    found = []
+    for id in filter(None, (part.strip() for part in env.get("PLATFORM_LISTING_EXTENSIONS", "").split(","))):
+        if id not in known or id in found:
+            raise ValueError(f"Invalid listing extension: {id!r}")
+        found.append(id)
+    return found
+
+
 def client_id(extension):
     return f"ext-{extension}"
 
@@ -43,5 +56,6 @@ def mcp_client_id(extension):
 
 
 def public(env):
-    """What the portals may show: ids and origins, never secrets."""
-    return [{"id": id, "origin": url} for id, url in extensions(env).items()]
+    """What the portals may show: ids, origins and whether one publishes listings, never secrets."""
+    listing = set(listing_extensions(env))
+    return [{"id": id, "origin": url, "listing": id in listing} for id, url in extensions(env).items()]

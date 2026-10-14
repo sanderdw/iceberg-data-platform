@@ -177,6 +177,30 @@ def test_semantic_model_describes_the_six_published_tables(flights):
     assert ("FLIGHT", "dep_delay") not in flagged
 
 
+def test_every_field_says_what_it_means_with_an_ontology_label(flights):
+    _, model, contract = flights
+    semantic = semantic_model(model, contract, ["ai_flights"])
+    fields = {(d["name"], f["name"]): f for d in semantic["datasets"] for f in d["fields"]}
+    assert all(f.get("description", "").endswith(".") for f in fields.values())
+    # A comma in an unquoted flow mapping value would start a new key and cut the description short.
+    meanings = [e for d in contract["datasets"].values() for e in d["fields"].values()]
+    assert all(set(e) <= {"label", "description", "synonyms", "examples"} for e in meanings)
+    concepts = {c["concept"] for c in model["ontology"]}
+    assert {f["label"] for f in fields.values() if "label" in f} <= concepts
+    assert fields[("FLIGHT", "dep_delay")]["label"] == "Delay"
+    assert fields[("FLIGHT", "cancel_code")]["ai_context"] == {"examples": ["A", "B", "C", "D"]}
+    runway = next(d for d in semantic["datasets"] if d["name"] == "RUNWAY")
+    assert "several runways" in runway["ai_context"]["instructions"]
+
+
+def test_semantic_model_rejects_a_label_outside_the_ontology(flights):
+    _, model, contract = flights
+    broken = copy.deepcopy(contract)
+    broken["datasets"]["FLIGHT"]["fields"]["dep_delay"]["label"] = "Lateness"
+    with pytest.raises(ValueError, match="FLIGHT.dep_delay"):
+        semantic_model(model, broken, ["ai_flights"])
+
+
 def test_stored_metrics_give_the_same_answer_as_notebook_seven(flights):
     connection, model, contract = flights
     semantic = semantic_model(model, contract, ["ai_flights"])

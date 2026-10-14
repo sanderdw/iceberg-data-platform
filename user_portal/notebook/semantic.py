@@ -202,15 +202,15 @@ def joins(model, *names):
     return "\n".join(clauses)
 
 
-def model_checks(connection, model):
-    """Evidence from the stored model: primary keys are unique and every relationship finds its target."""
-    report = []
+def model_check_queries(model):
+    """Checks from the stored model, as (label, SQL counting violations): primary keys are unique and
+    every relationship finds its target. Plain SQL over one relation per dataset, for any engine."""
+    queries = []
     for d in model["datasets"]:
         keys = ", ".join(quoted(k) for k in d.get("primary_key", []))
         if keys:
             sql = f"SELECT count(*) FROM (SELECT {keys} FROM {quoted(d['name'])} GROUP BY ALL HAVING count(*) > 1)"
-            report.append({"check": f"{d['name']} key ({keys.replace(chr(34), '')}) is unique",
-                           "violations": connection.execute(sql).fetchone()[0]})
+            queries.append((f"{d['name']} key ({keys.replace(chr(34), '')}) is unique", sql))
     for r in model["relationships"]:
         pairs = list(zip(r["from_columns"], r["to_columns"], strict=True))
         on = " AND ".join(f"f.{quoted(a)} = t.{quoted(b)}" for a, b in pairs)
@@ -219,6 +219,28 @@ def model_checks(connection, model):
             f"SELECT count(*) FROM {quoted(r['from'])} f LEFT JOIN {quoted(r['to'])} t ON {on} "
             f"WHERE {present} AND t.{quoted(pairs[0][1])} IS NULL"
         )
-        report.append({"check": f"{r['name']}: every {r['from']} finds its {r['to']}",
-                       "violations": connection.execute(sql).fetchone()[0]})
-    return report
+        queries.append((f"{r['name']}: every {r['from']} finds its {r['to']}", sql))
+    return queries
+
+
+def model_checks(connection, model):
+    """Evidence from the stored model, run in DuckDB: primary keys are unique and every relationship finds its target."""
+    return [{"check": label, "violations": connection.execute(sql).fetchone()[0]}
+            for label, sql in model_check_queries(model)]
+
+
+def scan_datasets(catalog, model):
+    """One lazy Polars scan per dataset, keyed by the dataset name, over the table the model points at.
+
+    `catalog` is a PyIceberg catalog signed in as the reader, such as `connection.connect()`.
+    """
+    import polars as pl
+
+    from user_portal.notebook.connection import polars_storage_options
+
+    scans = {}
+    for dataset in model["datasets"]:
+        namespace, name = dataset_table(dataset)
+        table = catalog.load_table((*namespace, name))
+        scans[dataset["name"]] = pl.scan_iceberg(table, storage_options=polars_storage_options(table))
+    return scans

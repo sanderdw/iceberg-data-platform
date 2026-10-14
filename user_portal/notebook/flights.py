@@ -65,12 +65,23 @@ DIMENSIONS = {
 }
 
 
-def field_entry(dataset, field):
+def context(item, *keys):
+    """Ossie `ai_context` from the keys of a contract entry that it has."""
+    found = {key: item[key] for key in keys if item.get(key)}
+    return {"ai_context": found} if found else {}
+
+
+def field_entry(dataset, field, meaning):
+    """One Ossie field; `meaning` is its entry in the contract: label, description, synonyms, examples."""
     entry = {"name": field["name"], "expression": field["expression"]}
+    if meaning.get("label"):
+        entry["label"] = meaning["label"]
+    if meaning.get("description"):
+        entry["description"] = meaning["description"]
     is_time = DIMENSIONS.get(dataset, {}).get(field["name"])
     if is_time is not None:
         entry["dimension"] = {"is_time": is_time}
-    return entry
+    return {**entry, **context(meaning, "synonyms", "examples")}
 
 
 def semantic_model(model, contract, namespace, catalog="lakehouse"):
@@ -78,7 +89,9 @@ def semantic_model(model, contract, namespace, catalog="lakehouse"):
 
     Datasets point at the Iceberg tables notebook 06 publishes, the relationships state the joins,
     the metrics carry the agreed SQL with dataset names instead of aliases, and the AI context
-    holds the product facts. Notebook 07 needs nothing else: it reads this model from Polaris.
+    holds the product facts. Fields get the contract's descriptions, synonyms and examples, and a
+    label that names their ontology concept. Notebook 07 needs nothing else: it reads this model
+    from Polaris.
     """
     found = datasets(model)
     columns = {d["name"]: {f["name"] for f in d["fields"]} for d in found}
@@ -91,6 +104,14 @@ def semantic_model(model, contract, namespace, catalog="lakehouse"):
     for name, flagged in DIMENSIONS.items():
         if not set(flagged) <= columns[name]:
             raise ValueError(f"{name} has no field {min(set(flagged) - columns[name])}.")
+    meanings = contract.get("datasets", {})
+    concepts = {c["concept"] for c in model.get("ontology", [])}
+    for name, meaning in meanings.items():
+        if not set(meaning.get("fields", {})) <= columns.get(name, set()):
+            raise ValueError(f"{name} has no field {min(set(meaning.get('fields', {})) - columns.get(name, set()))}.")
+        for field, entry in meaning.get("fields", {}).items():
+            if entry.get("label") and entry["label"] not in concepts:
+                raise ValueError(f"The label of {name}.{field} is not a concept in the ontology.")
     return {
         "name": model["name"],
         "description": f"{model['description']} {contract['grain']}",
@@ -111,7 +132,9 @@ def semantic_model(model, contract, namespace, catalog="lakehouse"):
                 "source": ".".join([catalog, *namespace, table_name(d)]),
                 **({"description": d["description"]} if d.get("description") else {}),
                 "primary_key": PRIMARY_KEYS[d["name"]],
-                "fields": [field_entry(d["name"], f) for f in d["fields"]],
+                **context(meanings.get(d["name"], {}), "instructions"),
+                "fields": [field_entry(d["name"], f, meanings.get(d["name"], {}).get("fields", {}).get(f["name"], {}))
+                           for f in d["fields"]],
             }
             for d in found
         ],

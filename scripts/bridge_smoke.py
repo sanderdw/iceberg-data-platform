@@ -107,7 +107,8 @@ def main():
 
     discovery = httpx.get(bridge, timeout=15).raise_for_status().json()
     assert discovery["contractVersion"].startswith("0.1.") and "automation-tokens" in discovery["capabilities"]
-    assert {"id": extension, "origin": origin} in discovery["extensions"]
+    # The smoke extension is not registered with --listing, so it may not read listings.
+    assert {"id": extension, "origin": origin, "listing": False} in discovery["extensions"]
 
     service = httpx.post(f"{issuer}/protocol/openid-connect/token", timeout=15, data={
         "grant_type": "client_credentials", "client_id": f"ext-{extension}", "client_secret": secret,

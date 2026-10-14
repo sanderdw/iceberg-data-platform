@@ -80,7 +80,11 @@ too. By default create_share and update_share add the tables that selected seman
 read and report them in addedTables. create_share of an external share and
 rotate_share_credential return a client secret once: hand it only to the intended recipient
 and never store it in notebooks, files or chat history. Rotation invalidates the old secret
-and delete_share revokes all access immediately, so ask the user first."""
+and delete_share revokes all access immediately, so ask the user first.
+A share can also be listed (listed=true) when a data catalog extension is installed: its
+names, schemas, descriptions and semantic models are published to that catalog, without data
+or a credential, so others can find the data product and ask the owning team for access.
+A listing grants nothing; contact tells catalog readers whom to ask. update_share can switch it."""
 
 Namespace = Annotated[
     list[Annotated[str, Field(min_length=1, max_length=256)]],
@@ -101,6 +105,8 @@ ShareObjects = Annotated[
     Field(min_length=1, max_length=50, description="Tables, views and semantic models to share; include at least one table."),
 ]
 Recipient = Annotated[str, Field(description="Who receives the share, for your records; up to 120 characters.")]
+Listed = Annotated[bool, Field(description="Publish the share's metadata to the data catalog; grants no access.")]
+Contact = Annotated[str, Field(description="Whom catalog readers ask for access, such as a team mailbox; up to 200 characters.")]
 Expiry = Annotated[datetime | None, Field(description="ISO 8601 time at which access ends; never when omitted.")]
 ModelTables = Annotated[
     bool, Field(description="Also select the tables that selected semantic models read, as the portal does.")
@@ -127,7 +133,7 @@ def model_digest(details, guide, detail="summary", search=None, dataset=None):
     def keep(kind, item):
         shown[kind][1] += 1
         found = not needle or any(needle in str(t).casefold()
-                                  for t in [item["name"], item["description"], *item["synonyms"]])
+                                  for t in [item["name"], item.get("label", ""), item["description"], *item["synonyms"]])
         shown[kind][0] += found
         return found
 
@@ -142,7 +148,8 @@ def model_digest(details, guide, detail="summary", search=None, dataset=None):
                 continue
             fields = [f for f in d["fields"] if keep("fields", f)]
             if not full:
-                fields = [{"name": f["name"], "datatype": f["datatype"], "dimension": f["dimension"],
+                fields = [{"name": f["name"], **({"label": f["label"]} if f.get("label") else {}),
+                           "datatype": f["datatype"], "dimension": f["dimension"],
                            "timeDimension": f["timeDimension"], "summary": first_sentence(f["description"], 120)}
                           for f in fields]
             datasets.append({**d, "fields": fields})
@@ -496,19 +503,22 @@ def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
         objects: ShareObjects,
         external: bool = True,
         recipient_team: TeamId | None = None,
+        listed: Listed = False,
+        contact: Contact = "",
         recipient: Recipient = "",
         description: Description = "",
         expires_at: Expiry = None,
         include_model_tables: ModelTables = True,
     ) -> dict[str, Any]:
-        """Share selected objects of a database you administer with another team, externally, or both.
+        """Share selected objects of a database you administer with another team, externally, in the
+        data catalog, or a combination. Set external=false for a share without an external credential.
 
         An external share returns its connection details and client secret once.
         """
         data = validated(
             ShareInput, "/api/shares", database=database, name=name, objects=[o.model_dump() for o in objects],
-            external=external, recipientTeam=recipient_team, recipient=recipient, description=description,
-            expiresAt=expires_at,
+            external=external, recipientTeam=recipient_team, listed=listed, contact=contact, recipient=recipient,
+            description=description, expiresAt=expires_at,
         )
         session, _ = await resolve(database)
         return await query(lambda: directory.create_share(session, data, include_model_tables=include_model_tables))
@@ -520,14 +530,18 @@ def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
         objects: ShareObjects | None = None,
         recipient: Recipient | None = None,
         description: Description | None = None,
+        listed: Listed | None = None,
+        contact: Contact | None = None,
         expires_at: Expiry = None,
         remove_expiry: bool = False,
         include_model_tables: ModelTables = True,
     ) -> dict[str, Any]:
-        """Change a share's objects, recipient, description or expiry; omitted fields stay as they are."""
+        """Change a share's objects, recipient, description, listing, contact or expiry; omitted fields stay
+        as they are."""
         if expires_at and remove_expiry:
             raise ToolError("Give expires_at or remove_expiry, not both.")
-        fields = {"recipient": recipient, "description": description, "expiresAt": expires_at}
+        fields = {"recipient": recipient, "description": description, "listed": listed, "contact": contact,
+                  "expiresAt": expires_at}
         fields = {k: v for k, v in fields.items() if v is not None}
         if objects is not None:
             fields["objects"] = [o.model_dump() for o in objects]

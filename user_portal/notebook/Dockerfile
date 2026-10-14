@@ -8,7 +8,9 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --group notebook
 # CPU quotas do not constrain host CPU discovery in native numerical libraries.
 # Bound each kernel's pools so several open notebooks fit the runtime's PID limit.
-ENV OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 NUMEXPR_NUM_THREADS=2 ARROW_IO_THREADS=2
+# Polars' own jemalloc would add background purge threads; it purges inline instead.
+ENV OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 NUMEXPR_NUM_THREADS=2 ARROW_IO_THREADS=2 \
+    POLARS_MAX_THREADS=2 POLARS_ASYNC_THREAD_COUNT=2 _RJEM_MALLOC_CONF=background_thread:false
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
 # dlt (example 08) would otherwise send anonymous usage data to dltHub.
 ENV RUNTIME__DLTHUB_TELEMETRY=false

@@ -18,6 +18,7 @@ docker compose -f compose.users.yaml up -d --wait users
 | `POLARIS_SEMANTIC_MODELS` | `true` | Set to `false` to turn off semantic models in Polaris |
 | `POLARIS_TOKEN_LIFETIME` | `3600` | Lifetime in seconds of the catalog tokens of extensions and data-share recipients. Extension runs end 15 minutes before their token expires. A revoked service account or data share keeps its issued tokens up to that long |
 | `MCP_CALLBACK_PORT` | `3010` | OAuth callback port of MCP clients |
+| `PLATFORM_LISTING_EXTENSIONS` | - | Registered extensions that publish listed data shares to a data catalog, such as `openmetadata`. `scripts.setup --extension … --listing` sets it |
 | `POLARIS_PUBLIC_URL` | `http://localhost:8181` | Catalog address for `iceberg_connect.py` and external share recipients |
 | `S3_ENDPOINT` | `http://localhost:9000` | Storage address that Polaris hands out with each table. On restart, the administration portal moves existing databases to it. |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Address of a reverse proxy, so sign-in limits apply per visitor |

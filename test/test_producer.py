@@ -2,7 +2,7 @@
 
 import json
 
-from user_portal.catalog import object_details, producer
+from server.catalog_metadata import object_details, producer
 
 P = "iceberg-data-platform."
 EXTENSIONS = {"dbt": "http://localhost:3004"}

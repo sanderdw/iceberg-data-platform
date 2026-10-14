@@ -28,6 +28,11 @@ An extension reaches the core through four doors:
   environment reaches the principal's read role too. The scope lists these databases with exactly
   the tables, views and semantic models they share. Recipients can't list shared namespaces, so an
   extension loads them by name. This is how Conversational BI reads shared semantic models.
+- **Listings** (capability `listings`). A team administrator can list a data share in a data
+  catalog. An extension registered with `--listing`, such as OpenMetadata, reads the listed
+  shares with its service-account token: names, schemas, descriptions and semantic models,
+  never data or a credential. It publishes them in its catalog so others can find the data
+  product and ask the owning team for a share.
 - **Discovery.** `GET /bridge/v1` returns the endpoints, environments, network aliases and
   registered extensions, so the handshake file holds only the extension's identity.
 
@@ -39,11 +44,12 @@ An extension reaches the core through four doors:
 | `automation-principals` | 0.1 | Enable, list and revoke automation principals per team and environment |
 | `automation-tokens` | 0.1 | Short-lived `read` or `write` catalog tokens for an automation principal. `expiresIn` is the lifetime the platform sets, one hour by default |
 | `shared-data` | 0.1 | Received team shares on the read role, `sharedDatabases` in the scope, `sharedObjects` in `/me` |
+| `listings` | 0.1.1 | `GET /listings` and `GET /listings/{shareId}` for listing extensions: listed data shares with the metadata of their objects |
 
 ## Registering an extension
 
 `scripts.setup --extension <id> --origin <url> --handshake <file>` registers an extension and writes
-its [handshake file](v1/handshake.md). See [extensions](../../docs/develop/extension-bridge.md#register-an-extension)
+its [handshake file](v1/handshake.md). Add `--listing` for an extension that publishes listings. See [extensions](../../docs/develop/extension-bridge.md#register-an-extension)
 for the full steps.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for versioning and [CHANGELOG.md](CHANGELOG.md) for changes.

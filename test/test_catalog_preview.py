@@ -7,8 +7,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from server.catalog_metadata import columns
 from server.models import ServiceError
-from user_portal.catalog import columns
 from user_portal.preview import read_rows, run_preview
 
 

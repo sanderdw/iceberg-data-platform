@@ -21,11 +21,11 @@ const semantic = {
   kind: 'semantic-model', name: 'energy_model', namespace: ['analytics'], specVersion: '0.2.0', entityVersion: '3', definition: '{\n  "name": "Energy"\n}',
   models: [{
     name: 'Energy', description: '<img src=x onerror=alert(1)>Energy use per meter', aiContext: [{label: 'Instructions', value: 'Report kWh per meter.\nExclude test meters.'}, {label: 'Synonyms', value: 'power'}],
-    datasets: [{name: 'READINGS', description: '', source: 'lakehouse.analytics.readings', table: {namespace: ['analytics'], name: 'readings'}, primaryKey: ['meter_id'],
-      fields: [{name: 'kwh', description: 'Energy', datatype: 'Decimal', dimension: false, expressions: [{dialect: 'ANSI_SQL', expression: 'kwh'}]}]},
-      {name: 'METERS', description: '', source: '', table: null, primaryKey: ['id'], fields: [{name: 'id', description: '', datatype: 'Integer', dimension: true, expressions: []}]}],
+    datasets: [{name: 'READINGS', description: '', source: 'lakehouse.analytics.readings', table: {namespace: ['analytics'], name: 'readings'}, primaryKey: ['meter_id'], aiContext: [],
+      fields: [{name: 'kwh', label: 'Energy', description: 'Energy', datatype: 'Decimal', dimension: false, timeDimension: false, synonyms: ['consumption'], aiContext: [{label: 'Instructions', value: 'Sum per meter.'}], expressions: [{dialect: 'ANSI_SQL', expression: 'kwh'}]}]},
+      {name: 'METERS', description: '', source: '', table: null, primaryKey: ['id'], aiContext: [], fields: [{name: 'id', label: '', description: '', datatype: 'Integer', dimension: true, timeDimension: false, synonyms: [], aiContext: [], expressions: []}]}],
     relationships: [{name: 'readings_meter', from: 'READINGS', to: 'METERS', fromColumns: ['meter_id'], toColumns: ['id']}],
-    metrics: [{name: 'total_kwh', description: 'Sum of energy', datatype: 'Decimal', expressions: [{dialect: 'ANSI_SQL', expression: 'SUM(READINGS.kwh)'}]}],
+    metrics: [{name: 'total_kwh', description: 'Sum of energy', datatype: 'Decimal', synonyms: [], aiContext: [], expressions: [{dialect: 'ANSI_SQL', expression: 'SUM(READINGS.kwh)'}]}],
   }],
 };
 let previewCalls = [], deny = false, oidc = true;
@@ -162,7 +162,10 @@ try {
   await expect(page.locator('.sd-box.sd-on')).toHaveCount(2);
   await page.screenshot({path: 'test-results/catalog/semantic-diagram-dark.png', fullPage: true});
   await page.getByRole('tab', {name: 'Datasets & fields', exact: true}).click();
-  await expect(page.getByRole('region', {name: 'Fields of READINGS', exact: true})).toContainText('kwh');
+  const readings = page.getByRole('region', {name: 'Fields of READINGS', exact: true});
+  await expect(readings).toContainText('kwh');
+  await expect(readings).toContainText('Also called: consumption.');
+  await expect(readings).toContainText('Instructions: Sum per meter.');
   await page.getByRole('tab', {name: 'Metrics & relationships', exact: true}).click();
   await expect(page.getByRole('tabpanel')).toContainText('SUM(READINGS.kwh)');
   await expect(page.getByRole('tabpanel')).toContainText('meter_id → id');

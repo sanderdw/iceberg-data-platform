@@ -122,7 +122,7 @@ function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="butt
 async function api(path, method = 'GET', body) { const response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); const result = await response.json(); if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
 // Extensions open in their own origin; the portal only links to them.
-const extensionLabels = {conversationalbi: 'Conversational BI', dbt: 'Pipelines', ingestion: 'Ingestion (dlt)'};
+const extensionLabels = {conversationalbi: 'Conversational BI', dbt: 'Pipelines', ingestion: 'Ingestion (dlt)', openmetadata: 'OpenMetadata'};
 function renderExtensions() {
   document.querySelectorAll('#workspace-nav .extension-link').forEach(link => link.remove());
   for (const extension of state.extensions || []) {

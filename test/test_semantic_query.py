@@ -220,8 +220,11 @@ def test_synonyms_of_fields_and_metrics_join_the_model_map():
                           "ai_context": {"synonyms": ["delayed", 7]}},
                          metric_context={"synonyms": ["cancel rate"]})
     inner["ai_context"]["synonyms"] = {"flight": ["trip"]}
-    assert ossie.parse(inner, ["ai_flights"]).synonyms == {
-        "flight": ["trip"], "FLIGHT.late": ["delayed"], "cancellation_pct": ["cancel rate"]}
+    found = ossie.parse(inner, ["ai_flights"]).synonyms
+    assert found["flight"] == ["trip"] and found["FLIGHT.late"] == ["delayed"]
+    assert found["cancellation_pct"] == ["cancel rate"]
+    # The stored flights model gives its own fields synonyms too.
+    assert found["FLIGHT.dep_delay"] == ["departure delay"]
 
 
 def test_values_never_become_sql():

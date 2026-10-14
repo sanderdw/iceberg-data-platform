@@ -42,6 +42,79 @@ cancellation_codes:
   B: Weather
   C: National air system
   D: Security
+# What each mapped field means, for the stored semantic model. A `label` names the concept in
+# flights.yaml that the field holds, so catalogs can group fields by business meaning. Synonyms
+# and examples become the field's Ossie `ai_context`; `instructions` the dataset's.
+datasets:
+  FLIGHT:
+    instructions: >-
+      One row per scheduled flight instance. Exclude diverted flights when measuring arrival
+      punctuality at the planned destination.
+    fields:
+      id: {label: FlightId, description: Unique identifier of one scheduled flight instance.}
+      nr: {label: FlightNr, description: "IATA flight number: the carrier code followed by a number.", synonyms: [flight number], examples: [XA101]}
+      carrier_code: {label: CarrierCode, description: Two-letter IATA code of the operating carrier; joins CARRIER.code., synonyms: [airline]}
+      route_id: {label: RouteId, description: The route flown; joins ROUTE.id.}
+      tail_nr: {label: TailNr, description: Tail number of the aircraft that flew; joins AIRCRAFT.tail_nr.}
+      date: {description: UTC date of the scheduled departure., synonyms: [flight date]}
+      scheduled_departure: {description: Scheduled departure from the gate in UTC.}
+      scheduled_arrival: {description: Scheduled arrival at the gate in UTC.}
+      scheduled_duration: {label: NrMinutes, description: Scheduled gate-to-gate time in minutes.}
+      departure: {description: Actual departure from the gate in UTC; NULL when canceled.}
+      arrival: {description: Actual arrival at the gate in UTC; NULL when canceled.}
+      dep_delay: {label: Delay, description: "Departure delay in minutes; negative means early, NULL when canceled.", synonyms: [departure delay]}
+      arr_delay: {label: Delay, description: "Arrival delay in minutes; negative means early, NULL when canceled.", synonyms: [arrival delay]}
+      wheels_off: {description: Takeoff time in UTC; NULL when canceled.}
+      wheels_on: {description: Landing time in UTC; NULL when canceled.}
+      duration: {label: NrMinutes, description: "Actual gate-to-gate time in minutes, including taxi; NULL when canceled."}
+      air_time: {label: NrMinutes, description: "Time in the air in minutes, excluding taxi; NULL when canceled."}
+      distance: {label: Distance, description: Actual distance flown in miles; NULL when canceled.}
+      cancelled: {description: True when the flight was canceled., synonyms: [canceled]}
+      diverted: {description: True when the flight landed somewhere other than its planned destination.}
+      cancel_code: {label: CancelationCode, description: "Reason for a cancellation: A carrier, B weather, C national air system, D security; NULL when not canceled.", examples: [A, B, C, D]}
+  CARRIER:
+    fields:
+      code: {label: CarrierCode, description: Two-letter IATA code of the airline., examples: [XA]}
+      name: {label: CarrierName, description: Name of the airline., synonyms: [airline]}
+  AIRCRAFT:
+    fields:
+      serial_nr: {label: SerialNr, description: Serial number from the manufacturer.}
+      name: {description: Name of the aircraft.}
+      nr_seats: {description: Number of passenger seats.}
+      tail_nr: {label: TailNr, description: Tail number that identifies the aircraft., synonyms: [registration]}
+      carrier_code: {label: CarrierCode, description: Carrier that operates the aircraft; joins CARRIER.code.}
+      manufacturer: {label: ManufacturerName, description: Manufacturer of the aircraft.}
+      model: {label: ModelName, description: Model of the aircraft.}
+      year: {label: Year, description: Year the aircraft was manufactured.}
+      capacity: {label: Capacity, description: Capacity of the aircraft in pounds.}
+  AIRPORT:
+    fields:
+      code: {label: AirportCode, description: Three-letter IATA code of the airport., examples: [QAA]}
+      name: {label: AirportName, description: Name of the airport.}
+      city_nm: {label: CityName, description: City the airport is in.}
+      state_code: {label: StateCode, description: Two-letter code of the US state the airport is in.}
+      state_nm: {label: StateName, description: Name of the US state the airport is in.}
+      market_nm: {label: MarketName, description: Market the airport serves.}
+      latitude: {label: DegreesLatitude, description: Latitude of the airport in degrees.}
+      longitude: {label: DegreesLongitude, description: Longitude of the airport in degrees.}
+      opened: {description: Date the airport opened.}
+  ROUTE:
+    fields:
+      id: {label: RouteId, description: The departure and destination airport codes joined by an arrow., examples: [QAA -> QAB]}
+      name: {description: The departure and destination airport names.}
+      orig_airport_code: {label: AirportCode, description: Departure airport; joins AIRPORT.code., synonyms: [origin]}
+      dest_airport_code: {label: AirportCode, description: Destination airport; joins AIRPORT.code., synonyms: [destination]}
+      distance: {label: Distance, description: Planned distance between the two airports in miles.}
+      dist_grp: {label: DistanceGroup, description: "Distance group from 1 (shortest) to 10 (longest), in steps of 300 miles."}
+  RUNWAY:
+    instructions: >-
+      Airports have several runways: never join RUNWAY into a flight aggregate without
+      accounting for that.
+    fields:
+      airport_code: {label: AirportCode, description: Airport the runway belongs to; joins AIRPORT.code.}
+      designator: {label: RunwayDesignator, description: "Designator of the runway, unique within its airport.", examples: [09/27]}
+      length: {label: RunwayLength, description: Length of the runway in feet.}
+      shape: {label: RunwayGeometry, description: Outline of the runway as a JSON list of latitude and longitude pairs.}
 metrics:
   average_departure_delay:
     description: Ossie Airport.average_departure_delay and Route.average_departure_delay; AVG ignores NULL.

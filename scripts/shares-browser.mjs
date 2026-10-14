@@ -6,9 +6,9 @@ import { execFileSync } from 'node:child_process';
 const database = {id: 'db-' + 'a'.repeat(32), name: 'Energy', team: 'analytics', environment: 'development'};
 const recipient = '<img src=x onerror=alert(1)> Partner BV';
 const ownerTeamName = '<img src=x onerror=alert(1)> Source team';
-let sharedOnly = false, includeOwned = false;
+let sharedOnly = false, includeOwned = false, listing = false;
 let role = 'reader', shares = [], calls = [], notebooks = [], environment = 'development', objectLimit = 50;
-const workspace = () => ({user: {name: 'Team member'}, teams: [{id: 'analytics', name: 'Energy analytics', role}], databases: environment === 'development' ? [{...database, ...(sharedOnly ? {shared: true, sharedWithTeam: 'analytics', team: 'owner-team', ownerTeamName} : {})}, ...(includeOwned ? [{...database, id: 'owned-db'}] : [])] : [], activeTeam: 'analytics', activeRole: role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], deletingDatabases: [], notebooks});
+const workspace = () => ({user: {name: 'Team member'}, teams: [{id: 'analytics', name: 'Energy analytics', role}], databases: environment === 'development' ? [{...database, ...(sharedOnly ? {shared: true, sharedWithTeam: 'analytics', team: 'owner-team', ownerTeamName} : {})}, ...(includeOwned ? [{...database, id: 'owned-db'}] : [])] : [], activeTeam: 'analytics', activeRole: role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], deletingDatabases: [], notebooks, extensions: listing ? [{id: 'openmetadata', origin: 'http://catalog.test', listing: true}] : []});
 const issued = (share, secret) => ({share, credentials: {clientId: share.clientId, clientSecret: secret}, connection: {type: 'iceberg-rest', uri: 'https://catalog.example/api/catalog', warehouse: database.id, oauth2ServerUri: 'https://catalog.example/api/catalog/v1/oauth/tokens', scope: 'PRINCIPAL_ROLE:ALL', accessDelegation: 'vended-credentials', s3Endpoint: 'https://s3.example', credential: `${share.clientId}:${secret}`, identifiers: share.objects.map(o => ({kind: o.kind, identifier: [...o.namespace, o.name].join('.')}))}});
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 try {
@@ -102,6 +102,8 @@ try {
   await expect(page.locator('.shares')).toContainText('Nothing in this database is shared.');
   await page.getByRole('button', {name: 'New data share', exact: true}).click();
   await page.getByLabel('Share name').fill('partner');
+  // Without a data catalog extension there is nothing to list in.
+  await expect(page.getByLabel('Listed in the data catalog', {exact: true})).toHaveCount(0);
   await page.getByLabel('Recipient', {exact: true}).fill(recipient);
   await page.evaluate(() => { document.activeElement.blur(); return refreshWorkspace(); });
   await expect(page.getByLabel('Recipient', {exact: true})).toHaveValue(recipient);
@@ -298,6 +300,49 @@ print(json.dumps(outputs))
   await expect(page.locator('.share-issued')).toBeVisible();
   expect(calls.at(-1).input.external).toBe(true);
   expect(calls.at(-1).input.recipientTeam).toBe('team-' + 'c'.repeat(32));
+  if ('listed' in calls.at(-1).input) throw new Error('A share was listed without a data catalog extension');
+  await page.getByRole('button', {name: 'Done, I stored the secret', exact: true}).click();
+  // With a data catalog extension a share can be listed alone: no credential, and switchable later.
+  await expect(page.locator('.shares')).toContainText('team-and-external');
+  listing = true;
+  await page.reload();
+  await expect(page.locator('#shares-page')).toBeVisible();
+  await page.getByRole('button', {name: 'New data share', exact: true}).click();
+  await page.getByLabel('Share name').fill('catalog');
+  await expect(page.getByLabel('Contact for access requests')).toBeHidden();
+  await page.getByLabel('Listed in the data catalog', {exact: true}).check();
+  await expect(page.locator('.share-form')).toContainText('A listing grants no access.');
+  await page.getByLabel('Contact for access requests').fill('data@example.test');
+  await page.getByLabel('Externally', {exact: true}).uncheck();
+  await page.locator('.share-tree summary').filter({hasText: 'analytics'}).click();
+  await page.getByLabel('readings').check();
+  await page.screenshot({path: 'test-results/shares/listing-form.png', fullPage: true});
+  await page.getByRole('button', {name: 'Create share', exact: true}).click();
+  await expect(page.locator('#notice')).toContainText('The data catalog shows its metadata');
+  const listedInput = calls.at(-1).input;
+  if (listedInput.listed !== true || listedInput.contact !== 'data@example.test' || listedInput.external !== false || listedInput.recipientTeam !== null) throw new Error('Unexpected listing request: ' + JSON.stringify(listedInput));
+  await expect(grid).toContainText('Listed');
+  await expect(page.getByRole('button', {name: 'New secret', exact: true})).toHaveCount(0);
+  await grid.getByRole('button', {name: 'Edit', exact: true}).click();
+  await expect(page.getByLabel('Listed in the data catalog', {exact: true})).toBeEnabled();
+  await expect(page.getByLabel('Externally', {exact: true})).toBeDisabled();
+  await page.getByLabel('Contact for access requests').fill('ops@example.test');
+  await page.getByRole('button', {name: 'Save share', exact: true}).click();
+  if (calls.at(-1).method !== 'PATCH' || calls.at(-1).input.listed !== true || calls.at(-1).input.contact !== 'ops@example.test') throw new Error('Unexpected listing edit: ' + JSON.stringify(calls.at(-1)));
+  // Without the extension a listed share can still be edited, and unlisted, but not listed again.
+  listing = false;
+  await page.reload();
+  await expect(page.locator('#shares-page')).toBeVisible();
+  await grid.getByRole('button', {name: 'Edit', exact: true}).click();
+  await page.getByLabel('Contact for access requests').fill('team@example.test');
+  await page.getByRole('button', {name: 'Save share', exact: true}).click();
+  await expect(page.locator('#notice')).toContainText('Share saved.');
+  if ('listed' in calls.at(-1).input || calls.at(-1).input.contact !== 'team@example.test') throw new Error('An unchanged listing was sent without a data catalog extension: ' + JSON.stringify(calls.at(-1)));
+  await grid.getByRole('button', {name: 'Edit', exact: true}).click();
+  await page.getByLabel('Listed in the data catalog', {exact: true}).uncheck();
+  await page.getByRole('button', {name: 'Save share', exact: true}).click();
+  await expect(page.locator('#notice')).toContainText('Share saved.');
+  if (calls.at(-1).input.listed !== false) throw new Error('Unlisting was not sent: ' + JSON.stringify(calls.at(-1)));
   sharedOnly = true; includeOwned = true; role = 'admin';
   await page.reload();
   await page.getByRole('button', {name: 'Team overview', exact: true}).click();
@@ -353,5 +398,5 @@ print(json.dumps(outputs))
   await expect(page.locator('#team-shares img')).toHaveCount(0);
   await expect(page.getByRole('button', {name: 'New data share', exact: true})).toHaveCount(0);
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS: workspace navigation, share lifecycle, credentials, escaping, ownership across overview/databases/catalog/notebooks, duplicate database names, shared-only teams, read-only controls, route restoration, dark/light/mobile layouts, semantic models add their tables to a share');
+  console.log('PASS: workspace navigation, share lifecycle, credentials, escaping, ownership across overview/databases/catalog/notebooks, duplicate database names, shared-only teams, read-only controls, route restoration, dark/light/mobile layouts, semantic models add their tables to a share, listings only with a data catalog extension');
 } finally { await browser.close(); }

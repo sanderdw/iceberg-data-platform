@@ -454,3 +454,47 @@ def test_a_share_with_only_a_semantic_model_is_refused(stack):
     _, db = stack
     with pytest.raises(ValueError, match="tables that the shared views and semantic models read"):
         share_input(db, objects=(MODEL,))
+
+
+def test_a_listed_share_is_never_activated_and_has_no_credential(stack):
+    provider, db = stack
+    result = provider.create_share(share_input(db, external=False, listed=True, contact="data@example.test"), CREATOR)
+    share = result["share"]
+    assert "credentials" not in result and "connection" not in result
+    assert (share["listed"], share["external"], share["recipientTeam"], share["contact"]) == (
+        True, False, None, "data@example.test")
+    # Its grants are stored but no principal holds them.
+    assert f"/principals/{share['id']}/principal-roles" not in provider.grants
+    assert not any(path.startswith(f"/principals/{share['id']}/principal-roles") for path, *_ in provider.events)
+    with pytest.raises(ServiceError, match="no external credential"):
+        provider.rotate_share(share["id"])
+    assert provider.list_shares(db)[0]["listed"] is True
+
+
+def test_a_listing_can_join_other_destinations_and_be_switched(stack):
+    provider, db = stack
+    both = provider.create_share(share_input(db, listed=True), CREATOR)
+    assert both["credentials"] and both["share"]["listed"]
+    id = both["share"]["id"]
+    unlisted = provider.update_share(id, ShareUpdate.model_validate({"listed": False, "contact": "ops"}))
+    assert (unlisted["listed"], unlisted["contact"], unlisted["external"]) == (False, "ops", True)
+    assert provider.update_share(id, ShareUpdate.model_validate({"listed": True}))["listed"] is True
+    # A listing-only share cannot lose its last destination.
+    only = provider.create_share(share_input(db, name="catalog", external=False, listed=True), CREATOR)["share"]
+    with pytest.raises(ServiceError, match="Revoke it instead") as exc:
+        provider.update_share(only["id"], ShareUpdate.model_validate({"listed": False}))
+    assert exc.value.status == 422
+    assert provider.list_shares(db)[0]["listed"] is True
+    # A share created before listings existed reads as not listed.
+    principal = provider.resources["principals"][id]
+    principal["properties"].pop("portal.listed")
+    assert next(s for s in provider.list_shares(db) if s["id"] == id)["listed"] is False
+
+
+def test_the_audience_may_be_a_listing_alone(stack):
+    from pydantic import ValidationError
+
+    _, db = stack
+    assert share_input(db, external=False, listed=True).listed
+    with pytest.raises(ValidationError, match="a data catalog listing"):
+        share_input(db, external=False)

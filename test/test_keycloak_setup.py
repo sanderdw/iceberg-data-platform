@@ -103,13 +103,20 @@ def test_extension_registration_writes_a_private_handshake(config_root):
     }
     # Registering again keeps the secret; a second extension is appended; setup leaves both alone.
     register_extension(config_root, "dbt", "http://localhost:3004", handshake)
-    register_extension(config_root, "other", "http://localhost:3009", config_root / "other.env")
+    register_extension(config_root, "other", "http://localhost:3009", config_root / "other.env", listing=True)
     setup(config_root)
     values = read_env(config_root / ".env")
     assert values["PLATFORM_EXTENSIONS"] == "dbt=http://localhost:3004,other=http://localhost:3009"
     assert values["PLATFORM_EXTENSION_SECRETS"].startswith(f"dbt={secret},other=")
+    assert values["PLATFORM_LISTING_EXTENSIONS"] == "other"
     remove_extension(config_root, "dbt")
     assert read_env(config_root / ".env")["PLATFORM_EXTENSIONS"] == "other=http://localhost:3009"
+    # Registering without --listing withdraws it; removing the extension does too.
+    register_extension(config_root, "other", "http://localhost:3009", config_root / "other.env")
+    assert read_env(config_root / ".env")["PLATFORM_LISTING_EXTENSIONS"] == ""
+    register_extension(config_root, "other", "http://localhost:3009", config_root / "other.env", listing=True)
+    remove_extension(config_root, "other")
+    assert read_env(config_root / ".env")["PLATFORM_LISTING_EXTENSIONS"] == ""
     for bad_id, origin in (("DBT", "http://localhost:3004"), ("dbt", "http://localhost:3004/path")):
         with pytest.raises(SystemExit):
             register_extension(config_root, bad_id, origin, handshake)

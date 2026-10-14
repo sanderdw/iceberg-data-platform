@@ -650,3 +650,25 @@ def test_streamable_http_round_trip_authenticates_each_request(stack):
                for name in ("delete_database", "rotate_share_credential", "delete_share", "delete_semantic_model"))
     assert not result.is_error, text(result)
     assert [d["id"] for d in result.structured_content["databases"]] == stack.databases[:1]
+
+
+def test_share_tools_list_a_share_in_the_data_catalog(stack, monkeypatch):
+    team = stack.teams[0]
+    database = stack.databases[0]
+    stack.provider.update_memberships(stack.account["id"], {team: "admin"})
+    sessions = {"kind": "table", "namespace": ["analytics"], "name": "sessions"}
+    arguments = {"database": database, "name": "catalog", "objects": [sessions], "external": False,
+                 "listed": True, "contact": "data@example.test"}
+    refused = call(stack, stack.token, "create_share", arguments)
+    assert refused.is_error and "data catalog extension" in text(refused)
+    monkeypatch.setenv("PLATFORM_EXTENSIONS", "openmetadata=http://localhost:3011")
+    monkeypatch.setenv("PLATFORM_LISTING_EXTENSIONS", "openmetadata")
+    created = call(stack, stack.token, "create_share", arguments)
+    assert not created.is_error, text(created)
+    share = created.structured_content["share"]
+    assert "credentials" not in created.structured_content
+    assert (share["listed"], share["contact"], share["external"]) == (True, "data@example.test", False)
+    last = call(stack, stack.token, "update_share", {"database": database, "share": share["id"], "listed": False})
+    assert last.is_error and "Revoke it instead" in text(last)
+    updated = call(stack, stack.token, "update_share", {"database": database, "share": share["id"], "contact": "ops"})
+    assert not updated.is_error and updated.structured_content["share"]["contact"] == "ops"

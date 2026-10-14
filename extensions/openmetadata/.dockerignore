@@ -1,0 +1,12 @@
+**
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!NOTICE
+!THIRD_PARTY_NOTICES.md
+!openmetadata_sync/
+!openmetadata_sync/**
+**/__pycache__/
+**/.venv/
+**/.env*

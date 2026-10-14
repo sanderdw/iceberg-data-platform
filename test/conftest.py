@@ -74,6 +74,8 @@ class MemoryPolaris(PolarisProvider):
         self.missing = set()
         self.events = []
         self.fail = None
+        # Catalog API responses by path, such as a loadTable result; anything else lists nothing.
+        self.catalog = {}
         self.storage = Mock()
         self.storage.create_bucket.side_effect = lambda name, team: f"db-{name}-123456789abc"
         self.storage.create_user.side_effect = lambda key, buckets: {
@@ -187,6 +189,13 @@ class MemoryPolaris(PolarisProvider):
 
     def request(self, path, method="GET", body=None, retry=True):
         self.events.append((path, method, body))
+        if self.fail and (failure := self.fail(path, method, body)):
+            # A test may inject a specific error, such as 406 for a feature that is off.
+            raise failure if isinstance(failure, ServiceError) else ServiceError(502, "injected failure")
+        if path in self.catalog:
+            if self.catalog[path] is None:
+                raise ServiceError(404, "Not found.")
+            return copy.deepcopy(self.catalog[path])
         return {"namespaces": [], "identifiers": []}
 
 

@@ -123,11 +123,14 @@ def share_expiry(value):
 class ShareInput(Input):
     external: bool = True
     recipient_team: TeamId | None = Field(default=None, alias="recipientTeam")
+    # A listing publishes metadata to a data catalog through a listing extension; it grants no access.
+    listed: bool = False
+    contact: str = Field(default="", max_length=200)
 
     @model_validator(mode="after")
     def audience(self):
-        if not self.external and not self.recipient_team:
-            raise ValueError("Choose another team, external sharing, or both.")
+        if not self.external and not self.recipient_team and not self.listed:
+            raise ValueError("Choose another team, external sharing, a data catalog listing, or a combination.")
         return self
 
     database: DatabaseId
@@ -148,6 +151,9 @@ class ShareUpdate(Input):
     description: str | None = Field(default=None, max_length=280)
     objects: list[ShareObject] | None = Field(default=None, min_length=1, max_length=50)
     expires_at: datetime | None = Field(default=None, alias="expiresAt")
+    # Unlike the team and external destinations, a listing can be switched: it grants nothing.
+    listed: bool | None = None
+    contact: str | None = Field(default=None, max_length=200)
 
     objects_valid = field_validator("objects")(share_objects)
     expiry_valid = field_validator("expires_at")(share_expiry)

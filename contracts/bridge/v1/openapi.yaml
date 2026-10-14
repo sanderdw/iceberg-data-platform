@@ -3,7 +3,7 @@
   "info": {
     "title": "Iceberg Platform Bridge",
     "description": "The stable interface for extensions. Authenticate with a Keycloak access token for the `iceberg-bridge` audience: a user token issued to the extension's clients, or the service-account token of the extension's confidential client. See contracts/bridge for the compatibility policy.",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "paths": {
     "/bridge/v1": {
@@ -760,6 +760,223 @@
           }
         ]
       }
+    },
+    "/bridge/v1/listings": {
+      "get": {
+        "summary": "Data shares listed in a data catalog (listing extensions)",
+        "operationId": "all_listings_bridge_v1_listings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "KeycloakBearer": []
+          }
+        ]
+      }
+    },
+    "/bridge/v1/listings/{shareId}": {
+      "get": {
+        "summary": "One listing with the metadata of its objects (listing extensions)",
+        "operationId": "one_listing_bridge_v1_listings__shareId__get",
+        "parameters": [
+          {
+            "name": "shareId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^share-[a-f0-9]{32}$",
+              "title": "Shareid"
+            }
+          },
+          {
+            "name": "if-none-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Listing"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "304": {
+            "description": "Not Modified"
+          }
+        },
+        "security": [
+          {
+            "KeycloakBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -964,6 +1181,65 @@
         ],
         "title": "CatalogEndpoints"
       },
+      "Column": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required"
+          },
+          "doc": {
+            "type": "string",
+            "title": "Doc"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "type": "array",
+            "title": "Children",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "required",
+          "doc"
+        ],
+        "title": "Column"
+      },
+      "ContextRow": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "ContextRow"
+      },
       "Database": {
         "properties": {
           "id": {
@@ -1078,6 +1354,24 @@
         ],
         "title": "Error"
       },
+      "Expression": {
+        "properties": {
+          "dialect": {
+            "type": "string",
+            "title": "Dialect"
+          },
+          "expression": {
+            "type": "string",
+            "title": "Expression"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dialect",
+          "expression"
+        ],
+        "title": "Expression"
+      },
       "Extension": {
         "properties": {
           "id": {
@@ -1087,6 +1381,11 @@
           "origin": {
             "type": "string",
             "title": "Origin"
+          },
+          "listing": {
+            "type": "boolean",
+            "title": "Listing",
+            "default": false
           }
         },
         "type": "object",
@@ -1095,6 +1394,411 @@
           "origin"
         ],
         "title": "Extension"
+      },
+      "LineageInput": {
+        "properties": {
+          "database": {
+            "type": "string",
+            "title": "Database"
+          },
+          "namespace": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database",
+          "namespace",
+          "name"
+        ],
+        "title": "LineageInput"
+      },
+      "ListedSemanticModel": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "semantic-model",
+            "title": "Kind"
+          },
+          "namespace": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "specVersion": {
+            "type": "string",
+            "title": "Specversion"
+          },
+          "entityVersion": {
+            "type": "string",
+            "title": "Entityversion"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticModel"
+            },
+            "type": "array",
+            "title": "Models"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "namespace",
+          "name",
+          "specVersion",
+          "entityVersion",
+          "models"
+        ],
+        "title": "ListedSemanticModel"
+      },
+      "ListedTable": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "table",
+            "title": "Kind"
+          },
+          "namespace": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uuid"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "partitionFields": {
+            "items": {
+              "$ref": "#/components/schemas/PartitionField"
+            },
+            "type": "array",
+            "title": "Partitionfields"
+          },
+          "rowCount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rowcount"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedat"
+          },
+          "producer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Producer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "namespace",
+          "name",
+          "comment",
+          "columns",
+          "partitionFields"
+        ],
+        "title": "ListedTable"
+      },
+      "ListedView": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "view",
+            "title": "Kind"
+          },
+          "namespace": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uuid"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "namespace",
+          "name",
+          "comment",
+          "columns"
+        ],
+        "title": "ListedView"
+      },
+      "Listing": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "contact": {
+            "type": "string",
+            "title": "Contact"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiresat"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/ListingOwner"
+          },
+          "database": {
+            "$ref": "#/components/schemas/ListingDatabase"
+          },
+          "objects": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ListedTable"
+                },
+                {
+                  "$ref": "#/components/schemas/ListedView"
+                },
+                {
+                  "$ref": "#/components/schemas/ListedSemanticModel"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "semantic-model": "#/components/schemas/ListedSemanticModel",
+                  "table": "#/components/schemas/ListedTable",
+                  "view": "#/components/schemas/ListedView"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Objects"
+          },
+          "unavailable": {
+            "items": {
+              "$ref": "#/components/schemas/SharedObject"
+            },
+            "type": "array",
+            "title": "Unavailable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "contact",
+          "version",
+          "owner",
+          "database",
+          "objects",
+          "unavailable"
+        ],
+        "title": "Listing"
+      },
+      "ListingDatabase": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "environment"
+        ],
+        "title": "ListingDatabase"
+      },
+      "ListingList": {
+        "properties": {
+          "listings": {
+            "items": {
+              "$ref": "#/components/schemas/ListingSummary"
+            },
+            "type": "array",
+            "title": "Listings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "listings"
+        ],
+        "title": "ListingList"
+      },
+      "ListingOwner": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "teamName": {
+            "type": "string",
+            "title": "Teamname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "teamName"
+        ],
+        "title": "ListingOwner"
+      },
+      "ListingSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "databaseId": {
+            "type": "string",
+            "title": "Databaseid"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "databaseId",
+          "environment"
+        ],
+        "title": "ListingSummary"
       },
       "Membership": {
         "properties": {
@@ -1124,6 +1828,232 @@
           "role"
         ],
         "title": "Membership"
+      },
+      "ModelDataset": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "table": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelTable"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "primaryKey": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Primarykey"
+          },
+          "aiContext": {
+            "items": {
+              "$ref": "#/components/schemas/ContextRow"
+            },
+            "type": "array",
+            "title": "Aicontext"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ModelField"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "source",
+          "primaryKey",
+          "aiContext",
+          "fields"
+        ],
+        "title": "ModelDataset"
+      },
+      "ModelField": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "datatype": {
+            "type": "string",
+            "title": "Datatype"
+          },
+          "dimension": {
+            "type": "boolean",
+            "title": "Dimension"
+          },
+          "timeDimension": {
+            "type": "boolean",
+            "title": "Timedimension"
+          },
+          "synonyms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Synonyms"
+          },
+          "aiContext": {
+            "items": {
+              "$ref": "#/components/schemas/ContextRow"
+            },
+            "type": "array",
+            "title": "Aicontext"
+          },
+          "expressions": {
+            "items": {
+              "$ref": "#/components/schemas/Expression"
+            },
+            "type": "array",
+            "title": "Expressions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "label",
+          "description",
+          "datatype",
+          "dimension",
+          "timeDimension",
+          "synonyms",
+          "aiContext",
+          "expressions"
+        ],
+        "title": "ModelField"
+      },
+      "ModelMetric": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "datatype": {
+            "type": "string",
+            "title": "Datatype"
+          },
+          "synonyms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Synonyms"
+          },
+          "aiContext": {
+            "items": {
+              "$ref": "#/components/schemas/ContextRow"
+            },
+            "type": "array",
+            "title": "Aicontext"
+          },
+          "expressions": {
+            "items": {
+              "$ref": "#/components/schemas/Expression"
+            },
+            "type": "array",
+            "title": "Expressions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "datatype",
+          "synonyms",
+          "aiContext",
+          "expressions"
+        ],
+        "title": "ModelMetric"
+      },
+      "ModelRelationship": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "from": {
+            "type": "string",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "title": "To"
+          },
+          "fromColumns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fromcolumns"
+          },
+          "toColumns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tocolumns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "from",
+          "to",
+          "fromColumns",
+          "toColumns"
+        ],
+        "title": "ModelRelationship"
+      },
+      "ModelTable": {
+        "properties": {
+          "namespace": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "namespace",
+          "name"
+        ],
+        "title": "ModelTable"
       },
       "Network": {
         "properties": {
@@ -1178,6 +2108,177 @@
           "bridgeAudience"
         ],
         "title": "OIDCEndpoints"
+      },
+      "PartitionField": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "sourceColumn": {
+            "type": "string",
+            "title": "Sourcecolumn"
+          },
+          "transform": {
+            "type": "string",
+            "title": "Transform"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "sourceColumn",
+          "transform"
+        ],
+        "title": "PartitionField"
+      },
+      "Producer": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "extension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runid"
+          },
+          "runAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runat"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/LineageInput"
+            },
+            "type": "array",
+            "title": "Inputs",
+            "default": []
+          },
+          "inputsTruncated": {
+            "type": "boolean",
+            "title": "Inputstruncated",
+            "default": false
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Quality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "Producer"
+      },
+      "Quality": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "checkedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "Quality"
       },
       "Revoked": {
         "properties": {
@@ -1280,6 +2381,56 @@
           "sharedObjects"
         ],
         "title": "ScopedSharedDatabase"
+      },
+      "SemanticModel": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "aiContext": {
+            "items": {
+              "$ref": "#/components/schemas/ContextRow"
+            },
+            "type": "array",
+            "title": "Aicontext"
+          },
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/ModelDataset"
+            },
+            "type": "array",
+            "title": "Datasets"
+          },
+          "relationships": {
+            "items": {
+              "$ref": "#/components/schemas/ModelRelationship"
+            },
+            "type": "array",
+            "title": "Relationships"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/ModelMetric"
+            },
+            "type": "array",
+            "title": "Metrics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "aiContext",
+          "datasets",
+          "relationships",
+          "metrics"
+        ],
+        "title": "SemanticModel"
       },
       "SharedDatabase": {
         "properties": {

@@ -35,11 +35,13 @@ The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the ima
 - **[Administration portal](admin-guide.md):** manage teams, users with a role per team, databases and data shares, and browse every Polaris catalog.
 - **[User portal](user-portal.md):** sign in with Keycloak, pick a team and environment, and manage databases, browse catalogs, open notebooks and share data.
 - **Catalog details:** table schemas, snapshots, branches and tags, partitioning, view SQL and a 100-row preview, plus [semantic models](semantic-models.md) with a diagram of their datasets and relationships, all with your own permissions.
-- **[Data shares](data-shares.md):** share selected tables, views and semantic models with another team or with an external party, who gets a credential and a DuckDB script.
-- **[Team notebooks](notebooks.md):** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Eight example notebooks cover PyIceberg, DuckDB, Iceberg v3, a data product whose semantic model lives in Polaris, and loading API data with dlt.
+- **[Data shares](data-shares.md):** share selected tables, views and semantic models with another team or with an external party, who gets a credential and a DuckDB script, or list them in a data catalog, metadata only.
+- **[Team notebooks](notebooks.md):** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Ten example notebooks cover PyIceberg, DuckDB, Iceberg v3, two data products whose semantic models live in Polaris (one with DuckDB, one with Polars), and loading API data with dlt.
 - **[MCP servers](ai-agents.md):** AI agents such as Claude Code sign in through Keycloak to explore data and semantic models, manage databases and data shares, or administer the platform.
-- **[Extensions](extensions.md):** add Conversational BI, a chat over your semantic models, dbt pipelines that agents build and test on your tables, and Ingestion (dlt) that loads APIs, databases and files into them. Each is released on its own.
+- **[Extensions](extensions.md):** add Conversational BI, a chat over your semantic models, dbt pipelines that agents build and test on your tables, Ingestion (dlt) that loads APIs, databases and files into them, and OpenMetadata, which lists your data products in a data catalog. Each is released on its own.
 
 This is an **educational local development platform**. Read [the security model](security.md) before deploying it elsewhere.
 
 The [presentation](https://sanderdw.github.io/iceberg-data-platform/presentation/) walks through Apache Iceberg, the platform and a demo from raw data to answers.
+
+Questions? Start with the [FAQ](faq.md).
