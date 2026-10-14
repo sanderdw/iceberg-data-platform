@@ -60,6 +60,9 @@ class OpenMetadata:
             entity = await self.request("PATCH", f"/{collection}/{entity['id']}", patch=ops)
         return entity
 
+    async def patch(self, collection, id, ops):
+        return await self.request("PATCH", f"/{collection}/{id}", patch=ops)
+
     async def get(self, collection, fqn, fields=None):
         try:
             return await self.request("GET", f"/{collection}/name/{enc(fqn)}",

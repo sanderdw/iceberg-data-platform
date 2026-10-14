@@ -29,6 +29,7 @@ nav = [
     { "Administer" = ["admin-guide.md", "configuration.md", "security.md"] },
     { "Extensions" = ["extensions.md", "conversational-bi.md", "dbt.md", "ingestion.md", "openmetadata.md"] },
   ] },
+  { "FAQ" = "faq.md" },
   { "Develop" = [
     "develop/index.md",
     "develop/run-from-source.md",

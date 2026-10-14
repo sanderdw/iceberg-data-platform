@@ -7,7 +7,8 @@ metrics. This module turns that into:
 - glossary terms: a term per model, with its datasets and described fields as child terms, in one
   glossary per installation, named `<prefix>__<database>__<namespace…>__<model>[__<dataset>[__<field>]]`
   with the readable name as display name;
-- a classification of field labels (Ossie's "label for categorization"), a tag per label;
+- a classification of field labels (Ossie's "label for categorization") per installation, named
+  `<prefix>__<domain> labels`, a tag per label;
 - notes, term tags and label tags for the tables and columns that datasets and fields read;
 - a section per model for the data product's description.
 
@@ -27,23 +28,30 @@ def glossary_request(domain):
                            "Data Platform list in this catalog. Published by the platform's OpenMetadata extension."}
 
 
-def classification_name(domain):
-    return m.clean(f"{domain} labels")
+def classification_name(prefix, domain):
+    """The installation's own classification: removal deletes every tag in it that no listed model uses."""
+    return m.clean(f"{prefix}__{domain} labels")
 
 
-def classification_request(domain):
-    return {"name": classification_name(domain), "displayName": f"{domain} labels", "mutuallyExclusive": False,
+def classification_request(prefix, domain):
+    return {"name": classification_name(prefix, domain), "displayName": f"{domain} labels", "mutuallyExclusive": False,
             "description": "Labels that the semantic models of listed data products give their fields, such as the "
                            "business concept a field holds. Published by the platform's OpenMetadata extension."}
 
 
-def label_fqn(domain, label):
-    return f"{m.quote(classification_name(domain))}.{m.quote(m.clean(label))}"
+def label_fqn(prefix, domain, label):
+    return f"{m.quote(classification_name(prefix, domain))}.{m.quote(m.clean(label))}"
 
 
-def tag_request(domain, label):
-    return {"classification": classification_name(domain), "name": m.clean(label), "displayName": label,
+def tag_request(prefix, domain, label):
+    return {"classification": classification_name(prefix, domain), "name": m.clean(label), "displayName": label,
             "description": f"Fields that a listed semantic model labels {label}."}
+
+
+def managed(prefix, domain, fqn):
+    """Whether a tag label is this installation's: one of its glossary terms or label tags."""
+    root, labels = m.quote(m.clean(domain)), m.quote(classification_name(prefix, domain))
+    return fqn.startswith((f"{root}.{prefix}__", f'{root}."{prefix}__', f"{labels}."))
 
 
 def tag(fqn, source="Glossary"):
@@ -62,13 +70,14 @@ def root_name(prefix, listing, obj, model, several):
 
 
 def field_column(field, columns):
-    """The column a field reads when its expression is just that column, such as `carrier_code` or `t.code`."""
+    """The column a field reads when its expression is just that column, such as `carrier_code` or `t.code`.
+
+    Only a field without an expression reads the column of its own name: a computed field, such as
+    `amount * 100`, reads no column, even when one shares its name.
+    """
     names = {c.lower(): c for c in columns}
-    for candidate in (m.expression(field), field["name"]):
-        match = COLUMN.match((candidate or "").strip())
-        if match and match[1].lower() in names:
-            return names[match[1].lower()]
-    return None
+    match = COLUMN.match((m.expression(field) or field["name"]).strip())
+    return names.get(match[1].lower()) if match else None
 
 
 def origin(listing, model):
@@ -129,14 +138,14 @@ def enrich(prefix, listing, glossary):
                         "displayName": field["name"], "synonyms": [m.clean(s) for s in field["synonyms"]],
                         "description": "\n\n".join([field["description"] or f"Field {field['name']} of "
                                                                               f"{dataset['name']}.", *notes]),
-                        **({"tags": [tag(label_fqn(glossary, label), "Classification")]} if label else {})}))
+                        **({"tags": [tag(label_fqn(prefix, glossary, label), "Classification")]} if label else {})}))
                     column = field_column(field, listed[k]) if table is not None else None
                     if column:
                         entry = table["columns"].setdefault(column, {"notes": [], "tags": []})
                         entry["notes"].append(" ".join(filter(None, [field["description"], *notes])))
                         entry["tags"].append(tag(field_fqn))
                         if label:
-                            entry["tags"].append(tag(label_fqn(glossary, label), "Classification"))
+                            entry["tags"].append(tag(label_fqn(prefix, glossary, label), "Classification"))
     unique = {}
     for fqn, body in terms:
         unique.setdefault(fqn, body)
@@ -172,9 +181,43 @@ def sections(listing):
     return "\n\n".join(result)
 
 
-def wanted_terms(prefix, listings, glossary):
-    return {fqn for listing in listings for fqn, _ in enrich(prefix, listing, glossary)[0]}
-
-
 def wanted_labels(prefix, listings, glossary):
-    return {label_fqn(glossary, label) for listing in listings for label in enrich(prefix, listing, glossary)[2]}
+    return {label_fqn(prefix, glossary, label)
+            for listing in listings for label in enrich(prefix, listing, glossary)[2]}
+
+
+def wanted_tags(prefix, listings, glossary):
+    """The tag labels these listings put on tables, columns and terms, as sets of tag FQNs.
+
+    {"tables": {table fqn: {"tags": set, "columns": {column name: set}}}, "terms": {term fqn: set}}.
+    A table or term that several listings name gets the union of theirs.
+    """
+    result = {"tables": {}, "terms": {}}
+    for listing in listings:
+        terms, tables, _ = enrich(prefix, listing, glossary)
+        for fqn, body in terms:
+            result["terms"].setdefault(fqn, set()).update(t["tagFQN"] for t in body.get("tags", []))
+        for (namespace, name), table in tables.items():
+            wanted = result["tables"].setdefault(m.table_fqn(prefix, listing, namespace, name),
+                                                 {"tags": set(), "columns": {}})
+            wanted["tags"].update(t["tagFQN"] for t in table["tags"])
+            for column, entry in table["columns"].items():
+                wanted["columns"].setdefault(m.clean(column), set()).update(t["tagFQN"] for t in entry["tags"])
+    return result
+
+
+def stale_tags(prefix, glossary, entity, wanted):
+    """JSON Patch operations that remove this installation's tags that no listing wants any more from
+    an entity and its columns; other tags stay. `wanted` is its entry of `wanted_tags`, or None."""
+    wanted = wanted or {"tags": set(), "columns": {}}
+    ops = []
+
+    def remove(path, tags, keep):
+        # From the last tag back, so earlier indexes stay valid.
+        ops.extend({"op": "remove", "path": f"{path}/tags/{i}"} for i, t in reversed(list(enumerate(tags or [])))
+                   if managed(prefix, glossary, t["tagFQN"]) and t["tagFQN"] not in keep)
+
+    remove("", entity.get("tags"), wanted["tags"])
+    for i, column in enumerate(entity.get("columns") or []):
+        remove(f"/columns/{i}", column.get("tags"), wanted["columns"].get(column["name"], set()))
+    return ops

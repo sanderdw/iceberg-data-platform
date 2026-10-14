@@ -74,7 +74,7 @@ this file says which one is meant. Code, docs and commit messages use these word
   with its datasets and described fields as child terms. Tables and columns are tagged with them.
 
 **Classification tag**
-: A tag of the extension's classification `<OM_DOMAIN> labels`. Each field label is one, on the
+: A tag of the installation's classification `<prefix>__<OM_DOMAIN> labels`. Each field label is one, on the
   field's column and its glossary term. _Avoid:_ "label" for the OpenMetadata side, except in
   "tag label", OpenMetadata's name for a tag applied to an entity.
 
@@ -85,7 +85,7 @@ this file says which one is meant. Code, docs and commit messages use these word
 **Prefix**
 : `OM_SERVICE_PREFIX`, `iceberg` by default. Everything this extension owns carries it: services
   `<prefix>-<environment>`, data products `<prefix>-share-…`, metrics and glossary terms
-  `<prefix>__…`. Removal only touches those, and the label classification.
+  `<prefix>__…`, and the label classification `<prefix>__<OM_DOMAIN> labels`. Removal only touches those.
 
 ## How they map
 

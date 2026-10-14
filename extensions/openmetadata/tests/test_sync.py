@@ -6,8 +6,10 @@ import logging
 import httpx
 import pytest
 
+from openmetadata_sync.bridge_client import BridgeClient
 from openmetadata_sync.errors import SyncError
-from tests.conftest import CUSTOMERS, DB, ORDERS, REPORT, REVENUE, SHARE, TOKEN, listing
+from openmetadata_sync.sync import Syncer
+from tests.conftest import CUSTOMERS, DB, ORDERS, REPORT, REVENUE, SHARE, TOKEN, FakeBridge, listing, settings
 
 SERVICE = "iceberg-development"
 ORDERS_FQN = f"{SERVICE}.{DB}.sales.orders"
@@ -240,8 +242,8 @@ def test_semantic_models_add_terms_notes_and_a_section(world):
     assert sorted(om.live("glossaryTerms")) == sorted(
         [root, orders_term, customers_term, ordered_at_term, region_term])
     # Field labels are tags of the extension's classification, on the column and on the field's term.
-    label = f"{glossary} labels.Region"
-    assert om.live("classifications") == [f"{glossary} labels"] and om.live("tags") == [label]
+    label = f"iceberg__{glossary} labels.Region"
+    assert om.live("classifications") == [f"iceberg__{glossary} labels"] and om.live("tags") == [label]
     term = om.entities["glossaryTerms"][region_term]
     assert term["displayName"] == "region"
     assert term["description"] == "Field region of CUSTOMERS.\n\nExamples: north, south."
@@ -293,3 +295,53 @@ def test_fields_with_the_same_name_get_terms_of_their_own(world):
     assert world.syncer.status["lastErrorCode"] is None
     ids = {e["description"] for e in world.om.entities["glossaryTerms"].values() if e["displayName"] == "id"}
     assert ids == {"Order number", "Customer number"}
+
+
+def labelled(region="Region", ordered_at="Region"):
+    item, model = listing(), copy.deepcopy(REVENUE)
+    model["models"][0]["datasets"][0]["fields"][0]["label"] = ordered_at
+    model["models"][0]["datasets"][1]["fields"][0]["label"] = region
+    item["objects"][-1] = model
+    return item
+
+
+def test_a_changed_label_leaves_its_column_and_term_and_other_tags_stay(world):
+    world.bridge.listings[SHARE] = labelled()
+    run(world.syncer.cycle(full=True))
+    om, classification = world.om, "iceberg__Iceberg Data Platform labels"
+    customers = om.entities["tables"][f"{SERVICE}.{DB}.sales.customers"]
+    region = next(c for c in customers["columns"] if c["name"] == "region")
+    # A tag that people added in OpenMetadata.
+    region["tags"].append({"tagFQN": "PII.Sensitive", "source": "Classification", "labelType": "Manual"})
+    item = labelled(region="Area")
+    item["version"] = "v2"
+    world.bridge.listings[SHARE] = item
+    run(world.syncer.cycle(full=True))
+    # `Region` is still the label of ordered_at, so its tag stays, but no longer on region.
+    assert om.live("tags") == [f"{classification}.Area", f"{classification}.Region"]
+    customers = om.entities["tables"][f"{SERVICE}.{DB}.sales.customers"]
+    region = next(c for c in customers["columns"] if c["name"] == "region")
+    name = f"iceberg__{DB}__sales__revenue"
+    region_term = f"Iceberg Data Platform.{name}.{name}__CUSTOMERS.{name}__CUSTOMERS__region"
+    assert [t["tagFQN"] for t in region["tags"]] == [region_term, "PII.Sensitive", f"{classification}.Area"]
+    assert [t["tagFQN"] for t in om.entities["glossaryTerms"][region_term]["tags"]] == [f"{classification}.Area"]
+    orders = om.entities["tables"][ORDERS_FQN]
+    ordered_at = next(c for c in orders["columns"] if c["name"] == "ordered_at")
+    assert f"{classification}.Region" in [t["tagFQN"] for t in ordered_at["tags"]]
+    # Syncing again changes nothing.
+    patches = len(om.patches)
+    run(world.syncer.cycle(full=True))
+    assert len(om.patches) == patches
+
+
+def test_installations_keep_each_others_labels(world):
+    world.bridge.listings[SHARE] = labelled()
+    run(world.syncer.cycle(full=True))
+    other = Syncer(settings(prefix="other"), BridgeClient(settings(), http=httpx.AsyncClient(
+        transport=httpx.MockTransport(FakeBridge().handle))), world.om_client)
+    run(other.cycle(full=True))
+    label = "iceberg__Iceberg Data Platform labels.Region"
+    assert world.om.live("tags") == [label]
+    customers = world.om.entities["tables"][f"{SERVICE}.{DB}.sales.customers"]
+    region = next(c for c in customers["columns"] if c["name"] == "region")
+    assert label in [t["tagFQN"] for t in region["tags"]]

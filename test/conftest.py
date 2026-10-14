@@ -189,8 +189,9 @@ class MemoryPolaris(PolarisProvider):
 
     def request(self, path, method="GET", body=None, retry=True):
         self.events.append((path, method, body))
-        if self.fail and self.fail(path, method, body):
-            raise ServiceError(502, "injected failure")
+        if self.fail and (failure := self.fail(path, method, body)):
+            # A test may inject a specific error, such as 406 for a feature that is off.
+            raise failure if isinstance(failure, ServiceError) else ServiceError(502, "injected failure")
         if path in self.catalog:
             if self.catalog[path] is None:
                 raise ServiceError(404, "Not found.")

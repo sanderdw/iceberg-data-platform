@@ -17,12 +17,15 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def listed(provider):
-    """(share, listing header) for every listed share of a ready database."""
+def listed(provider, id=None):
+    """(share, listing header) for every listed share of a ready database, or only the share `id`.
+
+    Reading a share's objects reads its grants: one listing reads only its own share's.
+    """
     databases = {d["id"]: d for d in provider.list_databases() if d["status"] == "ready"}
     teams = {t["id"]: t["name"] for t in provider.list_teams()}
     result = []
-    for share in provider.list_shares(drift=True):
+    for share in provider.list_shares(id=id, drift=True):
         database = databases.get(share["database"])
         if not share["listed"] or not database:
             continue
@@ -52,7 +55,7 @@ def summaries(provider):
 
 
 def listing(provider, id, extensions=None):
-    header = next((h for _, h in listed(provider) if h["id"] == id), None)
+    header = next((h for _, h in listed(provider, id)), None)
     if header is None:
         raise ServiceError(404, "This listing does not exist.")
     database = header["database"]["id"]

@@ -22,7 +22,7 @@ version and releases. It uses the platform only through the **Extension Bridge v
 | Listed table or view | Table (type Iceberg or View) with columns, types, descriptions, required columns and partitioning |
 | Semantic model metric | Metric with description, synonyms, AI context, SQL expression, type and dimensions; the tables it reads as assets and lineage |
 | Semantic model, its datasets and described fields | Glossary terms in the `Iceberg Data Platform` glossary; tables and columns are tagged with the terms of the datasets and fields that read them, and get their descriptions and AI context where the platform has none |
-| Field label | Tag in the `Iceberg Data Platform labels` classification, on the field's column and glossary term |
+| Field label | Tag in the `Iceberg Data Platform labels` classification (named `iceberg__Iceberg Data Platform labels`), on the field's column and glossary term |
 | Owning team | Team, as owner |
 | Listed data share | Data product in the `Iceberg Data Platform` domain, with the contact for access requests, a section per semantic model (description, AI instructions, datasets, metrics), an ER diagram of its tables and keys, and its schemas, tables and metrics as assets |
 

@@ -984,10 +984,13 @@ class PolarisProvider:
     def expire_shares(self):
         self.share_principals()
 
-    def list_shares(self, database=None, *, drift=False):
+    def list_shares(self, database=None, *, id=None, drift=False):
+        """Live shares, of one database or with one id when given. `drift` reads each one's grants."""
         shares = []
         for principal in self.share_principals():
             if database and principal["properties"]["portal.database"] != database:
+                continue
+            if id and principal["name"] != id:
                 continue
             actual = self.management(f"{self.share_role(principal)}/grants")["grants"] if drift else None
             shares.append(self.share(principal, actual))
@@ -1288,7 +1291,9 @@ class PolarisProvider:
                 try:
                     found.append((o, self.request(path)))
                 except ServiceError as exc:
-                    if exc.status not in (403, 404):
+                    # With semantic models turned off (406) a listed model is unavailable, as a
+                    # dropped object is; the listing still carries the rest.
+                    if exc.status not in (403, 404) and not (exc.status == 406 and o["kind"] == "semantic-model"):
                         raise
         return found
 

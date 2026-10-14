@@ -43,3 +43,5 @@ The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the ima
 This is an **educational local development platform**. Read [the security model](security.md) before deploying it elsewhere.
 
 The [presentation](https://sanderdw.github.io/iceberg-data-platform/presentation/) walks through Apache Iceberg, the platform and a demo from raw data to answers.
+
+Questions? Start with the [FAQ](faq.md).

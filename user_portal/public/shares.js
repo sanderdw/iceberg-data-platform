@@ -221,7 +221,9 @@ async function shareForm(host, db, share) {
       if (objects.length > maxObjects) throw new Error(`Select no more than ${maxObjects} ${maxObjects === 1 ? "object" : "objects"}.`);
       if (!objects.some(o => o.kind === 'table')) throw new Error('Select the tables that the shared views and semantic models read.');
       const body = {recipient: recipient.value.trim(), description: description.value.trim(), objects, expiresAt: expiry.value ? `${expiry.value}T23:59:59Z` : null};
-      if (canList() || share?.listed) Object.assign(body, {listed: listed.checked, contact: contact.value.trim()});
+      if (canList()) Object.assign(body, {listed: listed.checked, contact: contact.value.trim()});
+      // Without a data catalog extension a listed share can still be edited and unlisted, never listed again.
+      else if (share?.listed) Object.assign(body, {contact: contact.value.trim()}, listed.checked ? {} : {listed: false});
       // The API checks the models again; its warnings name tables the recipient would still miss.
       const warned = result => result.warnings?.length ? ` ${result.warnings.join(' ')}` : '';
       if (share) { const result = await api(`/shares/${share.id}`, 'PATCH', body); notice(`Share saved.${warned(result)}`); await loadShares(host, db); }

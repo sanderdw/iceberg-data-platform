@@ -1,4 +1,5 @@
 from openmetadata_sync import mapping as m
+from openmetadata_sync import semantics
 from tests.conftest import CUSTOMERS, DB, ORDERS, REVENUE, SHARE, listing
 
 
@@ -86,3 +87,15 @@ def test_lineage_and_data_product():
     assert product["name"] == f"iceberg-{SHARE}" and product["displayName"] == "orders-product"
     assert "data@example.test" in product["description"] and "metadata only" in product["description"]
     assert product["domains"] == ["Iceberg Data Platform"]
+
+
+def test_only_a_field_without_expression_falls_back_to_its_name():
+    def field(expression=None):
+        found = [{"dialect": "ANSI_SQL", "expression": expression}] if expression else []
+        return {"name": "amount", "expressions": found}
+
+    columns = ["id", "amount"]
+    assert semantics.field_column(field(), columns) == "amount"
+    assert semantics.field_column(field("o.AMOUNT"), columns) == "amount"
+    assert semantics.field_column(field("amount * 100"), columns) is None
+    assert semantics.field_column(field("id"), columns) == "id"

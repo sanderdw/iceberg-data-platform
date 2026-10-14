@@ -82,10 +82,13 @@ are hard-deleted, which removes their tags too. Metrics stay Metric entities, no
 Ossie gives a field an optional `label`, "a label for categorization". OpenMetadata's word for
 that is a tag of a classification, not a glossary term: a label groups fields across models and
 says nothing about one model. So each label is a tag of one classification per installation
-(`<OM_DOMAIN> labels`), on the column the field reads and on the field's glossary term. The
-classification is this extension's own: a tag no listed model uses is hard-deleted, which removes
-it from every column and term. Ossie has no dictionary of its own; a model that wants one uses its
-labels for the concepts of an ontology, as the platform's flights example does.
+(`<prefix>__<OM_DOMAIN> labels`, shown as `<OM_DOMAIN> labels`), on the column the field reads and
+on the field's glossary term. The classification is the installation's own, so two installations
+in one domain never remove each other's labels: a tag no listed model uses is hard-deleted, which
+removes it from every column and term, and a label a field no longer has leaves that field's
+column and term. Tags that people add in OpenMetadata stay. Ossie has no dictionary of its own; a
+model that wants one uses its labels for the concepts of an ontology, as the platform's flights
+example does.
 
 Every database, schema and table carries the domain explicitly: OpenMetadata refuses a PATCH of a
 data product's asset whose domain is only inherited from its service.

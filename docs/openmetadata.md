@@ -20,7 +20,7 @@ OpenMetadata 2.0 has no Iceberg connector of its own: it reaches Iceberg only th
 | Listed table or view | Table (type Iceberg or View) with columns, types, descriptions and partitioning |
 | Semantic model metric | Metric with its description, synonyms, AI context, SQL expression and dimensions, and lineage from the tables it reads |
 | Semantic model, its datasets and described fields | Glossary terms in the `Iceberg Data Platform` glossary. Tables and columns are tagged with the terms of the datasets and fields that read them; a table's description adds what its dataset means and its AI context, and a column without a description gets its field's description, synonyms and AI context (such as examples) |
-| Field label | Tag in the `Iceberg Data Platform labels` classification, on the field's column and glossary term. Ossie calls a label a "label for categorization"; the flights example uses it for the ontology concept a field holds, such as `Delay` or `AirportCode`, so one tag finds every delay column |
+| Field label | Tag in the `Iceberg Data Platform labels` classification (named `iceberg__Iceberg Data Platform labels`), on the field's column and glossary term. Ossie calls a label a "label for categorization"; the flights example uses it for the ontology concept a field holds, such as `Delay` or `AirportCode`, so one tag finds every delay column |
 | Owning team | Team, as owner |
 | Listed data share | Data product in the `Iceberg Data Platform` domain, with the description, the contact for access requests, a section per semantic model (its description, AI instructions, datasets and metrics) and an ER diagram of its tables and keys. Its schemas, tables and metrics are its assets |
 

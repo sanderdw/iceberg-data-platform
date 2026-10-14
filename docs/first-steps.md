@@ -30,3 +30,4 @@ Credentials are in `.env` in the installation directory. All ports bind to `127.
 - Work with your data in the [user portal](user-portal.md), from [your own tools](connect.md) or through an [AI agent](ai-agents.md).
 - Set up a class with the [agent skills](agent-skills.md).
 - Add [extensions](extensions.md): Conversational BI, dbt pipelines, Ingestion (dlt) and OpenMetadata.
+- Stuck on something? Check the [FAQ](faq.md).

@@ -329,6 +329,20 @@ print(json.dumps(outputs))
   await page.getByLabel('Contact for access requests').fill('ops@example.test');
   await page.getByRole('button', {name: 'Save share', exact: true}).click();
   if (calls.at(-1).method !== 'PATCH' || calls.at(-1).input.listed !== true || calls.at(-1).input.contact !== 'ops@example.test') throw new Error('Unexpected listing edit: ' + JSON.stringify(calls.at(-1)));
+  // Without the extension a listed share can still be edited, and unlisted, but not listed again.
+  listing = false;
+  await page.reload();
+  await expect(page.locator('#shares-page')).toBeVisible();
+  await grid.getByRole('button', {name: 'Edit', exact: true}).click();
+  await page.getByLabel('Contact for access requests').fill('team@example.test');
+  await page.getByRole('button', {name: 'Save share', exact: true}).click();
+  await expect(page.locator('#notice')).toContainText('Share saved.');
+  if ('listed' in calls.at(-1).input || calls.at(-1).input.contact !== 'team@example.test') throw new Error('An unchanged listing was sent without a data catalog extension: ' + JSON.stringify(calls.at(-1)));
+  await grid.getByRole('button', {name: 'Edit', exact: true}).click();
+  await page.getByLabel('Listed in the data catalog', {exact: true}).uncheck();
+  await page.getByRole('button', {name: 'Save share', exact: true}).click();
+  await expect(page.locator('#notice')).toContainText('Share saved.');
+  if (calls.at(-1).input.listed !== false) throw new Error('Unlisting was not sent: ' + JSON.stringify(calls.at(-1)));
   sharedOnly = true; includeOwned = true; role = 'admin';
   await page.reload();
   await page.getByRole('button', {name: 'Team overview', exact: true}).click();

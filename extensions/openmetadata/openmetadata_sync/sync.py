@@ -4,7 +4,8 @@ Every poll reads the cheap listing summary and fetches the listings whose versio
 full sync fetches all of them again (conditionally, with their ETag) and publishes everything, so
 schema and semantic model edits arrive and changes made in OpenMetadata to these entities heal.
 After a complete pass, entities of this extension that no listing names any more are soft-deleted
-(data products are deleted: OpenMetadata has no soft delete for them). A restart is one full push;
+(data products are deleted: OpenMetadata has no soft delete for them), and its tags that no listing
+puts on a table, column or term any more are removed from it. A restart is one full push;
 no state is stored.
 """
 
@@ -60,8 +61,8 @@ class Syncer:
 
     async def ensure_classification(self):
         if self.classification is None:
-            self.classification = await self.om.put("classifications",
-                                                    semantics.classification_request(self.settings.domain))
+            self.classification = await self.om.put(
+                "classifications", semantics.classification_request(self.prefix, self.settings.domain))
         return self.classification
 
     async def ensure_service(self, environment):
@@ -102,7 +103,7 @@ class Syncer:
             # Label tags first: terms, tables and columns carry them.
             await self.ensure_classification()
             for label in labels:
-                await om.put("tags", semantics.tag_request(self.settings.domain, label))
+                await om.put("tags", semantics.tag_request(prefix, self.settings.domain, label))
         if terms:
             # Terms first: tables and columns are tagged with them.
             await self.ensure_glossary()
@@ -156,6 +157,9 @@ class Syncer:
 
     async def prune(self, listings):
         wanted, removed = m.wanted(self.prefix, listings), 0
+        # OpenMetadata keeps the tags a PUT leaves out: a label or term that a field or dataset no
+        # longer has goes here, while other tags, such as those people add, stay.
+        tags = semantics.wanted_tags(self.prefix, listings, self.settings.domain)
         for environment in m.ENVIRONMENTS:
             service = m.service_name(self.prefix, environment)
             if await self.om.get("services/databaseServices", service) is None:
@@ -168,23 +172,30 @@ class Syncer:
                     if schema["fullyQualifiedName"] not in wanted["schemas"]:
                         removed += await self.om.delete("databaseSchemas", schema["fullyQualifiedName"])
                         continue
-                    for table in await self.om.list("tables", {"databaseSchema": schema["fullyQualifiedName"]}):
-                        if table["fullyQualifiedName"] not in wanted["tables"]:
-                            removed += await self.om.delete("tables", table["fullyQualifiedName"])
+                    for table in await self.om.list("tables", {"databaseSchema": schema["fullyQualifiedName"],
+                                                               "fields": "columns,tags"}):
+                        fqn = table["fullyQualifiedName"]
+                        if fqn not in wanted["tables"]:
+                            removed += await self.om.delete("tables", fqn)
+                        elif ops := semantics.stale_tags(self.prefix, self.settings.domain, table,
+                                                         tags["tables"].get(fqn)):
+                            await self.om.patch("tables", table["id"], ops)
         for metric in await self.om.list("metrics"):
             if metric["name"].startswith(self.prefix + "__") and metric["name"] not in wanted["metrics"]:
                 removed += await self.om.delete("metrics", metric["fullyQualifiedName"])
         glossary = await self.om.get("glossaries", m.clean(self.settings.domain))
         if glossary:
             # Terms of models that are no longer listed, with their tags on tables and columns.
-            terms = semantics.wanted_terms(self.prefix, listings, self.settings.domain)
-            root = m.quote(m.clean(self.settings.domain))
-            ours = (f"{root}.{self.prefix}__", f'{root}."{self.prefix}__')
-            for term in await self.om.list("glossaryTerms", {"glossary": glossary["id"]}):
+            for term in await self.om.list("glossaryTerms", {"glossary": glossary["id"], "fields": "tags"}):
                 fqn = term["fullyQualifiedName"]
-                if fqn.startswith(ours) and fqn not in terms:
+                if not semantics.managed(self.prefix, self.settings.domain, fqn):
+                    continue
+                if fqn not in tags["terms"]:
                     removed += await self.om.delete("glossaryTerms", fqn, hard=True)
-        classification = semantics.classification_name(self.settings.domain)
+                elif ops := semantics.stale_tags(self.prefix, self.settings.domain, term,
+                                                 {"tags": tags["terms"][fqn], "columns": {}}):
+                    await self.om.patch("glossaryTerms", term["id"], ops)
+        classification = semantics.classification_name(self.prefix, self.settings.domain)
         if await self.om.get("classifications", classification):
             # The classification is this extension's own: a label no listed model uses goes, with its tags.
             labels = semantics.wanted_labels(self.prefix, listings, self.settings.domain)

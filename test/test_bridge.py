@@ -349,6 +349,24 @@ def test_a_listing_is_conditional_and_reports_dropped_objects(bridge):
     assert bridge.call("GET", f"/listings/{unlisted['id']}", "other-service").status_code == 404
 
 
+def test_a_listing_without_semantic_models_carries_its_tables(bridge):
+    share = listed(bridge)
+    bridge.provider.fail = lambda path, method, body: (
+        ServiceError(406, "This feature is not enabled.") if "/semantic-models/" in path else None)
+    body = bridge.call("GET", f"/listings/{share['id']}", "other-service").json()
+    assert [o["kind"] for o in body["objects"]] == ["table", "view"]
+    assert [o["kind"] for o in body["unavailable"]] == ["semantic-model"]
+
+
+def test_a_listing_reads_only_its_own_share_grants(bridge):
+    share = listed(bridge)
+    other = share_to(bridge, bridge.team, [ORDERS], name="team-only")
+    bridge.provider.events.clear()
+    assert bridge.call("GET", f"/listings/{share['id']}", "other-service").status_code == 200
+    read = {path for path, method, _ in bridge.provider.events if method == "GET" and path.endswith("/grants")}
+    assert any(share["id"] in path for path in read) and not any(other["id"] in path for path in read)
+
+
 def test_a_failed_listing_read_removes_its_temporary_role(bridge):
     share = listed(bridge)
     bridge.provider.fail = lambda path, method, body: path.endswith("/views/report")

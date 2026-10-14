@@ -122,9 +122,18 @@ class FakeOpenMetadata:
             if collection == "tables" and not entity.get("domains"):
                 return self.error(400, "Domain cannot be empty when data products are provided.")
             for op in body:
+                parts = op["path"].strip("/").split("/")
+                if op["op"] == "remove":
+                    # Removing a tag label, by its index, from the entity or one of its columns.
+                    assert parts[-2] == "tags" and parts[-1].isdigit()
+                    target = entity
+                    for part in parts[:-2]:
+                        target = target[int(part)] if part.isdigit() else target[part]
+                    del target["tags"][int(parts[-1])]
+                    continue
                 assert op["op"] in ("add", "replace") and op["path"].endswith("/description")
                 target = entity
-                for part in op["path"].strip("/").split("/")[:-1]:
+                for part in parts[:-1]:
                     target = target[int(part)] if part.isdigit() else target[part]
                 target["description"] = escaped({"description": op["value"]})["description"]
             self.patches.append((collection, body))
