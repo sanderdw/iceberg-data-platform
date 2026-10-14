@@ -841,3 +841,27 @@ def test_shared_catalog_and_notebooks_without_owned_databases(users):
     assert workspace['databases'] == [] and workspace['notebooks'] == []
     assert c.get('/api/contents', params={'database': db}).status_code == 403
     assert c.post('/api/notebooks', json={'database': db}, headers=JSON).status_code == 403
+
+
+def test_a_share_is_listed_only_with_a_data_catalog_extension(users, monkeypatch):
+    c, (first, second, _), db = users.client, users.teams, users.databases[1]
+    promote(users, {first: "reader", second: "admin"})
+    login(c)
+    assert c.patch("/api/team", json={"team": second}, headers=JSON).status_code == 200
+    body = share_body(db, external=False, listed=True, contact="data@example.test")
+    refused = c.post("/api/shares", json=body, headers=JSON)
+    assert refused.status_code == 422 and "data catalog extension" in refused.json()["error"]
+    assert c.get("/api/workspace").json()["extensions"] == []
+    monkeypatch.setenv("PLATFORM_EXTENSIONS", "openmetadata=http://localhost:3011")
+    monkeypatch.setenv("PLATFORM_LISTING_EXTENSIONS", "openmetadata")
+    assert c.get("/api/workspace").json()["extensions"] == [
+        {"id": "openmetadata", "origin": "http://localhost:3011", "listing": True}]
+    created = c.post("/api/shares", json=body, headers=JSON)
+    assert created.status_code == 201, created.text
+    share = created.json()["share"]
+    assert "credentials" not in created.json() and (share["listed"], share["contact"]) == (True, "data@example.test")
+    monkeypatch.delenv("PLATFORM_LISTING_EXTENSIONS")
+    assert c.patch(f"/api/shares/{share['id']}", json={"listed": True}, headers=JSON).status_code == 422
+    # Without the extension a listing can still be edited otherwise, and revoked.
+    assert c.patch(f"/api/shares/{share['id']}", json={"description": "Orders"}, headers=JSON).status_code == 200
+    assert c.delete(f"/api/shares/{share['id']}", headers=JSON).status_code == 200

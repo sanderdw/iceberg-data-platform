@@ -1,10 +1,11 @@
-"""Public catalog metadata projections. Provider config and credentials stay server-side."""
+"""Public catalog metadata projections. Provider config and credentials stay server-side.
+
+The user portal shows them to signed-in users; the Bridge publishes listings with them.
+"""
 
 import json
 import re
 from urllib.parse import urlsplit
-
-from .semantic.ossie import dicts
 
 SENSITIVE = re.compile(
     r"secret|token|credential|password|access.key|private.key|authorization", re.IGNORECASE
@@ -198,6 +199,10 @@ def object_details(kind, loaded, extensions=None):
     return result
 
 
+def dicts(value):
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
 def text(value):
     """Ossie documents are user-written: show only scalars and JSON for anything nested."""
     if value is None:
@@ -264,8 +269,11 @@ def dataset_target(source, namespace):
     return {"namespace": levels or list(namespace), "name": parts[-1]}
 
 
-def context_rows(value):
-    """AI context as label/value rows: Ossie uses an object such as {instructions, synonyms}."""
+def context_rows(value, skip=()):
+    """AI context as label/value rows: Ossie uses an object such as {instructions, synonyms}.
+
+    `skip` leaves out keys shown elsewhere, such as the synonyms of a field or metric.
+    """
     if value in (None, "", [], {}):
         return []
     if not isinstance(value, dict):
@@ -273,7 +281,7 @@ def context_rows(value):
     return [
         {"label": text(key).replace("_", " ").capitalize(),
          "value": ", ".join(text(v) for v in item) if isinstance(item, list) else text(item)}
-        for key, item in value.items()
+        for key, item in value.items() if key not in skip and item not in (None, "", [], {})
     ]
 
 
@@ -295,14 +303,17 @@ def semantic_model_details(name, namespace, loaded):
                 "source": text(d.get("source")),
                 "table": dataset_target(d.get("source"), namespace),
                 "primaryKey": [text(k) for k in d["primary_key"]] if isinstance(d.get("primary_key"), list) else [],
+                "aiContext": context_rows(d.get("ai_context")),
                 "fields": [
                     {
                         "name": text(f.get("name")),
+                        "label": text(f.get("label")),
                         "description": text(f.get("description")),
                         "datatype": text(f.get("datatype")),
                         "dimension": dimension(f)[0],
                         "timeDimension": dimension(f)[1],
                         "synonyms": synonyms(f),
+                        "aiContext": context_rows(f.get("ai_context"), skip=("synonyms",)),
                         "expressions": expressions(f),
                     }
                     for f in dicts(d.get("fields"))
@@ -332,6 +343,7 @@ def semantic_model_details(name, namespace, loaded):
                         "description": text(m.get("description")),
                         "datatype": text(m.get("datatype")),
                         "synonyms": synonyms(m),
+                        "aiContext": context_rows(m.get("ai_context"), skip=("synonyms",)),
                         "expressions": expressions(m),
                     }
                     for m in dicts(model.get("metrics"))
@@ -348,3 +360,101 @@ def semantic_model_details(name, namespace, loaded):
         # The stored text, pretty-printed when it is JSON, so users can copy exactly what Polaris holds.
         "definition": json.dumps(payload, indent=2, ensure_ascii=False) if payload is not None else text(raw),
     }
+
+
+# Listings: what the Bridge publishes about a listed share to a data catalog. Definitions only:
+# no view SQL, locations, snapshots, refs or other properties.
+
+
+def column_tree(fields):
+    """Iceberg fields as nested columns; struct, list and map types carry their parts as children."""
+    result = []
+    for field in fields:
+        kind = field["type"]
+        children = []
+        if isinstance(kind, dict):
+            if kind["type"] == "struct":
+                children = column_tree(kind["fields"])
+            elif kind["type"] == "list":
+                children = column_tree([{"name": "element", "id": kind["element-id"], "type": kind["element"],
+                                         "required": kind.get("element-required", False)}])
+            elif kind["type"] == "map":
+                children = column_tree([
+                    {"name": part, "id": kind[f"{part}-id"], "type": kind[part],
+                     "required": part == "key" or kind.get("value-required", False)}
+                    for part in ("key", "value")
+                ])
+        result.append({
+            "id": field["id"], "name": field["name"],
+            "type": kind if isinstance(kind, str) else type_name(kind),
+            "required": field.get("required", False), "doc": str(field.get("doc", ""))[:2000],
+            "children": children,
+        })
+    return result
+
+
+def type_name(kind):
+    """An Iceberg type as text, such as `list<string>` or `struct<id: long>`."""
+    if isinstance(kind, str):
+        return kind
+    if kind["type"] == "list":
+        return f"list<{type_name(kind['element'])}>"
+    if kind["type"] == "map":
+        return f"map<{type_name(kind['key'])}, {type_name(kind['value'])}>"
+    if kind["type"] == "struct":
+        return "struct<" + ", ".join(f"{f['name']}: {type_name(f['type'])}" for f in kind["fields"]) + ">"
+    return str(kind["type"])
+
+
+def listed_producer(values, extensions, database, listed):
+    """The producer conventions, with lineage limited to objects listed in the same share."""
+    found = producer(values, extensions)
+    if found:
+        found["inputs"] = [i for i in found["inputs"]
+                           if i["database"] == database and (tuple(i["namespace"]), i["name"]) in listed]
+    return found
+
+
+def listed_table(namespace, name, loaded, *, database, listed, extensions=None):
+    metadata = loaded["metadata"]
+    schema = next((s for s in metadata.get("schemas", []) if s["schema-id"] == metadata.get("current-schema-id")), {})
+    by_id = {f["id"]: f["name"] for f in schema.get("fields", [])}
+    spec = next((s for s in metadata.get("partition-specs", []) if s.get("spec-id") == metadata.get("default-spec-id")),
+                {})
+    snapshot = next((s for s in metadata.get("snapshots", [])
+                     if s["snapshot-id"] == metadata.get("current-snapshot-id")), None)
+    rows = (snapshot or {}).get("summary", {}).get("total-records")
+    values = metadata.get("properties", {})
+    return {
+        "kind": "table", "namespace": list(namespace), "name": name, "uuid": metadata.get("table-uuid"),
+        "comment": str(values.get("comment", ""))[:2000],
+        "columns": column_tree(schema.get("fields", [])),
+        "partitionFields": [
+            {"name": f["name"], "sourceColumn": by_id.get(f.get("source-id"), ""), "transform": f["transform"]}
+            for f in spec.get("fields", [])
+        ],
+        "rowCount": int(rows) if str(rows).isdigit() else None,
+        "updatedAt": metadata.get("last-updated-ms"),
+        "producer": listed_producer(values, extensions or {}, database, listed),
+    }
+
+
+def listed_view(namespace, name, loaded):
+    metadata = loaded["metadata"]
+    version = next((v for v in metadata.get("versions", [])
+                    if v["version-id"] == metadata.get("current-version-id")), {})
+    schema = next((s for s in metadata.get("schemas", []) if s["schema-id"] == version.get("schema-id")), {})
+    return {
+        "kind": "view", "namespace": list(namespace), "name": name, "uuid": metadata.get("view-uuid"),
+        "comment": str(metadata.get("properties", {}).get("comment", ""))[:2000],
+        "columns": column_tree(schema.get("fields", [])),
+        "updatedAt": version.get("timestamp-ms"),
+    }
+
+
+def listed_semantic_model(namespace, name, loaded):
+    details = semantic_model_details(name, namespace, loaded)
+    # The normalized models only: the stored text may hold anything its writer added.
+    return {"kind": "semantic-model", "namespace": list(namespace), "name": name,
+            "specVersion": details["specVersion"], "entityVersion": details["entityVersion"],
+            "models": details["models"]}

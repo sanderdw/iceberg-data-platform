@@ -12,6 +12,7 @@ from pyiceberg.exceptions import ForbiddenError
 from pyiceberg.view import ViewVersion
 
 from scripts.smoke import assert_denied, stack_resources, token
+from server import listings
 from server.models import DatabaseInput, ServiceError, ShareInput, ShareUpdate, TeamInput, UserInput
 
 
@@ -159,6 +160,23 @@ def main():
         assert [e["name"] for e in drifted["extraGrants"]] == ["orders_v2"]
         writer.rename_table("sales.orders_v2", "sales.orders")
         print("PASS: editing the selection grants and revokes live; a rename shows up as drift")
+
+        listed = p.create_share(
+            ShareInput.model_validate({"database": db, "name": f"catalog-{suffix}", "external": False, "listed": True,
+                                       "objects": [*objects, model_object]}),
+            {"id": admin["user"]["id"], "name": admin["user"]["name"]},
+        )
+        assert "credentials" not in listed
+        assert p.management(f"/principals/{listed['share']['id']}/principal-roles")["roles"] == []
+        listing = listings.listing(p, listed["share"]["id"])
+        kinds = {o["kind"]: o for o in listing["objects"]}
+        assert set(kinds) == {"table", "view", "semantic-model"} and listing["unavailable"] == [], listing
+        assert [c["name"] for c in kinds["table"]["columns"]] == ["id"] and kinds["table"]["rowCount"] == 3
+        assert "SELECT" not in json.dumps(listing) and "s3://" not in json.dumps(listing)
+        assert not [r for r in p.management(f"/catalogs/{db}/catalog-roles")["roles"]
+                    if r["name"].startswith("portal-listing-")]
+        p.delete_share(listed["share"]["id"])
+        print("PASS: a listing reads definitions without data, activates no credential and leaves no role behind")
 
         try:
             p.move_database(db, p.save_team(TeamInput(name=f"share-next-{suffix}"))["id"])

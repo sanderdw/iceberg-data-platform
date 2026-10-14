@@ -1,4 +1,4 @@
-"""Run the native DuckDB notebooks on temporary data in offline containers, as a reader and a writer."""
+"""Run the example notebooks on temporary data in offline containers, as a reader and a writer."""
 
 import argparse
 import json
@@ -170,7 +170,83 @@ print('PASS: a reader lists and reads the semantic model but Polaris refuses eve
 """
 
 
-def main(*, flights_only=False):
+GRID_WRITE_CODE = """
+import importlib.util
+import json
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+import httpx
+
+from user_portal.notebook.connection import SessionRestCatalog, connect
+
+# Sign in as a portal notebook does: every request fetches the owner's current token from a session URL.
+token = httpx.post(os.environ['ICEBERG_TOKEN_URI'], data={
+    'grant_type': 'client_credentials', 'client_id': os.environ['ICEBERG_CLIENT_ID'],
+    'client_secret': os.environ['ICEBERG_CLIENT_SECRET'], 'scope': 'PRINCIPAL_ROLE:ALL'}).json()['access_token']
+
+class Session(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = json.dumps({'access_token': token}).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+server = HTTPServer(('127.0.0.1', 0), Session)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+os.environ.update(ICEBERG_SESSION_TOKEN_URL=f'http://127.0.0.1:{server.server_port}/token', MARIMO_GATEWAY_TOKEN='smoke')
+assert isinstance(connect(), SessionRestCatalog)
+
+def run(name):
+    spec = importlib.util.spec_from_file_location('grid_notebook', '/app/user_portal/notebook/examples/' + name)
+    notebook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(notebook)
+    return notebook.app.run()[1]
+
+identities = []
+for expected in ('created', 'updated'):
+    written = run('09_polars_grid_forecast_write.py')
+    counts = {r['dataset']: r['rows'] for r in written['published']}
+    assert counts['LOAD_FORECAST'] == 8640 and counts['SPREADING_CONTRIBUTION'] == 21600, counts
+    assert written['model_action'] == expected, written['model_action']
+    catalog = connect()
+    tables = [catalog.load_table(('ai_grid_forecast', r['table'].split('.')[-1])) for r in written['published']]
+    identities.append([str(t.metadata.table_uuid) for t in tables])
+    assert [t.scan().count() for t in tables] == list(counts.values())
+assert identities[0] == identities[1]
+print('PASS: Polars writes all eight grid forecast tables with its Iceberg sink in a portal session, twice, keeping their identity and row counts')
+"""
+
+GRID_READ_CODE = """
+import importlib.util
+
+from user_portal.notebook.connection import connect
+
+def run(name):
+    spec = importlib.util.spec_from_file_location('grid_notebook', '/app/user_portal/notebook/examples/' + name)
+    notebook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(notebook)
+    return notebook.app.run()[1]
+
+read = run('10_polars_grid_forecast_read.py')
+assert len(read['checks']) == 15 and all(c['violations'] == 0 for c in read['checks'])
+assert read['congestion_overview']['congestion_points'].sum() == 162
+assert read['engines_agree']['agree'].all()
+forecast = connect().load_table(('ai_grid_forecast', 'load_forecast'))
+before = forecast.current_snapshot().snapshot_id
+written = run('09_polars_grid_forecast_write.py')
+assert 'published' not in written, 'Expected Polaris to refuse a reader publishing the grid forecast'
+assert connect().load_table(('ai_grid_forecast', 'load_forecast')).current_snapshot().snapshot_id == before
+print('PASS: Polars scans the grid forecast with the semantic model from Polaris; a reader cannot publish it')
+"""
+
+
+def main(*, flights_only=False, grid_only=False):
     context = json.loads(subprocess.check_output(["docker", "context", "inspect"]))[0]
     with (
         closing(docker.DockerClient(base_url=context["Endpoints"]["docker"]["Host"])) as daemon,
@@ -205,14 +281,11 @@ def main(*, flights_only=False):
             network.connect(
                 os.environ.get("RUSTFS_CONTAINER", "iceberg-platform-rustfs-1"), aliases=["rustfs"]
             )
-            checks = [] if flights_only else [(CODE, reader), (V3_READER_CODE, reader), (V3_CODE, writer)]
-            checks.extend(
-                [
-                    (FLIGHTS_WRITE_CODE, writer),
-                    (FLIGHTS_READ_CODE, reader),
-                    (FLIGHTS_SEMANTIC_READ_CODE, reader),
-                ]
-            )
+            checks = [] if flights_only or grid_only else [(CODE, reader), (V3_READER_CODE, reader), (V3_CODE, writer)]
+            if not grid_only:
+                checks += [(FLIGHTS_WRITE_CODE, writer), (FLIGHTS_READ_CODE, reader), (FLIGHTS_SEMANTIC_READ_CODE, reader)]
+            if not flights_only:
+                checks += [(GRID_WRITE_CODE, writer), (GRID_READ_CODE, reader)]
             for code, account in checks:
                 run_notebook(daemon, network, database, account, code)
         finally:
@@ -263,4 +336,6 @@ def run_notebook(daemon, network, database, account, code):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--flights-only", action="store_true", help="Run only the flights write/read pair")
-    main(flights_only=parser.parse_args().flights_only)
+    parser.add_argument("--grid-only", action="store_true", help="Run only the Polars grid forecast write/read pair")
+    arguments = parser.parse_args()
+    main(flights_only=arguments.flights_only, grid_only=arguments.grid_only)

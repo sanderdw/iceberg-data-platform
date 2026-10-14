@@ -19,10 +19,10 @@ Teams create, own and share their databases. People, notebooks and AI agents all
 - **Administration portal:** manage teams, users with a role per team, databases and data shares, and browse every Polaris catalog.
 - **User portal:** sign in with Keycloak, pick a team and environment, and manage databases, browse catalogs, open notebooks and share data.
 - **Catalog details:** table schemas, snapshots, branches and tags, partitioning, view SQL and a 100-row preview, plus semantic models with a diagram of their datasets and relationships, all with your own permissions.
-- **Data shares:** share selected tables, views and semantic models with another team or with an external party, who gets a credential and a DuckDB script.
-- **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Eight example notebooks cover PyIceberg, DuckDB, Iceberg v3, a data product whose semantic model lives in Polaris, and loading API data with dlt.
+- **Data shares:** share selected tables, views and semantic models with another team or with an external party, who gets a credential and a DuckDB script, or list them in a data catalog, metadata only.
+- **Team notebooks:** one shared marimo filespace per team and environment. Each user's execution is isolated and uses that user's own permissions. Ten example notebooks cover PyIceberg, DuckDB, Iceberg v3, two data products whose semantic models live in Polaris (one with DuckDB, one with Polars), and loading API data with dlt.
 - **MCP servers:** AI agents such as Claude Code sign in through Keycloak to explore data and semantic models, manage databases and data shares, or administer the platform.
-- **Extensions:** add Conversational BI, a chat over your semantic models, dbt pipelines that agents build and test on your tables, and Ingestion (dlt) that loads APIs, databases and files into them. Each is released on its own; see [extensions](https://sanderdw.github.io/iceberg-data-platform/extensions/).
+- **Extensions:** add Conversational BI, a chat over your semantic models, dbt pipelines that agents build and test on your tables, Ingestion (dlt) that loads APIs, databases and files into them, and OpenMetadata, which lists your data products in a data catalog. Each is released on its own; see [extensions](https://sanderdw.github.io/iceberg-data-platform/extensions/).
 
 This is an **educational local development platform**. Read [the security model](https://sanderdw.github.io/iceberg-data-platform/security/) before deploying it elsewhere.
 
@@ -50,7 +50,7 @@ The documentation is at **https://sanderdw.github.io/iceberg-data-platform/**.
 - [First steps](https://sanderdw.github.io/iceberg-data-platform/first-steps/) and the [services](https://sanderdw.github.io/iceberg-data-platform/first-steps/#services)
 - Use the platform: [user portal](https://sanderdw.github.io/iceberg-data-platform/user-portal/), [notebooks](https://sanderdw.github.io/iceberg-data-platform/notebooks/), [semantic models](https://sanderdw.github.io/iceberg-data-platform/semantic-models/), [data shares](https://sanderdw.github.io/iceberg-data-platform/data-shares/), [your own tools](https://sanderdw.github.io/iceberg-data-platform/connect/) and [AI agents](https://sanderdw.github.io/iceberg-data-platform/ai-agents/)
 - [Administration guide](https://sanderdw.github.io/iceberg-data-platform/admin-guide/), [configuration](https://sanderdw.github.io/iceberg-data-platform/configuration/) and the [security model](https://sanderdw.github.io/iceberg-data-platform/security/)
-- [Extensions](https://sanderdw.github.io/iceberg-data-platform/extensions/): Conversational BI, dbt pipelines and Ingestion (dlt)
+- [Extensions](https://sanderdw.github.io/iceberg-data-platform/extensions/): Conversational BI, dbt pipelines, Ingestion (dlt) and OpenMetadata
 - [Develop](https://sanderdw.github.io/iceberg-data-platform/develop/): principles, [run from source](https://sanderdw.github.io/iceberg-data-platform/develop/run-from-source/), [contributing](https://sanderdw.github.io/iceberg-data-platform/develop/contributing/), architecture and internals
 - [Changelog](https://sanderdw.github.io/iceberg-data-platform/changelog/)
 - [Presentation](https://sanderdw.github.io/iceberg-data-platform/presentation/)

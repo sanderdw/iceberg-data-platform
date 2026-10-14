@@ -60,7 +60,7 @@ own: Conversational BI at `http://localhost:3007/mcp` (client `ext-conversationa
 | --- | --- |
 | `list_share_teams` | Teams that can receive a share of a database. |
 | `list_shares` / `list_received_shares` | Outgoing shares of a database, and the shares your teams received. |
-| `create_share` / `update_share` | Share tables, views and semantic models with a team, an external party or both. By default, selecting a semantic model also selects the tables it reads (`addedTables`). |
+| `create_share` / `update_share` | Share tables, views and semantic models with a team, an external party, the data catalog (`listed`, with a `contact`) or a combination. A listing publishes metadata only and needs a data catalog extension. By default, selecting a semantic model also selects the tables it reads (`addedTables`). |
 | `rotate_share_credential` | Returns a new client secret for an external share, once. The old one stops working. |
 | `delete_share` | Revokes all access immediately. `confirm_name` must equal the share's name. |
 
@@ -203,6 +203,8 @@ These lessons come from building models with the tools above:
 - **Dataset names.** Write metric expressions with the dataset name, such as `sum(SALES.amount)` or
   `count(SALES.id)`. A metric that names no dataset, such as a bare `count(*)`, cannot be queried on
   its own, because the portal cannot tell which dataset it counts.
+- **Fields.** Describe each field, and give it synonyms and examples in its `ai_context`. A `label`
+  groups fields by what they hold across models, such as `Delay`; a data catalog shows it as a tag.
 - **Dimensions.** Mark every field people group or filter by as a dimension, identifiers included.
   Once a dataset marks any field, only marked fields can be used.
 - **Data gaps.** Say in each metric's description which years it covers, and in the instructions what

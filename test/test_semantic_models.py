@@ -5,11 +5,11 @@ import json
 import httpx
 import pytest
 
+from server.catalog_metadata import semantic_model_details
 from server.models import ServiceError
 from server.polaris import ROLES, PolarisProvider
 from test.conftest import SEMANTIC_MODEL
 from test.test_user_portal import HEADERS, JSON, login, promote, users  # noqa: F401 - fixture
-from user_portal.catalog import semantic_model_details
 
 
 def test_document_projection_is_flat_and_keeps_the_stored_definition():
@@ -108,6 +108,20 @@ def test_fields_and_metrics_show_their_synonyms():
     shown = semantic_model_details("m", [], {"document": {"semantic_model": json.dumps(model)}})["models"][0]
     assert [f["synonyms"] for f in shown["datasets"][0]["fields"]] == [["eff"], []]
     assert shown["metrics"][0]["synonyms"] == ["em"]
+
+
+def test_labels_and_ai_context_of_datasets_fields_and_metrics():
+    model = {"datasets": [{"name": "D", "source": "t", "ai_context": {"instructions": "One row per day."},
+                           "fields": [{"name": "f", "label": "AirportCode",
+                                       "ai_context": {"synonyms": ["eff"], "examples": ["QAA", "QAB"]}}]}],
+             "metrics": [{"name": "m", "ai_context": {"synonyms": ["em"], "instructions": "Never sum."}}]}
+    shown = semantic_model_details("m", [], {"document": {"semantic_model": json.dumps(model)}})["models"][0]
+    dataset = shown["datasets"][0]
+    assert dataset["aiContext"] == [{"label": "Instructions", "value": "One row per day."}]
+    # Synonyms have their own list; the rest of a field's or metric's AI context is kept as rows.
+    assert dataset["fields"][0]["label"] == "AirportCode"
+    assert dataset["fields"][0]["aiContext"] == [{"label": "Examples", "value": "QAA, QAB"}]
+    assert shown["metrics"][0]["aiContext"] == [{"label": "Instructions", "value": "Never sum."}]
 
 
 @pytest.mark.parametrize("stored", ["not json", "[1, 2]", "42", "null", '{"semantic_model": 7}'])

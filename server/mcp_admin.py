@@ -199,12 +199,13 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
 
     @mcp.tool(annotations=READ_ONLY)
     async def list_shares() -> dict[str, Any]:
-        """Every data share with its database, objects, expiry and creator."""
+        """Every data share with its database, objects, destinations (team, external, listed), expiry and creator."""
         return {"shares": await query(provider.list_shares)}
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def revoke_share(share: ShareId) -> dict[str, Any]:
-        """End all access through this share immediately: the recipient team's and any external credential."""
+        """End all access through this share immediately: the recipient team's and any external credential.
+        A listed share also leaves the data catalog."""
         await query(provider.delete_share, share)
         return {"revoked": True, "share": share}
 

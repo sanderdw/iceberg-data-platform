@@ -182,7 +182,7 @@ def test_platform_administrators_see_and_revoke(portal, monkeypatch):
     item, _ = p.provider.create_automation(team, "production", "dbt", CREATOR)
     overview = p.client.get("/api/overview").json()
     assert [i["id"] for i in overview["automationPrincipals"]] == [item["id"]]
-    assert overview["extensions"] == [{"id": "dbt", "origin": "http://localhost:3004"}]
+    assert overview["extensions"] == [{"id": "dbt", "origin": "http://localhost:3004", "listing": False}]
     assert [i["id"] for i in p.client.get("/api/automation-principals").json()] == [item["id"]]
     assert p.delete("/automation-principals/share-" + "a" * 32).status_code == 422
     assert p.delete(f"/automation-principals/{item['id']}").json() == {"deleted": True}

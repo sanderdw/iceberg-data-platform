@@ -164,6 +164,30 @@ def test_catalog_properties_sign_in_as_the_notebook_owner(monkeypatch):
     assert properties["auth"] == {"type": "custom", "impl": "user_portal.notebook.connection.SessionAuthManager"}
 
 
+def test_session_catalog_signs_requests_and_keeps_plain_string_properties(monkeypatch):
+    pytest.importorskip("pyiceberg")
+    import requests
+    from pyiceberg.catalog.rest import RestCatalog
+
+    from user_portal.notebook import connection
+
+    for name, value in {
+        "ICEBERG_DATABASE": "db-1", "ICEBERG_CATALOG_URI": "http://polaris:8181/api/catalog",
+        "ICEBERG_TOKEN_URI": "http://polaris:8181/api/catalog/v1/oauth/tokens",
+        "ICEBERG_S3_ENDPOINT": "http://rustfs:9000",
+        "ICEBERG_SESSION_TOKEN_URL": "http://workspace-gateway:3002/internal/notebooks/n/token",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(connection, "access_token", lambda: "fresh")
+    monkeypatch.setattr(RestCatalog, "_fetch_config", lambda self: None)
+    catalog = connection.connect()
+    # Polars' Iceberg sink copies these and refuses anything but strings, such as a nested auth dict.
+    assert isinstance(catalog, connection.SessionRestCatalog)
+    assert all(isinstance(value, str) for value in catalog.properties.values())
+    request = catalog._session.prepare_request(requests.Request("GET", "http://polaris:8181/api/catalog/v1/config"))
+    assert request.headers["Authorization"] == "Bearer fresh"
+
+
 def test_dlt_tables_take_the_catalog_location(monkeypatch):
     pytest.importorskip("dlt")
     import dlt.common.libs.pyiceberg as dlt_iceberg

@@ -2,7 +2,12 @@
 
 ## 0.9.1 - 2026-10-13
 
-- The [presentation](https://sanderdw.github.io/iceberg-data-platform/presentation/) covers all three extensions and the current component versions.
+- **List a data product in your data catalog.** A data share can now also be **Listed in the data catalog**: its tables, views, columns, descriptions and semantic models are published without data or a credential, so others can find it and ask you for access. Team administrators switch a listing on or off at any time, with a contact for access requests. See [data shares](data-shares.md#what-a-listing-publishes).
+- **OpenMetadata**, a new extension, publishes listed shares to [OpenMetadata](https://open-metadata.org/) 2.0: tables and views with their columns, semantic model metrics with their dimensions, lineage, and a data product per share. Semantic models also become glossary terms, and field labels tags. See [OpenMetadata](openmetadata.md).
+- **An AI-ready grid forecast with Polars.** Example notebooks 09 and 10 write and read a synthetic medium-voltage load forecast and congestion outlook: Polars generates it lazily, checks it with SQL and writes it with its own Iceberg sink, and the semantic model's metrics run unchanged in Polars and in governed queries. Use `polars_storage_options()` to read or write Iceberg tables with Polars in your own notebooks.
+- **Flights example fields say what they mean.** Notebook 06 gives every field of the flights semantic model a description, and a label for the ontology concept it holds, with synonyms and examples where they help. The catalog, AI agents and data catalogs show them.
+- The Extension Bridge contract is now 0.1.1, with the `listings` capability. Existing extensions keep working.
+- The [presentation](https://sanderdw.github.io/iceberg-data-platform/presentation/) covers all four extensions, data catalog listings with OpenMetadata, and the current component versions.
 
 ## 0.9.0 - 2026-10-13
 

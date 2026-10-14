@@ -1,5 +1,19 @@
 # Bridge contract changelog
 
+## 0.1.1 - 2026-10-14
+
+Released with core 0.9.1. Additive: extensions built for 0.1.0 keep working.
+
+- Capability `listings`: data shares that their owning team lists in a data catalog. A
+  registered listing extension (`PLATFORM_LISTING_EXTENSIONS`) polls `GET /listings`, then
+  reads `GET /listings/{shareId}` for the names, column schemas, descriptions, partition
+  fields, producer conventions and semantic models of the listed objects. The response has
+  an `ETag` and answers `If-None-Match` with 304. A listing carries no data, view SQL,
+  storage location, snapshots or credential. Semantic model fields carry their `label`, and
+  datasets, fields and metrics their `aiContext` rows (a field's or metric's synonyms stay in
+  `synonyms`).
+- Discovery: each entry of `extensions` has `listing`, true for a listing extension.
+
 ## 0.1.0 - 2026-10-04
 
 First version, released with core 0.7.0.

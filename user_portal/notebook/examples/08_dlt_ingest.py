@@ -23,7 +23,7 @@ def _():
 def _(mo, os):
     mo.md(f"""
     # Load data with dlt
-    **Example 8 of 8 · database `{os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])}`**
+    **Example 8 of 10 · database `{os.environ.get("ICEBERG_DATABASE_NAME", os.environ["ICEBERG_DATABASE"])}`**
 
     [dlt](https://dlthub.com/docs) loads data from APIs, databases and files into Iceberg tables.
     It infers the schema, turns nested lists into child tables and keeps track of what it loaded.

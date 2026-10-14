@@ -13,7 +13,7 @@ flowchart LR
         Docker[Trusted Docker daemon]
         Notebook[Session marimo container]
     end
-    subgraph Extension[Extension, e.g. Conversational BI, dbt or Ingestion · own Compose project]
+    subgraph Extension[Extension, e.g. Conversational BI, dbt, Ingestion or OpenMetadata · own Compose project]
         ExtApp[Gateway: UI, API and /mcp<br/>Keycloak clients of the extension]
         Worker[Query worker]
     end

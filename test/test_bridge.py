@@ -5,11 +5,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.bridge import CONTRACT, create_bridge_app
-from server.models import DatabaseInput, ServiceError, ShareInput, TeamInput, UserInput
-from test.conftest import MemoryPolaris, members
+from server.models import DatabaseInput, ServiceError, ShareInput, ShareUpdate, TeamInput, UserInput
+from test.conftest import SEMANTIC_MODEL, MemoryPolaris, members
 
 ISSUER = "http://localhost:8080/realms/iceberg"
-ENV = {"OIDC_ISSUER": ISSUER, "PLATFORM_EXTENSIONS": "dbt=http://localhost:3004,other=http://localhost:3009"}
+ENV = {"OIDC_ISSUER": ISSUER, "PLATFORM_EXTENSIONS": "dbt=http://localhost:3004,other=http://localhost:3009",
+       "PLATFORM_LISTING_EXTENSIONS": "other"}
 
 
 class FakeVerifier:
@@ -73,8 +74,8 @@ def bridge():
     verifier.tokens["stranger"] = {"iss": ISSUER, "sub": "x", "azp": "iceberg-users",
                                    "polaris": {"principal_name": admin["id"], "principal_id": 0}}
     with TestClient(create_bridge_app(provider, verifier, ENV)) as client:
-        def call(method, path, token=None, **kwargs):
-            headers = {"Authorization": f"Bearer {token}"} if token else {}
+        def call(method, path, token=None, headers=None, **kwargs):
+            headers = {**({"Authorization": f"Bearer {token}"} if token else {}), **(headers or {})}
             return client.request(method, "/bridge/v1" + path, headers=headers, **kwargs)
 
         yield SimpleNamespace(call=call, provider=provider, verifier=verifier, team=team, other=other, dev=dev,
@@ -83,13 +84,14 @@ def bridge():
 
 def test_discovery_is_public_and_complete(bridge):
     body = bridge.call("GET", "").json()
-    assert body["contractVersion"] == "0.1.0"
-    assert body["capabilities"] == ["user-context", "automation-principals", "automation-tokens", "shared-data"]
+    assert body["contractVersion"] == "0.1.1"
+    assert body["capabilities"] == ["user-context", "automation-principals", "automation-tokens", "shared-data",
+                                    "listings"]
     assert body["oidc"] == {"issuer": ISSUER, "internalIssuer": ISSUER, "bridgeAudience": "iceberg-bridge"}
     assert body["catalog"]["internalUri"] == "http://polaris-control-plane:8181/api/catalog"
     assert body["network"]["name"] == "iceberg-platform_default"
-    assert body["extensions"] == [{"id": "dbt", "origin": "http://localhost:3004"},
-                                  {"id": "other", "origin": "http://localhost:3009"}]
+    assert body["extensions"] == [{"id": "dbt", "origin": "http://localhost:3004", "listing": False},
+                                  {"id": "other", "origin": "http://localhost:3009", "listing": True}]
     assert bridge.call("GET", "/health").json() == {"status": "ok"}
 
 
@@ -224,6 +226,139 @@ def test_revocation(bridge):
     response = bridge.call("POST", f"/automation-principals/{id}/tokens", "service", json={"access": "read"})
     assert (response.status_code, response.json()["code"]) == (404, "not_found")
     assert bridge.provider.list_automation() == []
+
+
+ORDERS = {"kind": "table", "namespace": ["sales"], "name": "orders"}
+REPORT = {"kind": "view", "namespace": ["sales"], "name": "report"}
+REVENUE = {"kind": "semantic-model", "namespace": ["sales"], "name": "revenue"}
+
+
+def listed(bridge, objects=(ORDERS, REPORT, REVENUE), name="catalog", **extra):
+    """A listing of the data team's development database, with its definitions in the catalog."""
+    db = bridge.dev
+    base = f"/api/catalog/v1/{db}/namespaces/sales"
+    bridge.provider.catalog.update({
+        f"{base}/tables/orders": {"metadata": {
+            "table-uuid": "u-orders", "location": "s3://bucket/sales/orders", "current-schema-id": 0,
+            "schemas": [{"schema-id": 0, "fields": [
+                {"id": 1, "name": "id", "type": "long", "required": True, "doc": "Order number"},
+                {"id": 2, "name": "customer", "required": False, "type": {"type": "struct", "fields": [
+                    {"id": 3, "name": "name", "type": "string", "required": False}]}},
+                {"id": 4, "name": "ordered_at", "type": "timestamptz", "required": False},
+            ]}],
+            "default-spec-id": 0,
+            "partition-specs": [{"spec-id": 0, "fields": [
+                {"name": "ordered_at_day", "source-id": 4, "field-id": 1000, "transform": "day"}]}],
+            "current-snapshot-id": 7,
+            "snapshots": [{"snapshot-id": 7, "timestamp-ms": 1, "summary": {"operation": "append", "total-records": "42"}}],
+            "last-updated-ms": 1700000000000,
+            "properties": {
+                "comment": "All orders", "write.format.default": "parquet",
+                "iceberg-data-platform.producer": "dbt",
+                "iceberg-data-platform.lineage.inputs": json.dumps([
+                    {"database": db, "namespace": ["sales"], "name": "report"},
+                    {"database": db, "namespace": ["raw"], "name": "unlisted"}]),
+            },
+        }},
+        f"{base}/views/report": {"metadata": {
+            "view-uuid": "u-report", "current-version-id": 1, "properties": {"comment": "Monthly"},
+            "versions": [{"version-id": 1, "schema-id": 0, "timestamp-ms": 5, "representations": [
+                {"type": "sql", "dialect": "spark", "sql": "SELECT * FROM raw.unlisted WHERE secret = 1"}]}],
+            "schemas": [{"schema-id": 0, "fields": [{"id": 1, "name": "total", "type": "decimal(10,2)",
+                                                     "required": False}]}],
+        }},
+        f"/api/catalog/polaris/v1/{db}/namespaces/sales/semantic-models/revenue": SEMANTIC_MODEL,
+    })
+    return bridge.provider.create_share(ShareInput.model_validate({
+        "database": db, "name": name, "external": False, "listed": True, "contact": "data@example.test",
+        "objects": list(objects), **extra,
+    }), {"id": "portal-" + "c" * 32, "name": "alice"})["share"]
+
+
+@pytest.mark.parametrize(("token", "code"), [
+    ("service", "listing_not_enabled"), ("alice", "service_required"), (None, "unauthorized")])
+def test_only_a_listing_extension_reads_listings(bridge, token, code):
+    share = listed(bridge)
+    for path in ("/listings", f"/listings/{share['id']}"):
+        assert bridge.call("GET", path, token).json()["code"] == code
+
+
+def test_listings_name_only_listed_shares(bridge):
+    share = listed(bridge)
+    share_to(bridge, bridge.team, [ORDERS], name="team-only")
+    body = bridge.call("GET", "/listings", "other-service").json()
+    assert [(item["id"], item["databaseId"], item["environment"]) for item in body["listings"]] == [
+        (share["id"], bridge.dev, "development")]
+    version = body["listings"][0]["version"]
+    bridge.provider.update_share(share["id"], ShareUpdate.model_validate({"description": "Orders per day"}))
+    assert bridge.call("GET", "/listings", "other-service").json()["listings"][0]["version"] != version
+    # Unlisting or revoking takes it out of the catalog.
+    both = listed(bridge, name="both", recipientTeam=bridge.other)
+    bridge.provider.update_share(both["id"], ShareUpdate.model_validate({"listed": False}))
+    bridge.provider.delete_share(share["id"])
+    assert bridge.call("GET", "/listings", "other-service").json()["listings"] == []
+
+
+def test_a_listing_carries_metadata_never_data(bridge):
+    share = listed(bridge)
+    provider = bridge.provider
+    provider.events.clear()
+    response = bridge.call("GET", f"/listings/{share['id']}", "other-service")
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["name"], body["contact"], body["owner"]) == (
+        "catalog", "data@example.test", {"team": bridge.team, "teamName": "data-team"})
+    assert body["database"] == {"id": bridge.dev, "name": "sales", "environment": "development"}
+    table, view, model = sorted(body["objects"], key=lambda o: o["kind"] == "semantic-model" and 2 or o["kind"] == "view")
+    assert table["columns"][1] == {"id": 2, "name": "customer", "type": "struct<name: string>", "required": False,
+                                   "doc": "", "children": [{"id": 3, "name": "name", "type": "string",
+                                                            "required": False, "doc": "", "children": []}]}
+    assert table["partitionFields"] == [{"name": "ordered_at_day", "sourceColumn": "ordered_at", "transform": "day"}]
+    assert (table["comment"], table["rowCount"]) == ("All orders", 42)
+    # Lineage keeps only what the same listing names.
+    assert table["producer"]["inputs"] == [{"database": bridge.dev, "namespace": ["sales"], "name": "report"}]
+    assert view["columns"][0]["type"] == "decimal(10,2)" and view["comment"] == "Monthly"
+    assert [m["name"] for m in model["models"][0]["metrics"]] == ["event_count"]
+    text = json.dumps(body)
+    for secret in ("SELECT", "s3://", "write.format", "unlisted", "snapshots", "definition"):
+        assert secret not in text
+    assert body["unavailable"] == []
+    # Read with a temporary role that holds no data privilege and is gone afterwards.
+    grants = [b["grant"] for path, method, b in provider.events if path.endswith("/grants") and method == "PUT"]
+    assert {g["privilege"] for g in grants} == {"TABLE_READ_PROPERTIES", "VIEW_READ_PROPERTIES", "SEMANTIC_MODEL_READ"}
+    role = next(b["catalogRole"]["name"] for path, method, b in provider.events
+                if path == f"/catalogs/{bridge.dev}/catalog-roles" and method == "POST")
+    assert role.startswith("portal-listing-") and role not in provider.catalog_roles[bridge.dev]
+    assert (f"/principal-roles/service_admin/catalog-roles/{bridge.dev}", "PUT", {"catalogRole": {"name": role}}) \
+        in provider.events
+    # Catalog reads ask for no storage credentials.
+    assert all(method == "GET" for path, method, _ in provider.events if path.startswith("/api/catalog/"))
+
+
+def test_a_listing_is_conditional_and_reports_dropped_objects(bridge):
+    share = listed(bridge)
+    first = bridge.call("GET", f"/listings/{share['id']}", "other-service")
+    etag = first.headers["etag"]
+    assert bridge.call("GET", f"/listings/{share['id']}", "other-service",
+                       headers={"If-None-Match": etag}).status_code == 304
+    bridge.provider.catalog[f"/api/catalog/v1/{bridge.dev}/namespaces/sales/views/report"] = None
+    changed = bridge.call("GET", f"/listings/{share['id']}", "other-service", headers={"If-None-Match": etag})
+    assert changed.status_code == 200 and changed.json()["unavailable"] == [REPORT]
+    assert bridge.call("GET", f"/listings/share-{'f' * 32}", "other-service").status_code == 404
+    unlisted = share_to(bridge, bridge.team, [ORDERS], name="team-only")
+    assert bridge.call("GET", f"/listings/{unlisted['id']}", "other-service").status_code == 404
+
+
+def test_a_failed_listing_read_removes_its_temporary_role(bridge):
+    share = listed(bridge)
+    bridge.provider.fail = lambda path, method, body: path.endswith("/views/report")
+    assert bridge.call("GET", f"/listings/{share['id']}", "other-service").status_code == 502
+    bridge.provider.fail = None
+    assert not [r for r in bridge.provider.catalog_roles[bridge.dev] if r.startswith("portal-listing-")]
+    # A role a stopped bridge left behind is swept.
+    bridge.provider.management(f"/catalogs/{bridge.dev}/catalog-roles", "POST",
+                               {"catalogRole": {"name": "portal-listing-left"}})
+    assert bridge.provider.sweep_listing_roles() == ["portal-listing-left"]
 
 
 def test_committed_contract_matches_the_implementation(bridge):

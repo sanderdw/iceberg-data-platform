@@ -1,0 +1,43 @@
+# The OpenMetadata extension: a separate Compose project that uses the platform only through the
+# Extension Bridge (contracts/bridge in the platform repository) and publishes listed data shares
+# to an OpenMetadata server. It holds no state.
+name: iceberg-openmetadata
+
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+services:
+  om-sync:
+    build: .
+    image: iceberg-openmetadata:0.1.0
+    <<: *hardened
+    labels:
+      io.iceberg-platform.extension: openmetadata
+    env_file: [.env.bridge]
+    environment:
+      OM_URL: ${OM_URL:-}
+      OM_JWT_TOKEN: ${OM_JWT_TOKEN:-}
+      OM_SERVICE_PREFIX: ${OM_SERVICE_PREFIX:-iceberg}
+      OM_DOMAIN: ${OM_DOMAIN:-Iceberg Data Platform}
+      OM_POLL_SECONDS: ${OM_POLL_SECONDS:-60}
+      OM_FULL_SYNC_SECONDS: ${OM_FULL_SYNC_SECONDS:-900}
+      OM_VERIFY_TLS: ${OM_VERIFY_TLS:-true}
+      OM_UI_URL: ${OM_UI_URL:-}
+    ports:
+      - "127.0.0.1:${OM_PORT:-3011}:3011"
+    networks: [platform]
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3011/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+networks:
+  platform:
+    external: true
+    name: ${PLATFORM_NETWORK:-iceberg-platform_default}

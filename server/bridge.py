@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import httpx
-from fastapi import Body, Depends, FastAPI, Request
+from fastapi import Body, Depends, FastAPI, Header, Request, Response
 from fastapi import Path as PathParam
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
@@ -29,17 +29,18 @@ from joserfc import jwt
 from joserfc.errors import InvalidKeyIdError
 from joserfc.jwk import KeySet
 from joserfc.jws import JWSRegistry
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from . import extensions as registry
+from . import listings
 from .models import ENVIRONMENTS, AutomationInput, Environment, ServiceError, TokenRequest
 from .polaris import AUTOMATION_ROLES, PolarisProvider, enc
 from .storage import RustFSStorage
 from .validation import validation_message
 
-CONTRACT_VERSION = "0.1.0"
-CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "shared-data"]
+CONTRACT_VERSION = "0.1.1"
+CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "shared-data", "listings"]
 BRIDGE_AUDIENCE = "iceberg-bridge"
 CONTRACT = Path(__file__).resolve().parent.parent / "contracts" / "bridge" / "v1" / "openapi.yaml"
 ADMIN_ROLES = ("admin", "bucket-admin")
@@ -91,6 +92,8 @@ class Network(BaseModel):
 class Extension(BaseModel):
     id: str
     origin: str
+    # Capability `listings`: this extension publishes listed data shares to a data catalog.
+    listing: bool = False
 
 
 class Discovery(BaseModel):
@@ -191,6 +194,183 @@ class Revoked(BaseModel):
     revoked: bool
 
 
+# Capability `listings`: data shares their owners publish to a data catalog. Metadata only.
+
+class ListingSummary(BaseModel):
+    id: str
+    version: str
+    databaseId: str
+    environment: Environment
+
+
+class ListingList(BaseModel):
+    listings: list[ListingSummary]
+
+
+class ListingOwner(BaseModel):
+    team: str
+    teamName: str
+
+
+class ListingDatabase(BaseModel):
+    id: str
+    name: str
+    environment: Environment
+
+
+class Column(BaseModel):
+    id: int
+    name: str
+    type: str
+    required: bool
+    doc: str
+    children: list[Column] = []
+
+
+class PartitionField(BaseModel):
+    name: str
+    sourceColumn: str
+    transform: str
+
+
+class LineageInput(BaseModel):
+    database: str
+    namespace: list[str]
+    name: str
+
+
+class Quality(BaseModel):
+    status: str
+    summary: str | None = None
+    checkedAt: str | None = None
+
+
+class Producer(BaseModel):
+    name: str
+    version: str | None = None
+    extension: str | None = None
+    url: str | None = None
+    runId: str | None = None
+    runAt: str | None = None
+    revision: str | None = None
+    node: str | None = None
+    inputs: list[LineageInput] = []
+    inputsTruncated: bool = False
+    quality: Quality | None = None
+
+
+class ListedTable(BaseModel):
+    kind: Literal["table"]
+    namespace: list[str]
+    name: str
+    uuid: str | None = None
+    comment: str
+    columns: list[Column]
+    partitionFields: list[PartitionField]
+    rowCount: int | None = None
+    updatedAt: int | None = None
+    producer: Producer | None = None
+
+
+class ListedView(BaseModel):
+    kind: Literal["view"]
+    namespace: list[str]
+    name: str
+    uuid: str | None = None
+    comment: str
+    columns: list[Column]
+    updatedAt: int | None = None
+
+
+class Expression(BaseModel):
+    dialect: str
+    expression: str
+
+
+class ModelTable(BaseModel):
+    namespace: list[str]
+    name: str
+
+
+class ContextRow(BaseModel):
+    label: str
+    value: str
+
+
+class ModelField(BaseModel):
+    name: str
+    label: str
+    description: str
+    datatype: str
+    dimension: bool
+    timeDimension: bool
+    synonyms: list[str]
+    # AI context other than synonyms, such as instructions and examples.
+    aiContext: list[ContextRow]
+    expressions: list[Expression]
+
+
+class ModelDataset(BaseModel):
+    name: str
+    description: str
+    source: str
+    table: ModelTable | None = None
+    primaryKey: list[str]
+    aiContext: list[ContextRow]
+    fields: list[ModelField]
+
+
+class ModelRelationship(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    name: str
+    from_: str = Field(alias="from")
+    to: str
+    fromColumns: list[str]
+    toColumns: list[str]
+
+
+class ModelMetric(BaseModel):
+    name: str
+    description: str
+    datatype: str
+    synonyms: list[str]
+    aiContext: list[ContextRow]
+    expressions: list[Expression]
+
+
+class SemanticModel(BaseModel):
+    name: str
+    description: str
+    aiContext: list[ContextRow]
+    datasets: list[ModelDataset]
+    relationships: list[ModelRelationship]
+    metrics: list[ModelMetric]
+
+
+class ListedSemanticModel(BaseModel):
+    kind: Literal["semantic-model"]
+    namespace: list[str]
+    name: str
+    specVersion: str
+    entityVersion: str
+    models: list[SemanticModel]
+
+
+class Listing(BaseModel):
+    id: str
+    name: str
+    description: str
+    contact: str
+    expiresAt: str | None = None
+    version: str
+    owner: ListingOwner
+    database: ListingDatabase
+    objects: list[Annotated[ListedTable | ListedView | ListedSemanticModel, Field(discriminator="kind")]]
+    # Listed objects that were dropped, or can no longer be read.
+    unavailable: list[SharedObject]
+
+
 @dataclass
 class Caller:
     kind: Literal["user", "service"]
@@ -278,6 +458,7 @@ def create_bridge_app(provider=None, verifier=None, env=None):
     provider = provider or PolarisProvider(env, RustFSStorage(env))
     verifier = verifier or TokenVerifier(env["OIDC_ISSUER"], env.get("OIDC_INTERNAL_ISSUER", env["OIDC_ISSUER"]))
     known = registry.extensions(env)
+    listing_ids = set(registry.listing_extensions(env))
     by_client = {registry.client_id(id): id for id in known} | {registry.mcp_client_id(id): id for id in known}
     catalog_internal = env.get("BRIDGE_CATALOG_URI", "http://polaris-control-plane:8181/api/catalog").rstrip("/")
     mutations = asyncio.Lock()
@@ -288,6 +469,12 @@ def create_bridge_app(provider=None, verifier=None, env=None):
 
     @asynccontextmanager
     async def lifespan(app):
+        if listing_ids:
+            # A stopped bridge may have left a temporary listing role behind.
+            try:
+                await run_in_threadpool(provider.sweep_listing_roles)
+            except ServiceError:
+                LOG.warning("Leftover listing roles could not be removed; the next start retries.")
         try:
             yield
         finally:
@@ -369,8 +556,15 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                               "service_required")
         return c
 
+    def as_listing(c: AnyCaller) -> Caller:
+        as_service(c)
+        if c.extension not in listing_ids:
+            raise BridgeError(403, "This extension is not registered to publish listings.", "listing_not_enabled")
+        return c
+
     UserCaller = Annotated[Caller, Depends(as_user)]
     ServiceCaller = Annotated[Caller, Depends(as_service)]
+    ListingCaller = Annotated[Caller, Depends(as_listing)]
 
     def team_role(c, team):
         roles = {m["team"]: m["role"] for m in provider.user(c.principal)["memberships"]}
@@ -381,6 +575,7 @@ def create_bridge_app(provider=None, verifier=None, env=None):
     errors = {status: {"model": Error} for status in (401, 403, 404, 409, 422, 502, 503)}
     team_id = Annotated[str, PathParam(pattern=r"^team-[a-f0-9]{32}$")]
     automation_id = Annotated[str, PathParam(pattern=r"^svc-[a-f0-9]{32}$")]
+    share_id = Annotated[str, PathParam(pattern=r"^share-[a-f0-9]{32}$")]
 
     @app.get("/bridge/v1", response_model=Discovery, summary="Discover the platform")
     def discovery():
@@ -503,6 +698,23 @@ def create_bridge_app(provider=None, verifier=None, env=None):
             "expiresIn": int(issued.get("expires_in", 0)), "access": data.access, "principal": id,
             "catalog": {"internalUri": catalog_internal},
         }
+
+    @app.get("/bridge/v1/listings", response_model=ListingList, responses=errors,
+             summary="Data shares listed in a data catalog (listing extensions)")
+    async def all_listings(c: ListingCaller):
+        return {"listings": await run_in_threadpool(listings.summaries, provider)}
+
+    @app.get("/bridge/v1/listings/{shareId}", response_model=Listing, responses={**errors, 304: {}},
+             summary="One listing with the metadata of its objects (listing extensions)")
+    async def one_listing(shareId: share_id, c: ListingCaller,
+                          if_none_match: Annotated[str | None, Header()] = None):
+        body = await run_in_threadpool(listings.listing, provider, shareId, known)
+        body = Listing.model_validate(body).model_dump(mode="json", by_alias=True)
+        etag = f'"{listings.digest(body)}"'
+        AUDIT.info("listing read: %s extension=%s", shareId, c.extension)
+        if if_none_match == etag:
+            return Response(status_code=304, headers={"ETag": etag})
+        return JSONResponse(body, headers={"ETag": etag})
 
     def schema():
         if app.openapi_schema is None:

@@ -38,6 +38,10 @@ ROLES = {
 # One grant per shared object and nothing on the namespace or catalog: Polaris does
 # not filter listings, so any list privilege would reveal every other name.
 SHARE_PRIVILEGES = {"table": "TABLE_READ_DATA", "view": "VIEW_READ_PROPERTIES", "semantic-model": "SEMANTIC_MODEL_READ"}
+# A listing reads only definitions: what the Bridge projects for a data catalog, never data.
+LISTING_PRIVILEGES = {"table": "TABLE_READ_PROPERTIES", "view": "VIEW_READ_PROPERTIES",
+                      "semantic-model": "SEMANTIC_MODEL_READ"}
+LISTING_ROLE = "portal-listing-"
 # The name field of a Polaris grant on one object of each kind.
 GRANT_NAMES = {"table": "tableName", "view": "viewName", "semantic-model": "semanticModelName"}
 MAX_SHARES = 20
@@ -65,6 +69,10 @@ def share_grant(o):
         GRANT_NAMES[o["kind"]]: o["name"],
         "privilege": SHARE_PRIVILEGES[o["kind"]],
     }
+
+
+def listing_grant(o):
+    return {**share_grant(o), "privilege": LISTING_PRIVILEGES[o["kind"]]}
 
 
 def grant_key(grant):
@@ -869,8 +877,9 @@ class PolarisProvider:
             self.remove(f"{path}/catalog-roles/{role}")
         # The user gateway is a second writer: a share created there during this deletion
         # leaves a role that would block the catalog drop. Its principal is revoked as an orphan.
+        # The Bridge may be reading a listing of this database too.
         for role in self.management(f"{path}/catalog-roles")["roles"]:
-            if role["name"].startswith("share-"):
+            if role["name"].startswith(("share-", LISTING_ROLE)):
                 self.remove(f"{path}/catalog-roles/{enc(role['name'])}")
         self.remove(f"/principal-roles/service_admin/catalog-roles/{enc(id)}/catalog_admin")
         self.remove(path)
@@ -900,6 +909,8 @@ class PolarisProvider:
             "recipient": p.get("portal.recipient", ""),
             "external": p.get("portal.external", "true") == "true",
             "recipientTeam": p.get("portal.recipient-team"),
+            "listed": p.get("portal.listed") == "true",
+            "contact": p.get("portal.contact", ""),
             "description": p.get("portal.description", ""),
             "database": p["portal.database"],
             "objects": objects,
@@ -1105,6 +1116,8 @@ class PolarisProvider:
                             "portal.recipient": data.recipient,
                             "portal.external": str(data.external).lower(),
                             **({"portal.recipient-team": data.recipient_team} if data.recipient_team else {}),
+                            "portal.listed": str(data.listed).lower(),
+                            "portal.contact": data.contact,
                             "portal.description": data.description,
                             "portal.database": data.database,
                             "portal.objects": json.dumps(objects),
@@ -1153,6 +1166,13 @@ class PolarisProvider:
             properties["portal.recipient"] = data.recipient
         if "description" in changed and data.description is not None:
             properties["portal.description"] = data.description
+        if "contact" in changed and data.contact is not None:
+            properties["portal.contact"] = data.contact
+        if "listed" in changed and data.listed is not None:
+            properties["portal.listed"] = str(data.listed).lower()
+            if (not data.listed and properties.get("portal.external", "true") != "true"
+                    and not properties.get("portal.recipient-team")):
+                raise ServiceError(422, "A share needs a team, external access or a listing. Revoke it instead.")
         if "expires_at" in changed:
             properties.pop("portal.expires-at", None)
             if data.expires_at:
@@ -1170,7 +1190,7 @@ class PolarisProvider:
     def rotate_share(self, id):
         principal = self.editable_share(id)
         if principal["properties"].get("portal.external", "true") != "true":
-            raise ServiceError(409, "This share is only available to a team and has no external credential.")
+            raise ServiceError(409, "This share has no external credential.")
         # `rotate` is reserved for the principal itself; `reset` keeps the client ID
         # and invalidates the old secret at once.
         result = self.management(f"/principals/{enc(id)}/reset", "POST", {})
@@ -1200,6 +1220,77 @@ class PolarisProvider:
         self.remove(self.share_role(principal))
         self.remove(f"/principal-roles/{enc(id)}")
         self.remove(path)
+
+    # Listings: shares published to a data catalog by a listing extension through the Bridge.
+    # The share's own principal is never activated for a listing; the Bridge reads definitions.
+
+    @contextmanager
+    def listing_access(self, database, objects):
+        """Temporary rights to read the definitions of listed objects, for the platform identity only.
+
+        The unique role holds no TABLE_READ_DATA and reads send no access delegation, so Polaris
+        vends no storage credentials. Deleting the role removes its grants and its assignment.
+        Yields the objects that could be granted: a dropped object is left out.
+        """
+        path = f"/catalogs/{enc(database)}"
+        role = f"{LISTING_ROLE}{uuid4().hex}"
+        role_path = f"{path}/catalog-roles/{role}"
+        self.management(
+            f"{path}/catalog-roles", "POST", {"catalogRole": {"name": role, "properties": {"portal.managed-by": MANAGED}}}
+        )
+        try:
+            granted = []
+            for o in objects:
+                try:
+                    self.management(f"{role_path}/grants", "PUT", {"grant": listing_grant(o)})
+                except ServiceError as exc:
+                    if exc.status != 404:
+                        raise
+                    continue
+                granted.append(o)
+            self.management(
+                f"/principal-roles/service_admin/catalog-roles/{enc(database)}", "PUT", {"catalogRole": {"name": role}}
+            )
+            yield granted
+        finally:
+            try:
+                self.remove(role_path)
+            except ServiceError as exc:
+                raise ServiceError(
+                    502,
+                    "The temporary listing role could not be removed. "
+                    "Ask the portal administrator to check the portal-listing roles in Polaris.",
+                ) from exc
+
+    def sweep_listing_roles(self):
+        """Remove listing roles that a stopped process left behind; returns their names."""
+        removed = []
+        for catalog in self.management("/catalogs")["catalogs"]:
+            if not self.managed(catalog):
+                continue
+            path = f"/catalogs/{enc(catalog['name'])}/catalog-roles"
+            for role in self.management(path)["roles"]:
+                if role["name"].startswith(LISTING_ROLE):
+                    self.remove(f"{path}/{enc(role['name'])}")
+                    removed.append(role["name"])
+        return removed
+
+    def listing_metadata(self, database, objects):
+        """(object, loaded definition) for each listed object that still exists."""
+        found = []
+        with self.listing_access(database, objects) as granted:
+            for o in granted:
+                namespace = enc("\x1f".join(o["namespace"]))
+                if o["kind"] == "semantic-model":
+                    path = f"/api/catalog/polaris/v1/{enc(database)}/namespaces/{namespace}/semantic-models/{enc(o['name'])}"
+                else:
+                    path = f"/api/catalog/v1/{enc(database)}/namespaces/{namespace}/{o['kind']}s/{enc(o['name'])}"
+                try:
+                    found.append((o, self.request(path)))
+                except ServiceError as exc:
+                    if exc.status not in (403, 404):
+                        raise
+        return found
 
     # Automation principals: service accounts through which extensions such as Conversational BI
     # act for a team in one environment. Their secret never leaves the bridge.

@@ -1,0 +1,160 @@
+name: OpenMetadata extension CI
+# The OpenMetadata extension (extensions/openmetadata) is tested and released on its own. It runs when the
+# extension, the Bridge contract it depends on, or the Bridge's listings change. The end-to-end job starts a
+# real OpenMetadata server (about 4 GB of memory), so it runs on main and on demand, not on every pull request.
+on:
+  push:
+    branches: [main]
+    paths: ['extensions/openmetadata/**', 'contracts/bridge/**', 'server/bridge.py', 'server/listings.py', 'server/catalog_metadata.py', 'server/polaris.py', '.github/workflows/openmetadata-*.yml']
+  pull_request:
+    paths: ['extensions/openmetadata/**', 'contracts/bridge/**', 'server/bridge.py', 'server/listings.py', 'server/catalog_metadata.py', 'server/polaris.py', '.github/workflows/openmetadata-*.yml']
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: openmetadata-ci-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    working-directory: extensions/openmetadata
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.13.0'
+          enable-cache: true
+          cache-dependency-glob: extensions/openmetadata/uv.lock
+      - run: uv sync --locked
+      - run: uv run pytest
+      - run: uv run ruff check .
+      - run: uv run python -m scripts.release
+      - name: Audit Python dependencies
+        run: |
+          uv export --locked --all-groups --no-hashes --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt" > /dev/null
+          uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+
+  integration:
+    # The platform from this commit, a local OpenMetadata 2.0.5 and this extension, end to end.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.13.0'
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+      - run: uv run python -m scripts.setup --demo --extension openmetadata --origin http://localhost:3011 --handshake extensions/openmetadata/.env.bridge --listing
+      - run: docker compose up -d --build --wait
+      - name: A team, a table and a listed share of it (test fixture)
+        id: fixture
+        run: |
+          uv run --all-groups python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          import httpx
+          from dotenv import load_dotenv
+          load_dotenv(".env")
+          from server.models import DatabaseInput, ShareInput, TeamInput, UserInput
+          from server.polaris import PolarisProvider, enc
+          from server.storage import RustFSStorage
+          provider = PolarisProvider(os.environ, RustFSStorage(os.environ))
+          team = provider.save_team(TeamInput(name="e2e-team"))["id"]
+          db = provider.create_database(DatabaseInput(name="e2e", team=team))["id"]
+          created = provider.create_user(UserInput(name="e2e-admin", memberships=[{"team": team, "role": "admin"}]))
+          # The table is written as the team's administrator, like any producer.
+          token = httpx.post(f"{provider.url}/api/catalog/v1/oauth/tokens", data={
+              "grant_type": "client_credentials", "client_id": created["credentials"]["clientId"],
+              "client_secret": created["credentials"]["clientSecret"], "scope": "PRINCIPAL_ROLE:ALL"}).json()["access_token"]
+          prefix = f"{provider.url}/api/catalog/v1/{enc(db)}"
+          headers = {"Authorization": f"Bearer {token}"}
+          httpx.post(f"{prefix}/namespaces", json={"namespace": ["sales"]}, headers=headers).raise_for_status()
+          httpx.post(f"{prefix}/namespaces/sales/tables", headers=headers, json={"name": "orders", "schema": {
+              "type": "struct", "schema-id": 0, "fields": [
+                  {"id": 1, "name": "id", "type": "long", "required": True, "doc": "Order number"},
+                  {"id": 2, "name": "amount", "type": "decimal(10,2)", "required": False}]},
+              "properties": {"comment": "All orders"}}).raise_for_status()
+          share = provider.create_share(ShareInput.model_validate({
+              "database": db, "name": "catalog-e2e", "external": False, "listed": True,
+              "contact": "data@example.test", "objects": [{"kind": "table", "namespace": ["sales"], "name": "orders"}],
+          }), {"id": created["user"]["id"], "name": created["user"]["name"]})["share"]
+          print(f"share={share['id']}")
+          PY
+      - name: Start OpenMetadata and the extension
+        working-directory: extensions/openmetadata
+        run: |
+          uv sync --locked
+          uv run python -m scripts.setup
+          docker compose -f compose.yaml -f compose.openmetadata.yaml up -d --wait openmetadata-server
+          uv run python -m scripts.om_token
+          docker compose -f compose.yaml -f compose.openmetadata.yaml up -d --build --wait
+      - name: The listing appears in OpenMetadata
+        working-directory: extensions/openmetadata
+        env:
+          E2E_SHARE_ID: ${{ steps.fixture.outputs.share }}
+        run: uv run python -m scripts.e2e_smoke
+      - name: Logs on failure
+        if: failure()
+        working-directory: extensions/openmetadata
+        run: docker compose -f compose.yaml -f compose.openmetadata.yaml logs --tail 200 om-sync openmetadata-server
+      - name: Clean up
+        if: always()
+        run: |
+          (cd extensions/openmetadata && docker compose -f compose.yaml -f compose.openmetadata.yaml down --remove-orphans --volumes) || true
+          docker compose down --remove-orphans --volumes || true
+
+  compat:
+    # The source checks against the newest platform release with the `listings` capability. The first
+    # is v0.9.1; until it exists the integration job covers this commit.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Find the newest platform release with listings
+        id: core
+        run: |
+          for tag in $(git tag --list 'v*' --sort=-version:refname); do
+            if git show "$tag:contracts/bridge/v1/openapi.yaml" 2>/dev/null | grep -q '"/bridge/v1/listings"'; then
+              echo "tag=$tag" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          done
+          echo "No platform release offers listings yet; the integration job covers this commit." >> "$GITHUB_STEP_SUMMARY"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        if: steps.core.outputs.tag
+        with:
+          version: '0.13.0'
+      - name: Its Bridge contract version is in this extension's range
+        if: steps.core.outputs.tag
+        env:
+          TAG: ${{ steps.core.outputs.tag }}
+        run: |
+          git show "$TAG:contracts/bridge/v1/openapi.yaml" > "$RUNNER_TEMP/core-openapi.json"
+          cd extensions/openmetadata
+          uv sync --locked
+          uv run python - <<'PY'
+          import json, os, sys, tomllib
+          from openmetadata_sync.bridge_client import in_range
+          version = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "core-openapi.json")))["info"]["version"]
+          spec = tomllib.load(open("pyproject.toml", "rb"))["tool"]["iceberg-openmetadata"]["bridge-contract"]
+          if not in_range(version, spec):
+              sys.exit(f"{os.environ['TAG']} offers Bridge contract {version}, outside {spec}")
+          print(f"{os.environ['TAG']}: Bridge contract {version} is within {spec}")
+          PY

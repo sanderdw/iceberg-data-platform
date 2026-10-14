@@ -19,7 +19,8 @@ const RUSTFS = 'http://localhost:9001/rustfs/console/browser/', KEYCLOAK_USERS =
 // SCADA export there from their own computer with the DuckDB CLI, and builds the feeder_load
 // semantic model with the semantic-model skill (work files in presentation/grid). mila shares the
 // model with a research partner and with outage-response, where noor reads it without owning a
-// database. Both team administrators enable Conversational BI, and noor asks it about the model.
+// database, and lists it in the data catalog, which the OpenMetadata extension publishes. Both team
+// administrators enable Conversational BI, and noor asks it about the model.
 const TEAMS = [
   ['grid-planning', 'Capacity planning for the regional grid'],
   ['asset-management', 'Lifecycle of stations, cables and transformers'],
@@ -42,6 +43,14 @@ const NAMESPACE = 'grid_sensors', TABLE = 'feeder_load', MODEL = 'feeder_load', 
 const MODEL_FILE = `presentation/grid/semantic-models/${NAMESPACE}/${MODEL}.json`, QUESTIONS_FILE = MODEL_FILE.replace(/\.json$/, '.questions.sql');
 const TEAM_ADMIN = 'mila', SHARE = {name: 'feeder-load-research', recipient: 'University of Example · grid research', description: 'Synthetic feeder load with its semantic model, for congestion research'};
 const TEAM_SHARE = {name: 'feeder-load', team: 'outage-response', description: 'Feeder load with the agreed overload metrics'}, RECIPIENT = 'noor';
+const LISTING = {name: 'feeder-load-catalog', contact: 'grid-planning@example.com', description: 'Feeder load with the agreed overload metrics, for every team to find'};
+// Example notebook 09 writes a second product with Polars into the same database, listed in the catalog as well.
+const POLARS = {notebook: '09 · Write an AI-ready grid forecast with Polars', namespace: 'ai_grid_forecast', model: 'mv_load_forecast', tables: 8};
+const POLARS_SHARE = {name: 'mv-load-forecast', team: 'outage-response', description: 'MV load forecast with the agreed congestion metrics'};
+const POLARS_QUESTION = 'Which substations get the most offtake congestion points?';
+const POLARS_LISTING = {name: 'mv-load-forecast-catalog', contact: 'grid-planning@example.com', description: 'Synthetic MV load forecast and congestion outlook, for every team to find'};
+// The OpenMetadata extension's local catalog (compose.openmetadata.yaml) and its default administrator.
+const OM_ORIGIN = env.OM_UI_URL || 'http://localhost:8585', OM_ADMIN = ['admin@open-metadata.org', 'admin'];
 const CBI_ORIGIN = 'http://localhost:3007', CBI_QUESTION = 'Which feeders ran above their rating in the week of 21 September, and for how many hours?';
 // iceberg_connect.py keeps sander's sign-in here instead of in the real ~/.config.
 const CONNECT_ENV = {...process.env, XDG_CONFIG_HOME: resolve('.local/presentation/config')};
@@ -153,10 +162,65 @@ async function useDevelopment(page) {
   await expect(page.locator('#environment')).toHaveValue('development');
 }
 // Selecting the model in the share form selects the tables it reads as well.
-async function pickModel(page) {
-  await page.locator('.share-tree summary').filter({hasText: NAMESPACE}).click();
-  await page.locator('.share-tree .share-object').filter({hasText: 'Semantic model'}).filter({hasText: MODEL}).locator('input').check();
-  await expect(page.locator('.share-selection')).toContainText(`SELECTED · ${MODEL_TABLES + 1}`);
+async function pickModel(page, namespace = NAMESPACE, model = MODEL, tables = MODEL_TABLES) {
+  await page.locator('.share-tree summary').filter({hasText: namespace}).click();
+  await page.locator('.share-tree .share-object').filter({hasText: 'Semantic model'}).filter({hasText: model}).locator('input').check();
+  await expect(page.locator('.share-selection')).toContainText(`SELECTED · ${tables + 1}`);
+}
+// A share for another team only: its members read the model with their own accounts, no credential.
+async function fillTeamShare(page, shareDatabase, share, ...model) {
+  const teams = await (await page.context().request.get(`${env.USER_ORIGIN}/api/share-teams`)).json();
+  await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).click();
+  await page.getByLabel('Share name').fill(share.name);
+  await page.getByLabel('Another team', {exact: true}).check();
+  await page.getByLabel('Recipient team', {exact: true}).selectOption(teams.find(t => t.name === share.team).id);
+  await page.getByLabel('Externally', {exact: true}).uncheck();
+  await page.getByLabel('Description', {exact: true}).fill(share.description);
+  await pickModel(page, ...model);
+  await page.locator('.database-shares').filter({hasText: DEMO_DATABASE}).first().evaluate(s => s.scrollIntoView({block: 'start'}));
+}
+// A listing in the data catalog only: no team, no external party, a contact for access requests.
+async function fillListing(form, listing, ...model) {
+  await form.goto(env.USER_ORIGIN);
+  await form.locator('#workspace-screen').waitFor();
+  await toPage(form, 'Data shares');
+  const shareDatabase = form.locator('.database-shares').filter({has: form.getByRole('heading', {name: DEMO_DATABASE, exact: true})});
+  await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).click();
+  await form.getByLabel('Share name').fill(listing.name);
+  await form.getByLabel('Externally', {exact: true}).uncheck();
+  await form.getByLabel('Listed in the data catalog', {exact: true}).check();
+  await form.getByLabel('Contact for access requests').fill(listing.contact);
+  await form.getByLabel('Description', {exact: true}).fill(listing.description);
+  await pickModel(form, ...model);
+  return shareDatabase;
+}
+// Creates the listing unless it exists, and returns the name of its OpenMetadata data product.
+async function createListing(form, shareDatabase, context, database, listing) {
+  const shares = async () => (await (await context.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares;
+  if ((await shares()).some(s => s.name === listing.name)) await form.getByRole('button', {name: 'Cancel', exact: true}).click();
+  else await form.getByRole('button', {name: 'Create share', exact: true}).click();
+  await shareDatabase.getByText(listing.name, {exact: true}).waitFor();
+  return 'iceberg-' + (await shares()).find(s => s.name === listing.name).id;
+}
+async function omSignIn(om) {
+  om.setDefaultTimeout(30000);
+  await om.goto(OM_ORIGIN + '/signin');
+  await om.locator('#email').fill(OM_ADMIN[0]);
+  await om.locator('#password').fill(OM_ADMIN[1]);
+  await om.getByRole('button', {name: 'Sign In', exact: true}).click();
+  await om.waitForURL(url => !url.pathname.includes('signin'));
+}
+// The extension polls every minute; the data product shows up once the listing is published.
+async function openDataProduct(om, product, listing) {
+  for (let attempt = 0; ; attempt++) {
+    await om.goto(`${OM_ORIGIN}/dataProduct/${product}`);
+    if (await om.getByText(listing.name, {exact: true}).first().waitFor({timeout: 10000}).then(() => true, () => false)) break;
+    if (attempt > 30) throw new Error(`${product} did not reach OpenMetadata`);
+    await om.waitForTimeout(10000);
+  }
+  // The description opens collapsed; its `more` link has no height, so it is clicked through the DOM.
+  await om.getByText('more', {exact: true}).first().dispatchEvent('click');
+  await om.locator('img[alt^="Tables and keys"]').first().waitFor();
 }
 const toPage = (page, name) => page.locator('#workspace-nav').getByRole('button', {name, exact: true}).click();
 const openTab = (page, name) => page.getByRole('tab', {name, exact: true}).click();
@@ -190,6 +254,11 @@ async function connectAs(page) {
 }
 
 // The extension's own Keycloak client; a context already signed in to a portal passes straight through.
+// A team administrator enables Conversational BI once per team and environment.
+async function enableCbi(page, team) {
+  const row = page.locator('nav.models .not-enabled').filter({hasText: `${team} · development`});
+  if (await row.count()) { await row.getByRole('button', {name: 'Enable', exact: true}).click(); await row.waitFor({state: 'detached'}); }
+}
 async function cbiSignIn(page, username) {
   await page.goto(CBI_ORIGIN + '/');
   await page.getByRole('button', {name: /Sign in with Keycloak/}).click();
@@ -336,6 +405,34 @@ try {
     await shot(workspace, '49-user-model-metrics');
   }
 
+  // The deck's demo: example notebook 09 writes the MV load forecast with Polars 2 and stores its
+  // semantic model. 63 and 66 share a slide, so they are near-square halves like 58 and 59.
+  if (need(63, 66, 67, 68, 69)) {
+    const half = await browser.newContext({viewport: {width: 1600, height: 1620}, deviceScaleFactor: 2.5, colorScheme: 'dark', storageState: await member.storageState()});
+    const polars = await half.newPage();
+    polars.setDefaultTimeout(30000);
+    await polars.goto(env.USER_ORIGIN);
+    await polars.locator('#workspace-screen').waitFor();
+    await toPage(polars, 'Notebooks');
+    await polars.locator('#notebook-databases button').filter({hasText: DEMO_DATABASE}).first().click();
+    const notebook = await runNotebook(polars, POLARS.notebook, 'Ready to analyse');
+    await toHeading(notebook, '3. Derive the congestion outlook with expressions');
+    await shot(polars, '63-user-notebook-polars');
+    await toHeading(notebook, '4. Turn the contract into quality evidence');
+    await shot(polars, '66-user-notebook-polars-quality');
+    await polars.locator('#close-notebook').click();
+    await polars.locator('#editor').waitFor({state: 'hidden'});
+    await half.close();
+    await openNamespace(workspace, POLARS.namespace);
+    await openModel(workspace, POLARS.model);
+    await shot(workspace, '68-user-model-overview-polars');
+    await showDiagram(workspace);
+    await shot(workspace, '67-user-model-diagram-polars');
+    await openTab(workspace, 'Metrics & relationships');
+    await expect(workspace.getByRole('tabpanel')).toContainText('congestion_points');
+    await shot(workspace, '69-user-model-metrics-polars');
+  }
+
   await signOut(member);
 
   // A team administrator shares the semantic model with an external party, without a portal administrator.
@@ -366,16 +463,8 @@ try {
     await shareDatabase.getByRole('region', {name: 'Data shares', exact: true}).waitFor();
 
     // The same model for another team: its members read it with their own accounts, no credential.
-    const teams = await (await owner.request.get(`${env.USER_ORIGIN}/api/share-teams`)).json();
     const shares = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares;
-    await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).click();
-    await sharing.getByLabel('Share name').fill(TEAM_SHARE.name);
-    await sharing.getByLabel('Another team', {exact: true}).check();
-    await sharing.getByLabel('Recipient team', {exact: true}).selectOption(teams.find(t => t.name === TEAM_SHARE.team).id);
-    await sharing.getByLabel('Externally', {exact: true}).uncheck();
-    await sharing.getByLabel('Description').fill(TEAM_SHARE.description);
-    await pickModel(sharing);
-    await sharing.locator('.database-shares').filter({hasText: DEMO_DATABASE}).first().evaluate(s => s.scrollIntoView({block: 'start'}));
+    await fillTeamShare(sharing, shareDatabase, TEAM_SHARE);
     await shot(sharing, '37-user-share-team-form');
     if (shares.some(s => s.name === TEAM_SHARE.name)) await sharing.getByRole('button', {name: 'Cancel', exact: true}).click();
     else await sharing.getByRole('button', {name: 'Create share', exact: true}).click();
@@ -421,25 +510,116 @@ try {
     await signOut(recipient);
     await recipient.close();
   }
+  // mila shares the Polars model with outage-response; noor sees only the shared objects, read-only.
+  if (need(70, 71)) {
+    await sharing.goto(env.USER_ORIGIN);
+    await sharing.locator('#workspace-screen').waitFor();
+    await toPage(sharing, 'Data shares');
+    const shareDatabase = sharing.locator('.database-shares').filter({has: sharing.getByRole('heading', {name: DEMO_DATABASE, exact: true})});
+    await shareDatabase.getByRole('button', {name: 'New data share', exact: true}).waitFor();
+    const shares = (await (await owner.request.get(`${env.USER_ORIGIN}/api/shares?database=${database.id}`)).json()).shares;
+    await fillTeamShare(sharing, shareDatabase, POLARS_SHARE, POLARS.namespace, POLARS.model, POLARS.tables);
+    await shot(sharing, '70-user-share-team-form-polars');
+    if (shares.some(s => s.name === POLARS_SHARE.name)) await sharing.getByRole('button', {name: 'Cancel', exact: true}).click();
+    else await sharing.getByRole('button', {name: 'Create share', exact: true}).click();
+    await shareDatabase.getByText(POLARS_SHARE.name, {exact: true}).waitFor();
+
+    const recipient = await newContext(), received = await recipient.newPage();
+    received.setDefaultTimeout(30000);
+    await signIn(received, env.USER_ORIGIN, RECIPIENT, state.users[RECIPIENT], chosen => { state.users[RECIPIENT] = chosen; });
+    await received.locator('#workspace-screen').waitFor();
+    if (await received.locator('#environment').inputValue() !== 'development') await received.locator('#environment').selectOption('development');
+    await toPage(received, 'Databases');
+    await received.locator('#received-databases').getByText(DEMO_DATABASE).first().waitFor();
+    await toPage(received, 'Catalog');
+    await received.locator('#databases button').filter({hasText: DEMO_DATABASE}).first().click();
+    await received.locator('#catalog-database-context').waitFor();
+    await received.locator('.object-row').filter({hasText: POLARS.namespace}).getByRole('button').click();
+    await objectRow(received, POLARS.model, 'Semantic model').waitFor();
+    await shot(received, '71-user-received-catalog-polars');
+    await signOut(recipient);
+    await recipient.close();
+  }
+  // mila lists the model in the data catalog: metadata only. The OpenMetadata extension publishes it
+  // as a data product with its tables, glossary terms, metrics and an ER diagram.
+  if (need(58, 59, 60, 61, 62)) {
+    // 58 and 59 share a slide: each fills a near-square half, so they are 4000×4050 from a 1600 px viewport.
+    const half = await browser.newContext({viewport: {width: 1600, height: 1620}, deviceScaleFactor: 2.5, colorScheme: 'dark', storageState: await owner.storageState()});
+    const form = await half.newPage();
+    const shareDatabase = await fillListing(form, LISTING);
+    await shareDatabase.evaluate(s => s.scrollIntoView({block: 'start'}));
+    await shot(form, '58-user-share-listed-form');
+    const product = await createListing(form, shareDatabase, owner, database, LISTING);
+
+    const dataProduct = await half.newPage();
+    await omSignIn(dataProduct);
+    await openDataProduct(dataProduct, product, LISTING);
+    // Owner, contact and model at the top, the ER diagram at the bottom: scroll just past the banner.
+    await dataProduct.locator('img[alt^="Tables and keys"]').first().evaluate(diagram => {
+      diagram.scrollIntoView({block: 'end'});
+      let box = diagram.parentElement;
+      while (box && box.scrollTop === 0) box = box.parentElement;
+      (box || document.scrollingElement).scrollBy(0, 40);
+    });
+    await shot(dataProduct, '59-om-data-product');
+    await half.close();
+
+    const catalog = await newContext(), om = await catalog.newPage();
+    await omSignIn(om);
+    await openDataProduct(om, product, LISTING);
+    await om.getByRole('heading', {name: 'Tables and keys'}).first().evaluate(h => h.scrollIntoView({block: 'start'}));
+    await shot(om, '60-om-data-product-diagram');
+    await om.goto(`${OM_ORIGIN}/table/iceberg-development.${database.id}.${NAMESPACE}.${TABLE}`);
+    await om.getByRole('cell', {name: 'utilisation_pct'}).first().waitFor();
+    await shot(om, '61-om-table');
+    await om.goto(`${OM_ORIGIN}/metric/iceberg__${database.id}__${NAMESPACE}__${MODEL}__overload_hours`);
+    await om.getByText('overload_hours').first().waitFor();
+    await om.waitForLoadState('networkidle').catch(() => {});
+    await shot(om, '62-om-metric');
+    await catalog.close();
+  }
+  // The Polars model in the data catalog: 72 and 73 share a slide as near-square halves.
+  if (need(72, 73, 74, 75)) {
+    const half = await browser.newContext({viewport: {width: 1600, height: 1620}, deviceScaleFactor: 2.5, colorScheme: 'dark', storageState: await owner.storageState()});
+    const form = await half.newPage();
+    const shareDatabase = await fillListing(form, POLARS_LISTING, POLARS.namespace, POLARS.model, POLARS.tables);
+    await shareDatabase.evaluate(s => s.scrollIntoView({block: 'start'}));
+    await shot(form, '72-user-share-listed-form-polars');
+    const product = await createListing(form, shareDatabase, owner, database, POLARS_LISTING);
+    const dataProduct = await half.newPage();
+    await omSignIn(dataProduct);
+    await openDataProduct(dataProduct, product, POLARS_LISTING);
+    // The ER diagram of the listed model, drawn from its keys and relationships.
+    await dataProduct.getByRole('heading', {name: 'Tables and keys'}).first().evaluate(h => h.scrollIntoView({block: 'start'}));
+    await shot(dataProduct, '73-om-data-product-polars');
+    await half.close();
+
+    const catalog = await newContext(), om = await catalog.newPage();
+    await omSignIn(om);
+    await om.goto(`${OM_ORIGIN}/table/iceberg-development.${database.id}.${POLARS.namespace}.load_forecast`);
+    await om.getByRole('cell', {name: 'utilization_pct'}).first().waitFor();
+    await shot(om, '74-om-table-polars');
+    await om.goto(`${OM_ORIGIN}/metric/iceberg__${database.id}__${POLARS.namespace}__${POLARS.model}__congestion_points`);
+    await om.getByText('congestion_points').first().waitFor();
+    await om.waitForLoadState('networkidle').catch(() => {});
+    await shot(om, '75-om-metric-polars');
+    await catalog.close();
+  }
   // Conversational BI, the first extension. Each team administrator enables it once per environment;
   // noor then asks about the model grid-planning shared with outage-response.
   if (need(54, 55, 56)) {
     const chat = await owner.newPage();
     await cbiSignIn(chat);
-    const enable = async (page, team) => {
-      const row = page.locator('nav.models .not-enabled').filter({hasText: `${team} · development`});
-      if (await row.count()) { await row.getByRole('button', {name: 'Enable', exact: true}).click(); await row.waitFor({state: 'detached'}); }
-    };
     await chat.locator('nav.models .not-enabled').filter({hasText: `${DEMO_TEAM} · development`}).waitFor().catch(() => {});
     await shot(chat, '54-cbi-enable');
-    await enable(chat, DEMO_TEAM);
+    await enableCbi(chat, DEMO_TEAM);
     await chat.locator('nav.models button.db').filter({hasText: MODEL}).first().waitFor();
     await chat.close();
 
     const asker = await newContext(), bi = await asker.newPage();
     bi.setDefaultTimeout(30000);
     await cbiSignIn(bi, RECIPIENT);
-    await enable(bi, TEAM_SHARE.team);
+    await enableCbi(bi, TEAM_SHARE.team);
     await bi.locator('nav.models .database-group', {hasText: 'Shared with your team'}).locator('button.db', {hasText: MODEL}).first().click();
     await bi.locator('h1', {hasText: MODEL}).waitFor();
     const input = bi.locator('[data-copilotkit] textarea').first();
@@ -454,6 +634,30 @@ try {
     await bi.locator('.query-card summary', {hasText: 'SQL'}).first().click();
     await bi.locator('.query-card').first().evaluate(card => card.scrollIntoView({block: 'start'}));
     await shot(bi, '56-cbi-query');
+    await asker.close();
+  }
+  // noor asks the Polars model grid-planning shared with outage-response.
+  if (need(76, 77)) {
+    const asker = await newContext(), bi = await asker.newPage();
+    bi.setDefaultTimeout(30000);
+    await cbiSignIn(bi, RECIPIENT);
+    await enableCbi(bi, POLARS_SHARE.team);
+    await bi.locator('nav.models .database-group', {hasText: 'Shared with your team'}).locator('button.db', {hasText: POLARS.model}).first().click();
+    await bi.locator('h1', {hasText: POLARS.model}).waitFor();
+    const input = bi.locator('[data-copilotkit] textarea').first();
+    await input.fill(POLARS_QUESTION);
+    await input.press('Enter');
+    await bi.locator('.query-card').first().waitFor({timeout: 120000});
+    await bi.locator('.gen-card canvas[role=img]').first().waitFor({timeout: 120000}).catch(() => {});
+    // The written answer names the substation with the most congestion points.
+    await bi.getByText(/Dunmore|SS-DUN/).first().waitFor({timeout: 120000});
+    await bi.waitForTimeout(3000);
+    await shot(bi, '76-cbi-answer-polars');
+    await bi.locator('.query-card summary', {hasText: 'SQL'}).first().click();
+    // The chat keeps to the bottom while the expanded SQL grows; scroll up once it has settled.
+    await bi.waitForTimeout(1500);
+    await bi.locator('.query-card').first().evaluate(card => card.scrollIntoView({block: 'start'}));
+    await shot(bi, '77-cbi-query-polars');
     await asker.close();
   }
   await owner.close();

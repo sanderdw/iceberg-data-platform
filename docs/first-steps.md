@@ -21,6 +21,7 @@
 | Conversational BI | http://localhost:3007 | Optional [extension](conversational-bi.md); Keycloak account |
 | dbt pipelines | http://localhost:3004 | Optional [extension](dbt.md); Keycloak account, MCP through the `ext-dbt-mcp` client |
 | Ingestion (dlt) | http://localhost:3008 | Optional [extension](ingestion.md); Keycloak account, MCP through the `ext-ingestion-mcp` client |
+| OpenMetadata | http://localhost:3011 | Optional [extension](openmetadata.md); opens your OpenMetadata server, sync status at `/api/status` |
 
 Credentials are in `.env` in the installation directory. All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [deploying beyond localhost](security.md#deploying-beyond-localhost) or the [quick-share skill](agent-skills.md).
 
@@ -28,4 +29,4 @@ Credentials are in `.env` in the installation directory. All ports bind to `127.
 
 - Work with your data in the [user portal](user-portal.md), from [your own tools](connect.md) or through an [AI agent](ai-agents.md).
 - Set up a class with the [agent skills](agent-skills.md).
-- Add [extensions](extensions.md): Conversational BI, dbt pipelines and Ingestion (dlt).
+- Add [extensions](extensions.md): Conversational BI, dbt pipelines, Ingestion (dlt) and OpenMetadata.

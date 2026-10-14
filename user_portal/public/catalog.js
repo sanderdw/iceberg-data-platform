@@ -304,9 +304,9 @@ function renderSemanticModel(detail, db, ns, name) {
     if (!count('datasets')) p.append(element('p', 'No datasets.', 'catalog-empty'));
     models.forEach(m => m.datasets.forEach(d => {
       p.append(element('h3', d.name));
-      p.append(facts([['Source', d.source], ['Primary key', d.primaryKey.join(', ')], ['Description', d.description]]));
+      p.append(facts([['Source', d.source], ['Primary key', d.primaryKey.join(', ')], ['Description', d.description], ...d.aiContext.map(c => [c.label, c.value])]));
       if (d.table) p.append(action('Open table →', () => openDataset(db, ns, d)));
-      p.append(dataGrid(['Field', 'Type', 'Dimension', 'Expression', 'Description'], d.fields.map(f => [f.name, f.datatype, f.timeDimension ? 'Time' : f.dimension ? 'Yes' : 'No',expressionText(f.expressions), f.description]), `Fields of ${d.name}`));
+      p.append(dataGrid(['Field', 'Label', 'Type', 'Dimension', 'Expression', 'Description'], d.fields.map(f => [f.name, f.label, f.datatype, f.timeDimension ? 'Time' : f.dimension ? 'Yes' : 'No', expressionText(f.expressions), [f.description, ...f.synonyms.length ? [`Also called: ${f.synonyms.join(', ')}.`] : [], ...f.aiContext.map(c => `${c.label}: ${c.value}`)].filter(Boolean).join(' ')]), `Fields of ${d.name}`));
     }));
   });
   tab('Metrics & relationships', p => {

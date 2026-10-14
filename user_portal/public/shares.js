@@ -18,6 +18,9 @@ function modelTables(modelTableCache, db, model) {
 }
 const objectPath = o => [...o.namespace, o.name].join('.');
 function canShare() { return ['admin', 'bucket-admin'].includes(state?.activeRole); }
+// A share can be listed only when a data catalog extension publishes listings.
+function canList() { return (state?.extensions || []).some(e => e.listing); }
+const LISTING_HINT = 'Publishes names, schemas, descriptions and semantic model metrics to the data catalog, so others can find this data product and ask for access. A listing grants no access.';
 function field(label, input) { const wrap = element('label', label); wrap.append(input); return wrap; }
 function textInput(value, maxLength, required = false) { const input = element('input'); input.value = value || ''; input.maxLength = maxLength; input.required = required; return input; }
 function copyButton(label, text, done) { return action(label, async () => { await navigator.clipboard.writeText(text); notice(done); }); }
@@ -69,7 +72,7 @@ async function loadShares(host, db, background = false) {
 }
 
 function renderShares(host, db, result) {
-  const intro = element('p', 'Share selected tables, views and semantic models with another team, externally, or both. Team members use their own accounts; external recipients receive a separate credential.', 'hint');
+  const intro = element('p', `Share selected tables, views and semantic models with another team, externally${canList() ? ', in the data catalog' : ''}, or a combination. Team members use their own accounts; external recipients receive a separate credential.${canList() ? ' A listing shows only metadata.' : ''}`, 'hint');
   const create = action('New data share', async () => shareForm(host, db)); create.classList.remove('quiet');
   create.disabled = !canShare() || result.shares.length >= result.limits.shares;
   if (canShare() && create.disabled) create.title = 'This database has reached its data share limit.';
@@ -82,7 +85,7 @@ function renderShares(host, db, result) {
     const actions = element('div', undefined, 'share-actions');
     if (share.status === 'revoking') actions.append(element('span', 'Revoking…', 'hint'));
     else actions.append(action('Edit', async () => shareForm(host, db, share)), ...(share.external !== false ? [action('New secret', async () => issued(host, db, await api(`/shares/${share.id}/rotate`, 'POST'), 'The previous secret no longer works.'))] : []), revokeButton(host, db, share));
-    const name = element('div'); name.append(element('strong', share.name), element('small', [share.recipientTeam ? `Team: ${share.recipientTeamName || share.recipientTeam}` : '', share.external !== false ? `External: ${share.recipient || '—'}` : ''].filter(Boolean).join(' · ')));
+    const name = element('div'); name.append(element('strong', share.name), element('small', [share.recipientTeam ? `Team: ${share.recipientTeamName || share.recipientTeam}` : '', share.external !== false ? `External: ${share.recipient || '—'}` : '', share.listed ? 'Listed' : ''].filter(Boolean).join(' · ')));
     return [name, objects, share.expiresAt ? `${share.expiresAt.slice(0, 10)} · end of day UTC` : 'Never', `${share.createdBy || '—'} · ${timestamp(share.createdAt)}`, actions];
   });
   const list = rows.length ? dataGrid(['Share / recipient', 'Shared objects', 'Expires', 'Created', ''], rows, 'Data shares') : element('p', 'Nothing in this database is shared.', 'catalog-empty');
@@ -143,17 +146,23 @@ async function shareForm(host, db, share) {
   const team = element('select'); team.setAttribute('aria-label', 'Recipient team'); team.append(new Option('Choose a team', ''));
   teams.forEach(t => team.append(new Option(t.name, t.id)));
   team.value = share?.recipientTeam || ''; team.disabled = Boolean(share);
-  const internalField = field('Another team', internal), externalField = field('Externally', external);
-  internalField.className = externalField.className = 'share-object';
-  const teamField = field('Recipient team', team);
+  const listed = element('input'); listed.type = 'checkbox'; listed.checked = Boolean(share?.listed);
+  const contact = textInput(share?.contact, 200);
+  const internalField = field('Another team', internal), externalField = field('Externally', external), listedField = field('Listed in the data catalog', listed);
+  internalField.className = externalField.className = listedField.className = 'share-object';
+  const teamField = field('Recipient team', team), contactField = field('Contact for access requests', contact);
+  contactField.append(element('small', LISTING_HINT, 'hint'));
   audience.append(internalField, teamField, externalField);
-  if (share) audience.append(element('p', 'To change sharing destinations, revoke this share and create a new one.', 'hint'));
+  // A listing grants nothing, so it can be switched on an existing share; the other destinations cannot.
+  if (canList() || share?.listed) audience.append(listedField, contactField);
+  if (share) audience.append(element('p', 'To change the team or external destination, revoke this share and create a new one.', 'hint'));
   function audienceChanged() {
     teamField.hidden = !internal.checked; team.required = internal.checked;
+    contactField.hidden = !listed.checked;
     recipient.disabled = !external.checked;
     if (!share) save.textContent = external.checked ? 'Create share and show credential' : 'Create share';
   }
-  internal.addEventListener('change', audienceChanged); external.addEventListener('change', audienceChanged);
+  [internal, external, listed].forEach(box => box.addEventListener('change', audienceChanged));
   const expiry = element('input'); expiry.type = 'date'; expiry.value = share?.expiresAt ? share.expiresAt.slice(0, 10) : '';
   expiry.min = new Date().toISOString().slice(0, 10);
   const chosen = element('div', undefined, 'share-selection'), warning = element('p', VIEW_WARNING, 'share-warning'); warning.setAttribute('role', 'note');
@@ -212,14 +221,15 @@ async function shareForm(host, db, share) {
       if (objects.length > maxObjects) throw new Error(`Select no more than ${maxObjects} ${maxObjects === 1 ? "object" : "objects"}.`);
       if (!objects.some(o => o.kind === 'table')) throw new Error('Select the tables that the shared views and semantic models read.');
       const body = {recipient: recipient.value.trim(), description: description.value.trim(), objects, expiresAt: expiry.value ? `${expiry.value}T23:59:59Z` : null};
+      if (canList() || share?.listed) Object.assign(body, {listed: listed.checked, contact: contact.value.trim()});
       // The API checks the models again; its warnings name tables the recipient would still miss.
       const warned = result => result.warnings?.length ? ` ${result.warnings.join(' ')}` : '';
       if (share) { const result = await api(`/shares/${share.id}`, 'PATCH', body); notice(`Share saved.${warned(result)}`); await loadShares(host, db); }
       else {
-        if (!internal.checked && !external.checked) throw new Error('Choose another team, external sharing, or both.');
+        if (!internal.checked && !external.checked && !listed.checked) throw new Error(canList() ? 'Choose another team, external sharing, a data catalog listing, or a combination.' : 'Choose another team, external sharing, or both.');
         const result = await api('/shares', 'POST', {...body, database: db.id, name: name.value, external: external.checked, recipientTeam: internal.checked ? team.value : null});
         if (result.credentials) { issued(host, db, result, 'Share created.'); if (warned(result)) notice(`Share created.${warned(result)}`); }
-        else { notice(`Share created. Recipient team members can read the selected objects with their own accounts.${warned(result)}`); await loadShares(host, db); }
+        else { notice(`Share created. ${internal.checked ? 'Recipient team members can read the selected objects with their own accounts.' : 'The data catalog shows its metadata within a few minutes.'}${warned(result)}`); await loadShares(host, db); }
       }
     });
   });

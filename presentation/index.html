@@ -80,15 +80,14 @@
     .reveal .group .label { margin-bottom: var(--space-sm); }
     .reveal .dot { display: inline-block; width: 10px; height: 10px; border-radius: 999px; background: var(--accent); vertical-align: middle; margin-right: var(--space-sm); }
     .reveal .caption { font-family: var(--r-code-font); font-size: 0.45em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); line-height: 1.4; }
-    /* Screenshot slides: one-line header, the image fills what is left, caption pinned to the bottom */
+    /* Screenshot slides: one-line header, the image fills what is left */
     .reveal .head { display: flex; align-items: baseline; gap: var(--space-lg); margin-bottom: var(--space-md); flex: none; }
     .reveal .head .label { margin: 0; white-space: nowrap; }
     .reveal .head h2 { font-size: 1em; margin: 0; }
-    .reveal .fig { flex: 1 1 auto; min-height: 0; display: flex; align-items: flex-start; justify-content: flex-start; }
-    .reveal .fig .shot { max-height: 100%; max-width: 100%; width: auto; height: auto; border: 1px solid var(--border-visible); border-radius: 8px; display: block; }
+    .reveal .fig { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: 100%; align-items: start; justify-items: start; }
+    .reveal .fig .shot { margin: 0; box-sizing: border-box; max-height: 100%; max-width: 100%; width: auto; height: auto; border: 1px solid var(--border-visible); border-radius: 8px; display: block; }
     .reveal .fig.two { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 100%; gap: var(--space-lg); }
     .reveal .fig.two .shot { max-height: 100%; width: auto; max-width: 100%; }
-    .reveal .foot.two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); }
     .reveal .hint { position: absolute; top: 6px; right: 0; font-family: var(--r-code-font); font-size: 0.4em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-disabled); }
     /* Full-bleed vertical slides for two-image pages: the screenshot is the slide */
     .reveal .slides section.full { padding: 0; justify-content: flex-end; align-items: flex-start; }
@@ -202,7 +201,7 @@
     <p class="lede">Apache Iceberg as the table format, with every other building block open source, replaceable, and running on a single laptop.</p>
     <div class="label">Sander de Wildt<br>Apache Iceberg · Polaris · Keycloak<br>RustFS · marimo · DuckDB</div>
   </div>
-  <aside class="notes">Three parts: what Iceberg is and is not, why the all open source approach matters for autonomy and portability, and a demo of the platform itself, with Conversational BI as one of its three extensions. Three parts: Iceberg, the platform, and one demo from raw data to answers. The model diagram and the Conversational BI answer have full-screen views below them (arrow down).</aside>
+  <aside class="notes">Three parts: what Iceberg is and is not, why the all open source approach matters for autonomy and portability, and a demo of the platform itself, with Conversational BI as one of its four extensions. Three parts: Iceberg, the platform, and one demo from raw data to answers. The model diagram, the OpenMetadata listing and the Conversational BI answer have full-screen views below them (arrow down).</aside>
 </section>
 
 <section>
@@ -219,11 +218,10 @@
       <ol>
         <li>How Iceberg actually works, and why it is not a platform like Snowflake.</li>
         <li>What a fully open source stack gives us: autonomy, portability and no lock-in.</li>
-        <li>A demo of one grid sensor data product: loaded by a team, given meaning by a coding agent, shared with another team and asked about in a chat.</li>
+        <li>A demo of one grid sensor data product: loaded by a team, given meaning by a coding agent, shared with another team, listed in a data catalog and asked about in a chat.</li>
       </ol>
     </div>
   </div>
-  <div class="caption foot">Background: Making Apache Iceberg feel like a database service on Medium · the LinkedIn post on data sharing at Alliander</div>
   <aside class="notes">Tone: direct, no consultancy language. Keep it about capabilities and ownership. The Medium post covers the same ground in writing.</aside>
 </section>
 
@@ -237,7 +235,7 @@
     <div class="layer"><span class="n">4 · Open source</span><span class="d"><strong>No licences.</strong> Every building block is Apache-2.0 or MIT, and so is the platform. No vendor account and no trial clock.</span></div>
     <div class="layer"><span class="n">5 · Loosely coupled</span><span class="d"><strong>Open interfaces between the components.</strong> Iceberg REST, S3, OIDC and MCP, so you can replace one block without touching the others. Bigger capabilities come as extensions behind one contract, so the core stays small.</span></div>
   </div>
-  <aside class="notes">This is the lens for the rest of the talk. Clean UX: team members serve themselves; destructive actions ask for the exact name. API first: the UI has no private backdoor, the OpenAPI schema comes from the same code. AI native: MCP on both portals, tokens issued to the iceberg-mcp client, and agent skills in the Agent Skills format in the installation folder, such as semantic-model, dbt-platform and ingestion. Loosely coupled: every connection between building blocks is an open standard, which is what makes swapping possible. The same idea one level up: Conversational BI, dbt pipelines and Ingestion are extensions with their own release, and they reach the core only through the Extension Bridge.</aside>
+  <aside class="notes">This is the lens for the rest of the talk. Clean UX: team members serve themselves; destructive actions ask for the exact name. API first: the UI has no private backdoor, the OpenAPI schema comes from the same code. AI native: MCP on both portals, tokens issued to the iceberg-mcp client, and agent skills in the Agent Skills format in the installation folder, such as semantic-model, dbt-platform and ingestion. Loosely coupled: every connection between building blocks is an open standard, which is what makes swapping possible. The same idea one level up: Conversational BI, dbt pipelines, Ingestion and OpenMetadata are extensions with their own release, and they reach the core only through the Extension Bridge.</aside>
 </section>
 
 <section class="title">
@@ -314,6 +312,7 @@
       <tr><td>Conversational BI (extension)</td><td>Pydantic AI, CopilotKit, Chart.js, DuckDB</td><td class="num">2.55 · 1.79 · 4.5 · 1.5.5</td><td class="mono">MIT</td><td>Any LLM provider: OpenAI, Anthropic, Gemini, Bedrock</td></tr>
       <tr><td>dbt pipelines (extension)</td><td>dbt v2 OSS on DuckDB</td><td class="num">2.0.5 · 1.5.5</td><td class="mono">Apache-2.0</td><td>Any dbt adapter for an Iceberg engine</td></tr>
       <tr><td>Ingestion (extension)</td><td>dlt with its Iceberg destination</td><td class="num">1.31</td><td class="mono">Apache-2.0</td><td>Airbyte, Meltano, any Iceberg REST writer</td></tr>
+      <tr><td>Data catalog (extension)</td><td>OpenMetadata, fed through its REST API</td><td class="num">2.0.5</td><td class="mono">Apache-2.0</td><td>DataHub, Unity Catalog OSS, Apache Atlas</td></tr>
     </tbody>
   </table>
 </section>
@@ -358,13 +357,12 @@
       <text class="lbl" x="560" y="40">bucket and IAM provisioning (S3 API)</text>
       <text class="lbl" x="725" y="275">token validation (JWKS)</text>
       <text class="lbl" x="725" y="405">vended, table-scoped credentials</text>
-      <rect class="out" x="920" y="80" width="240" height="70" rx="8" style="stroke-dasharray:4 4"/><text x="1040" y="110" text-anchor="middle">Extensions</text><text class="sub" x="1040" y="134" text-anchor="middle">Conversational BI · dbt · dlt</text>
-      <rect x="920" y="190" width="240" height="70" rx="8"/><text x="1040" y="220" text-anchor="middle">Extension Bridge</text><text class="sub" x="1040" y="244" text-anchor="middle">/bridge/v1 · contract 0.1</text>
+      <rect class="out" x="920" y="80" width="240" height="70" rx="8" style="stroke-dasharray:4 4"/><text x="1040" y="110" text-anchor="middle">Extensions</text><text class="sub" x="1040" y="134" text-anchor="middle">CBI · dbt · dlt · OpenMetadata</text>
+      <rect x="920" y="190" width="240" height="70" rx="8"/><text x="1040" y="220" text-anchor="middle">Extension Bridge</text><text class="sub" x="1040" y="244" text-anchor="middle">/bridge/v1 · contract 0.1.1</text>
       <line x1="1040" y1="150" x2="1040" y2="190"/>
       <line x1="920" y1="225" x2="820" y2="210"/>
     </svg>
   </div>
-  <div class="caption foot">iceberg-platform (admin, identity, data, Bridge) and iceberg-workspaces (gateway, notebooks) · both portals serve /mcp · extensions run beside them, each with its own release</div>
 </section>
 
 <section>
@@ -421,15 +419,8 @@
 </section>
 
 <section class="shot-slide">
-  <div class="head"><span class="label">02 · Platform · Administration</span><h2>Databases: a catalog plus a bucket, per team</h2></div>
-  <div class="fig"><img class="shot" src="screenshots/02-admin-databases.png" alt="Admin portal databases page"></div>
-  <div class="caption foot">Admin portal :3000 · six databases across three fictional grid operator teams, development and production</div>
-</section>
-
-<section class="shot-slide">
   <div class="head"><span class="label">02 · Platform · Team workspace</span><h2>Team administrators run their own databases</h2></div>
   <div class="fig"><img class="shot" src="screenshots/36-user-databases-create.png" alt="User portal Databases page with the create database form filled in"></div>
-  <div class="caption foot"></div>
   <aside class="notes">No ticket to the platform team: a team administrator creates the catalog and its bucket from the user portal. The gateway re-checks the administrator role, owning team and environment against Polaris before every change. Readers and writers see the same page without the buttons. The platform administrator still sees every database in the admin portal.</aside>
 </section>
 
@@ -447,7 +438,7 @@
         <tr><td class="mono">describe_table · describe_view</td><td>Schema, partitioning, snapshots, branches, view SQL</td></tr>
         <tr><td class="mono">list_semantic_models · describe_semantic_model</td><td>Datasets, joins, agreed metrics and AI context · a summary, searchable, for large models</td></tr>
         <tr><td class="mono">query_semantic_model</td><td>Answers from the agreed metrics and joins, read with the user's own grants</td></tr>
-        <tr><td class="mono">list_dimension_values</td><td>Exact filter values, such as Dockside-4 Church</td></tr>
+        <tr><td class="mono">list_dimension_values</td><td>Exact filter values, such as Example Dunmore</td></tr>
         <tr><td class="mono">preview_rows</td><td>Up to 100 rows, at any snapshot</td></tr>
         <tr><td class="mono">list · create · update · delete_share</td><td>Team administrators only · sharing a model adds its tables</td></tr>
         <tr><td class="mono">create · rename · delete_database</td><td>Team administrators only · delete needs the exact name</td></tr>
@@ -461,7 +452,6 @@
       <li>Destructive tools are marked as such, and the agent is told to ask before using them.</li>
     </ul>
   </div>
-  <div class="caption foot">“Which feeders ran above their rating last week? Use the feeder_load model and show the definition and the SQL.”</div>
   <aside class="notes">Any MCP client works: Claude Code, Codex, an IDE, or your own agent. The agent reads the model with describe_semantic_model and answers with query_semantic_model, which compiles the agreed metric SQL and runs it read-only with the user's grants. Model Context Protocol over streamable HTTP at /mcp on the user portal. Tokens must be issued to the iceberg-mcp client (azp check), so a browser session token cannot be replayed here. Signature, issuer, audience and expiry are verified and the user is mapped to their Polaris principal on every call. The callback port is fixed so the redirect URI can be exact.</aside>
 </section>
 
@@ -481,7 +471,7 @@
       <rect x="20" y="190" width="340" height="56" rx="8"/><text x="190" y="214" text-anchor="middle">Agent</text><text class="sub" x="190" y="234" text-anchor="middle">Pydantic AI, defined in YAML · any LLM</text>
       <rect x="20" y="260" width="340" height="56" rx="8"/><text x="190" y="284" text-anchor="middle">Query worker</text><text class="sub" x="190" y="304" text-anchor="middle">DuckDB · one locked-down process per query</text>
 
-      <rect class="hi" x="500" y="40" width="420" height="300" rx="8"/><text class="hi" x="710" y="76" text-anchor="middle">Extension Bridge</text><text class="sub" x="710" y="98" text-anchor="middle">/bridge/v1 · contract 0.1.0</text>
+      <rect class="hi" x="500" y="40" width="420" height="300" rx="8"/><text class="hi" x="710" y="76" text-anchor="middle">Extension Bridge</text><text class="sub" x="710" y="98" text-anchor="middle">/bridge/v1 · contract 0.1.1</text>
       <text class="code" x="530" y="146">GET /me</text><text class="sub" x="530" y="166">teams, roles, own and shared databases</text>
       <text class="code" x="530" y="216">automation principals</text><text class="sub" x="530" y="236">one per team and environment, enabled by its admins</text>
       <text class="code" x="530" y="286">POST …/tokens</text><text class="sub" x="530" y="306">a one-hour catalog token, read only for this extension</text>
@@ -500,8 +490,7 @@
       <text class="never" x="520" y="482">secrets · storage keys · core source code</text><text class="never" x="520" y="502">container names · the Polaris management API</text>
     </svg>
   </div>
-  <div class="caption foot">Three extensions today: Conversational BI, dbt pipelines and Ingestion (dlt) · each has its own Compose project and release · it refuses to start outside its contract range, &gt;=0.1,&lt;0.2</div>
-  <aside class="notes">This is the loosely coupled principle one level up. An LLM chat brings a heavy dependency tree, a model provider and a fast release cycle; none of that belongs in the catalog and identity layer every team depends on. The core stays small: catalog, storage, identity, portals and notebooks. Sources: contracts/bridge/README.md and COMPATIBILITY.md in the core, and the AGENTS.md of the extension. The Bridge capabilities are user-context, automation-principals, automation-tokens and shared-data. An automation principal is a service account for one team in one environment; only that team's administrators create it, and it reaches the data shares the team received through their read role. Its catalog tokens last an hour. Conversational BI asks only for read tokens. dbt pipelines and Ingestion (dlt) write: each run is an isolated container that writes as the team's service account with a short-lived token, and Ingestion keeps pipeline secrets encrypted and write-only. The extension signs people in through its own Keycloak clients, whose tokens Polaris refuses, so a chat session can never be replayed against the catalog. Any producer can describe a table with the table-property conventions, which the catalog shows as Produced by.</aside>
+  <aside class="notes">This is the loosely coupled principle one level up. An LLM chat brings a heavy dependency tree, a model provider and a fast release cycle; none of that belongs in the catalog and identity layer every team depends on. The core stays small: catalog, storage, identity, portals and notebooks. Sources: contracts/bridge/README.md and COMPATIBILITY.md in the core, and the AGENTS.md of the extension. The Bridge capabilities are user-context, automation-principals, automation-tokens, shared-data and listings. OpenMetadata uses only listings: the metadata of the shares a team lists in the data catalog, never a catalog token. An automation principal is a service account for one team in one environment; only that team's administrators create it, and it reaches the data shares the team received through their read role. Its catalog tokens last an hour. Conversational BI asks only for read tokens. dbt pipelines and Ingestion (dlt) write: each run is an isolated container that writes as the team's service account with a short-lived token, and Ingestion keeps pipeline secrets encrypted and write-only. The extension signs people in through its own Keycloak clients, whose tokens Polaris refuses, so a chat session can never be replayed against the catalog. Any producer can describe a table with the table-property conventions, which the catalog shows as Produced by.</aside>
 </section>
 
 <section class="shot-slide">
@@ -510,7 +499,6 @@
     <img class="shot" src="screenshots/54-cbi-enable.png" alt="Conversational BI model list for mila with grid-planning development and production not enabled yet, each with an Enable button">
     <img class="shot" src="screenshots/57-admin-extension-accounts.png" alt="Admin portal Teams page with the extension service accounts of Conversational BI for outage-response and grid-planning, each with Revoke">
   </div>
-  <div class="caption foot two"><span>Conversational BI · mila enables it for grid-planning, one environment at a time</span><span>Admin portal · Teams · every extension service account, who enabled it and when · revoke</span></div>
   <aside class="notes">Enable creates the team's service account for that environment through the Bridge; until then the extension sees nothing of the team. The same works over the extension's MCP server with enable_environment. A revoked service account gets no new tokens, and tokens already issued expire within the hour.</aside>
 </section>
 
@@ -525,200 +513,80 @@
     </ul>
     <ul>
       <li>Revoking a membership stops the affected runtimes within 30 seconds.</li>
-      <li>A data share holds one read grant per table, view or semantic model. A receiving team never gets administration; an external secret is shown once, never stored.</li>
+      <li>A data share holds one read grant per table, view or semantic model. A receiving team never gets administration; an external secret is shown once, never stored. A listing in the data catalog publishes metadata only.</li>
       <li>MCP accepts only tokens issued to the <code>iceberg-mcp</code> client, verified on every call: an agent never holds more than its user.</li>
       <li>Extensions get no platform secrets or storage keys: a team's service account, enabled by its administrators and revocable by the platform administrator. dbt and Ingestion runs are isolated containers with a short-lived token.</li>
     </ul>
   </div>
-  <div class="caption foot">This build is meant for local development. HTTPS, persistent sessions and hostile-tenant isolation are on the roadmap, and the boundaries are documented.</div>
 </section>
 
 <section class="divider">
   <div class="doto num">03</div>
   <h1>From raw data to answers</h1>
-  <p class="secondary">A grid sensor export, loaded by an agent, given meaning by the team, shared and asked about in a chat.</p>
+  <p class="secondary">A load forecast written in a notebook, given meaning by its contract, shared, listed in a data catalog and asked about in a chat.</p>
 </section>
 
-<section>
-  <div class="label">03 · Demo · Your computer</div>
-  <h2>End users bring their own tools: a coding agent and the DuckDB CLI</h2>
-  <div class="cols-asym">
-    <pre style="font-size:0.54em"><code data-noescape><span class="c">~/iceberg-data-platform $</span> <span class="k">claude</span>
-<span class="c">&gt;</span> <span class="k">The SCADA export of the last two weeks is in scada-export/. Load it into</span>
-<span class="k">  grid-sensors and help me build a semantic model for it.</span>
-
-● iceberg-user · list_databases
-  grid-sensors · development · grid-planning · you: writer
-● Bash  uv run iceberg_connect.py login
-  Open http://localhost:8080/realms/iceberg/device?user_code=… and confirm the code ….
-  Signed in.
-● Bash  uv run iceberg_connect.py shell db-… --write &lt; load.sql
-  CREATE SCHEMA IF NOT EXISTS lakehouse.grid_sensors;
-  CREATE TABLE lakehouse.grid_sensors.substation  AS FROM 'scada-export/substation.parquet';
-  CREATE TABLE lakehouse.grid_sensors.feeder      AS FROM 'scada-export/feeder.parquet';
-  CREATE TABLE lakehouse.grid_sensors.feeder_load AS FROM 'scada-export/feeder_load.parquet';
-  table         rows
-  feeder_load  32256
-● Skill  semantic-model
-  Three tables in grid_sensors. Now the model: I'll profile them first, then ask
-  you which questions it has to answer.</code></pre>
-    <div style="font-size:0.85em">
-      <div class="group"><div class="label tight">Your agent</div><p class="secondary">Claude Code, Codex, GitHub Copilot or any other agent with MCP and a terminal. Registered once against the user portal, it works as <em>you</em>.</p></div>
-      <div class="group"><div class="label tight">Your tools</div><p class="secondary"><code>iceberg_connect.py</code> attaches a database to the DuckDB CLI, PyIceberg or DBeaver with the user's own grants. Read-only unless <code>--write</code> is set, and writing needs the Writer role.</p></div>
-      <div class="group"><div class="label tight">Your data</div><p class="secondary">Here Parquet files in a folder. CSV, an S3 bucket or a URL work the same way: DuckDB reads them all. For a recurring load, the Ingestion extension runs it on a schedule.</p></div>
-    </div>
+<section class="shot-slide">
+  <div class="head"><span class="label">03 · Demo · Notebook</span><h2>A notebook checks the data product, then writes it</h2></div>
+  <div class="fig two">
+    <img class="shot" src="screenshots/63-user-notebook-polars.png" alt="Example notebook 09 in the grid-sensors database: a query joins the congestion outlook to assets, feeders and substations and counts future congestion points per substation, with the resulting table">
+    <img class="shot" src="screenshots/66-user-notebook-polars-quality.png" alt="Example notebook 09: the contract's quality checks, run as SQL, all with zero violations, before the tables are written to Iceberg">
   </div>
-  <div class="caption foot">Real commands and output, run as sander on the demo stack · shortened · the prompts were written for the demo · next: the semantic-model skill takes over</div>
-  <aside class="notes">This is track 02 of the user portal's Getting started page: your own tools, as yourself. The agent finds the database over MCP, signs in with iceberg_connect.py (a device sign-in in the browser, so no password or key ends up in a script or a prompt) and loads the export with the DuckDB CLI: the token goes through an owner-only init file, never the command line. The export is synthetic and comes from presentation/grid/grid_sensors.py; load.sql is next to it. The rough edges in the data are deliberate, because the interview has to settle them: evening peaks on feeders with heat pumps and EV chargers that run above their rating in the second week, reverse power flow at midday on rural solar feeders, a six-hour comms outage, a broken temperature sensor that reports -999 and SUSPECT spikes from the head-end.</aside>
-</section>
-
-<section>
-  <div class="label">03 · Demo · Semantic model with your coding agent</div>
-  <h2>The agent looks at the data, asks the owner, and proposes a model</h2>
-  <div class="cols-3" style="font-size:0.8em">
-    <div class="group">
-      <div class="label tight">1 · Profile: what is in the data</div>
-      <p class="secondary">The agent counts and measures every column of the 32,256 readings. That shows what is odd, not what it means:</p>
-      <ul class="secondary" style="font-size:0.9em">
-        <li>1,920.6 kW on cables rated at most 680 kW</li>
-        <li>negative load down to -417.6 kW</li>
-        <li>a cable temperature of -999 °C</li>
-        <li>24 quarter-hours without any data</li>
-      </ul>
-    </div>
-    <div class="group">
-      <div class="label tight">2 · Interview: what it means</div>
-      <p class="secondary">First the questions the model must answer; sander gives six, such as <em>“Which feeders ran above their rating last week?”</em> Then the meaning, a few questions at a time:</p>
-      <div class="chat" style="font-size:0.82em;gap:10px">
-        <div class="turn"><span class="who">agent</span><p>Which readings count?</p></div>
-        <div class="turn you"><span class="who">sander</span><p>OK and ESTIMATED. SUSPECT failed the plausibility check.</p></div>
-        <div class="turn"><span class="who">agent</span><p>And negative load?</p></div>
-        <div class="turn you"><span class="who">sander</span><p>Solar feed-in. We call it teruglevering.</p></div>
-      </div>
-    </div>
-    <div class="group">
-      <div class="label tight">3 · Proposal: a draft model</div>
-      <p class="secondary">The agent writes the answers down as a semantic model and plays it back before anything is stored:</p>
-      <ul class="secondary" style="font-size:0.9em">
-        <li><em>overload_hours</em>: valid quarter-hours above the rating, divided by 4</li>
-        <li>SUSPECT and MISSING never count in a load metric</li>
-        <li>-999 means a broken sensor</li>
-        <li>teruglevering and overbelasting as synonyms</li>
-      </ul>
-    </div>
-  </div>
-  <div class="caption foot">In short: the data shows what is odd, only the team knows what it means. The agent asks, the team decides.</div>
-  <aside class="notes">Real profile output from the semantic-model skill, shortened; sander's answers were written for the demo. The skill ships with the installer in .agents/skills, in the open Agent Skills format, so Claude Code, Codex, GitHub Copilot and others pick it up. Its steps: connect, scope, profile, interview, draft, check, review, publish. The rule it follows: never guess business meaning. The data can suggest an answer, the owner confirms it. It asks at most four questions per round, each with its own suggestion where the profile supports one. One suggestion was wrong for this domain: it proposed a signed average utilisation, but a cable heats up from feed-in as much as from demand, so the metric uses the absolute value. That is exactly the knowledge that is not in the data. Owner (grid-planning), refresh (daily SCADA export at 06:00 UTC) and classification (internal, no personal data) are asked too. The full transcript and the work files are in presentation/grid.</aside>
-</section>
-
-<section>
-  <div class="label">03 · Demo · Semantic model · Draft</div>
-  <h2>The metadata an AI needs, stored beside the tables</h2>
-  <div class="cols-asym">
-    <pre style="font-size:0.56em"><code data-noescape>{
-  <span class="k">"name"</span>: <span class="s">"feeder_load"</span>,
-  <span class="k">"description"</span>: <span class="s">"… One row in FEEDER_LOAD per feeder per quarter-hour."</span>,
-  <span class="k">"ai_context"</span>: { <span class="k">"instructions"</span>:
-    <span class="s">"Time: measured_at is the UTC start of a quarter-hour …
-     Missing values: … SUSPECT readings failed the SCADA
-     plausibility check and are excluded from every load metric …
-     'Last week' means … 2026-09-21 up to and including 2026-09-27."</span> },
-  <span class="k">"datasets"</span>: [{ <span class="k">"name"</span>: <span class="s">"FEEDER_LOAD"</span>,
-    <span class="k">"source"</span>: <span class="s">"lakehouse.grid_sensors.feeder_load"</span>,
-    <span class="k">"primary_key"</span>: [<span class="s">"feeder_id"</span>, <span class="s">"measured_at"</span>], … }, …],
-  <span class="k">"relationships"</span>: [{ <span class="k">"name"</span>: <span class="s">"feeder"</span>,
-    <span class="k">"from"</span>: <span class="s">"FEEDER_LOAD"</span>, <span class="k">"from_columns"</span>: [<span class="s">"feeder_id"</span>],
-    <span class="k">"to"</span>: <span class="s">"FEEDER"</span>, <span class="k">"to_columns"</span>: [<span class="s">"feeder_id"</span>] }, …],
-  <span class="k">"metrics"</span>: [{ <span class="k">"name"</span>: <span class="s">"overload_hours"</span>,
-    <span class="k">"description"</span>: <span class="s">"Hours with a valid reading above the rated
-      capacity … SUSPECT and MISSING readings excluded. Unit: hours."</span>,
-    <span class="k">"ai_context"</span>: { <span class="k">"synonyms"</span>: [<span class="s">"congestion hours"</span>, <span class="s">"overbelasting"</span>] },
-    <span class="k">"expression"</span>: … <span class="s">"count(*) FILTER (WHERE FEEDER_LOAD.utilisation_pct
-      &gt; 100 AND FEEDER_LOAD.quality_flag IN ('OK', 'ESTIMATED')) / 4.0"</span> }, …]
-}</code></pre>
-    <div style="font-size:0.85em">
-      <div class="group"><h3>Grain and keys</h3><p class="secondary">One row per feeder per quarter-hour, and a key per dataset, so the agent knows what it counts.</p></div>
-      <div class="group"><h3>Relationships</h3><p class="secondary">FEEDER_LOAD → FEEDER → SUBSTATION. Ossie points a relationship from the many side to the one side; the platform only joins that way, so no reading is counted twice.</p></div>
-      <div class="group"><h3>Metrics</h3><p class="secondary">Seven, each defined once with its exclusions and unit. "Last week" is a filter, not a metric.</p></div>
-      <div class="group"><h3>AI context</h3><p class="secondary">UTC days, the quality codes, owner and refresh, the synonyms from the interview, and how to answer.</p></div>
-    </div>
-  </div>
-  <div class="caption foot">Apache Ossie semantic model, shortened · Ossie describes, it does not run anything · Polaris stores it beside the tables, the platform compiles the queries</div>
-  <aside class="notes">SM draft writes one dataset per table and one field per column, with TODO wherever meaning is needed; the agent fills those in from the interview. The full document is presentation/grid/semantic-models/grid_sensors/feeder_load.json, and the Definition tab in the catalog shows the stored version. Division of labour: the Ossie specification defines a relationship as from the many side (from) to the one side (to), with to_columns the primary or unique key of the one side. Ossie itself executes nothing. The platform's governed-query compiler joins only along that direction and only onto a primary key, so every join is many-to-one and a metric is never inflated; a question that would fan out is refused (user_portal/semantic/compiler.py). Governed queries accept only an allowlist of SQL: aggregates and scalar functions over the model's own columns, no subqueries, no table functions. That is why time windows are filters at question time rather than metrics.</aside>
-</section>
-
-<section>
-  <div class="label">03 · Demo · Semantic model · Check, review and publish</div>
-  <h2>Every question runs against the real data, then the owner decides</h2>
-  <div class="cols-asym">
-    <pre style="font-size:0.58em"><code data-noescape><span class="c">$</span> <span class="k">SM check $DB grid_sensors feeder_load.json --questions feeder_load.questions.sql</span>
-Keys and relationships
-  <span class="ok">ok</span>    FEEDER_LOAD key (feeder_id, measured_at) is unique: 0 violations
-  <span class="ok">ok</span>    feeder: every FEEDER_LOAD finds its FEEDER: 0 violations
-  <span class="ok">ok</span>    substation: every FEEDER finds its SUBSTATION: 0 violations
-Questions
-  <span class="ok">ok</span>    Which feeders ran above their rating last week, and for how many hours?
-        name | overload_hours
-        Dockside-4 Church | 6.5
-        Northgate-2 Mill | 5.75
-        Northgate-3 Station | 5.0
-        Millbrook-1 Mill | 4.25
-  <span class="ok">ok</span>    How did the daily peak load per substation develop over the last two weeks?
-        name | measured_date | peak_load_kw
-        <span class="flag">Example Dockside | 2026-09-13 | 142.0</span>
-        Example Dockside | 2026-09-14 | 430.8
-        …
-0 errors, 0 failed checks, 0 warnings.
-<span class="c">$</span> <span class="k">SM publish $DB grid_sensors feeder_load.json --name feeder_load …</span>
-<span class="ok">created grid_sensors.feeder_load, entity version 1</span></code></pre>
-    <div class="chat" style="font-size:0.8em">
-      <div class="turn"><span class="who">agent</span><p>Everything passes. One thing to judge: the trend starts on 13 September at 142 kW. That UTC day holds only the first two hours of local 14 September.</p></div>
-      <div class="turn you"><span class="who">sander</span><p>Leave that day out of trends.</p></div>
-      <div class="turn"><span class="who">agent</span><p>Added to the instructions and to question 2. Check again: 0 errors, 0 failed checks, 0 warnings.</p></div>
-      <div class="turn you"><span class="who">sander</span><p>Approved. Publish it.</p></div>
-    </div>
-  </div>
-  <div class="caption foot">A green check is not a right answer: the owner reads the numbers first · after publishing, all six questions give the same answer over MCP</div>
-  <aside class="notes">The check is read-only and runs in UTC: it validates the structure, that every field is a real column, every metric, the primary-key and relationship checks, and each interview question from the questions file, showing up to ten rows. All six questions passed on the first run. The partial first day is the kind of thing only a person spots: technically correct, misleading in a trend chart. Publishing runs the checks again and creates the model with an optimistic version check. The replay compiles each question the way Conversational BI and any MCP agent will; one call was refused at first because order_by needs the output column name, and the error says which names exist.</aside>
+  <aside class="notes">The demo product is a synthetic medium-voltage load forecast for network architects: six substations, 48 feeders and 288 assets, a forecast per asset, year and direction from 2026 to 2040, and a precomputed congestion outlook that says when each asset becomes congested and how badly. It is example notebook 09, which every team gets in its notebook workspace. One contract file, grid_forecast.product.yaml, defines the product: the tables, a description for every column, keys, joins, metrics and quality checks. The notebook generates every row, derives the congestion outlook and runs the contract's SQL checks; only when all of them pass does it write the eight Iceberg tables, partitioned by year. The notebook's engine is just an example: any engine with an Iceberg writer works the same way. Polaris checks sander's identity and vends storage credentials scoped to each table. A rerun overwrites the rows of the same tables, so their history and shares survive.</aside>
 </section>
 
 <section>
   <section class="shot-slide">
-    <div class="head"><span class="label">03 · Demo · Semantic model</span><h2>The platform draws the model</h2></div>
-    <div class="fig"><img class="shot" src="screenshots/44-user-model-diagram.png" alt="Diagram tab of the feeder_load semantic model: three datasets drawn as tables with their keys, relationships as lines between the join columns"></div>
-    <div class="caption foot">Catalog · grid_sensors · feeder_load · datasets as tables with PK and FK · each relationship a line between the join columns · hover to follow it, select to open the table</div>
-    <div class="hint">↓ overview and metrics</div>
+    <div class="head"><span class="label">03 · Demo · Semantic model</span><h2>The meaning, stored beside the tables</h2></div>
+    <div class="fig"><img class="shot" src="screenshots/67-user-model-diagram-polars.png" alt="Diagram tab of the mv_load_forecast semantic model: eight datasets drawn as tables with their keys, relationships as lines between the join columns"></div>
+    <div class="hint">↓ AI context and metrics</div>
   </section>
-  <section class="full" data-background-image="screenshots/43-user-model-overview.png" data-background-size="contain" data-background-color="#000000">
+  <section class="full" data-background-image="screenshots/68-user-model-overview-polars.png" data-background-size="contain" data-background-color="#000000">
     <div class="caption">User portal · semantic model overview with its AI context</div>
   </section>
-  <section class="full" data-background-image="screenshots/49-user-model-metrics.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">User portal · metrics and relationships</div>
+  <section class="full" data-background-image="screenshots/69-user-model-metrics-polars.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">User portal · the agreed metrics and relationships</div>
   </section>
-  <aside class="notes">No extra tool and no second copy: the catalog reads the model from Polaris with the user's own grants, like a table. Facts sit on the left, dimensions to the right. A box shows at most 12 fields and always keeps keys and join columns. Metrics are not drawn; they are in the Metrics and relationships tab with their SQL. Datasets and fields link to the Iceberg tables, and Definition shows the stored document.</aside>
+  <aside class="notes">The notebook stores the meaning as an Apache Ossie semantic model in Polaris, in the same namespace as the tables. It comes straight from the contract: every dataset points at its Iceberg table and names its key, every field has a description, a label for its concept and synonyms, the relationships state the joins, and the metrics carry the agreed SQL, such as congestion_points and peak_utilization_pct. The AI context holds what a person would tell a new colleague: the grain, the horizon, the missing-value policy, and never to add up peaks of different assets, because they do not occur at the same moment. The catalog reads the model with the user's own grants, like a table, and draws it. Ossie points a relationship from the many side to the one side; the platform only joins that way, so no row is ever counted twice.</aside>
 </section>
 
 <section class="shot-slide">
   <div class="head"><span class="label">03 · Demo · Data sharing</span><h2>Share the model with another team, without a copy</h2></div>
   <div class="fig two">
-    <img class="shot" src="screenshots/37-user-share-team-form.png" alt="User portal data share form with outage-response as recipient team, the feeder_load semantic model selected and its three tables added">
-    <img class="shot" src="screenshots/39-user-received-catalog.png" alt="noor's catalog of the shared grid-sensors database, marked shared and read-only, with the three tables and the model">
+    <img class="shot" src="screenshots/70-user-share-team-form-polars.png" alt="User portal data share form with outage-response as recipient team, the mv_load_forecast semantic model selected and its eight tables added">
+    <img class="shot" src="screenshots/71-user-received-catalog-polars.png" alt="noor's catalog of the shared grid-sensors database, marked shared and read-only: eight tables and one semantic model, owner named">
   </div>
-  <div class="caption foot two"><span>mila administers grid-planning · the feeder_load model for outage-response · its three tables come along</span><span>noor in outage-response · only the shared objects, read-only, owner named</span></div>
-  <aside class="notes">A team administrator picks tables, views and semantic models of one database and chooses the recipient: another team, an external party, or both. Selecting a model selects the tables it reads, because a model without its tables cannot be queried. In Polaris a share is one catalog role with one read grant per object, nothing on the namespace or catalog, so a recipient cannot list anything else. A team share is granted to each member's own principal role, including people who join later, and removed when they leave. An external party gets a client ID and a secret shown once, and loads the model by its address with any Iceberg REST client. Shares can expire and be revoked at any time; the platform administrator sees every share and can revoke it. There is still only one copy of the data.</aside>
+  <aside class="notes">A team administrator picks tables, views and semantic models of one database and chooses the recipient: another team, an external party, a listing in the data catalog, or a combination. Selecting a model selects the tables it reads, because a model without its tables cannot be queried. In Polaris a share is one catalog role with one read grant per object, nothing on the namespace or catalog, so a recipient cannot list anything else. A team share is granted to each member's own principal role, including people who join later, and removed when they leave. An external party gets a client ID and a secret shown once. Shares can expire and be revoked at any time; the platform administrator sees every share and can revoke it. There is still only one copy of the data.</aside>
+</section>
+
+<section>
+  <section class="shot-slide">
+    <div class="head"><span class="label">03 · Demo · Data catalog</span><h2>List it in the data catalog, so others find it</h2></div>
+    <div class="fig two">
+      <img class="shot" src="screenshots/72-user-share-listed-form-polars.png" alt="User portal data share form for mv-load-forecast-catalog: only Listed in the data catalog checked, with grid-planning@example.com as the contact for access requests and the mv_load_forecast model selected">
+      <img class="shot" src="screenshots/73-om-data-product-polars.png" alt="OpenMetadata data product mv-load-forecast-catalog: the agreed metrics, the ER diagram of its eight tables with their primary and foreign keys, and the list of foreign keys">
+    </div>
+    <div class="hint">↓ a table and a metric up close</div>
+  </section>
+  <section class="full" data-background-image="screenshots/74-om-table-polars.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">OpenMetadata · load_forecast with the model's descriptions, glossary terms and keys</div>
+  </section>
+  <section class="full" data-background-image="screenshots/75-om-metric-polars.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">OpenMetadata · the agreed congestion_points metric with its description and dimensions</div>
+  </section>
+  <aside class="notes">A listing is the third audience of a data share, next to another team and an external party. It grants nothing: no principal role, no credential, no data. The platform publishes names, column schemas, descriptions and the semantic model through the Extension Bridge's listings capability, never view SQL, storage locations or snapshots. The OpenMetadata extension pushes that to OpenMetadata 2.0 through its REST API: OpenMetadata dropped its own Iceberg connector and never read semantic models, so pulling was not an option. Each listing becomes a data product with its schemas, tables and metrics as assets. The model's datasets and fields become glossary terms, their descriptions land on the tables and columns, its keys become table constraints and an ER diagram, and every metric becomes a Metric entity with its SQL, synonyms and dimensions. Field labels become classification tags. Unlisting, revoking or an expiry removes it within a minute. OpenMetadata is one extension; another data catalog can use the same contract. Someone who finds the product asks grid-planning for a data share.</aside>
 </section>
 
 <section>
   <section class="shot-slide">
     <div class="head"><span class="label">03 · Demo · Conversational BI</span><h2>noor asks the shared model a question</h2></div>
-    <div class="fig"><img class="shot" src="screenshots/55-cbi-answer.png" alt="Conversational BI answer for noor on the shared feeder_load model: a query card with overload_hours by FEEDER.name for 21 to 27 September, the metric definition, and a bar chart of four feeders led by Dockside-4 Church with 6.5 hours"></div>
-    <div class="caption foot">“Which feeders ran above their rating in the week of 21 September, and for how many hours?” · the same four feeders and 6.5 hours as the skill's check · the definition and join path above the chart</div>
+    <div class="fig"><img class="shot" src="screenshots/76-cbi-answer-polars.png" alt="Conversational BI answer for noor on the shared mv_load_forecast model: a query card with congestion_points by SUBSTATION.name for offtake, the join path from congestion to substation, and a bar chart led by Example Dunmore with 38"></div>
     <div class="hint">↓ the SQL</div>
   </section>
-  <section class="full" data-background-image="screenshots/56-cbi-query.png" data-background-size="contain" data-background-color="#000000">
-    <div class="caption">Conversational BI · the SQL compiled from the model: the agreed metric, the feeder join, the UTC window</div>
+  <section class="full" data-background-image="screenshots/77-cbi-query-polars.png" data-background-size="contain" data-background-color="#000000">
+    <div class="caption">Conversational BI · the SQL compiled from the model: the agreed metric and the joins from congestion to substation</div>
   </section>
-  <aside class="notes">noor is administrator of outage-response and enabled Conversational BI for their team in development; the model is the one grid-planning shared with outage-response, so it shows as Shared · Read-only with its owner. The LLM in this capture is Google Gemini; OpenAI, Anthropic and Amazon Bedrock work the same way through LLM_MODEL. The answer is not a guess from the LLM: the numbers come from a governed query, and they match what the skill checked before publishing.</aside>
+  <aside class="notes">noor is administrator of outage-response and enabled Conversational BI for their team in development; the model is the one grid-planning shared with outage-response, so it shows as Shared · Read-only with its owner. The LLM in this capture is Google Gemini; OpenAI, Anthropic and Amazon Bedrock work the same way through LLM_MODEL. The answer is not a guess from the LLM: it picks the metric and the dimension, and the numbers come from a governed query that follows the model's joins. They match the overview the notebook computed.</aside>
 </section>
 
 <section>
@@ -730,7 +598,6 @@ Questions
     <div class="layer"><span class="n">3 · A disposable worker reads<small>DuckDB · one process per query</small></span><span class="d"><strong>With the team's one-hour read token</strong> and vended, table-scoped credentials. Shared models need nothing extra: the team's read role reaches them.</span></div>
     <div class="layer"><span class="n">4 · The answer shows its work<small>CopilotKit · Chart.js</small></span><span class="d"><strong>Query card, definitions, join path and SQL.</strong> The chart loads its rows from the result by id, never from the LLM.</span></div>
   </div>
-  <div class="caption foot">The model owner decides what a metric means. The LLM only picks names.</div>
   <aside class="notes">Also as an API at :3007/api/v1 and an MCP server at :3007/mcp, so another agent can ask the same governed questions. Every capability is one method exposed three ways: REST, MCP and the chat agent. The extension never writes to the platform. Sources: extensions/conversationalbi/README.md, sections Governed queries and What goes to the LLM.</aside>
 </section>
 
@@ -744,7 +611,7 @@ Questions
     <li><strong>Meaning belongs next to the data.</strong> A semantic model is part of the data product: owned by the team, checked before it is published, and shared and governed like the tables.</li>
     <li><strong>Self-service only works with clear ownership.</strong> Teams create, own and share their databases, while the platform team owns the building blocks.</li>
     <li><strong>Agents use the same front door.</strong> They get the same identity and grants as the people they work for.</li>
-    <li><strong>Keep the core small, grow through extensions.</strong> New capabilities such as Conversational BI, dbt pipelines and Ingestion come with their own release, behind one versioned contract.</li>
+    <li><strong>Keep the core small, grow through extensions.</strong> New capabilities such as Conversational BI, dbt pipelines, Ingestion and OpenMetadata come with their own release, behind one versioned contract.</li>
   </ul>
 </section>
 

@@ -3,6 +3,7 @@
 import os
 
 from pyiceberg.catalog import load_catalog
+from pyiceberg.catalog.rest import AUTH, RestCatalog
 from pyiceberg.catalog.rest.auth import AuthManager
 from pyiceberg.io.pyarrow import PyArrowFileIO
 
@@ -21,6 +22,24 @@ class SessionAuthManager(AuthManager):
         return f"Bearer {access_token()}"
 
 
+SESSION_AUTH = {"type": "custom", "impl": "user_portal.notebook.connection.SessionAuthManager"}
+
+
+class SessionRestCatalog(RestCatalog):
+    """The REST catalog, signing every request with the notebook owner's current session token.
+
+    It sets up that auth itself, so its properties stay plain strings: Polars' Iceberg sink copies
+    a table's catalog properties and accepts nothing else.
+    """
+
+    def _create_session(self):
+        self.properties[AUTH] = SESSION_AUTH
+        try:
+            return super()._create_session()
+        finally:
+            del self.properties[AUTH]
+
+
 def catalog_properties():
     """The PyIceberg REST catalog properties of the notebook's database, signed in as its owner."""
     token = access_token()
@@ -30,7 +49,7 @@ def catalog_properties():
         {"credential": f"{os.environ['ICEBERG_CLIENT_ID']}:{os.environ['ICEBERG_CLIENT_SECRET']}"}
     )
     if os.environ.get("ICEBERG_SESSION_TOKEN_URL"):
-        credentials = {"auth": {"type": "custom", "impl": "user_portal.notebook.connection.SessionAuthManager"}}
+        credentials = {"auth": SESSION_AUTH}
     return {
         "type": "rest",
         "uri": os.environ["ICEBERG_CATALOG_URI"],
@@ -45,7 +64,27 @@ def catalog_properties():
 
 
 def connect():
-    return load_catalog(os.environ["ICEBERG_DATABASE"], **catalog_properties())
+    properties = catalog_properties()
+    if properties.pop(AUTH, None):
+        return SessionRestCatalog(os.environ["ICEBERG_DATABASE"], **properties)
+    return load_catalog(os.environ["ICEBERG_DATABASE"], **properties)
+
+
+def polars_storage_options(table):
+    """The storage settings Polars needs to read or write a loaded table's files itself.
+
+    Polars' Iceberg scan and sink go through PyIceberg for metadata, but open data files with their
+    own object store, which sees only these options: the credentials Polaris vended for the table and
+    the internal storage endpoint. Table properties such as `comment` never reach the object store.
+    """
+    options = {k: v for k, v in table.io.properties.items() if k.startswith("s3.")}
+    if os.environ.get("ICEBERG_S3_ENDPOINT"):
+        options["s3.endpoint"] = os.environ["ICEBERG_S3_ENDPOINT"]
+    if options.get("s3.access-key-id"):
+        options.setdefault("s3.region", "us-east-1")
+    if options.get("s3.endpoint", "").startswith("http://"):
+        options["allow_http"] = "true"
+    return options
 
 
 def dlt_destination(local_dir):

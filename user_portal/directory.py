@@ -8,12 +8,12 @@ import httpx
 from pydantic import ValidationError
 
 from server import extensions
+from server.catalog_metadata import object_details, properties, semantic_model_details
 from server.models import DatabaseInput, Environment, ServiceError
 from server.polaris import MAX_SHARES, PolarisProvider, enc
 from server.storage import RustFSStorage
 from server.validation import validation_message
 
-from .catalog import object_details, properties, semantic_model_details
 from .semantic import compiler, ossie, rules
 from .semantic.errors import SemanticError
 
@@ -332,13 +332,20 @@ class UserDirectory:
                 raise ServiceError(422, validation_message(exc.errors(), "/api/shares")) from None
         return data, added, warnings
 
+    @staticmethod
+    def require_listing(data):
+        if data.listed and not extensions.listing_extensions(os.environ):
+            raise ServiceError(422, "No data catalog extension is installed, so a share can't be listed.")
+
     def create_share(self, session, data, *, include_model_tables=False):
+        self.require_listing(data)
         database, user = self.share_database(session, data.database)
         data, added, warnings = self.model_tables(session, data.database, data, include_model_tables)
         created = self.metadata.create_share(data, user, expected_team=database["team"])
         return {**created, "addedTables": added, "warnings": warnings}
 
     def update_share(self, session, id, data, *, include_model_tables=False):
+        self.require_listing(data)
         principal = self.share(session, id)
         added, warnings = [], []
         if data.objects is not None:

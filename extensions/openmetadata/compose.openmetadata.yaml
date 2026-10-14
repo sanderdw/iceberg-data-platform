@@ -1,0 +1,112 @@
+# Optional: a local OpenMetadata 2.0.5 server for demos and CI, in the same Compose project.
+#   docker compose -f compose.yaml -f compose.openmetadata.yaml up -d --wait
+# The UI is at http://localhost:8585 (admin@open-metadata.org / admin). scripts.om_token writes the
+# ingestion-bot's JWT to .env. For a real catalog, point OM_URL at your own OpenMetadata instead.
+# Images and settings follow OpenMetadata's docker-compose-postgres quickstart of release 2.0.5,
+# without the Airflow ingestion service: this extension pushes through the API.
+
+x-openmetadata-env: &openmetadata-env
+  OPENMETADATA_CLUSTER_NAME: openmetadata
+  SERVER_PORT: 8585
+  SERVER_ADMIN_PORT: 8586
+  LOG_LEVEL: INFO
+  AUTHENTICATION_PROVIDER: basic
+  AUTHORIZER_ADMIN_PRINCIPALS: "[admin]"
+  AUTHORIZER_PRINCIPAL_DOMAIN: open-metadata.org
+  AUTHENTICATION_PUBLIC_KEYS: "[http://localhost:8585/api/v1/system/config/jwks]"
+  SERVER_HOST_API_URL: http://openmetadata-server:8585/api
+  PIPELINE_SERVICE_CLIENT_ENABLED: "false"
+  DB_DRIVER_CLASS: org.postgresql.Driver
+  DB_SCHEME: postgresql
+  DB_PARAMS: allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+  DB_USER: openmetadata_user
+  DB_USER_PASSWORD: openmetadata_password
+  DB_HOST: openmetadata-postgresql
+  DB_PORT: 5432
+  OM_DATABASE: openmetadata_db
+  ELASTICSEARCH_HOST: openmetadata-elasticsearch
+  ELASTICSEARCH_PORT: 9200
+  ELASTICSEARCH_SCHEME: http
+  SEARCH_TYPE: elasticsearch
+
+services:
+  om-sync:
+    environment:
+      OM_URL: ${OM_URL:-http://openmetadata-server:8585/api}
+      OM_UI_URL: ${OM_UI_URL:-http://localhost:8585}
+    networks: [platform, catalog]
+    depends_on:
+      openmetadata-server:
+        condition: service_healthy
+
+  openmetadata-postgresql:
+    image: docker.getcollate.io/openmetadata/postgresql:2.0.5
+    command: "--work_mem=10MB"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    labels:
+      io.iceberg-platform.extension: openmetadata
+    volumes:
+      - om-postgres:/var/lib/postgresql/data
+    networks: [catalog]
+    healthcheck:
+      test: psql -U postgres -tAc 'select 1' -d openmetadata_db
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  openmetadata-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.0
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: -Xms1024m -Xmx1024m
+      xpack.security.enabled: "false"
+    labels:
+      io.iceberg-platform.extension: openmetadata
+    volumes:
+      - om-search:/usr/share/elasticsearch/data
+    networks: [catalog]
+    healthcheck:
+      test: "curl -s http://localhost:9200/_cluster/health?pretty | grep status | grep -qE 'green|yellow' || exit 1"
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  openmetadata-migrate:
+    image: docker.getcollate.io/openmetadata/server:2.0.5
+    command: "./bootstrap/openmetadata-ops.sh migrate"
+    environment: *openmetadata-env
+    labels:
+      io.iceberg-platform.extension: openmetadata
+    networks: [catalog]
+    depends_on:
+      openmetadata-postgresql:
+        condition: service_healthy
+      openmetadata-elasticsearch:
+        condition: service_healthy
+
+  openmetadata-server:
+    image: docker.getcollate.io/openmetadata/server:2.0.5
+    restart: unless-stopped
+    environment: *openmetadata-env
+    labels:
+      io.iceberg-platform.extension: openmetadata
+    ports:
+      - "127.0.0.1:${OPENMETADATA_PORT:-8585}:8585"
+    networks: [catalog]
+    depends_on:
+      openmetadata-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8586/healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+networks:
+  catalog:
+
+volumes:
+  om-postgres:
+  om-search:

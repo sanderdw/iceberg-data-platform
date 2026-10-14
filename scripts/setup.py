@@ -192,8 +192,15 @@ def set_env(config, updates):
     config.chmod(0o600)
 
 
-def register_extension(root, extension, origin, handshake):
-    """Register an extension and write the handshake file it starts with (contracts/bridge/v1/handshake.md)."""
+def listing_ids(values):
+    return [id for id in (values.get("PLATFORM_LISTING_EXTENSIONS") or "").split(",") if id.strip()]
+
+
+def register_extension(root, extension, origin, handshake, listing=False):
+    """Register an extension and write the handshake file it starts with (contracts/bridge/v1/handshake.md).
+
+    `listing` lets it read listed data shares to publish them in a data catalog (capability `listings`).
+    """
     if not EXTENSION_ID.match(extension):
         raise SystemExit("An extension id is 2–24 lowercase letters or digits, starting with a letter.")
     if not re.match(r"^https?://[^/@?#]+/?$", origin):
@@ -204,8 +211,10 @@ def register_extension(root, extension, origin, handshake):
     secrets_ = parse_pairs(values.get("PLATFORM_EXTENSION_SECRETS"))
     registered[extension] = origin.rstrip("/")
     secrets_.setdefault(extension, secrets.token_hex(24))
+    listing_ = [id for id in listing_ids(values) if id != extension] + ([extension] if listing else [])
     set_env(config, {"PLATFORM_EXTENSIONS": format_pairs(registered),
-                     "PLATFORM_EXTENSION_SECRETS": format_pairs(secrets_)})
+                     "PLATFORM_EXTENSION_SECRETS": format_pairs(secrets_),
+                     "PLATFORM_LISTING_EXTENSIONS": ",".join(listing_)})
     target = Path(handshake)
     target.parent.mkdir(parents=True, exist_ok=True)
     content = "".join(f"{key}={value}\n" for key, value in {
@@ -238,7 +247,8 @@ def remove_extension(root, extension):
     registered.pop(extension, None)
     secrets_.pop(extension, None)
     set_env(config, {"PLATFORM_EXTENSIONS": format_pairs(registered),
-                     "PLATFORM_EXTENSION_SECRETS": format_pairs(secrets_)})
+                     "PLATFORM_EXTENSION_SECRETS": format_pairs(secrets_),
+                     "PLATFORM_LISTING_EXTENSIONS": ",".join(id for id in listing_ids(values) if id != extension)})
     print(f"Extension {extension} removed. Recreating the platform services disables its Keycloak clients.")
 
 
@@ -291,13 +301,15 @@ def main():
     parser.add_argument("--extension", help="Register an extension, such as conversationalbi")
     parser.add_argument("--origin", help="The extension's browser origin, such as http://localhost:3007")
     parser.add_argument("--handshake", help="Where to write the extension's bridge credentials (mode 0600)")
+    parser.add_argument("--listing", action="store_true",
+                        help="With --extension: it publishes listed data shares to a data catalog")
     parser.add_argument("--remove-extension", metavar="ID", help="Unregister an extension")
     args = parser.parse_args()
     setup(demo=args.demo)
     if args.extension:
         if not args.origin or not args.handshake:
             parser.error("--extension requires --origin and --handshake")
-        register_extension(ROOT, args.extension, args.origin, args.handshake)
+        register_extension(ROOT, args.extension, args.origin, args.handshake, args.listing)
     if args.remove_extension:
         remove_extension(ROOT, args.remove_extension)
 

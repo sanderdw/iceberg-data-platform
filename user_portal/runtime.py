@@ -73,6 +73,14 @@ class Workspace:
                     "url": self.url + "?file=07_duckdb_flights_read.py",
                 },
                 {"title": "08 · Load data with dlt", "url": self.url + "?file=08_dlt_ingest.py"},
+                {
+                    "title": "09 · Write an AI-ready grid forecast with Polars",
+                    "url": self.url + "?file=09_polars_grid_forecast_write.py",
+                },
+                {
+                    "title": "10 · Read an AI-ready grid forecast with Polars",
+                    "url": self.url + "?file=10_polars_grid_forecast_read.py",
+                },
             ],
         }
 

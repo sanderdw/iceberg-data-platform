@@ -1,0 +1,39 @@
+[project]
+name = "iceberg-openmetadata"
+version = "0.1.0"
+description = "OpenMetadata for the Iceberg Data Platform: publishes listed data shares (schemas, descriptions and semantic model metrics, never data) to an OpenMetadata catalog"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi==0.143.0",
+  "uvicorn[standard]>=0.53.0",
+  "httpx>=0.28.1",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=9.1.1",
+  "ruff>=0.17.0",
+]
+
+[tool.iceberg-openmetadata]
+# Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
+# 0.1.1 is the first with the `listings` capability.
+bridge-contract = ">=0.1.1,<0.2"
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "C4", "RUF"]
+ignore = ["RUF001", "RUF002"]

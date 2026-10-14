@@ -27,7 +27,7 @@ nav = [
       "connect.md", "ai-agents.md", "mcp.md",
     ] },
     { "Administer" = ["admin-guide.md", "configuration.md", "security.md"] },
-    { "Extensions" = ["extensions.md", "conversational-bi.md", "dbt.md", "ingestion.md"] },
+    { "Extensions" = ["extensions.md", "conversational-bi.md", "dbt.md", "ingestion.md", "openmetadata.md"] },
   ] },
   { "Develop" = [
     "develop/index.md",
@@ -38,7 +38,7 @@ nav = [
     "develop/keycloak.md",
     "develop/form-validation.md",
     "develop/extension-bridge.md",
-    { "Extension internals" = ["develop/conversational-bi.md", "develop/dbt.md", "develop/ingestion.md"] },
+    { "Extension internals" = ["develop/conversational-bi.md", "develop/dbt.md", "develop/ingestion.md", "develop/openmetadata.md"] },
     "develop/releasing.md",
   ] },
   { "Releases" = [

@@ -23,6 +23,7 @@ on:
       - '!.github/workflows/conversationalbi-*.yml'
       - '!.github/workflows/dbt-*.yml'
       - '!.github/workflows/ingestion-*.yml'
+      - '!.github/workflows/openmetadata-*.yml'
   pull_request:
   workflow_dispatch:
   workflow_call:
