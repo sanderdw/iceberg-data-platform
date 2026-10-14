@@ -1,5 +1,5 @@
 # Conversational BI gateway and agent (one process, ports 3007 and 3017). Context: extensions/conversationalbi.
-FROM node:24-slim AS web
+FROM node:26-slim AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 # No install scripts: nothing phones home at build time.
