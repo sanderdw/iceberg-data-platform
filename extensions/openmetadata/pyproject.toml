@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-openmetadata"
-version = "0.1.0"
+version = "0.1.1"
 description = "OpenMetadata for the Iceberg Data Platform: publishes listed data shares (schemas, descriptions and semantic model metrics, never data) to an OpenMetadata catalog"
 readme = "README.md"
 license = "Apache-2.0"

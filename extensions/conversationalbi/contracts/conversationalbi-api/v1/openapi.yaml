@@ -3,7 +3,7 @@
   "info": {
     "title": "Conversational BI \u00b7 Iceberg Data Platform",
     "description": "Governed questions over the semantic models of your teams and of the data shares they received. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-conversationalbi-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
-    "version": "0.1.1"
+    "version": "0.1.2"
   },
   "paths": {
     "/api/v1/me": {

@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-conversationalbi"
-version = "0.1.1"
+version = "0.1.2"
 description = "Conversational BI for the Iceberg Data Platform: ask questions of your own and shared semantic models"
 readme = "README.md"
 license = "Apache-2.0"
@@ -17,7 +17,7 @@ dependencies = [
   "duckdb-extension-iceberg==1.5.5",
   "duckdb-extension-httpfs==1.5.5",
   "duckdb-extension-avro==1.5.5",
-  "pydantic-ai-slim[ag-ui,spec,google,openai,anthropic,bedrock,bedrock-mantle]>=2.55.0,<3",
+  "pydantic-ai-slim[ag-ui,spec,google,openai,anthropic,bedrock,bedrock-mantle]>=2.56.0,<3",
 ]
 
 [dependency-groups]

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 - 2026-10-14
+
+- Its own installer adds the extension to an installed platform from the release:
+  `install.sh` puts its files in the platform's `extensions/openmetadata`, registers it as a listing
+  extension, writes `.env` and starts it, with Docker only. It asks for the OpenMetadata address and
+  bot token, or takes `OM_URL`, `OM_JWT_TOKEN` and `OM_UI_URL` from the environment; `--demo` also
+  starts a local OpenMetadata and fetches its bot token.
+- `scripts.setup` takes the same settings from the environment, asks for the missing ones in a
+  terminal, and `--demo` selects the local OpenMetadata through `COMPOSE_FILE` in `.env`.
+
 ## 0.1.0 - 2026-10-14
 
 - First version of OpenMetadata for the Iceberg Data Platform, on Extension Bridge contract 0.1.1

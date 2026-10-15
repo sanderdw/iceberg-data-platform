@@ -33,6 +33,19 @@ that are not listed; the owning team decides by listing the model.
 Unlisting, revoking or an expiry removes the listing within a minute: tables and metrics are
 soft-deleted and the data product is deleted. Listing it again brings back the same entities.
 
+## Install
+
+Into a platform installed with its installer (0.9.1 or later), in `~/iceberg-data-platform`:
+
+```bash
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.1/install.sh | sh
+```
+
+It puts this extension's files in the platform's `extensions/openmetadata`, registers it, asks for
+your OpenMetadata and starts it. `sh -s -- --demo` also starts a local OpenMetadata. The
+[OpenMetadata page](https://sanderdw.github.io/iceberg-data-platform/openmetadata/#install) of the
+documentation describes the options.
+
 ## Install from source
 
 You need a running platform (core 0.9.1 or later) and an OpenMetadata 2.0 server.
@@ -73,10 +86,14 @@ You need a running platform (core 0.9.1 or later) and an OpenMetadata 2.0 server
 Elasticsearch, about 4 GB of memory) to the same project:
 
 ```bash
-docker compose -f compose.yaml -f compose.openmetadata.yaml up -d --wait openmetadata-server
+uv run python -m scripts.setup --demo
+docker compose up -d --wait openmetadata-server
 uv run python -m scripts.om_token
-docker compose -f compose.yaml -f compose.openmetadata.yaml up -d --build --wait
+docker compose up -d --build --wait
 ```
+
+`--demo` sets `COMPOSE_FILE` in `.env`, so `docker compose` in this folder includes
+`compose.openmetadata.yaml`. Remove that line to use your own OpenMetadata again.
 
 Open `http://localhost:8585` and sign in as `admin@open-metadata.org` with password `admin`.
 

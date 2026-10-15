@@ -37,7 +37,7 @@ The installer can also add [Conversational BI](conversational-bi.md), a chat ove
 Replace `latest/download` with `download/vX.Y.Z`. The bundle, Compose files and images are all pinned to that version:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.9.1/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.9.2/install.sh | sh
 ```
 
 ## Test a branch

@@ -28,6 +28,7 @@ def no_credentials(monkeypatch):
 
 @pytest.mark.parametrize("model, env, expected", [
     ("google:gemini-3.8-flash", {"GOOGLE_API_KEY": "g"}, "GoogleModel"),
+    ("google:gemini-4-argon", {"GOOGLE_API_KEY": "g"}, "GoogleModel"),
     ("anthropic:claude-sonnet-5-5", {"ANTHROPIC_API_KEY": "a"}, "AnthropicModel"),
     ("openai:gpt-5.5", {"OPENAI_API_KEY": "o"}, "OpenAIResponsesModel"),
     ("openai-chat:gpt-5.5", {"OPENAI_API_KEY": "o"}, "OpenAIChatModel"),

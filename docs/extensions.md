@@ -25,7 +25,7 @@ $env:ICEBERG_EXTENSIONS = 'conversationalbi,dbt,ingestion'
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-`ICEBERG_EXTENSIONS=none` skips the questions. Rerunning the installer keeps the extensions you added, with their data. Each extension page describes its own options. The installer doesn't add OpenMetadata: it needs your OpenMetadata server and a bot token, so you [register it yourself](openmetadata.md#install).
+`ICEBERG_EXTENSIONS=none` skips the questions. Rerunning the installer keeps the extensions you added, with their data. Each extension page describes its own options. The installer doesn't add OpenMetadata: it needs your OpenMetadata server and a bot token, so it has [its own installer](openmetadata.md#install).
 
 ## Service accounts
 

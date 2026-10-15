@@ -35,15 +35,17 @@ jobs:
           version: '0.13.0'
       - id: version
         run: uv run --no-project python -m scripts.release --channel "$GITHUB_REF" >> "$GITHUB_OUTPUT"
-      - name: Check and build the source archive
+      - name: Check and build the source archive, installation bundle and installer
         env:
           PREVIEW: ${{ steps.version.outputs.preview }}
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
         run: |
-          if [ "$PREVIEW" = true ]; then
-            uv run --no-project python -m scripts.release --build
-          else
-            uv run --no-project python -m scripts.release --tag "$GITHUB_REF_NAME" --build
-          fi
+          # install.sh downloads the bundle from this same release; the bundle runs this release's image.
+          tag=()
+          [ "$PREVIEW" = true ] || tag=(--tag "$GITHUB_REF_NAME")
+          uv run --no-project python -m scripts.release "${tag[@]}" --build --install \
+            --release-tag "$RELEASE_TAG" --image-tag "$IMAGE_TAG"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: openmetadata-source
@@ -137,8 +139,10 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
         # Never "latest": releases/latest/download/install.sh must stay the platform's installer.
         run: |
-          gh release create "openmetadata-v${VERSION}" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --latest=false \
-            --title "OpenMetadata ${VERSION}" --notes "OpenMetadata ${VERSION} for the Iceberg Data Platform (Bridge contract 0.1.1, capability listings). Image: ghcr.io/sanderdw/iceberg-openmetadata:${VERSION}."
+          gh release create "openmetadata-v${VERSION}" dist/*.tar.gz dist/install.sh dist/SHA256SUMS --repo "$GITHUB_REPOSITORY" --latest=false \
+            --title "OpenMetadata ${VERSION}" --notes "OpenMetadata ${VERSION} for the Iceberg Data Platform (Bridge contract 0.1.1, capability listings). Image: ghcr.io/sanderdw/iceberg-openmetadata:${VERSION}.
+
+          Add it to an installed platform: \`curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/download/openmetadata-v${VERSION}/install.sh | sh\` (append \`-s -- --demo\` for a local OpenMetadata)."
       - name: Create the preview prerelease
         if: needs.validate.outputs.preview == 'true'
         env:
@@ -148,9 +152,9 @@ jobs:
           IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
           RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
         run: |
-          gh release create "$RELEASE_TAG" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+          gh release create "$RELEASE_TAG" dist/*.tar.gz dist/install.sh dist/SHA256SUMS --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --prerelease --latest=false --title "OpenMetadata preview ${IMAGE_TAG}" \
-            --notes "OpenMetadata ${VERSION} built from commit ${GITHUB_SHA} on the ${BRANCH} branch (Bridge contract 0.1.1). Image: ghcr.io/sanderdw/iceberg-openmetadata:${IMAGE_TAG}."
+            --notes "OpenMetadata ${VERSION} built from commit ${GITHUB_SHA} on the ${BRANCH} branch (Bridge contract 0.1.1). Image: ghcr.io/sanderdw/iceberg-openmetadata:${IMAGE_TAG}. Install: \`curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/install.sh | sh\`"
       - name: Prune older previews of this branch
         if: needs.validate.outputs.preview == 'true'
         env:

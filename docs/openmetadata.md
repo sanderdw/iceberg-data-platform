@@ -32,23 +32,63 @@ Unlisting a share, revoking it or letting it expire removes it from OpenMetadata
 
 ## Install
 
-The installer doesn't add this extension, because it needs your OpenMetadata server and a bot token. From the platform directory:
+The platform installer doesn't add this extension, because it needs your OpenMetadata server and a bot token. It has its own installer instead. On the machine where the platform is installed (in `~/iceberg-data-platform`, version 0.9.1 or later):
 
-1. Register the extension as a listing extension and recreate the platform services:
+```bash
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.1/install.sh | sh
+```
+
+It asks for:
+
+- **The OpenMetadata API address**, as the extension's container reaches it, such as `https://metadata.example.com/api`.
+- **A bot token**: the JWT of an OpenMetadata bot (**Settings > Bots**, for example `ingestion-bot`). The bot needs to create and delete database services, databases, schemas, tables, metrics, domains, data products and lineage. Without permission to create teams, listings are published without owners.
+- **Where people browse OpenMetadata** (optional), such as `https://metadata.example.com`. The user portal's **OpenMetadata** link opens it.
+
+To install without questions, pass them in the environment:
+
+```bash
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.1/install.sh | \
+  OM_URL=https://metadata.example.com/api OM_JWT_TOKEN=eyJ... OM_UI_URL=https://metadata.example.com sh
+```
+
+The installer:
+
+1. Downloads the extension's files, checks them against the release's checksums and puts them in `~/iceberg-data-platform/extensions/openmetadata`.
+2. Registers the extension with the platform as a listing extension and applies that to the platform services.
+3. Writes the settings to `extensions/openmetadata/.env` and starts the extension.
+
+Use `--dir` when the platform is installed elsewhere: `| sh -s -- --dir /opt/iceberg-data-platform`. Running the install command again, or that of a newer release, keeps `.env` and the registration.
+
+### Try it with a local OpenMetadata
+
+No OpenMetadata yet? `--demo` also starts one next to the extension, with about 4 GB of memory:
+
+```bash
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.1/install.sh | sh -s -- --demo
+```
+
+The first start takes a few minutes. Open `http://localhost:8585` and sign in as `admin@open-metadata.org` with password `admin`. It's for trying the extension out, not for production. To switch to your own OpenMetadata later, remove the `COMPOSE_FILE` line from `extensions/openmetadata/.env`, set `OM_URL` and `OM_JWT_TOKEN` there, and run `docker compose up -d --wait` in that folder.
+
+### List your first data share
+
+1. In the user portal, a team administrator opens **Data shares** and turns on **Listed in the data catalog** on a share.
+2. Within a minute it appears in OpenMetadata as a data product in the `Iceberg Data Platform` domain.
+3. `http://localhost:3011/api/status` shows the last sync, its counts and the last error code.
+
+### Change, stop or remove
+
+From `~/iceberg-data-platform/extensions/openmetadata`:
+
+- **Change settings:** edit `.env` (see [Settings](#settings)), then run `docker compose up -d --wait`.
+- **Stop:** `docker compose down`. Add `-v` to also delete the local OpenMetadata's data.
+- **Remove:** stop it, then from `~/iceberg-data-platform` unregister it and apply that:
 
     ```bash
-    uv run python -m scripts.setup --extension openmetadata --origin http://localhost:3011 \
-      --handshake extensions/openmetadata/.env.bridge --listing
+    uv run python -m scripts.setup --remove-extension openmetadata
     docker compose up -d --wait && docker compose -f compose.users.yaml up -d --wait users
     ```
 
-2. In `extensions/openmetadata`, run `uv run python -m scripts.setup` and set in its `.env`:
-    - `OM_URL`: the OpenMetadata API as the container reaches it, such as `https://metadata.example.com/api`.
-    - `OM_JWT_TOKEN`: the JWT of an OpenMetadata bot (**Settings > Bots**, for example `ingestion-bot`). It needs to create and delete database services, databases, schemas, tables, metrics, domains, data products and lineage. Without permission to create teams, listings are published without owners.
-
-3. Start it with `docker compose up -d --build --wait`.
-
-The user portal now offers **Listed in the data catalog** on [data shares](data-shares.md). For a local demo, `compose.openmetadata.yaml` in the extension adds an OpenMetadata server; see the [extension's README](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/openmetadata#a-local-openmetadata-for-a-demo).
+From a source checkout, follow the [extension's README](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/openmetadata#install-from-source).
 
 ## Settings
 

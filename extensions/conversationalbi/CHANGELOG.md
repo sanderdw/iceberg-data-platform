@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 - 2026-10-14
+
+- Pydantic AI 2.56.0, which adds Gemini 4 Argon: set `LLM_MODEL=google:gemini-4-argon`. It also
+  lifts the Google timeout to 20 minutes, so long answers are not cut off.
+
 ## 0.1.1 - 2026-10-13
 
 - Updated dependencies, including FastAPI 0.143.0, Pydantic AI 2.55.0, the MCP SDK 2.3.0,

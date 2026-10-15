@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 ENVIRONMENTS = ("development", "acceptance", "production")
 DEFAULT_MODEL = "google:gemini-3.8-flash"
 
