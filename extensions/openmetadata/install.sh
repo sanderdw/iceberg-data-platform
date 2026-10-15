@@ -109,6 +109,8 @@ main() {
     started=false
     if [ "$(om_value COMPOSE_FILE)" = compose.yaml:compose.openmetadata.yaml ]; then
         demo=true
+        # Compose prefers these over .env, which holds the local server's address and token.
+        unset OM_URL OM_JWT_TOKEN OM_UI_URL
         printf 'Starting a local OpenMetadata (the first start takes a few minutes)...\n'
         om_compose up -d --wait openmetadata-server
         docker run --rm --user "$(id -u):$(id -g)" --mount "type=bind,src=$om_dir,dst=/extension" \

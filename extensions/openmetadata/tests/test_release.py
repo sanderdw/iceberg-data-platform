@@ -74,14 +74,16 @@ def test_setup_demo_selects_the_local_openmetadata(tmp_path):
     (tmp_path / ".env.bridge").write_text("BRIDGE_CONTRACT=1\nEXTENSION_ORIGIN=http://localhost:3011\n"
                                           "PLATFORM_NETWORK=iceberg-platform_default\n")
     (tmp_path / ".env").write_text("OM_URL=https://om.example.com/api\nOM_UI_URL=https://om.example.com\n")
-    setup(tmp_path, env={}, demo=True, interactive=True, ask=None, prompt=None)
+    # Settings of another OpenMetadata in the environment do not apply to the local one.
+    env = {"OM_URL": "https://om.example.com/api", "OM_JWT_TOKEN": "eyJ.bot", "OM_UI_URL": "https://om.example.com"}
+    setup(tmp_path, env=env, demo=True, interactive=True, ask=None, prompt=None)
     values = read(tmp_path / ".env")
     assert values["COMPOSE_FILE"] == "compose.yaml:compose.openmetadata.yaml"
     # compose.openmetadata.yaml supplies the local addresses when these are empty.
-    assert values["OM_URL"] == "" and values["OM_UI_URL"] == ""
+    assert values["OM_URL"] == "" and values["OM_UI_URL"] == "" and values["OM_JWT_TOKEN"] == ""
     # A rerun without --demo keeps the local OpenMetadata and asks nothing.
-    setup(tmp_path, env={}, interactive=True, ask=None, prompt=None)
-    assert read(tmp_path / ".env")["COMPOSE_FILE"] == "compose.yaml:compose.openmetadata.yaml"
+    setup(tmp_path, env=env, interactive=True, ask=None, prompt=None)
+    assert read(tmp_path / ".env") == values
 
 
 @pytest.fixture

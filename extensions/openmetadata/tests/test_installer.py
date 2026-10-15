@@ -53,7 +53,8 @@ shutil.copyfile(pathlib.Path(os.environ['TEST_RELEASE']) / url.rsplit('/', 1)[1]
 DOCKER = '''import json, os, subprocess, sys
 args = sys.argv[1:]
 with open(os.environ['TEST_DOCKER_LOG'], 'a') as log:
-    log.write(json.dumps({"cwd": os.getcwd(), "args": args}) + '\\n')
+    log.write(json.dumps({"cwd": os.getcwd(), "args": args,
+                          "env": sorted(name for name in os.environ if name.startswith("OM_"))}) + '\\n')
 if args[0] == 'run':
     sys.exit(subprocess.run([sys.executable, os.environ['TEST_FAKE_RUN'], *args]).returncode)
 '''
@@ -194,6 +195,22 @@ def test_demo_starts_a_local_openmetadata(installer):
     result = run()
     assert result.returncode == 0, result.stdout + result.stderr
     assert "http://localhost:8585" in result.stdout
+
+
+def test_demo_ignores_openmetadata_settings_in_the_environment(installer):
+    run, env, platform = installer
+    om_dir = platform / "extensions/openmetadata"
+    exported = {"OM_URL": "https://om.example.com/api", "OM_JWT_TOKEN": "eyJ.bot", "OM_UI_URL": "https://om.example.com"}
+    # Compose prefers the environment over .env, so the local OpenMetadata's settings must be all it sees.
+    for args in (["--demo"], []):
+        result = run(*args, **exported)
+        assert result.returncode == 0, result.stdout + result.stderr
+        settings = read(om_dir / ".env")
+        assert (settings["OM_URL"], settings["OM_UI_URL"]) == ("", "")
+        assert settings["OM_JWT_TOKEN"] == "eyJ.local-bot"
+        ups = [call for call in compose_ups(env) if call["cwd"] == str(om_dir)]
+        assert ups and all(call["env"] == [] for call in ups)
+        assert "Catalog  http://localhost:8585" in result.stdout
 
 
 def test_a_checksum_failure_installs_nothing(installer):

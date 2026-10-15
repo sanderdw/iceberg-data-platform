@@ -2,7 +2,8 @@
 
 Standard library only: the extension's installer runs it in the platform image.
 OpenMetadata settings already in .env (OM_URL, OM_JWT_TOKEN, ...) are kept on reruns. Settings in the
-environment replace them; in a terminal the setup asks for the ones still missing.
+environment replace them, except with the local OpenMetadata; in a terminal the setup asks for the ones
+still missing.
 
   uv run python -m scripts.setup           # your own OpenMetadata
   uv run python -m scripts.setup --demo    # the local OpenMetadata of compose.openmetadata.yaml
@@ -67,12 +68,12 @@ def setup(root=ROOT, env=None, demo=False, ask=getpass.getpass, prompt=input, in
     values = read(config) if config.exists() else {}
     for key, value in DEFAULTS.items():
         values.setdefault(key, value)
-    values.update({name: url(env[name]) if name != "OM_JWT_TOKEN" else env[name]
-                   for name in PASSTHROUGH if env.get(name)})
-    if demo:
+    if demo or values.get("COMPOSE_FILE") == DEMO_COMPOSE:
         # The local server's addresses come from compose.openmetadata.yaml; scripts.om_token writes the token.
         values.update({"COMPOSE_FILE": DEMO_COMPOSE, "OM_URL": "", "OM_UI_URL": ""})
-    elif values.get("COMPOSE_FILE") != DEMO_COMPOSE:
+    else:
+        values.update({name: url(env[name]) if name != "OM_JWT_TOKEN" else env[name]
+                       for name in PASSTHROUGH if env.get(name)})
         interactive = sys.stdin.isatty() if interactive is None else interactive
         if interactive and not (values["OM_URL"] and values["OM_JWT_TOKEN"]):
             ask_missing(values, ask, prompt)
