@@ -15,7 +15,7 @@ A branch publishes on demand, either through **Actions → Release → Run workf
 
 The workflow runs the full CI suite and builds AMD64 and ARM64 images. Only then does it publish the exact prerelease and update the `SLUG-preview` installers. A failed run leaves the previous preview in place.
 
-A preview also builds the Conversational BI, dbt and Ingestion (dlt) images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add all three extensions without their own releases.
+A preview also builds the Conversational BI, dbt and Ingestion (dlt) images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add all three extensions without their own releases. The platform installer doesn't add OpenMetadata, so a core preview doesn't build its image; an [OpenMetadata preview](#release-an-extension) publishes its own installer.
 
 `SLUG` is the branch name in lowercase, with characters other than letters, digits, `.`, `_` and `-` replaced by `-`, up to 60 characters. Branch names that start with `v` plus a digit are rejected. The workflow keeps the five newest builds per branch. Delete the `SLUG-preview` release after merging.
 
@@ -41,7 +41,7 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
    - dbt: `dbt-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/dbt`.
    - Ingestion (dlt): `ingestion-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/ingestion`.
 
-   A branch preview skips this check, because it builds the extension images itself.
+   A branch preview skips this check, because it builds the extension images itself. OpenMetadata isn't in the installation bundle; it has its own installer, so this check doesn't cover it. Release it before the core when its version changed, so the core's release notes can point to it.
 4. Tag the core commit on `main`:
 
    ```bash
@@ -102,8 +102,20 @@ The Ingestion extension works the same way:
 
 The **Ingestion release** workflow runs its CI, builds `ghcr.io/sanderdw/iceberg-ingestion` and `iceberg-ingestion-runner` for AMD64 and ARM64, checks that both are public and publishes the release with its source archive. On the first publication, set both packages to **Public** and rerun the failed job. Its branch previews are named `ingestion-SLUG-RUN_ID-ATTEMPT`.
 
+The OpenMetadata extension works the same way, with one image and no API contract:
+
+1. In `extensions/openmetadata`, update the version in `pyproject.toml`, `uv.lock` (`uv lock`), `VERSION` in `openmetadata_sync/config.py` and the image tag in `compose.yaml`. Date its `CHANGELOG.md` section, and update the version in the install commands of `docs/openmetadata.md` and the extension's README. `uv run python -m scripts.release` rejects a mismatch.
+2. After the merge into `main`, tag that commit right away, because the published documentation already names the new installer:
+
+   ```bash
+   git tag -a openmetadata-vX.Y.Z -m "OpenMetadata X.Y.Z"
+   git push origin openmetadata-vX.Y.Z
+   ```
+
+The **OpenMetadata extension release** workflow runs its CI, including the end-to-end test against a local OpenMetadata server, builds `ghcr.io/sanderdw/iceberg-openmetadata` for AMD64 and ARM64, checks that it is public and publishes the release with its source archive, its installation bundle (`iceberg-openmetadata-X.Y.Z-install.tar.gz`: `compose.yaml` on the published image, the demo's `compose.openmetadata.yaml`, `scripts/setup.py` and `scripts/om_token.py`), `install.sh` and `SHA256SUMS`. `install.sh` downloads from its own release, never from `releases/latest`, which stays the platform's. On the first publication, set the package to **Public** and rerun the failed job. Its branch previews are named `openmetadata-SLUG-RUN_ID-ATTEMPT` and carry an installer of their own. To build them locally: `uv run --no-project python -m scripts.release --build --install` in `extensions/openmetadata`.
+
 Release each extension whose version changed before the core: tag it on `main`, wait for its workflow, then tag `vX.Y.Z`.
 
 ## Package visibility
 
-On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**, including `iceberg-conversationalbi`, `iceberg-conversationalbi-runtime`, `iceberg-dbt`, `iceberg-dbt-runner`, `iceberg-ingestion` and `iceberg-ingestion-runner`. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.
+On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**, including `iceberg-conversationalbi`, `iceberg-conversationalbi-runtime`, `iceberg-dbt`, `iceberg-dbt-runner`, `iceberg-ingestion`, `iceberg-ingestion-runner` and `iceberg-openmetadata`. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.

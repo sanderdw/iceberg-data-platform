@@ -47,7 +47,7 @@ def main():
     parser.add_argument("--url", default="http://localhost:8585/api")
     args = parser.parse_args()
     write(ROOT / ".env", bot_token(args.url.rstrip("/")))
-    print("OM_JWT_TOKEN written to .env. Recreate om-sync to use it: docker compose up -d om-sync")
+    print("OM_JWT_TOKEN written to .env. Start the extension, or recreate it: docker compose up -d --wait")
 
 
 if __name__ == "__main__":

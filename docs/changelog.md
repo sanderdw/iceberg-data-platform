@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.2 - 2026-10-14
+
+- **Install OpenMetadata with one command.** The OpenMetadata extension has its own installer: it adds the extension to your installation, registers it, asks for your OpenMetadata address and bot token, and starts it. With `--demo` it also starts a local OpenMetadata to try it out. See [OpenMetadata](openmetadata.md#install).
+- **Gemini 4 Argon in Conversational BI.** Set `LLM_MODEL=google:gemini-4-argon`. Long answers from Google models are no longer cut off.
+
 ## 0.9.1 - 2026-10-13
 
 - **List a data product in your data catalog.** A data share can now also be **Listed in the data catalog**: its tables, views, columns, descriptions and semantic models are published without data or a credential, so others can find it and ask you for access. Team administrators switch a listing on or off at any time, with a contact for access requests. See [data shares](data-shares.md#what-a-listing-publishes).

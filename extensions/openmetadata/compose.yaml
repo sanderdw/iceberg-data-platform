@@ -14,7 +14,7 @@ x-hardened: &hardened
 services:
   om-sync:
     build: .
-    image: iceberg-openmetadata:0.1.0
+    image: iceberg-openmetadata:0.1.1
     <<: *hardened
     labels:
       io.iceberg-platform.extension: openmetadata
