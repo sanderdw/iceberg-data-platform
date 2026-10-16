@@ -6,7 +6,7 @@ Getting started with Iceberg takes more than a table format. You need a catalog,
 
 Teams create, own and share their databases. People, notebooks and AI agents all sign in through Keycloak and work with the same grants.
 
-# Use it as:
+## Use it as
 - **A reference architecture.** See how catalog, storage, identity and engines fit together with team ownership, data sharing and AI agents on one identity. Every choice and boundary is documented, so you can reuse what fits your own platform.
 - **A classroom.** The demo-company skill sets up a fictional company for up to 48 participants, with one account each and a sign-in list to hand out. The quick-share skill opens the portals to a room for the session.
 - **A personal lab.** Learn Iceberg hands-on: create tables in a notebook, follow a query from the catalog to the Parquet files, and try snapshots, branches and Iceberg v3 with no cloud account or trial clock.

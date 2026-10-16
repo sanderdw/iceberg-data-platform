@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 - 2026-10-16
+
+- Acceptance and production builds and the docs site take only revisions that were the head of `main`:
+  merging always adds a merge commit, so a commit hidden inside a merged branch is never promoted. The
+  docs site, which runs scripts with the viewer's session, comes only from a successful docs run of such
+  a revision; other runs keep no `out/docs`.
+- `merge_to_main` takes the reviewed branch head as `revision` and refuses the merge if the branch moved.
+- `iceberg_dbt.py` refuses any file path from the project that would leave the folder (a drive letter such as
+  `C:/` on Windows, an absolute path or `..`) before writing anything, and the server refuses `:` in file paths.
+
 ## 0.1.0 - 2026-10-13
 
 - First version of the dbt extension for the Iceberg Data Platform, on Extension Bridge contract 0.1.

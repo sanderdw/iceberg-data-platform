@@ -67,6 +67,8 @@ class BranchInput(Input):
 class MergeInput(Input):
     branch: str = Field(max_length=100)
     message: str = Field(default="", max_length=2000)
+    revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{7,40}$",
+                                 description="The branch head you reviewed; the merge is refused if the branch moved.")
 
 
 class CompileInput(Input):
@@ -184,7 +186,7 @@ def router(services, caller_dependency):
     @api.post("/projects/{project}/merge", operation_id="mergeToMain",
               summary="Merge a branch into main (team administrators)")
     async def merge(project: ProjectId, data: Annotated[MergeInput, Body()], caller: Caller):
-        return await services.merge_to_main(caller, project, data.branch, data.message)
+        return await services.merge_to_main(caller, project, data.branch, data.message, data.revision)
 
     @api.post("/projects/{project}/compile", operation_id="compile",
               summary="Compile selected models or inline SQL with a read-only token")

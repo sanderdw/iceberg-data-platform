@@ -40,7 +40,7 @@ import threading
 import time
 import urllib.parse
 import webbrowser
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import httpx
 
@@ -256,13 +256,28 @@ def fetch(api, project, ref):
     return listing["revision"], contents
 
 
+def local_path(root, path):
+    """`root / path` for a file path from the server, refused unless it stays inside root on every platform.
+
+    On Windows a drive (`C:/...`, `C:x`) or an anchor replaces the folder when joined, so a path a teammate
+    committed could otherwise write anywhere your account can.
+    """
+    windows = PureWindowsPath(path)
+    if (not path or ":" in path or "\\" in path or PurePosixPath(path).is_absolute() or windows.drive or windows.anchor
+            or any(part in ("", ".", "..") for part in path.split("/"))):
+        raise Failure(f"The project holds an unsafe file path, {path[:80]!r}; nothing was written. "
+                      "Ask a team administrator to remove it.")
+    target = root / path
+    if not target.resolve().is_relative_to(root.resolve()):
+        raise Failure(f"{path[:80]!r} leads outside {root}; nothing was written.")
+    return target
+
+
 def write_tree(root, contents, keep=()):
-    for path, text in contents.items():
-        if path in keep:
-            continue
-        target = root / path
+    targets = {path: local_path(root, path) for path in contents if path not in keep}  # all checked before any write
+    for path, target in targets.items():
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(text.encode())  # bytes: the same digest on every platform, no newline translation
+        target.write_bytes(contents[path].encode())  # bytes: the same digest on every platform, no newline translation
 
 
 # Commands.
@@ -301,7 +316,7 @@ def cmd_pull(api, args):
     keep = set(modified) | set(added)
     write_tree(root, contents, keep)
     for path in set(state["files"]) - set(contents) - keep:
-        (root / path).unlink(missing_ok=True)
+        local_path(root, path).unlink(missing_ok=True)
     state.update(ref=args.ref or state["ref"], revision=revision,
                  files={p: digest(t.encode()) for p, t in contents.items()})
     save_state(root, state)

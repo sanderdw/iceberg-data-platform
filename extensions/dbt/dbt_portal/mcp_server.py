@@ -206,10 +206,13 @@ def create_mcp(settings, services, verifier):
         return await call(services.diff, project, base, head)
 
     @mcp.tool(annotations=DESTRUCTIVE)
-    async def merge_to_main(project: ProjectId, branch: str, message: str = "") -> dict[str, Any]:
+    async def merge_to_main(project: ProjectId, branch: str, message: str = "",
+                            revision: Annotated[str | None, Field(pattern=r"^[0-9a-f]{7,40}$", description=(
+                                "The branch head you reviewed with diff; the merge is refused if the branch moved."))]
+                            = None) -> dict[str, Any]:
         """Merge a branch into main (team administrators). Acceptance and production build main; the hint
         says when main still needs a build in development for the pipeline viewer."""
-        return await call(services.merge_to_main, project, branch, message)
+        return await call(services.merge_to_main, project, branch, message, revision)
 
     @mcp.tool(annotations=READ)
     async def compile(project: ProjectId, environment: Environment = "development", ref: Ref = "main",

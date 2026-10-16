@@ -3,7 +3,7 @@
   "info": {
     "title": "Ingestion (dlt) \u00b7 Iceberg Data Platform",
     "description": "Declarative dlt pipelines that load REST APIs, databases and files into your teams' Iceberg databases, with runs and schedules. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-ingestion-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "paths": {
     "/api/v1/me": {

@@ -282,6 +282,14 @@ def test_secrets_need_a_key(tmp_path):
         Secrets("ab" * 32).open("password", sealed)
 
 
+def test_the_gateway_masks_encoded_secrets_in_run_logs_and_errors():
+    from ingestion.secrets import Secrets
+    line = ("HTTPError: 401 Client Error for url: https://api.example.test/x?zz=Ab12%2Bcd%2Fef%3Dgh "
+            "'Ab12+cd/ef=gh' Basic dXNlcjpBYjEyK2Nk")
+    text = Secrets("ab" * 32).scrub(line, ["Ab12+cd/ef=gh"])
+    assert "Ab12" not in text and "dXNlcjpB" not in text and "for url: https://api.example.test/x?" in text
+
+
 def test_every_operation_has_an_mcp_tool_and_the_contract_is_current(stack):
     schema = stack.app.openapi()
     operations = {op["operationId"] for path in schema["paths"].values() for op in path.values()}

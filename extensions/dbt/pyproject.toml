@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-dbt"
-version = "0.1.0"
+version = "0.1.1"
 description = "dbt v2 pipelines for the Iceberg Data Platform: an API and MCP server for agents, and pipeline visualization"
 readme = "README.md"
 license = "Apache-2.0"

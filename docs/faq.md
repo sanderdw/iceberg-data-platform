@@ -20,7 +20,7 @@ The installer prints it at the end. It is also `PLATFORM_ADMIN_PASSWORD` in `.en
 
 ### How should I get started?
 
-The simplest start is to install only the core platform. Sign in to the administration portal as `platform-admin`. When it asks for a new password, enter the same one again, so `.env` still holds it for reference. Create a team with one Administrator in it: you. Then sign out of the administration portal, because signing in to the user portal can fail while you are still signed in there. Sign in to the user portal as your new user, create a database, open **Notebooks** and explore. You can add extensions later. See [first steps](first-steps.md).
+Install only the core platform and follow the [first steps](first-steps.md). You can add extensions later.
 
 ### How do I update?
 
@@ -42,15 +42,7 @@ The administration portal needs the Keycloak role `iceberg-admin/platform-admin`
 
 ### What can Read, Read & write and Administrator do?
 
-A role applies to every database of that team:
-
-| Role          | Can                                                      |
-| ------------- | -------------------------------------------------------- |
-| Read          | Read namespaces, tables, views, semantic models and data |
-| Read & write  | Also create and write namespaces, tables and views       |
-| Administrator | Also manage catalog access, databases and data shares    |
-
-See [teams, databases and users](admin-guide.md#teams-databases-and-users).
+A role applies to every database of that team. The roles are described under [teams, databases and users](admin-guide.md#teams-databases-and-users).
 
 ### A user forgot their password.
 
@@ -96,7 +88,7 @@ The core platform sends nothing to an LLM (or anything else). A coding agent you
 
 ### How do I add an extension later?
 
-Run the installer again and answer yes, or name the extensions in `ICEBERG_EXTENSIONS`. It keeps the extensions you already added, with their data. The installer doesn't add OpenMetadata; you [register it yourself](openmetadata.md#install). See [extensions](extensions.md#install).
+Run the installer again and answer yes, or name the extensions in `ICEBERG_EXTENSIONS`. It keeps the extensions you already added, with their data. The installer doesn't add OpenMetadata; it has [its own installer](openmetadata.md#install). See [extensions](extensions.md#install).
 
 ### Ingestion refuses my local database.
 

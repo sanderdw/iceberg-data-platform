@@ -114,7 +114,6 @@ The OpenMetadata extension works the same way, with one image and no API contrac
 
 The **OpenMetadata extension release** workflow runs its CI, including the end-to-end test against a local OpenMetadata server, builds `ghcr.io/sanderdw/iceberg-openmetadata` for AMD64 and ARM64, checks that it is public and publishes the release with its source archive, its installation bundle (`iceberg-openmetadata-X.Y.Z-install.tar.gz`: `compose.yaml` on the published image, the demo's `compose.openmetadata.yaml`, `scripts/setup.py` and `scripts/om_token.py`), `install.sh` and `SHA256SUMS`. `install.sh` downloads from its own release, never from `releases/latest`, which stays the platform's. On the first publication, set the package to **Public** and rerun the failed job. Its branch previews are named `openmetadata-SLUG-RUN_ID-ATTEMPT` and carry an installer of their own. To build them locally: `uv run --no-project python -m scripts.release --build --install` in `extensions/openmetadata`.
 
-Release each extension whose version changed before the core: tag it on `main`, wait for its workflow, then tag `vX.Y.Z`.
 
 ## Package visibility
 

@@ -111,7 +111,7 @@ sequenceDiagram
 
 - **Credentials.** Each run receives a Polaris token from the Bridge, `write` for `build`/`run`/`seed` and `read` for everything else. Storage uses Polaris-vended, table-scoped credentials. The extension never holds a platform secret beyond its own Keycloak client.
 - **Isolation.** A run is one container from the pinned runner image, started by the launcher (the only container with the Docker socket). The container has a read-only root, no capabilities and no internet. It sits on a private network with only the catalog and storage. Two builds of the same project and environment never overlap.
-- **Capacity.** At most `MAX_CONCURRENT_RUNS` runs (default 4) run at once across all teams, and at most `MAX_RUNS_PER_TEAM` (default 2) of one team, so one team cannot take every slot. A waiting build holds no slot. Each run gets `RUN_MEMORY` (2g) and `RUN_CPUS` (2). Logs and files are kept for the newest `RUN_RETENTION` (30) finished runs per project and environment, plus the run the pipeline is drawn from and the newest docs; older runs keep their status and results.
+- **Capacity.** At most `MAX_CONCURRENT_RUNS` runs (default 4) run at once across all teams, and at most `MAX_RUNS_PER_TEAM` (default 2) of one team, so one team cannot take every slot. A waiting build holds no slot. Each run gets `RUN_MEMORY` (2g) and `RUN_CPUS` (2). Logs and files are kept for the newest `RUN_RETENTION` (30) finished runs per project and environment, plus the run the pipeline is drawn from and the newest docs run of a `main` head; older runs keep their status and results.
 - **Pipelines** are drawn from dbt v2's Parquet information schema (`--generate-info-schema`).
 
 ## Install from source

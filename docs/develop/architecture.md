@@ -73,6 +73,7 @@ The third party never signs in to a portal. A team administrator hands over the 
 | `extensions/conversationalbi/compose.yaml` | `iceberg-conversationalbi` | Optional Conversational BI extension, released separately (see [extensions](../extensions.md)) |
 | `extensions/dbt/compose.yaml` | `iceberg-dbt` | Optional dbt extension: API, MCP and viewer, and the launcher of isolated run containers, released separately |
 | `extensions/ingestion/compose.yaml` | `iceberg-ingestion` | Optional Ingestion (dlt) extension: page, API and MCP, and the launcher of isolated run containers, released separately |
+| `extensions/openmetadata/compose.yaml` | `iceberg-openmetadata` | Optional OpenMetadata sync of listed data shares, with its own installer and release |
 
 - **Keycloak** signs in people and MCP clients. **Polaris** holds all application metadata (teams, users, databases, shares) and enforces data permissions; see the [resource model](resource-model.md). There is no separate application database. Polaris also stores the Apache Ossie semantic models of each namespace (beta in Polaris 1.8, see [semantic models](../semantic-models.md)).
 - **The user portal** joins the platform network and doesn't depend on the admin portal. Catalog browsing and notebooks use the signed-in user's own token. The portal uses its platform identity only for directory lookups and for the database and share actions of team administrators.
@@ -106,5 +107,5 @@ The user portal controls Docker and is therefore a trusted service. The same goe
 | `test/` | Unit and authorization tests |
 | `docs/` | Documentation site, built with Zensical (`zensical.toml`): installer users at the top level, `docs/develop/` for building and internals |
 | `contracts/bridge/` | Extension Bridge contract: OpenAPI, table-property, network and handshake conventions |
-| `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi`, `extensions/dbt` and `extensions/ingestion` |
+| `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi`, `extensions/dbt`, `extensions/ingestion` and `extensions/openmetadata` |
 | `presentation/` | reveal.js deck, published under `/presentation/` of the documentation site and excluded from source releases |

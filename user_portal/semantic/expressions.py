@@ -95,6 +95,11 @@ def sql(tree):
     return tree.sql(dialect=DIALECT)
 
 
+def operand(tree):
+    """The SQL of an expression that another condition wraps, parenthesised unless it is one column or value."""
+    return sql(tree) if isinstance(tree, exp.Column | exp.Literal | exp.Boolean | exp.Null) else f"({sql(tree)})"
+
+
 def pretty(query):
     try:
         return sqlglot.transpile(query, read=DIALECT, write=DIALECT, pretty=True)[0]

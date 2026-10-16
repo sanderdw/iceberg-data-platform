@@ -90,3 +90,16 @@ def test_outside_a_project_folder_it_says_how_to_start(terminal):
 def test_show_keeps_one_line_per_row():
     assert cli.cell("Dit is\r\n- een samentelling") == "Dit is - een samentelling"
     assert cli.cell("x" * 50) == "x" * 39 + "…"
+
+
+@pytest.mark.parametrize("path", ["C:/Users/Public/Documents/evil.cmd", "C:rel.txt", "/etc/x", "../x", "a/../../x",
+                                  "\\\\host\\share\\x", "models\\..\\..\\x", "a.sql:stream"])
+def test_files_from_the_server_stay_inside_the_folder(tmp_path, path):
+    # A path a teammate committed must not escape the clone, on Windows rules too; nothing is written then.
+    root = tmp_path / "shop"
+    root.mkdir()
+    with pytest.raises(cli.Failure, match="nothing was written"):
+        cli.write_tree(root, {"models/a.sql": "select 1", path: "planted"})
+    assert not any(root.iterdir())
+    cli.write_tree(root, {"models/a.sql": "select 1"})
+    assert (root / "models" / "a.sql").read_text() == "select 1"

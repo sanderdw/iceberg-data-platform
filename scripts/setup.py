@@ -19,6 +19,13 @@ BRIDGE_URL = "http://bridge:3005"
 PLATFORM_NETWORK = "iceberg-platform_default"
 INTERNAL_ISSUER = "http://keycloak:8080/realms/iceberg"
 EXTENSION_ID = re.compile(r"^[a-z][a-z0-9]{1,23}$")
+# Sign-in is reachable from the internet once quick-share runs: lock an account for a minute after
+# 10 failed passwords, doubling up to 15 minutes. People choose their own passwords; no policy applies.
+REALM_SECURITY = {
+    "bruteForceProtected": True, "permanentLockout": False, "failureFactor": 10,
+    "waitIncrementSeconds": 60, "maxFailureWaitSeconds": 900, "maxDeltaTimeSeconds": 43200,
+    "quickLoginCheckMilliSeconds": 1000, "minimumQuickLoginWaitSeconds": 60,
+}
 
 
 def mapper(name, kind, config):
@@ -161,6 +168,7 @@ def realm(env):
         "realm": "iceberg", "enabled": True, "registrationAllowed": False,
         "resetPasswordAllowed": False, "rememberMe": False, "accessTokenLifespan": 900,
         "ssoSessionIdleTimeout": 1800, "ssoSessionMaxLifespan": 28800,
+        **REALM_SECURITY,
         "roles": {"client": {"iceberg-admin": [{"name": "platform-admin"}]}},
         "clients": clients, "users": users,
     }

@@ -65,6 +65,6 @@ The `ingestion` [agent skill](agent-skills.md) in the installation folder guides
 - A run ends 15 minutes before its catalog token expires: 45 minutes with the platform's default `POLARIS_TOKEN_LIFETIME` of one hour. Raise that in `.env`, for example to 7200, for longer loads; see [configuration](configuration.md).
 - At most 4 runs at once, 2 per team, and one per pipeline. A schedule skips its time while the pipeline is still running.
 
-Version 0.1.0 is batch only, with the three declarative sources. Custom Python pipelines, dlt's verified sources and change data capture are not included.
+Ingestion is batch only, with the three declarative sources. Custom Python pipelines, dlt's verified sources and change data capture are not included.
 
 How it is built: [Ingestion internals](develop/ingestion.md).

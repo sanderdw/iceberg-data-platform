@@ -15,8 +15,8 @@ from starlette.concurrency import run_in_threadpool
 from .models import ServiceError
 
 MCP_CLIENT_ID = "iceberg-mcp"
-# Room for the largest valid tool call, a 100-part namespace of escaped names, and no more.
-MCP_MAX_BODY = 256 * 1024
+# Room for the largest valid tool call, a 1 MB semantic model sent with whitespace, and no more.
+MCP_MAX_BODY = 2 * 1024 * 1024
 LOG = logging.getLogger(__name__)
 
 

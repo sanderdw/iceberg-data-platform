@@ -1,6 +1,18 @@
 """Application entrypoints shared by source and published container images."""
 
+import logging
 import os
+
+
+def logs():
+    """Send the platform's own records, including the Bridge audit trail, to stderr at INFO.
+
+    Uvicorn configures only its own loggers, so without this every INFO record is dropped.
+    Libraries stay at WARNING: httpx alone would log every Polaris call.
+    """
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    for name in ("server", "user_portal", "iceberg"):
+        logging.getLogger(name).setLevel(logging.INFO)
 
 
 def identity(portal):
@@ -18,6 +30,7 @@ def identity(portal):
 def admin():
     from .app import create_app
 
+    logs()
     oidc = identity("admin")
     from .identity import UserManagement
 
@@ -28,5 +41,20 @@ def admin():
 def users():
     from user_portal.app import create_app
 
+    logs()
     oidc = identity("users")
     return create_app(oidc=oidc, session_cookie="iceberg_user")
+
+
+def bridge():
+    from .bridge import create_bridge_app
+
+    logs()
+    return create_bridge_app()
+
+
+def monitor():
+    from .monitoring import create_monitor_app
+
+    logs()
+    return create_monitor_app()

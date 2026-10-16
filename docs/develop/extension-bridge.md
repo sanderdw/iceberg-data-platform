@@ -43,4 +43,4 @@ Add `--listing` for an extension that publishes listings, such as OpenMetadata; 
 | Conversational BI | [`extensions/conversationalbi`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/conversationalbi) | [Conversational BI](conversational-bi.md) |
 | dbt pipelines | [`extensions/dbt`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/dbt) | [dbt pipelines](dbt.md) |
 | Ingestion (dlt) | [`extensions/ingestion`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/ingestion) | [Ingestion (dlt)](ingestion.md) |
-| OpenMetadata | [`extensions/openmetadata`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/openmetadata) | [OpenMetadata](../openmetadata.md) |
+| OpenMetadata | [`extensions/openmetadata`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/openmetadata) | [OpenMetadata](openmetadata.md) |

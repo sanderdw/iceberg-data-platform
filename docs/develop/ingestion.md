@@ -92,6 +92,6 @@ uv run pytest
 uv run ruff check .
 uv run python -m scripts.api_contract     # after API changes
 uv run python -m scripts.release          # versions, files and secrets
-docker build -f runner/Dockerfile -t iceberg-ingestion-runner:0.1.0 .
+docker build -f runner/Dockerfile -t iceberg-ingestion-runner:dev .
 uv run python -m scripts.e2e_smoke        # against a running platform; see its docstring
 ```
