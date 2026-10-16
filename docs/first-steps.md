@@ -1,8 +1,8 @@
 # First steps
 
-1. Open the administration portal at http://localhost:3000, sign in as `platform-admin` and change the temporary password. The installer prints it, and it is `PLATFORM_ADMIN_PASSWORD` in `.env`.
+1. Open the administration portal at http://localhost:3000, sign in as `platform-admin` and change the temporary password. The installer prints it, and it is `PLATFORM_ADMIN_PASSWORD` in `.env`; entering the same one again keeps `.env` as a reference.
 2. Create a team, a database for that team, and a user in that team with the **Read & write** role. The [administration guide](admin-guide.md) explains each step.
-3. Open the user portal at http://localhost:3002, sign in as that user with the one-time password, and change it.
+3. Sign out of the administration portal, because signing in to the user portal can fail while you are still signed in there. Open the user portal at http://localhost:3002, sign in as that user with the one-time password, and change it.
 4. Open **Notebooks** and pick an example from the notebook selector. Start with **01**, which creates the data that the later examples read. See [notebooks](notebooks.md).
 
 ## Services

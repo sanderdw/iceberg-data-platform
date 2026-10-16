@@ -48,9 +48,10 @@ and tell the user to run the installer again with `ICEBERG_EXTENSIONS=dbt`.
 6. Check the result: `preview_model` for rows, `get_pipeline` with `ref=<branch>` for the DAG and
    statuses of your branch, `get_model` for columns and tests. Without `ref` it shows the latest run
    of any branch; the pipeline viewer shows `main` unless the person picks a branch.
-7. Ask a team admin to `merge_to_main`. Then build `main` in development: the pipeline viewer
-   shows `main` and draws only what a run of `main` produced (the merge's `hint` says so).
-   Acceptance and production build only `main`; ask the user before building or scheduling there.
+7. Ask a team admin to `merge_to_main`, passing the branch head they reviewed with `diff` as
+   `revision`. Then build `main` in development: the pipeline viewer shows `main` and draws only what
+   a run of `main` produced (the merge's `hint` says so). Acceptance and production build only
+   revisions that were the head of `main`; ask the user before building or scheduling there.
 8. When a mart answers business questions, offer to build its semantic model with the
    `semantic-model` skill (`.agents/skills/semantic-model`). Then Conversational BI and
    `query_semantic_model` answer from the mart's agreed metrics. `replace_table` keeps the table's
@@ -81,7 +82,7 @@ server but can run shell commands:
    edits that were not pushed; the script warns when that happens.
 4. Read the streamed log and the exit code (0 is success). `show --select <model> --limit 10`
    previews rows; `compile --inline "<sql>"` checks a query.
-5. Ask the person before `--target acceptance` or `--target production` (they build only `main`),
+5. Ask the person before `--target acceptance` or `--target production` (they build only a head of `main`),
    and ask a team administrator to merge the branch in the viewer.
 
 The local dbt MCP server (`uvx dbt-mcp`, with `DBT_PROJECT_DIR` on the cloned folder and

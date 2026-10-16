@@ -30,14 +30,14 @@ The installer scripts and archives are available in the [release assets](https:/
 
 ## Add extensions
 
-The installer can also add [Conversational BI](conversational-bi.md), a chat over your semantic models, [dbt pipelines](dbt.md), where AI agents build and test pipelines on your tables, and [Ingestion (dlt)](ingestion.md), which loads APIs, databases and files into them. In a terminal it asks for each one; `ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion` adds all three. See [extensions](extensions.md).
+The installer can also add [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md) and [Ingestion (dlt)](ingestion.md); in a terminal it asks for each one. See [extensions](extensions.md#install).
 
 ## Install a specific version
 
 Replace `latest/download` with `download/vX.Y.Z`. The bundle, Compose files and images are all pinned to that version:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.9.2/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.9.3/install.sh | sh
 ```
 
 ## Test a branch

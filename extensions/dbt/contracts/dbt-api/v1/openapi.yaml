@@ -3,7 +3,7 @@
   "info": {
     "title": "dbt pipelines \u00b7 Iceberg Data Platform",
     "description": "dbt v2 projects, runs, schedules and pipelines for your teams. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-dbt-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "paths": {
     "/api/v1/me": {
@@ -1693,6 +1693,19 @@
             "maxLength": 2000,
             "title": "Message",
             "default": ""
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{7,40}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision",
+            "description": "The branch head you reviewed; the merge is refused if the branch moved."
           }
         },
         "additionalProperties": false,

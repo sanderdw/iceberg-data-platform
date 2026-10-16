@@ -21,5 +21,5 @@ Five principles behind every choice. Check a change against all five.
 - [Keycloak](keycloak.md): realm, clients, configuration and deployment boundaries.
 - [Form validation](form-validation.md): the rules both portals and the API enforce.
 - [Extension Bridge](extension-bridge.md): the contract between the core and its extensions.
-- Extension internals: [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md) and [Ingestion (dlt)](ingestion.md).
+- Extension internals: [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md) and [OpenMetadata](openmetadata.md).
 - [Publishing a release](releasing.md).

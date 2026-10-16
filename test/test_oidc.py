@@ -294,7 +294,8 @@ def test_user_link_identity_permissions_and_token_expiry(issuer):
     directory.http.close()
     directory.http = httpx.Client(transport=httpx.MockTransport(wire))
     runtime = FakeRuntime()
-    with TestClient(create_users(directory, runtime, oidc=oidc)) as client:
+    # The fake runtime's container answers at http://notebook:2718; its token requests come from there.
+    with TestClient(create_users(directory, runtime, oidc=oidc), client=("notebook", 50000)) as client:
         assert client.get(start(client, state), follow_redirects=False).status_code == 303
         workspace = client.get("/api/workspace").json()
         assert workspace["user"]["id"] == account["id"]
@@ -307,6 +308,10 @@ def test_user_link_identity_permissions_and_token_expiry(issuer):
         token_path = f"/internal/notebooks/{notebook['id']}/token"
         assert client.get(token_path).status_code == 401
         assert client.get(token_path, headers={"Authorization": "Bearer wrong"}).status_code == 401
+        # The right token from any other address is refused: it would be a renewal capability.
+        runtime.workspaces[notebook["id"]].upstream = "http://10.9.9.9:2718"
+        assert client.get(token_path, headers={"Authorization": "Bearer hidden-runtime-token"}).status_code == 401
+        runtime.workspaces[notebook["id"]].upstream = "http://notebook:2718"
         state["sessions"][0].access_until = 0
         response = client.get(token_path, headers={"Authorization": "Bearer hidden-runtime-token"})
         assert response.status_code == 200

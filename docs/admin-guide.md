@@ -105,10 +105,10 @@ Every call requires the `platform-admin` role. The tools are the administration 
 
 ## API
 
-Interactive documentation is at http://localhost:3000/docs after sign-in. **Try it out** uses your session and adds the write headers. From a script, send the `portal_session` cookie from your browser:
+Interactive documentation is at http://localhost:3000/docs after sign-in. **Try it out** uses your session and adds the write headers. From a script, send the `iceberg_admin` cookie from your browser:
 
 ```bash
-curl -b 'portal_session=<cookie>' -H 'Content-Type: application/json' -H 'X-Portal-Request: 1' \
+curl -b 'iceberg_admin=<cookie>' -H 'Content-Type: application/json' -H 'X-Portal-Request: 1' \
   -d '{"name": "marketing"}' http://localhost:3000/api/teams
 ```
 

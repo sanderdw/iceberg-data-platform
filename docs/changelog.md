@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.3 - 2026-10-16
+
+- **Security fixes from two security reviews.** What is still open is listed in the [security review](security-review.md).
+  - Governed queries: a semantic model's declared field types can no longer add SQL, in the user portal and in Conversational BI, and filters on derived fields that combine conditions with `AND` or `OR` now return the right answer.
+  - Keycloak locks an account for a while after 10 wrong passwords.
+  - dbt: acceptance and production build, and the docs site shows, only revisions that were the head of `main`, never a commit from inside a merged branch. `iceberg_dbt.py` refuses file paths that would leave the project folder on Windows.
+  - Ingestion masks secrets in run logs also when a request URL-encodes them.
+  - A notebook's token address answers only that notebook's own container.
+  - A bucket administrator's storage access covers only buckets whose own tags tie them to the team's databases, so an edited catalog property can no longer point it at another team's bucket.
+  - Moving a database to another team no longer lets the old team's extensions keep access to it.
+- **The user portal rides out a Polaris or Keycloak restart.** Sessions stay open while either is unreachable; notebooks stop after 90 seconds of outage instead of at once, and a failed check no longer stops expiry enforcement.
+- **The Bridge's audit trail reaches the logs**, with the portals' own records: `docker compose logs bridge` shows every automation principal created or revoked and every token issued.
+- The [security model](security.md) now says that notebook output runs with the viewer's portal session and that Writers can change a database's catalog properties.
+- Fixed: the scripting guide names the administration portal's real session cookie, `iceberg_admin`; MCP accepts a semantic model up to the 1 MB limit; the OpenMetadata guide lists every permission its bot needs.
+
 ## 0.9.2 - 2026-10-14
 
 - **Install OpenMetadata with one command.** The OpenMetadata extension has its own installer: it adds the extension to your installation, registers it, asks for your OpenMetadata address and bot token, and starts it. With `--demo` it also starts a local OpenMetadata to try it out. See [OpenMetadata](openmetadata.md#install).

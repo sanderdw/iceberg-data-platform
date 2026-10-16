@@ -7,6 +7,7 @@ catalog as a durable retry marker until last.
 """
 
 import json
+import logging
 import secrets
 import time
 from contextlib import contextmanager
@@ -77,6 +78,9 @@ def listing_grant(o):
 
 def grant_key(grant):
     return json.dumps(grant, sort_keys=True)
+
+
+LOG = logging.getLogger(__name__)
 
 
 def buckets(access):
@@ -509,6 +513,22 @@ class PolarisProvider:
             if d["team"] in roles and d["status"] == "ready" and environment in (None, d["environment"])
         }
 
+    def owned_buckets(self, access):
+        """The buckets for a bucket-admin's storage policy, each bound to its database by its tags.
+
+        `portal.bucket` is a catalog property that catalog roles can edit, so a name alone could point the
+        policy at another team's bucket or at every bucket. A bucket that fails is left out, not fatal.
+        """
+        owned = []
+        for database, d in access.items():
+            if d["role"] != "bucket-admin":
+                continue
+            if self.storage.owns_bucket(d["bucket"], database):
+                owned.append(d["bucket"])
+            else:
+                LOG.warning("Left database %s's bucket out of a storage policy: its tags do not bind it", database)
+        return sorted(owned)
+
     def access_holders(self):
         """Every principal role that holds team access: users and active automation principals."""
         return self.list_users() + [
@@ -527,8 +547,8 @@ class PolarisProvider:
         if s3 and buckets(before) != buckets(after):
             principal = self.require(f"/principals/{enc(user['id'])}")
             if key := principal["properties"].get("portal.bucket-access-key"):
-                self.storage.set_user_buckets(key, buckets(after))
-                undo.append(lambda: self.storage.set_user_buckets(key, buckets(before)))
+                self.storage.set_user_buckets(key, self.owned_buckets(after))
+                undo.append(lambda: self.storage.set_user_buckets(key, self.owned_buckets(before)))
         for db, role in sorted(grants(after) - grants(before)):
             path = f"{base}/{enc(db)}"
             self.management(path, "PUT", {"catalogRole": {"name": role}})
@@ -642,9 +662,15 @@ class PolarisProvider:
                 # Also re-binds when the user holds different roles in both teams.
                 self.sync_access(user, self.access(user, databases), self.access(user, moved), undo)
             bucket = catalog["properties"]["portal.bucket"]
+            # The tags, not the editable property, say whose bucket this is: never retag another database's.
+            if not self.storage.owns_bucket(bucket, id):
+                raise ServiceError(409, "The storage bucket does not belong to this database. Nothing was moved.")
             self.storage.tag_bucket(bucket, id, team)
             undo.append(lambda: self.storage.tag_bucket(bucket, id, old))
             result = self.update_properties(path, {**properties, "portal.team": team})
+            # The Bridge grants automation principals in its own process. A grant that landed after the
+            # revocation above is removed here; one that lands after this sees the new team and withdraws.
+            self.revoke_automation_grants(old, catalog["properties"]["portal.environment"], id)
             # The name now counts in the destination team; the first undo restores the old team.
             self.commit_team(destination)
             return self.database(result)
@@ -714,7 +740,7 @@ class PolarisProvider:
             access = self.access(user, self.list_databases())
             bucket_credentials = None
             if key:
-                bucket_credentials = self.storage.create_user(key, buckets(access))
+                bucket_credentials = self.storage.create_user(key, self.owned_buckets(access))
                 undo.append(lambda: self.storage.delete_user(key))
             # S3 policy was just created. Only grant catalog permissions here.
             self.sync_access(user, {}, access, undo, s3=False)
@@ -741,7 +767,7 @@ class PolarisProvider:
         with provision() as undo:
             if "bucket-admin" in roles.values() and not properties.get("portal.bucket-access-key"):
                 key = f"portal{secrets.token_hex(12)}"
-                credentials = self.storage.create_user(key, buckets(after))
+                credentials = self.storage.create_user(key, self.owned_buckets(after))
                 undo.append(lambda: self.storage.delete_user(key))
                 properties["portal.bucket-access-key"] = key
                 self.sync_access(user, before, after, undo, s3=False)
@@ -856,7 +882,7 @@ class PolarisProvider:
                     principal = self.require(f"/principals/{enc(user['id'])}")
                     self.storage.set_user_buckets(
                         principal["properties"]["portal.bucket-access-key"],
-                        buckets(self.access(user, databases)),
+                        self.owned_buckets(self.access(user, databases)),
                     )
         # Grant the management identity content access for recursive Iceberg cleanup.
         self.management(
@@ -1392,6 +1418,31 @@ class PolarisProvider:
             return
         undo.append(lambda: self.remove(f"{base}/{enc(share_id)}"))
 
+    def revoke_automation_grants(self, team, environment, database):
+        for item in self.list_automation(team=team):
+            if item["environment"] == environment:
+                for holder in self.automation_holders(item):
+                    role = holder["memberships"][0]["role"]
+                    self.remove(f"/principal-roles/{enc(holder['id'])}/catalog-roles/{enc(database)}/{role}")
+
+    def withdraw_if_moved(self, item, database):
+        """After granting `item` a database, take the grant back if the database left its team or environment.
+
+        A database move revokes before it writes the new team, and the Bridge grants from another process:
+        re-reading after the grant closes that window from this side; the move closes it from the other.
+        """
+        try:
+            p = self.require(f"/catalogs/{enc(database)}")["properties"]
+        except ServiceError as exc:
+            if exc.status != 404:
+                raise
+            return
+        if (p.get("portal.team"), p.get("portal.environment")) != (item["team"], item["environment"]) \
+                or p.get("portal.moving") or p.get("portal.deleting") == "true":
+            for holder in self.automation_holders(item):
+                role = holder["memberships"][0]["role"]
+                self.remove(f"/principal-roles/{enc(holder['id'])}/catalog-roles/{enc(database)}/{role}")
+
     def automation_scope(self, id, *, extension=None):
         item = self.automation(self.require_automation(id, extension=extension))
         all_databases = self.list_databases()
@@ -1452,6 +1503,8 @@ class PolarisProvider:
             databases = self.list_databases()
             for holder in self.automation_holders(item):
                 self.sync_access(holder, {}, self.access(holder, databases), undo, s3=False)
+            for database in self.access(self.automation_holders(item)[0], databases):
+                self.withdraw_if_moved(item, database)
             for share in self.automation_shares(item, databases=databases):
                 self.grant_automation_share(item, share["id"], share["database"], undo)
             # Publish against the team fence: a racing team deletion fails one side.
@@ -1466,18 +1519,18 @@ class PolarisProvider:
     def reconcile_automation(self, id):
         """Grant the databases and shares that appeared while this principal was being created. Idempotent."""
         scope = self.automation_scope(id)
-        for holder in self.automation_holders(scope):
-            role = holder["memberships"][0]["role"]
-            for database in scope["databases"]:
+        for database in scope["databases"]:
+            for holder in self.automation_holders(scope):
                 try:
                     self.management(
                         f"/principal-roles/{enc(holder['id'])}/catalog-roles/{enc(database['id'])}",
                         "PUT",
-                        {"catalogRole": {"name": role}},
+                        {"catalogRole": {"name": holder["memberships"][0]["role"]}},
                     )
                 except ServiceError as exc:
                     if exc.status != 409:
                         raise
+            self.withdraw_if_moved(scope, database["id"])
         # Also heals shares created while this principal was being created.
         for share in self.automation_shares(scope):
             self.grant_automation_share(scope, share["id"], share["database"], [])

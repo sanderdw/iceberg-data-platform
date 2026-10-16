@@ -1,6 +1,6 @@
 # User portal
 
-The user portal at http://localhost:3002. Team members sign in with Keycloak, pick a team and environment, and work with their databases in shared [marimo](https://marimo.io/) notebooks.
+The user portal runs at http://localhost:3002. Team members sign in with Keycloak, pick a team and environment, and work with their databases in shared [marimo](https://marimo.io/) notebooks.
 
 To open the portals from a phone or another computer for a class or demo, use the [`quick-share` agent skill](agent-skills.md). Sign-in needs HTTPS off `localhost`, so a plain port binding such as `compose.users.lan.yaml` is not enough on its own.
 

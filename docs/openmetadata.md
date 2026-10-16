@@ -41,7 +41,7 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/o
 It asks for:
 
 - **The OpenMetadata API address**, as the extension's container reaches it, such as `https://metadata.example.com/api`.
-- **A bot token**: the JWT of an OpenMetadata bot (**Settings > Bots**, for example `ingestion-bot`). The bot needs to create and delete database services, databases, schemas, tables, metrics, domains, data products and lineage. Without permission to create teams, listings are published without owners.
+- **A bot token**: the JWT of an OpenMetadata bot (**Settings > Bots**, for example `ingestion-bot`). The bot needs to create and delete database services, databases, schemas, tables, metrics, domains, data products, lineage, glossaries, glossary terms, classifications and tags. Without permission to create teams, listings are published without owners.
 - **Where people browse OpenMetadata** (optional), such as `https://metadata.example.com`. The user portal's **OpenMetadata** link opens it.
 
 To install without questions, pass them in the environment:

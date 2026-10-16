@@ -92,6 +92,9 @@ def main():
                 log.write(line)
                 written += len(line)
         result["exitCode"] = process.wait()
+    if job["command"][0] != "docs":
+        # Project code can write files here; only a docs run's site is ever served.
+        shutil.rmtree(out / "docs", ignore_errors=True)
     collect(project, out)
     if job["command"][0] == "show":
         rows = show_rows((out / "dbt.log").read_text(errors="replace"))

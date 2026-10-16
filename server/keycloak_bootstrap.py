@@ -10,6 +10,7 @@ from scripts.setup import (
     CLI_CLIENT_ID,
     DEFAULT_ROLES,
     MCP_CLIENT_ID,
+    REALM_SECURITY,
     cli_client,
     extension_client,
     extension_mcp_client,
@@ -89,6 +90,15 @@ def main():
             response.raise_for_status()
             kc.headers["Authorization"] = "Bearer " + response.json()["access_token"]
             prefix = "/admin/realms/iceberg"
+            # The realm is imported once, so its sign-in protection is kept in force here. Keycloak
+            # creates the realm's own admin-cli with password sign-in, which nothing on this platform uses.
+            kc.put(prefix, json=REALM_SECURITY).raise_for_status()
+            response = kc.get(prefix + "/clients", params={"clientId": "admin-cli"})
+            response.raise_for_status()
+            for client in response.json():
+                if client.get("directAccessGrantsEnabled"):
+                    kc.put(prefix + "/clients/" + client["id"],
+                           json={**client, "directAccessGrantsEnabled": False}).raise_for_status()
             # A dedicated realm service account provisions users. The portal never
             # receives the master-realm administrator password.
             response = kc.get(prefix + "/clients", params={"clientId": "iceberg-provisioner"})

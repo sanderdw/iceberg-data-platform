@@ -31,7 +31,7 @@ A team administrator enables dbt once per environment, through an agent (`enable
 - **Projects** belong to a team and are Git repositories kept by the extension. A new project is empty apart from `dbt_project.yml`, a README and the namespace macro. `main` is protected: writers commit to branches, and team administrators merge.
 - **The viewer** shows each pipeline per environment and branch (`main` unless you pick another), follows running builds live, filters and focuses the graph (`+name+`), previews a model's rows and builds a node with its upstream or downstream. **Files** edits any project file on a branch, **Schedules** manages schedules and **Settings** enables environments and deletes branches. Writers create projects there. Team administrators delete them under **Settings**: the project, its history and the dbt properties on its tables go, the tables stay. Writers can edit a node's file from its panel, save it to a branch and build that branch in development. Team administrators can merge it to `main`.
 - **Runs** execute as the team's service account for one environment, with a short-lived catalog token: `write` for `build`, `run` and `seed`, `read` for everything else. Two builds of the same project and environment never overlap.
-- **Promotion.** Development builds any branch. Acceptance and production build only revisions on `main`, and their schedules need a team administrator.
+- **Promotion.** Development builds any branch. Acceptance and production build only revisions that were the head of `main`: a merge always adds a merge commit, so a commit from inside a merged branch never reaches them. Their schedules need a team administrator.
 - **Pipelines** are drawn from dbt's information schema, with each node's latest status and test results. After a build, each table gets the platform's producer, lineage and quality properties and its column docs, so the catalog shows where it comes from under **Produced by**.
 
 | Role in the team | Can |
@@ -85,7 +85,7 @@ uv run iceberg_dbt.py show --select balans --limit 5
 uv run iceberg_dbt.py compile --inline "select count(*) from {{ ref('balans') }}"
 ```
 
-Commands run `main` by default, in development unless you pass `--target acceptance` or `--target production` (which also build only `main`). Your local edits are not part of a run until you put them on a branch:
+Commands run `main` by default, in development unless you pass `--target acceptance` or `--target production` (see [promotion](#how-it-works)). Your local edits are not part of a run until you put them on a branch:
 
 ```bash
 uv run iceberg_dbt.py status                   # what changed since clone or pull
@@ -93,7 +93,7 @@ uv run iceberg_dbt.py push --branch add-orders -m "Add orders"
 uv run iceberg_dbt.py build --ref add-orders   # build the branch in development
 ```
 
-A team administrator merges the branch into `main` in the viewer or with `merge_to_main`.
+A team administrator merges the branch into `main` in the viewer or with `merge_to_main`. Pass `revision` (the branch head you reviewed with `diff`) so the merge is refused if the branch moved since.
 
 The [dbt MCP server](https://docs.getdbt.com/docs/dbt-ai/about-mcp?version=2#local-mcp-server) can run these commands for an AI agent. Make the script executable (`chmod +x iceberg_dbt.py`; it starts itself with `uv run`) and point `DBT_PATH` at it:
 

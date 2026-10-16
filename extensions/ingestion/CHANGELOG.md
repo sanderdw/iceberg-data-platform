@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 - 2026-10-16
+
+- Secrets are masked in run logs and errors also when URL-encoded or escaped, Basic credentials are
+  masked, and the query string of a failed request's URL is hidden, since an API key can travel there
+  under any name.
+
 ## 0.1.0 - 2026-10-13
 
 - First version of Ingestion (dlt) for the Iceberg Data Platform, on Extension Bridge contract 0.1.

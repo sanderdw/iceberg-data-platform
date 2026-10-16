@@ -54,8 +54,8 @@ function renderGuide() {
   ];
 
   const signIn = loginUrl
-    ? `# Copy the portal_session cookie from your browser's developer tools.
-portal.cookies.set('portal_session', '<cookie>')`
+    ? `# Copy the iceberg_admin cookie from your browser's developer tools.
+portal.cookies.set('iceberg_admin', '<cookie>')`
     : `portal.post(ORIGIN + '/api/session', json={'password': '<PORTAL_PASSWORD>'}).raise_for_status()`;
   const createUser = keycloakUsers
     ? `# The response contains the temporary password, once.
@@ -85,8 +85,8 @@ for environment in ('development', 'production'):
 ${createUser}`;
   const headers = `-H 'Content-Type: application/json' -H 'X-Portal-Request: 1'`;
   const curl = loginUrl
-    ? `# Copy the portal_session cookie from your browser's developer tools.
-curl -b 'portal_session=<cookie>' ${headers} \\
+    ? `# Copy the iceberg_admin cookie from your browser's developer tools.
+curl -b 'iceberg_admin=<cookie>' ${headers} \\
   -d '{"name": "marketing"}' ${origin}/api/teams`
     : `curl -c cookies.txt ${headers} \\
   -d '{"password": "<PORTAL_PASSWORD>"}' ${origin}/api/session
