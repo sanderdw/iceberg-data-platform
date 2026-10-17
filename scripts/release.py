@@ -173,7 +173,7 @@ def release_channel(ref, version, run_id, attempt):
         raise ValueError("The project version must be X.Y.Z")
     if ref == f"refs/tags/v{version}":
         return {"version": version, "preview": "false", "release_tag": f"v{version}", "image_tag": version,
-                "entrypoint": "", "slug": ""}
+                "entrypoint": "", "slug": "", "chart_version": version}
     if not ref.startswith("refs/heads/"):
         raise ValueError("Run this workflow on a branch or the vX.Y.Z tag matching the project version")
     # Branch names become release and image tags: keep them simple and out of the stable v* namespace.
@@ -181,8 +181,9 @@ def release_channel(ref, version, run_id, attempt):
     if not slug or re.match(r"v\d", slug):
         raise ValueError("This branch name cannot be used for a preview release")
     build = f"{slug}-{run_id}-{attempt}"
+    # A chart version is SemVer: its prerelease part allows letters, digits and hyphens only.
     return {"version": version, "preview": "true", "release_tag": build, "image_tag": build,
-            "entrypoint": f"{slug}-preview", "slug": slug}
+            "entrypoint": f"{slug}-preview", "slug": slug, "chart_version": f"{version}-{re.sub(r'[._]', '-', build)}"}
 
 
 def installer_source(root, filename, release_tag="latest", image_tag="latest"):

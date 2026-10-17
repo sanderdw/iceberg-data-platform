@@ -46,14 +46,12 @@ jobs:
           fi
       - name: Package the Helm chart
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          CHART_VERSION: ${{ steps.version.outputs.chart_version }}
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
-          PREVIEW: ${{ steps.version.outputs.preview }}
         run: |
           sh ../../dev/kubernetes/tools.sh "$RUNNER_TEMP/bin"
-          # A chart version is SemVer: a preview's chart is the coming version plus its image tag.
-          chart="$VERSION"; [ "$PREVIEW" != true ] || chart="$VERSION-$IMAGE_TAG"
-          "$RUNNER_TEMP/bin/helm" package deploy/helm/iceberg-conversationalbi --version "$chart" --app-version "$IMAGE_TAG" -d dist
+          # The channel's chart_version is SemVer; a branch image tag may not be (underscores, dots).
+          "$RUNNER_TEMP/bin/helm" package deploy/helm/iceberg-conversationalbi --version "$CHART_VERSION" --app-version "$IMAGE_TAG" -d dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: conversationalbi-source

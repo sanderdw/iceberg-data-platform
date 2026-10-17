@@ -80,7 +80,7 @@ def channel(ref, version, run_id, attempt):
     """An ingestion-vX.Y.Z tag is a release; a branch is a preview with its own image and release tags."""
     if ref == f"refs/tags/ingestion-v{version}":
         return {"version": version, "preview": "false", "image_tag": version, "release_tag": f"ingestion-v{version}",
-                "slug": ""}
+                "slug": "", "chart_version": version}
     if not ref.startswith("refs/heads/"):
         raise SystemExit(f"Run this workflow on a branch or on tag ingestion-v{version}, not {ref}")
     # The same names as the platform's branch previews, so one branch's images line up.
@@ -88,8 +88,10 @@ def channel(ref, version, run_id, attempt):
     if not slug or re.match(r"v\d", slug):
         raise SystemExit("This branch name cannot be used for a preview")
     build = f"{slug}-{run_id}-{attempt}"
+    # A chart version is SemVer: its prerelease part allows letters, digits and hyphens only.
     return {"version": version, "preview": "true", "image_tag": build, "release_tag": f"ingestion-{build}",
-            "slug": slug}
+            "slug": slug,
+            "chart_version": f"{version}-{re.sub(r'[._]', '-', build)}"}
 
 
 def main():

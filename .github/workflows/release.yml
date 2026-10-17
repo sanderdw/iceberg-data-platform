@@ -113,15 +113,13 @@ jobs:
           uv run python -m scripts.release --build --install --release-tag "$RELEASE_TAG" --image-tag "$IMAGE_TAG" "${extension[@]}"
       - name: Package the Helm chart
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          CHART_VERSION: ${{ steps.version.outputs.chart_version }}
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
-          PREVIEW: ${{ steps.version.outputs.preview }}
         run: |
           sh dev/kubernetes/tools.sh "$RUNNER_TEMP/bin"
-          # A chart version is SemVer: a preview's chart is the coming version plus its image tag.
-          chart="$VERSION"; [ "$PREVIEW" != true ] || chart="$VERSION-$IMAGE_TAG"
-          "$RUNNER_TEMP/bin/helm" package deploy/helm/iceberg-data-platform --version "$chart" --app-version "$IMAGE_TAG" -d dist
-          (cd dist && sha256sum "$(basename dist/*.tgz)" >> SHA256SUMS)
+          # The channel's chart_version is SemVer; a branch image tag may not be (underscores, dots).
+          "$RUNNER_TEMP/bin/helm" package deploy/helm/iceberg-data-platform --version "$CHART_VERSION" --app-version "$IMAGE_TAG" -d dist
+          (cd dist && sha256sum "iceberg-data-platform-$CHART_VERSION.tgz" >> SHA256SUMS)
       - name: Scan source archive
         run: |
           curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"

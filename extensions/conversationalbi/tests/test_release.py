@@ -19,10 +19,17 @@ def test_words_are_not_secrets():
 def test_a_version_tag_is_a_release_and_a_branch_a_preview():
     assert channel("refs/tags/conversationalbi-v0.1.0", "0.1.0", "7", "1") == {
         "version": "0.1.0", "preview": "false", "image_tag": "0.1.0", "release_tag": "conversationalbi-v0.1.0",
-        "slug": ""}
+        "slug": "", "chart_version": "0.1.0"}
     assert channel("refs/heads/Feature/Chat", "0.1.0", "7", "2") == {
         "version": "0.1.0", "preview": "true", "image_tag": "feature-chat-7-2",
-        "release_tag": "conversationalbi-feature-chat-7-2", "slug": "feature-chat"}
+        "release_tag": "conversationalbi-feature-chat-7-2", "slug": "feature-chat",
+        "chart_version": "0.1.0-feature-chat-7-2"}
+
+
+def test_a_preview_chart_version_is_semver():
+    # Helm refuses the underscores and dots a branch image tag keeps.
+    names = channel("refs/heads/feature_k8s.2", "0.1.0", "7", "1")
+    assert (names["image_tag"], names["chart_version"]) == ("feature_k8s.2-7-1", "0.1.0-feature-k8s-2-7-1")
 
 
 @pytest.mark.parametrize("ref", ["refs/tags/conversationalbi-v0.2.0", "refs/tags/v0.7.0", "refs/pull/24/merge",

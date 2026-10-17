@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 import secrets
 import shlex
 import shutil
@@ -365,17 +366,21 @@ def test_installer_rejects_mixed_channels_and_unsafe_tags(release_tag, image_tag
 def test_release_channel_names_stable_and_branch_releases():
     stable = release_channel("refs/tags/v0.2.1", "0.2.1", "123", "1")
     assert stable == {"version": "0.2.1", "preview": "false", "release_tag": "v0.2.1", "image_tag": "0.2.1",
-                      "entrypoint": "", "slug": ""}
+                      "entrypoint": "", "slug": "", "chart_version": "0.2.1"}
     branch = release_channel("refs/heads/keycloak", "0.2.1", "123", "1")
     assert branch == {"version": "0.2.1", "preview": "true", "release_tag": "keycloak-123-1",
-                      "image_tag": "keycloak-123-1", "entrypoint": "keycloak-preview", "slug": "keycloak"}
+                      "image_tag": "keycloak-123-1", "entrypoint": "keycloak-preview", "slug": "keycloak",
+                      "chart_version": "0.2.1-keycloak-123-1"}
     nested = release_channel("refs/heads/feature/Foo_bar+x", "0.2.1", "123", "2")
     assert (nested["release_tag"], nested["entrypoint"]) == ("feature-foo_bar-x-123-2", "feature-foo_bar-x-preview")
+    dotted = release_channel("refs/heads/release_0.09", "0.2.1", "123", "1")
     long_branch = release_channel("refs/heads/" + "a" * 59 + "/b", "0.2.1", "123", "1")
     assert long_branch["slug"] == "a" * 59
-    for channel in (branch, nested, long_branch):
-        # Every generated name must be accepted as an installer literal.
+    for channel in (branch, nested, long_branch, dotted):
+        # Every generated name must be accepted as an installer literal, and every chart version by Helm.
         installer_source(ROOT, "install.sh", channel["release_tag"], channel["image_tag"])
+        assert re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?", channel["chart_version"])
+    assert dotted["chart_version"] == "0.2.1-release-0-09-123-1"
 
 
 @pytest.mark.parametrize("ref,version", [

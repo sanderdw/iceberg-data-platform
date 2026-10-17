@@ -79,7 +79,7 @@ def channel(ref, version, run_id, attempt):
     """A dbt-vX.Y.Z tag is a release; a branch is a preview with its own image and release tags."""
     if ref == f"refs/tags/dbt-v{version}":
         return {"version": version, "preview": "false", "image_tag": version, "release_tag": f"dbt-v{version}",
-                "slug": ""}
+                "slug": "", "chart_version": version}
     if not ref.startswith("refs/heads/"):
         raise SystemExit(f"Run this workflow on a branch or on tag dbt-v{version}, not {ref}")
     # The same names as the platform's branch previews, so one branch's images line up.
@@ -87,7 +87,9 @@ def channel(ref, version, run_id, attempt):
     if not slug or re.match(r"v\d", slug):
         raise SystemExit("This branch name cannot be used for a preview")
     build = f"{slug}-{run_id}-{attempt}"
-    return {"version": version, "preview": "true", "image_tag": build, "release_tag": f"dbt-{build}", "slug": slug}
+    # A chart version is SemVer: its prerelease part allows letters, digits and hyphens only.
+    return {"version": version, "preview": "true", "image_tag": build, "release_tag": f"dbt-{build}", "slug": slug,
+            "chart_version": f"{version}-{re.sub(r'[._]', '-', build)}"}
 
 
 def main():

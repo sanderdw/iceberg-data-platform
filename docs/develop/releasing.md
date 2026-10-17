@@ -7,7 +7,7 @@ The `Release` workflow publishes three container images (`ghcr.io/sanderdw/icebe
 | Stable | `vX.Y.Z` tag on `main` | `vX.Y.Z`, marked Latest if highest | `:X.Y.Z`, `:latest` | `/releases/latest/download/install.sh` or `/releases/download/vX.Y.Z/install.sh` |
 | Branch preview | **Run workflow** on the branch | Prerelease `SLUG-RUN_ID-ATTEMPT` plus rolling `SLUG-preview` | `:SLUG-RUN_ID-ATTEMPT` | `/releases/download/SLUG-preview/install.sh` |
 
-Every installer is pinned to its own release and image tag. Previews never become Latest and never write `:latest`. A preview also pushes the chart as version `X.Y.Z-SLUG-RUN_ID-ATTEMPT`, whose images default to the preview's tag: `helm install ... --version X.Y.Z-SLUG-RUN_ID-ATTEMPT`.
+Every installer is pinned to its own release and image tag. Previews never become Latest and never write `:latest`. A preview also pushes the chart as version `X.Y.Z-SLUG-RUN_ID-ATTEMPT`, with any `.` or `_` in the slug turned into `-` because chart versions are SemVer. Its images default to the preview's tag: `helm install ... --version X.Y.Z-SLUG-RUN_ID-ATTEMPT`.
 
 ## Publish a branch for testers
 
