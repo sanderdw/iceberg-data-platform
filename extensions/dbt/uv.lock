@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.14"
 
 [[package]]
@@ -308,12 +308,12 @@ wheels = [
 
 [[package]]
 name = "dbt-oss"
-version = "2.0.5"
+version = "2.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mashumaro", extra = ["msgpack"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fe/19/e444023562e5ee81bddd2620e8d1d4ae6d8c599c64310d93a47e5e4dc230/dbt_oss-2.0.5.tar.gz", hash = "sha256:1000d1813e6888590351bc8ff5091e9a8167493377646902323c39905d554a41", size = 5062, upload-time = "2026-09-18T15:49:33.921Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/27/0f/fe494ebb01368bd1a5daeb497818abfaae78525d4ef784777cd7573d4c3d/dbt_oss-2.0.8.tar.gz", hash = "sha256:9fb1a216fdd21dd4e69fd973e2a7d6e0d4c9af2d32c82b9d2f4d20b3107b37eb", size = 5008, upload-time = "2026-10-14T07:50:46.929Z" }
 
 [[package]]
 name = "docker"
@@ -606,7 +606,7 @@ dev = [
 ]
 launcher = [{ name = "docker", specifier = "==7.2.0" }]
 runner = [
-    { name = "dbt-oss", specifier = "==2.0.5" },
+    { name = "dbt-oss", specifier = "==2.0.8" },
     { name = "duckdb", specifier = "==1.5.5" },
     { name = "duckdb-extension-avro", specifier = "==1.5.5" },
     { name = "duckdb-extension-httpfs", specifier = "==1.5.5" },
