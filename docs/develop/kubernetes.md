@@ -66,4 +66,6 @@ Port-forward the Services to the Compose ports, write `.env` with
 `dev/kubernetes/scaleway.py` creates a Scaleway Kapsule cluster with Traefik and cert-manager, pushes
 the working tree's images to a private registry, installs the chart on `<ip>.sslip.io` hostnames and
 checks the routed and refused paths. It reads the API key from `scaleway.env` (git-ignored). Run
-`scaleway.py down` after every session; `status` shows what is still running.
+`scaleway.py down` after every session; `status` shows what is still running. `down` asks whether to
+keep the reserved IP, so the next cluster gets the same hostnames; without a terminal it keeps it, and
+`--release-ip` releases it without asking.

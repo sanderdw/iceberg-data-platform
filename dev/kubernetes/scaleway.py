@@ -11,7 +11,7 @@ kubeconfig and saved certificates go to .local/scaleway/, both git-ignored.
     python3 dev/kubernetes/scaleway.py extension dbt   # register an extension and install its chart
     python3 dev/kubernetes/scaleway.py verify    # check the routed and refused paths per host
     python3 dev/kubernetes/scaleway.py postgres up <namespace>   # Managed PostgreSQL on the cluster's network
-    python3 dev/kubernetes/scaleway.py down      # delete the cluster and its volumes; keeps the IP
+    python3 dev/kubernetes/scaleway.py down      # delete the cluster and its volumes; asks whether to keep the IP
     python3 dev/kubernetes/scaleway.py status    # what is still running, and costing money
 
 Without a DNS zone the base domain is <ip-with-dashes>.sslip.io; set BASE_DOMAIN in scaleway.env
@@ -376,20 +376,52 @@ def verify(args):
     sys.exit(1 if failed else 0)
 
 
+def release_ip(args, ip):
+    """--release-ip decides; otherwise ask on a terminal, and keep the IP when nobody can answer."""
+    if args.release_ip or not ip:
+        return args.release_ip
+    if not sys.stdin.isatty():
+        return False
+    answer = input(f"Keep IP {ip['ip_address']} for the next cluster, so the hostnames stay the same? [Y/n] ")
+    return answer.strip().lower() in ("n", "no")
+
+
+def detach_ip(ip):
+    """Free the reserved IP before the cluster goes: deleting the cluster's Load Balancers releases their IP."""
+    if not ip.get("lb_id"):
+        return
+    # Without its Service the cloud controller deletes the Load Balancer and keeps a static IP.
+    run("kubectl", "-n", "traefik", "delete", "service", "traefik", "--ignore-not-found", "--timeout=3m",
+        capture=True, check=False)
+    for _ in range(24):
+        ip = flexible_ip()
+        if not ip or not ip.get("lb_id"):
+            return
+        time.sleep(5)
+    print(f"Deleting Load Balancer {ip['lb_id']} and keeping IP {ip['ip_address']}")
+    scw("lb", "lb", "delete", ip["lb_id"], f"zone={zone()}", "release-ip=false")
+
+
 def down(args):
+    ip = flexible_ip()
+    release = release_ip(args, ip)
     if database():
         postgres(argparse.Namespace(action="down"))
     found = cluster()
     if found:
+        if ip and not release:
+            detach_ip(ip)
         print(f"Deleting cluster {found['id']} with its load balancers and volumes")
         scw("k8s", "cluster", "delete", found["id"], f"region={region()}", "with-additional-resources=true")
         run("scw", "k8s", "cluster", "wait", found["id"], f"region={region()}", "timeout=20m", check=False)
-    ip = flexible_ip()
-    if ip and args.release_ip:
-        scw("lb", "ip", "delete", ip["id"], f"zone={zone()}")
-        print(f"Released IP {ip['ip_address']}")
-    elif ip:
-        print(f"Kept IP {ip['ip_address']} (a few euro cents a day); --release-ip removes it")
+    kept = flexible_ip()
+    if kept and release:
+        scw("lb", "ip", "delete", kept["id"], f"zone={zone()}")
+        print(f"Released IP {kept['ip_address']}")
+    elif kept:
+        print(f"Kept IP {kept['ip_address']} (a few euro cents a day); --release-ip removes it")
+    elif ip and not release:
+        print(f"IP {ip['ip_address']} was released anyway; the next up reserves a new one with new hostnames")
     KUBECONFIG.unlink(missing_ok=True)
 
 
@@ -443,7 +475,7 @@ def main():
     p.add_argument("--prod", action="store_true")
     p.set_defaults(func=verify)
     p = sub.add_parser("down")
-    p.add_argument("--release-ip", action="store_true")
+    p.add_argument("--release-ip", action="store_true", help="Release the reserved IP without asking")
     p.set_defaults(func=down)
     p = sub.add_parser("postgres")
     p.add_argument("action", choices=["up", "down"])
