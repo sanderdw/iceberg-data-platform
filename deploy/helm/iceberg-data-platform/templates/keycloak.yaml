@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    {{- include "idp.component" (list . "keycloak") | nindent 4 }}
+spec:
+  selector:
+    {{- include "idp.selector" "keycloak" | nindent 4 }}
+  ports:
+    - {name: http, port: 8080}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    {{- include "idp.component" (list . "keycloak") | nindent 4 }}
+spec:
+  replicas: 1
+  # One instance with a local cache; two at once would race on the realm import.
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "idp.selector" "keycloak" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "idp.component" (list . "keycloak") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "idp.pullSecrets" . | nindent 6 }}
+      initContainers:
+        # The realm import, from the same definition as scripts.setup; Keycloak imports it once and
+        # resolves the ${...} secrets from its own environment.
+        - name: realm
+          image: {{ include "idp.image" (list . "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [/app/.venv/bin/python, -m, scripts.setup, --realm-json, /import/iceberg-realm.json]
+          env:
+            - name: PORTAL_ORIGIN
+              value: {{ include "idp.origin" (list . "admin") | quote }}
+            - name: USER_ORIGIN
+              value: {{ include "idp.origin" (list . "users") | quote }}
+            - name: PLATFORM_ADMIN_USERNAME
+              value: {{ .Values.platformAdminUsername | quote }}
+            - name: MCP_CALLBACK_PORT
+              value: {{ .Values.mcpCallbackPort | quote }}
+          {{- include "idp.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: import, mountPath: /import}
+      containers:
+        - name: keycloak
+          image: {{ .Values.images.keycloak }}
+          args: [start, --import-realm]
+          env:
+            - {name: KC_BOOTSTRAP_ADMIN_USERNAME, value: admin}
+            {{- include "idp.secretEnv" (list . "KC_BOOTSTRAP_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_PASSWORD") | nindent 12 }}
+            - name: KC_HOSTNAME
+              value: {{ include "idp.origin" (list . "auth") | quote }}
+            # Portals and Polaris call http://keycloak:8080 inside the cluster; browsers use KC_HOSTNAME.
+            - {name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC, value: "true"}
+            # The administration console is never routed; it opens through kubectl port-forward only.
+            - name: KC_HOSTNAME_ADMIN
+              value: {{ .Values.keycloak.adminOrigin | default "http://localhost:8080" | quote }}
+            - {name: KC_HTTP_ENABLED, value: "true"}
+            - {name: KC_PROXY_HEADERS, value: xforwarded}
+            {{- with .Values.keycloak.proxyTrustedAddresses }}
+            - {name: KC_PROXY_TRUSTED_ADDRESSES, value: {{ . | quote }}}
+            {{- end }}
+            - {name: KC_HEALTH_ENABLED, value: "true"}
+            - {name: KC_CACHE, value: local}
+            - {name: KC_DB, value: postgres}
+            - name: KC_DB_URL_HOST
+              value: {{ include "idp.pgHost" . | quote }}
+            - name: KC_DB_URL_PORT
+              value: {{ include "idp.pgPort" . | quote }}
+            - name: KC_DB_URL_DATABASE
+              value: {{ include "idp.pgDatabase" (list . "keycloak") | quote }}
+            - name: KC_DB_URL_PROPERTIES
+              value: "?sslmode={{ include "idp.pgSslmode" . }}"
+            - name: KC_DB_USERNAME
+              value: {{ include "idp.pgUser" (list . "keycloak") | quote }}
+            {{- include "idp.pgPasswordEnv" (list . "KC_DB_PASSWORD" "keycloak") | nindent 12 }}
+            {{- include "idp.secretEnv" (list . "OIDC_PORTAL_SECRET") | nindent 12 }}
+            {{- include "idp.secretEnv" (list . "OIDC_USERS_SECRET") | nindent 12 }}
+            {{- include "idp.secretEnv" (list . "PLATFORM_ADMIN_PASSWORD") | nindent 12 }}
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: management, containerPort: 9000}
+          startupProbe:
+            httpGet: {path: /health/started, port: management}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health/ready, port: management}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health/live, port: management}
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.keycloak.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: import, mountPath: /opt/keycloak/data/import, readOnly: true}
+      volumes:
+        - name: import
+          emptyDir: {}

@@ -1,12 +1,14 @@
 # Keycloak identity and access
 
-Keycloak handles sign-in for both portals, notebook tokens for Polaris and MCP clients. Polaris handles teams and data permissions. Startup runs `keycloak-bootstrap`, which provisions the `iceberg` realm, its clients and the `platform-admin` account. It creates no demo users, teams or databases. To manage accounts, see the [administration guide](../admin-guide.md#teams-databases-and-users).
+Keycloak handles sign-in for both portals, notebook tokens for Polaris and MCP clients. Polaris handles teams and data permissions. Startup runs `keycloak-bootstrap` (on Kubernetes a post-install and post-upgrade hook Job), which provisions the `iceberg` realm, its clients and the `platform-admin` account. It creates no demo users, teams or databases. To manage accounts, see the [administration guide](../admin-guide.md#teams-databases-and-users).
 
 ## Configuration
 
 `scripts.setup` derives `PORTAL_ORIGIN`, `USER_ORIGIN`, `KEYCLOAK_ORIGIN` and `OIDC_ISSUER` from `PORT`, `USER_PORT` and `KEYCLOAK_PORT`. Set the ports before the first setup. If you change a port later, you must also update the origins and the client redirect and logout URIs in Keycloak, because an existing realm is never re-imported. Issuer and redirect origins must match exactly, so use `localhost`.
 
 Keycloak access beyond localhost needs HTTPS and matching issuer and redirect URLs; see [deploying beyond localhost](../security.md#deploying-beyond-localhost). For a class or demo, the [quick-share skill](../agent-skills.md) sets this up.
+
+On Kubernetes, the chart derives the origins from `baseDomain` and `hosts` and imports the realm once, with an init container that runs `scripts.setup --realm-json`; set them before the first install. Keycloak's administration console and the `master` realm are never routed: the master realm's front-end address is `keycloak.adminOrigin` (`http://localhost:8080`), reached through `kubectl port-forward`, and because nothing outside the cluster reaches that realm it accepts plain HTTP.
 
 To run a portal directly from source, see [contributing](contributing.md).
 
@@ -51,7 +53,7 @@ sequenceDiagram
 - Signing out ends that portal's session and its notebooks, then signs out of Keycloak. There is no back-channel logout. A session in the other portal, a copied token or vended S3 credentials stay valid until they expire. Disabling an account or removing its admin role doesn't invalidate tokens that were already issued.
 - MCP clients and `iceberg_connect.py` keep an offline refresh token on the user's machine. It is valid for 30 days of inactivity. Revoke it in Keycloak under the user's offline **Sessions**, or with `uv run iceberg_connect.py logout`.
 - Sessions are in memory, so each portal needs a single replica.
-- Keycloak runs in `start-dev` mode with a local database. Production needs HTTPS, a persistent database, backups, MFA, key rotation and audit events.
+- With Compose, Keycloak runs in `start-dev` mode with a local database. The Kubernetes chart runs `keycloak start` on Postgres behind HTTPS. Production still needs backups, MFA, key rotation and audit events.
 
 ## Demo fixtures
 
@@ -61,6 +63,8 @@ The Keycloak browser tests need optional demo accounts on a development stack:
 uv run python -m scripts.setup --demo
 docker compose run --build --rm keycloak-bootstrap --demo
 ```
+
+On Kubernetes, `--set demo=true` does the same; the passwords are `DEMO_*_PASSWORD` in the Secret `iceberg-platform`.
 
 This creates `demo-admin`, `demo-writer`, `demo-reader` and `demo-outsider`, with their `DEMO_*_PASSWORD` credentials in `.env`. Writers and readers can access `demo-demo`. `demo-private` belongs to another team, and the outsider has no platform identity. See [Contributing](contributing.md#tests) for the tests that use them.
 

@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dbt-launcher
+  labels:
+    {{- include "dbt.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dbt-portal
+  labels:
+    {{- include "dbt.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "dbt.selector" . | nindent 4 }}
+  ports:
+    - {name: http, port: 3004}
+---
+# Runs reach the launcher here for their input and output, with their own one-run ticket.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dbt-launcher
+  labels:
+    {{- include "dbt.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "dbt.selector" . | nindent 4 }}
+  ports:
+    - {name: launcher, port: 3006}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dbt
+  labels:
+    {{- include "dbt.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # One portal with SQLite state, and one launcher that owns its runs.
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "dbt.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dbt.labels" . | nindent 8 }}
+        app.kubernetes.io/component: dbt
+    spec:
+      serviceAccountName: dbt-launcher
+      # Only the launcher container gets the API token, through its own projected volume.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "dbt.pullSecrets" . | nindent 6 }}
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: portal
+          image: {{ include "dbt.image" (dict "root" . "name" "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: {name: {{ .Values.bridgeSecret }}}
+          env:
+            - {name: LAUNCHER_URL, value: "http://localhost:3006"}
+            - name: LAUNCHER_TOKEN
+              valueFrom: {secretKeyRef: {name: iceberg-dbt, key: LAUNCHER_TOKEN}}
+            - {name: MAX_CONCURRENT_RUNS, value: {{ .Values.runs.maxConcurrent | quote }}}
+            - {name: MAX_RUNS_PER_TEAM, value: {{ .Values.runs.maxPerTeam | quote }}}
+            - {name: RUN_RETENTION, value: {{ .Values.runs.retention | quote }}}
+            - {name: RUN_TIMEOUT_SECONDS, value: {{ .Values.runs.timeoutSeconds | quote }}}
+            - {name: HOME, value: /tmp}
+          ports:
+            - {name: http, containerPort: 3004}
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 20
+            failureThreshold: 6
+            initialDelaySeconds: 20
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          {{- include "dbt.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: state, mountPath: /data}
+            - {name: artifacts, mountPath: /data/artifacts, readOnly: true}
+        - name: launcher
+          image: {{ include "dbt.image" (dict "root" . "name" "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [/app/.venv/bin/uvicorn, "launcher.app:create_app", --factory, --host, 0.0.0.0, --port, "3006", --no-access-log]
+          env:
+            - name: LAUNCHER_TOKEN
+              valueFrom: {secretKeyRef: {name: iceberg-dbt, key: LAUNCHER_TOKEN}}
+            - {name: LAUNCHER_BACKEND, value: kubernetes}
+            - name: RUNS_NAMESPACE
+              value: {{ include "dbt.runsNamespace" . | quote }}
+            - {name: RUN_URL, value: "http://dbt-launcher:3006"}
+            - name: RUNNER_IMAGE
+              value: {{ include "dbt.image" (dict "root" . "name" "runner") | quote }}
+            - name: RUNNER_PULL_POLICY
+              value: {{ .Values.image.pullPolicy | quote }}
+            - name: RUNNER_PULL_SECRETS
+              value: {{ $names := list }}{{ range .Values.imagePullSecrets }}{{ $names = append $names .name }}{{ end }}{{ join "," $names | quote }}
+            - {name: ARTIFACTS_DIR, value: /artifacts}
+            - {name: BRIDGE_EXTENSION_ID, value: dbt}
+            - {name: RUN_MEMORY, value: {{ .Values.runs.memory | quote }}}
+            - {name: RUN_CPUS, value: {{ .Values.runs.cpus | quote }}}
+            - {name: RUN_WORK_SIZE, value: {{ .Values.runs.workSize | quote }}}
+          ports:
+            - {name: launcher, containerPort: 3006}
+          readinessProbe:
+            httpGet: {path: /health, port: launcher}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 20m, memory: 128Mi}
+            limits: {memory: 1Gi}
+          {{- include "dbt.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp-launcher, mountPath: /tmp}
+            - {name: artifacts, mountPath: /artifacts}
+            - {name: api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - {name: tmp-launcher, emptyDir: {}}
+        - name: state
+          persistentVolumeClaim: {claimName: dbt-state}
+        - name: artifacts
+          persistentVolumeClaim: {claimName: dbt-artifacts}
+        - name: api
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 3600}
+              - configMap:
+                  name: kube-root-ca.crt
+                  items: [{key: ca.crt, path: ca.crt}]
+              - downwardAPI:
+                  items: [{path: namespace, fieldRef: {fieldPath: metadata.namespace}}]

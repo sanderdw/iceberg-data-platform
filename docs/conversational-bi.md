@@ -27,6 +27,8 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 A **team administrator** enables Conversational BI once per environment: the **Enable** button in the chat's sidebar, or `enable_environment` over MCP. That creates the team's read-only service account for that environment, which also reads the data shares the team received there.
 
+On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
+
 ## Connect an AI agent
 
 ```bash
@@ -89,6 +91,8 @@ To keep data on your own hardware, point `OPENAI_BASE_URL` at a local OpenAI-com
 ```bash
 docker compose -f conversationalbi/compose.yaml up -d --wait
 ```
+
+On Kubernetes the model and key are in the Secret the chart's `llm.existingSecret` names (or the chart's own `llm.model` and `llm.env`). Replace the Secret with the new `LLM_MODEL` and key, then restart the gateway with `kubectl -n iceberg rollout restart deploy/cbi-gateway`. The row limits are `query.llmRows` and `query.maxRows` there; see [add extensions](install-kubernetes.md#add-extensions).
 
 A model that cannot start (unknown, or without its key) does not stop the extension: `/api/health` reports it under `llm`, the chat answers with what is missing, and the API and MCP server keep working.
 

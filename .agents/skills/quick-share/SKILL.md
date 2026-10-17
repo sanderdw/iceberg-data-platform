@@ -5,6 +5,8 @@ description: Make an installed Iceberg Data Platform reachable from anywhere for
 
 # Quick share for Iceberg Data Platform
 
+**Compose installations only.** A Kubernetes installation already has public HTTPS addresses for every portal (`https://admin.<domain>`, `https://users.<domain>`): if the platform runs on Kubernetes (no `compose.yaml` here, or the user says so), stop and point to those addresses instead.
+
 Out of the box every portal listens on `127.0.0.1` only. This skill starts two free [Cloudflare quick tunnels](https://developers.cloudflare.com/tunnel/get-started/#quick-tunnels-development), each with a random `https://<name>.trycloudflare.com` address, and points the platform at them. Browsers, phones and agents trust the certificates as they are. Nothing is rebuilt.
 
 - **Participants** need only the user portal address. It also carries the Iceberg catalog and S3 storage, so DuckDB, PyIceberg and DBeaver on their own laptops work too.

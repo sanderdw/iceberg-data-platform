@@ -40,7 +40,7 @@ from server.validation import validation_message
 from .directory import UserDirectory, validate_namespace
 from .mcp_server import create_mcp
 from .preview import run_preview
-from .runtime import NotebookRuntime, filespace_key
+from .runtime import RuntimeBackendError, filespace_key, notebook_runtime
 
 PUBLIC = Path(__file__).parent / "public"
 CONNECT_SCRIPT = Path(__file__).parent / "client" / "iceberg_connect.py"
@@ -101,7 +101,7 @@ def same_origin(origin, url):
 
 def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE):
     directory = directory or UserDirectory(os.environ)
-    runtime = runtime or NotebookRuntime(os.environ)
+    runtime = runtime or notebook_runtime(os.environ)
     sessions, attempts = {}, {}
     lock = asyncio.Lock()
     # Previews and governed queries share these slots; MCP calls wait up to USER_QUERY_WAIT_SECONDS for one.
@@ -173,7 +173,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         unchecked.pop(id, None)
         try:
             await run_in_threadpool(runtime.stop_session, id)
-        except DockerException:
+        except (DockerException, RuntimeBackendError):
             LOG.error("Notebook cleanup failed; retrying on next sweep")
 
     async def unavailable(id, reason):
@@ -184,7 +184,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         if unchecked[id] >= UNCHECKED_PASSES:
             try:
                 await run_in_threadpool(runtime.stop_session, id)
-            except DockerException:
+            except (DockerException, RuntimeBackendError):
                 LOG.error("Notebook cleanup failed; retrying on next sweep")
 
     async def sweep_once():
@@ -210,7 +210,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     await close_session(id, exc.status)
                 else:
                     await unavailable(id, exc.status)
-            except DockerException:
+            except (DockerException, RuntimeBackendError):
                 LOG.error("Notebook cleanup failed; retrying on next sweep")
             except Exception:  # One malformed record must not skip every later session and orphan cleanup.
                 LOG.exception("Authorization check failed unexpectedly")
@@ -221,7 +221,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             if workspace.session_id not in sessions:
                 try:
                     await run_in_threadpool(runtime.stop, workspace.id)
-                except DockerException:
+                except (DockerException, RuntimeBackendError):
                     LOG.error("Orphan notebook cleanup failed")
 
     async def sweep():
@@ -257,7 +257,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     directory.close()
 
     app = FastAPI(
-        title="Iceberg User Workspace", version="0.9.3", docs_url=None, redoc_url=None, lifespan=lifespan,
+        title="Iceberg User Workspace", version="0.9.9", docs_url=None, redoc_url=None, lifespan=lifespan,
         description=(
             "Sign in to the user portal first, then open /docs to call these APIs with your session. "
             "Your team roles and selected team/environment apply to every operation. "
@@ -580,7 +580,9 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         async with lock:
             workspace = runtime.workspaces.get(id)
             supplied = request.headers.get("authorization", "")
-            if (not workspace or not secrets.compare_digest(supplied, f"Bearer {workspace.token}")
+            # The address check holds only for direct connections: a forwarded request could name any address.
+            forwarded = "x-forwarded-for" in request.headers or "forwarded" in request.headers
+            if (forwarded or not workspace or not secrets.compare_digest(supplied, f"Bearer {workspace.token}")
                     or not request.client or request.client.host != urlsplit(workspace.upstream).hostname):
                 raise ServiceError(401, "Notebook authorization required.")
             session = sessions.get(workspace.session_id)

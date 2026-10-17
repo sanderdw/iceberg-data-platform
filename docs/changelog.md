@@ -1,19 +1,19 @@
 # Changelog
 
-## 0.9.3 - 2026-10-16
+## 0.9.9 - 2026-10-17
 
-- **Security fixes from two security reviews.** What is still open is listed in the [security review](security-review.md).
-  - Governed queries: a semantic model's declared field types can no longer add SQL, in the user portal and in Conversational BI, and filters on derived fields that combine conditions with `AND` or `OR` now return the right answer.
+- **Install on Kubernetes.** Run the platform and its extensions on your own Kubernetes cluster with one `helm install` and your domain. Every portal gets its own HTTPS address. You can use your cloud provider's PostgreSQL and the official Apache Polaris chart. The `kubernetes-install` agent skill guides you through it. The Docker installation stays as it is. See [Install on Kubernetes](install-kubernetes.md).
+- **Safer by default.** Fixes from two security reviews, in the platform, Conversational BI, dbt and Ingestion:
+  - Semantic models can no longer be used to sneak SQL into a query.
   - Keycloak locks an account for a while after 10 wrong passwords.
-  - dbt: acceptance and production build, and the docs site shows, only revisions that were the head of `main`, never a commit from inside a merged branch. `iceberg_dbt.py` refuses file paths that would leave the project folder on Windows.
-  - Ingestion masks secrets in run logs also when a request URL-encodes them.
-  - A notebook's token address answers only that notebook's own container.
-  - A bucket administrator's storage access covers only buckets whose own tags tie them to the team's databases, so an edited catalog property can no longer point it at another team's bucket.
-  - Moving a database to another team no longer lets the old team's extensions keep access to it.
-- **The user portal rides out a Polaris or Keycloak restart.** Sessions stay open while either is unreachable; notebooks stop after 90 seconds of outage instead of at once, and a failed check no longer stops expiry enforcement.
-- **The Bridge's audit trail reaches the logs**, with the portals' own records: `docker compose logs bridge` shows every automation principal created or revoked and every token issued.
-- The [security model](security.md) now says that notebook output runs with the viewer's portal session and that Writers can change a database's catalog properties.
-- Fixed: the scripting guide names the administration portal's real session cookie, `iceberg_admin`; MCP accepts a semantic model up to the 1 MB limit; the OpenMetadata guide lists every permission its bot needs.
+  - Teams can no longer reach another team's storage.
+  - When a database moves to another team, the old team's extensions lose access to it.
+  - Ingestion run logs hide secrets better.
+
+  What is still open is listed in the [security review](security-review.md).
+- **Notebooks keep running through a short outage.** When Polaris or Keycloak restarts you stay signed in, and notebooks stop only after 90 seconds without them.
+- **See who used the Bridge.** Its logs show every automation account created or revoked and every token issued.
+- Fixed: filters that combine conditions with `AND` or `OR` on calculated fields give the right answer, MCP accepts semantic models up to 1 MB, and the guides name the correct session cookie and OpenMetadata bot permissions.
 
 ## 0.9.2 - 2026-10-14
 

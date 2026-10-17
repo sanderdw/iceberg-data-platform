@@ -32,7 +32,7 @@ Unlisting a share, revoking it or letting it expire removes it from OpenMetadata
 
 ## Install
 
-The platform installer doesn't add this extension, because it needs your OpenMetadata server and a bot token. It has its own installer instead. On the machine where the platform is installed (in `~/iceberg-data-platform`, version 0.9.1 or later):
+OpenMetadata runs with the Compose installation only; it has no Helm chart yet. The platform installer doesn't add this extension, because it needs your OpenMetadata server and a bot token. It has its own installer instead. On the machine where the platform is installed (in `~/iceberg-data-platform`, version 0.9.1 or later):
 
 ```bash
 curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.1/install.sh | sh

@@ -1,4 +1,5 @@
-"""The launcher: the only part of the ingestion extension with the Docker socket.
+"""The launcher: the only part of the ingestion extension with the Docker socket, or on Kubernetes
+the right to create Jobs in the runs namespace (launcher/kubernetes.py, LAUNCHER_BACKEND=kubernetes).
 
 It starts one pinned runner image per run, with fixed isolation flags, on two networks of its own:
 a private internal network that holds only the platform's catalog and storage (found by their role
@@ -24,7 +25,8 @@ import docker
 from docker.errors import APIError, DockerException, NotFound
 from docker.types import Mount
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ingestion.config import VERSION
@@ -59,6 +61,19 @@ class Chunks(io.RawIOBase):
         size = min(len(buffer), len(self.chunk))
         buffer[:size], self.chunk = self.chunk[:size], self.chunk[size:]
         return size
+
+
+def extract_out(fileobj, target):
+    """Unpack a run's out/ archive: only regular files and directories under out/, never links or absolute paths.
+
+    Streamed ("r|"): a large build's artifacts never sit in memory whole.
+    """
+    with tarfile.open(fileobj=fileobj, mode="r|") as tar:
+        for member in tar:
+            name = Path(member.name)
+            if name.is_absolute() or ".." in name.parts or not (member.isfile() or member.isdir()):
+                continue
+            tar.extract(member, target, filter="data")
 
 
 class RunInput(BaseModel):
@@ -190,14 +205,7 @@ class Launcher:
         target.mkdir(parents=True)
         try:
             stream, _ = container.get_archive(f"{WORK}/out")
-            # Streamed ("r|"): a large build's artifacts never sit in memory whole.
-            with tarfile.open(fileobj=io.BufferedReader(Chunks(stream), 1 << 20), mode="r|") as tar:
-                for member in tar:
-                    # Only regular files and directories under out/, never links or absolute paths.
-                    name = Path(member.name)
-                    if name.is_absolute() or ".." in name.parts or not (member.isfile() or member.isdir()):
-                        continue
-                    tar.extract(member, target, filter="data")
+            extract_out(io.BufferedReader(Chunks(stream), 1 << 20), target)
         except NotFound:
             pass
         logs = container.logs(stdout=True, stderr=True, tail=20000)
@@ -253,6 +261,10 @@ def create_app(launcher=None, env=None):
     token = env.get("LAUNCHER_TOKEN", "")
     if len(token) < 32:
         raise RuntimeError("LAUNCHER_TOKEN must be at least 32 characters.")
+    if launcher is None and env.get("LAUNCHER_BACKEND", "docker") == "kubernetes":
+        from launcher.kubernetes import KubernetesLauncher
+
+        launcher = KubernetesLauncher(env)
     launcher = launcher or Launcher(env)
 
     @asynccontextmanager
@@ -264,7 +276,9 @@ def create_app(launcher=None, env=None):
 
     @app.middleware("http")
     async def authenticate(request: Request, call_next):
-        if request.url.path != "/health" and not secrets.compare_digest(
+        # A run calls the job endpoints with its own ticket, never with the launcher token.
+        job_path = request.url.path.startswith("/jobs/") and getattr(launcher, "backend", "docker") == "kubernetes"
+        if request.url.path != "/health" and not job_path and not secrets.compare_digest(
                 request.headers.get("x-launcher-token", ""), token):
             return JSONResponse({"error": "Launcher token required."}, status_code=401)
         return await call_next(request)
@@ -306,5 +320,36 @@ def create_app(launcher=None, env=None):
     @app.delete("/runs/{id}")
     def cancel(id: str):
         return {"cancelled": launcher.cancel(id)}
+
+    def ticket(request):
+        value = request.headers.get("authorization", "")
+        return value.removeprefix("Bearer ") if value.startswith("Bearer ") else ""
+
+    @app.get("/jobs/{id}/input")
+    def job_input(id: str, request: Request):
+        archive = launcher.take_input(id, ticket(request))
+        if archive is None:
+            return JSONResponse({"error": "Unknown run or ticket."}, status_code=401)
+        return Response(archive, media_type="application/x-tar")
+
+    @app.put("/jobs/{id}/output")
+    async def job_output(id: str, request: Request):
+        from launcher.kubernetes import MAX_OUTPUT
+
+        if not launcher.check_ticket(id, ticket(request)):
+            return JSONResponse({"error": "Unknown run or ticket."}, status_code=401)
+        target = launcher.artifacts / f".upload-{id}"
+        size = 0
+        try:
+            with open(target, "wb") as file:
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > MAX_OUTPUT:
+                        return JSONResponse({"error": "The run's output is too large."}, status_code=413)
+                    file.write(chunk)
+            accepted = await run_in_threadpool(launcher.accept_output, id, ticket(request), target, extract_out)
+        finally:
+            target.unlink(missing_ok=True)
+        return {"stored": True} if accepted else JSONResponse({"error": "Already uploaded."}, status_code=409)
 
     return app

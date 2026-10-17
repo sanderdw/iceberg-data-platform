@@ -1,0 +1,20 @@
+{{- range $name, $size := dict "dbt-state" .Values.storage.state "dbt-artifacts" .Values.storage.artifacts }}
+---
+# Projects, schedules and run history (SQLite and Git); kept when the chart is uninstalled.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "dbt.labels" $ | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with $.Values.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $size }}
+{{- end }}

@@ -41,7 +41,7 @@ def class_plan(participants, teams):
     return members
 
 
-@pytest.mark.parametrize("name", ["quick-share", "demo-company", "semantic-model"])
+@pytest.mark.parametrize("name", ["quick-share", "demo-company", "semantic-model", "kubernetes-install"])
 def test_skill_frontmatter_names_its_folder(name):
     meta = frontmatter(SKILLS / name / "SKILL.md")
     assert meta["name"] == name

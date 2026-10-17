@@ -1,0 +1,62 @@
+# Extension Bridge (contracts/bridge): the stable interface for extensions, which install their
+# charts in this namespace. It holds no storage credentials.
+apiVersion: v1
+kind: Service
+metadata:
+  name: bridge
+  labels:
+    {{- include "idp.component" (list . "bridge") | nindent 4 }}
+spec:
+  selector:
+    {{- include "idp.selector" "bridge" | nindent 4 }}
+  ports:
+    - {name: http, port: 3005}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bridge
+  labels:
+    {{- include "idp.component" (list . "bridge") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "idp.selector" "bridge" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "idp.component" (list . "bridge") | nindent 8 }}
+        io.iceberg-platform.role: bridge
+      annotations:
+        checksum/extensions: {{ toJson .Values.extensions | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "idp.pullSecrets" . | nindent 6 }}
+      containers:
+        - name: bridge
+          image: {{ include "idp.image" (list . "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [/app/.venv/bin/uvicorn, "server.entrypoints:bridge", --factory, --host, 0.0.0.0, --port, "3005", --no-access-log]
+          env:
+            {{- include "idp.platformEnv" . | nindent 12 }}
+            - {name: POLARIS_URL, value: "http://polaris:8181"}
+            - {name: BRIDGE_CATALOG_URI, value: "http://polaris-control-plane:8181/api/catalog"}
+            - name: USER_ORIGIN
+              value: {{ include "idp.origin" (list . "users") | quote }}
+            - {name: BRIDGE_PLATFORM, value: kubernetes}
+            - name: BRIDGE_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+          ports:
+            - {name: http, containerPort: 3005}
+          {{- include "idp.probes" (list "/bridge/v1/health" "http" 20) | nindent 10 }}
+          resources:
+            requests: {cpu: 20m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          {{- include "idp.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}

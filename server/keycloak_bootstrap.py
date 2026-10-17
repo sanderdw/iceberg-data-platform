@@ -90,6 +90,19 @@ def main():
             response.raise_for_status()
             kc.headers["Authorization"] = "Bearer " + response.json()["access_token"]
             prefix = "/admin/realms/iceberg"
+            # On Kubernetes the administration console is reached through a port-forward only (the
+            # Ingress never routes the master realm), so its sign-in must use that address too.
+            admin_origin = os.environ.get("KEYCLOAK_ADMIN_ORIGIN")
+            if admin_origin:
+                response = kc.get("/admin/realms/master")
+                response.raise_for_status()
+                master = response.json()
+                master["attributes"] = {**master.get("attributes", {}), "frontendUrl": admin_origin}
+                if admin_origin.startswith("http://"):
+                    # A plain-HTTP front end makes Keycloak refuse the realm's sign-ins from pod addresses,
+                    # this bootstrap's included. The master realm is never routed out of the cluster.
+                    master["sslRequired"] = "none"
+                kc.put("/admin/realms/master", json=master).raise_for_status()
             # The realm is imported once, so its sign-in protection is kept in force here. Keycloak
             # creates the realm's own admin-cli with password sign-in, which nothing on this platform uses.
             kc.put(prefix, json=REALM_SECURITY).raise_for_status()

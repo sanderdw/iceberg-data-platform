@@ -6,17 +6,17 @@ Short answers, each with a link to the page that has the details.
 
 ### Can I run it in production?
 
-No. This is an educational local development platform. It has not had an independent security audit, only the latest release receives fixes, each portal runs as one replica, and the user portal mounts the Docker socket. Reuse the architecture and the choices behind it, not the installation itself. See the [security model](security.md) and [deploying beyond localhost](security.md#deploying-beyond-localhost).
+No. This is an educational local development platform. It has not had an independent security audit, only the latest release receives fixes, each portal runs as one replica, and with Compose the user portal mounts the Docker socket. The [Kubernetes chart](install-kubernetes.md) replaces that socket with narrow namespace rights and HTTPS, but the rest still applies. Reuse the architecture and the choices behind it, not the installation itself. See the [security model](security.md) and [deploying beyond localhost](security.md#deploying-beyond-localhost).
 
 ## Install and run
 
 ### What do I need?
 
-Docker with Compose v2 (Docker Desktop on macOS and Windows) and at least 4 GiB of Docker memory, on AMD64 or ARM64. You don't need Python, Node.js or a source checkout. See [installation](install.md).
+Docker with Compose v2 (Docker Desktop on macOS and Windows) and at least 4 GiB of Docker memory, on AMD64 or ARM64. You don't need Python, Node.js or a source checkout. See [installation](install.md). On a Kubernetes cluster you need Helm, an ingress controller and cert-manager instead; see [Install on Kubernetes](install-kubernetes.md).
 
 ### Where is the first password?
 
-The installer prints it at the end. It is also `PLATFORM_ADMIN_PASSWORD` in `.env` in the installation directory. Sign in to the administration portal as `platform-admin` and choose a new password. See [first steps](first-steps.md).
+The installer prints it at the end. It is also `PLATFORM_ADMIN_PASSWORD` in `.env` in the installation directory. On Kubernetes, read it from the Secret `iceberg-platform`; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in). Sign in to the administration portal as `platform-admin` and choose a new password. See [first steps](first-steps.md).
 
 ### How should I get started?
 
@@ -24,15 +24,15 @@ Install only the core platform and follow the [first steps](first-steps.md). You
 
 ### How do I update?
 
-Run the installer again. It keeps `.env` and the data volumes. Save your notebook work and read the release notes first. See [update or restart](install.md#update-or-restart).
+Run the installer again. It keeps `.env` and the data volumes. Save your notebook work and read the release notes first. See [update or restart](install.md#update-or-restart). On Kubernetes, run `helm upgrade`; see [update](install-kubernetes.md#update).
 
 ### How do I start completely fresh?
 
-Stop every Compose project with `docker compose down --volumes`, then remove the team notebook volumes (`iceberg-workspaces-work-*`), which `down` never removes. This deletes all data and can't be undone. See [stop and preserve data](install.md#stop-and-preserve-data).
+Stop every Compose project with `docker compose down --volumes`, then remove the team notebook volumes (`iceberg-workspaces-work-*`), which `down` never removes. This deletes all data and can't be undone. See [stop and preserve data](install.md#stop-and-preserve-data). On Kubernetes, `helm uninstall` keeps the data; delete the namespaces to remove it (see [uninstall](install-kubernetes.md#uninstall)).
 
 ### Can people in my class use one installation from their own laptops?
 
-Yes, with limits. The [`quick-share` skill](agent-skills.md) gives the portals public HTTPS addresses for the session through [Cloudflare quick tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/), but quick tunnels have [serious limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/#limitations). For anything more than a short session, use a stable [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/), or let everyone run their own local installation.
+Yes. A [Kubernetes installation](install-kubernetes.md) has public HTTPS addresses already, for a class of any size. With Compose it works with limits: the [`quick-share` skill](agent-skills.md) gives the portals public HTTPS addresses for the session through [Cloudflare quick tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/), but quick tunnels have [serious limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/#limitations). For anything more than a short session, use a stable [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/), or let everyone run their own local installation.
 
 ## Accounts and access
 
@@ -46,7 +46,7 @@ A role applies to every database of that team. The roles are described under [te
 
 ### A user forgot their password.
 
-A platform administrator uses **Reset password** on the Users page, which issues a new temporary password. That works only for accounts the portal created. Reset a linked account in the Keycloak console. See the [administration guide](admin-guide.md#teams-databases-and-users).
+A platform administrator uses **Reset password** on the Users page, which issues a new temporary password. That works only for accounts the portal created. Reset a linked account in the Keycloak console (on Kubernetes through a port-forward; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in)). See the [administration guide](admin-guide.md#teams-databases-and-users).
 
 ## Notebooks and your own tools
 
@@ -64,7 +64,7 @@ The token it started with lasts one hour. From your computer, run the `iceberg_c
 
 ### `iceberg_connect.py` only works on the platform's machine.
 
-Keycloak, Polaris and RustFS listen on `127.0.0.1`. Start the [`quick-share` skill](agent-skills.md), then download the helper again from the user portal (**Catalog › Connect from your computer**), so it has the public addresses. See [connect from your computer](connect.md).
+With Compose, Keycloak, Polaris and RustFS listen on `127.0.0.1`. (A Kubernetes installation has public addresses; download the helper from its user portal.) Start the [`quick-share` skill](agent-skills.md), then download the helper again from the user portal (**Catalog › Connect from your computer**), so it has the public addresses. See [connect from your computer](connect.md).
 
 ### Why are dates and times in UTC?
 
@@ -88,8 +88,8 @@ The core platform sends nothing to an LLM (or anything else). A coding agent you
 
 ### How do I add an extension later?
 
-Run the installer again and answer yes, or name the extensions in `ICEBERG_EXTENSIONS`. It keeps the extensions you already added, with their data. The installer doesn't add OpenMetadata; it has [its own installer](openmetadata.md#install). See [extensions](extensions.md#install).
+Run the installer again and answer yes, or name the extensions in `ICEBERG_EXTENSIONS`. On Kubernetes, register it in the platform chart and install its chart; see [add extensions](install-kubernetes.md#add-extensions). It keeps the extensions you already added, with their data. The installer doesn't add OpenMetadata; it has [its own installer](openmetadata.md#install). See [extensions](extensions.md#install).
 
 ### Ingestion refuses my local database.
 
-Sources on loopback, private or link-local addresses are refused. For a demo against a database on your own computer, set `ING_ALLOW_PRIVATE_SOURCES=true` in `ingestion/.env` and restart the extension. The run then reaches your computer as `host.docker.internal`. See [isolation and limits](ingestion.md#isolation-and-limits).
+Sources on loopback, private or link-local addresses are refused. For a demo against a database on your own computer, set `ING_ALLOW_PRIVATE_SOURCES=true` in `ingestion/.env` and restart the extension. The run then reaches your computer as `host.docker.internal`. On Kubernetes, install the chart with `runs.allowPrivateSources=true` to reach sources in your own network. See [isolation and limits](ingestion.md#isolation-and-limits).

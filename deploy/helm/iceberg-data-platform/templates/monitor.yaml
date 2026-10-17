@@ -1,0 +1,134 @@
+{{- if .Values.monitor.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: monitor
+  labels:
+    {{- include "idp.component" (list . "monitor") | nindent 4 }}
+automountServiceAccountToken: false
+{{- $namespaces := list .Release.Namespace }}
+{{- if .Values.notebooks.enabled }}{{ $namespaces = append $namespaces (include "idp.notebooksNamespace" .) }}{{ end }}
+{{- range $namespace := $namespaces }}
+---
+# Read-only: the pods and their usage in the platform and notebook namespaces.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: iceberg-monitor
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "idp.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: iceberg-monitor
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "idp.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: iceberg-monitor
+subjects:
+  - kind: ServiceAccount
+    name: monitor
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitor
+  labels:
+    {{- include "idp.component" (list . "monitor") | nindent 4 }}
+spec:
+  selector:
+    {{- include "idp.selector" "monitor" | nindent 4 }}
+  ports:
+    - {name: http, port: 3003}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitor
+  labels:
+    {{- include "idp.component" (list . "monitor") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "idp.selector" "monitor" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "idp.component" (list . "monitor") | nindent 8 }}
+    spec:
+      serviceAccountName: monitor
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      {{- include "idp.pullSecrets" . | nindent 6 }}
+      # The RustFS volume is ReadWriteOnce: the monitor runs on its node to measure the filesystem.
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "idp.selector" "rustfs" | nindent 18 }}
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: monitor
+          image: {{ include "idp.image" (list . "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [/app/.venv/bin/uvicorn, "server.entrypoints:monitor", --factory, --host, 0.0.0.0, --port, "3003"]
+          env:
+            {{- include "idp.secretEnv" (list . "PORTAL_PASSWORD") | nindent 12 }}
+            - {name: POLARIS_URL, value: "http://polaris:8181"}
+            - name: POLARIS_CLIENT_ID
+              value: {{ .Values.polarisClientId | quote }}
+            {{- include "idp.secretEnv" (list . "POLARIS_CLIENT_SECRET") | nindent 12 }}
+            # Read-only statistics of the catalog database (server/monitoring.py).
+            - name: PGHOST
+              value: {{ include "idp.pgHost" . | quote }}
+            - name: PGPORT
+              value: {{ include "idp.pgPort" . | quote }}
+            - name: PGDATABASE
+              value: {{ include "idp.pgDatabase" (list . "polaris") | quote }}
+            - name: PGUSER
+              value: {{ include "idp.pgUser" (list . "polaris") | quote }}
+            - name: PGSSLMODE
+              value: {{ include "idp.pgSslmode" . | quote }}
+            {{- include "idp.pgPasswordEnv" (list . "POSTGRES_PASSWORD" "polaris") | nindent 12 }}
+            {{- include "idp.rustfsAdminEnv" . | nindent 12 }}
+            - name: AWS_REGION
+              value: {{ .Values.awsRegion | quote }}
+            - {name: MONITOR_BACKEND, value: kubernetes}
+            - name: MONITOR_NAMESPACES
+              value: {{ join "," $namespaces | quote }}
+            - {name: MONITOR_USERS_URL, value: "http://users:3002"}
+          ports:
+            - {name: http, containerPort: 3003}
+          {{- include "idp.probes" (list "/health" "http" 20) | nindent 10 }}
+          resources:
+            requests: {cpu: 20m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          {{- include "idp.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: storage, mountPath: /storage, readOnly: true}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: storage
+          persistentVolumeClaim:
+            claimName: data-rustfs-0
+            readOnly: true
+{{- end }}

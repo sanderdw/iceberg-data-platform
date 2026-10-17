@@ -1,6 +1,6 @@
 # Iceberg Data Platform
 
-**An open lakehouse you actually own.** Apache Iceberg as the table format, with every other building block open source and replaceable. It runs on a single laptop with one command.
+**An open lakehouse you actually own.** Apache Iceberg as the table format, with every other building block open source and replaceable. It runs on a laptop with one command, or on a Kubernetes cluster with Helm.
 
 Getting started with Iceberg takes more than a table format. You need a catalog, object storage, identity, an engine and a place to work. Vendors make that part easy, and that is usually where lock-in starts. This platform shows the other route: Apache Polaris, Keycloak, RustFS, PostgreSQL, marimo and DuckDB, connected through open interfaces (Iceberg REST, S3, OIDC and MCP). You can replace one block without touching the others.
 
@@ -22,6 +22,8 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. Continue with the [installation guide](install.md) and the [first steps](first-steps.md).
 
+On a Kubernetes cluster, install the Helm chart instead: see [Install on Kubernetes](install-kubernetes.md).
+
 ## Use it as
 
 - **A reference architecture.** See how catalog, storage, identity and engines fit together with team ownership, data sharing and AI agents on one identity. Every choice and boundary is documented, so you can reuse what fits your own platform.
@@ -40,7 +42,7 @@ The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the ima
 - **[MCP servers](ai-agents.md):** AI agents such as Claude Code sign in through Keycloak to explore data and semantic models, manage databases and data shares, or administer the platform.
 - **[Extensions](extensions.md):** add Conversational BI, a chat over your semantic models, dbt pipelines that agents build and test on your tables, Ingestion (dlt) that loads APIs, databases and files into them, and OpenMetadata, which lists your data products in a data catalog. Each is released on its own.
 
-This is an **educational local development platform**. Read [the security model](security.md) before deploying it elsewhere.
+This is an **educational development platform**, not an audited production service. Read [the security model](security.md) before deploying it elsewhere.
 
 The [presentation](https://sanderdw.github.io/iceberg-data-platform/presentation/) walks through Apache Iceberg, the platform and a demo from raw data to answers.
 

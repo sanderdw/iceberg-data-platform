@@ -3,7 +3,7 @@
 This page lists what is still open after two reviews of the platform. Fixed findings are in the [changelog](changelog.md); the trust boundaries the platform is designed around are in the [security model](security.md).
 
 - **Architecture and security review of 0.9.2** (October 2026). A source-only review of the core, the four extensions, the installers, the Compose files, the workflows and the agent skills, in independent passes that each tried to refute the others' findings.
-- **[Cloudflare security-audit skill](https://github.com/cloudflare/security-audit-skill)** (October 2026, quick profile). A second review of the 0.9.3 code: hunters per area, an independent verifier per finding, and local checks in a sandbox without network or secrets.
+- **[Cloudflare security-audit skill](https://github.com/cloudflare/security-audit-skill)** (October 2026, quick profile). A second review of the code before the Kubernetes support (released as part of 0.9.9): hunters per area, an independent verifier per finding, and local checks in a sandbox without network or secrets.
 
 Both ran without a live Polaris, Keycloak or RustFS, so behaviour that depends on them is listed under [not verified](#not-verified). Neither is an independent audit. Nothing found is reachable without an account, and nothing reaches another team's data without a share, a membership or a team role.
 
@@ -13,14 +13,14 @@ Both ran without a live Polaris, Keycloak or RustFS, so behaviour that depends o
 
 The portals read a database's owning team and environment from its Polaris catalog properties. Polaris lets team Writers and Administrators, and pipelines that write as the team, edit those properties through its management API. A team member could therefore make a database look like another team's, move it between environments as far as extensions are concerned, or hide it from the portals.
 
-0.9.3 removes the consequences found so far: storage policies, database moves and the admin page no longer trust these properties. The root cause stays: keep the ownership record on an entity only the platform identity can write, and check it on every read. Until then, give the Writer role only to people you would trust as that team's Administrator.
+0.9.9 removes the consequences found so far: storage policies, database moves and the admin page no longer trust these properties. The root cause stays: keep the ownership record on an entity only the platform identity can write, and check it on every read. Until then, give the Writer role only to people you would trust as that team's Administrator.
 
 *Priority: high.*
 
 ### Code a team member wrote runs with the viewer's session
 
 - **Notebooks** are served on the user portal's own address. Output a notebook renders runs with the portal session of whoever opens it, so running a teammate's notebook lets their code do whatever you can do in the portal, such as creating a data share. Serve notebooks from a separate origin. *Priority: high.*
-- **The dbt docs site** runs scripts on the dbt viewer's address. Since 0.9.3 it serves only successful docs runs of a revision that was the head of `main`, so the risk is limited to code an Administrator merged. A separate origin, or a sandboxed page, removes it. *Priority: medium.*
+- **The dbt docs site** runs scripts on the dbt viewer's address. Since 0.9.9 it serves only successful docs runs of a revision that was the head of `main`, so the risk is limited to code an Administrator merged. A separate origin, or a sandboxed page, removes it. *Priority: medium.*
 
 ### Data and text from other teams are trusted too far
 
@@ -90,6 +90,7 @@ The Cloudflare audit did not reach these areas; a next review should start here.
 - How Ingestion turns values from a parent API response into requests for child resources.
 - Whether team roles can change a catalog's storage configuration, and how narrowly Polaris scopes the storage credentials it hands out.
 - How the dbt runner publishes semantic models and pipeline properties after a build.
+- Everything Kubernetes, which 0.9.9 added after both reviews: the Helm charts and their NetworkPolicies and RBAC, the notebook pods (`user_portal/runtime_kubernetes.py`, `server/kube.py`), the monitor's pod listing, the dbt and Ingestion Job backends (`launcher/kubernetes.py`, `launcher/kube.py`) and the run-ticket endpoints the runners call (`runner/remote.py`).
 
 ## Not verified
 

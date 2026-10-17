@@ -22,9 +22,11 @@ $env:ICEBERG_EXTENSIONS = 'dbt'
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-Each build runs in its own container, with no internet and a read-only file system, from the runner image the installer pulls. The extension's launcher starts these containers through the Docker socket; it accepts no image, flag or mount from a request. Rerunning the installer keeps the extension, its projects and their runs.
+Each build runs in its own container, with no internet and a read-only file system, from the runner image the installer pulls. The extension's launcher starts these containers through the Docker socket; it accepts no image, flag or mount from a request. On [Kubernetes](install-kubernetes.md#add-extensions) each build is a Job in the namespace `<namespace>-dbt-runs` instead, with the same limits. Rerunning the installer keeps the extension, its projects and their runs.
 
 A team administrator enables dbt once per environment, through an agent (`enable_environment`), under **Settings** in the viewer, or with `POST /api/v1/teams/{team}/environments/development`.
+
+On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 
 ## How it works
 
@@ -125,9 +127,9 @@ Not available on the platform: `show --inline`, `list`, `debug`, `deps` and `cle
 
 ## Limits
 
-- A run ends 15 minutes before its catalog token expires, so after 45 minutes by default. For longer runs, raise the platform's token lifetime in `.env`, for example `POLARIS_TOKEN_LIFETIME=7200` for runs up to 1h45, and restart the platform with `docker compose up -d --wait`. A revoked service account or data share then keeps its issued tokens up to that long.
+- A run ends 15 minutes before its catalog token expires, so after 45 minutes by default. For longer runs, raise the platform's token lifetime in `.env`, for example `POLARIS_TOKEN_LIFETIME=7200` for runs up to 1h45, and restart the platform with `docker compose up -d --wait`. On Kubernetes, set `polaris.tokenLifetime=7200` with `helm upgrade`. A revoked service account or data share then keeps its issued tokens up to that long.
 - Runs cannot read data shares the team received.
-- At most 4 runs run at once across all teams, and at most 2 of one team. A waiting build holds no slot.
+- At most 4 runs run at once across all teams, and at most 2 of one team (on Kubernetes the chart's `runs.maxConcurrent` and `runs.maxPerTeam`). A waiting build holds no slot.
 - The dbt docs site, linked from the viewer, loads DuckDB-WASM from cdn.jsdelivr.net in the browser.
 
 How it is built: [dbt internals](develop/dbt.md).

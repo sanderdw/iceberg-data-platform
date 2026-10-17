@@ -312,6 +312,10 @@ def test_user_link_identity_permissions_and_token_expiry(issuer):
         runtime.workspaces[notebook["id"]].upstream = "http://10.9.9.9:2718"
         assert client.get(token_path, headers={"Authorization": "Bearer hidden-runtime-token"}).status_code == 401
         runtime.workspaces[notebook["id"]].upstream = "http://notebook:2718"
+        # A forwarded request names its address itself; behind a trusted proxy it could claim the notebook's.
+        for header in ("X-Forwarded-For", "Forwarded"):
+            assert client.get(token_path, headers={"Authorization": "Bearer hidden-runtime-token",
+                                                   header: "notebook"}).status_code == 401
         state["sessions"][0].access_until = 0
         response = client.get(token_path, headers={"Authorization": "Bearer hidden-runtime-token"})
         assert response.status_code == 200

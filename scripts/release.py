@@ -43,19 +43,20 @@ ROOT_FILES = (
     "uv.lock",
     "zensical.toml",
 )
-SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", "contracts", ".github", ".agents")
+SOURCE_DIRS = ("server", "public", "user_portal", "scripts", "test", "docs", "contracts", "deploy", ".github", ".agents")
 # Agent skills ship in the installation bundle at the same paths.
 SKILLS_DIR = ".agents/skills"
 # Extensionless files accepted in source directories.
-PLAIN_NAMES = {"Dockerfile", "Caddyfile"}
+PLAIN_NAMES = {"Dockerfile", "Caddyfile", ".helmignore", "values.schema.json"}
 BINARY_SUFFIXES = {".png", ".ttf"}
-SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml"} | BINARY_SUFFIXES
+SUFFIXES = {".py", ".js", ".mjs", ".html", ".css", ".svg", ".txt", ".md", ".yaml", ".yml", ".tpl"} | BINARY_SUFFIXES
 IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv"}
 # Git-ignored personal notes; never scanned or released.
 LOCAL_DIRS = ("docs/local_only/",)
 # Tracked in git but not part of the core source release: the presentation is published by the
-# GitHub Pages workflow; extensions and their workflows are versioned and released on their own.
-TRACKED_UNRELEASED = ("presentation/", "extensions/", ".github/workflows/conversationalbi-", ".github/workflows/dbt-",
+# GitHub Pages workflow; extensions and their workflows are versioned and released on their own; dev/ holds
+# maintainer tooling such as the Kubernetes test cluster scripts.
+TRACKED_UNRELEASED = ("presentation/", "extensions/", "dev/", ".github/workflows/conversationalbi-", ".github/workflows/dbt-",
                       ".github/workflows/ingestion-", ".github/workflows/openmetadata-")
 
 
@@ -100,12 +101,16 @@ def check(root=ROOT):
         raise ValueError("Release versions differ between Python, npm and the npm lockfile")
     if locked_project.get("version") != project["version"]:
         raise ValueError("Release version differs from the project version in uv.lock")
+    chart = (root / "deploy/helm/iceberg-data-platform/Chart.yaml").read_text()
+    if not all(re.search(rf'^{key}: "?{re.escape(project["version"])}"?$', chart, re.MULTILINE)
+               for key in ("version", "appVersion")):
+        raise ValueError("The Helm chart version differs from the project version")
     for api_path in ("server/app.py", "user_portal/app.py"):
         if f'version="{project["version"]}"' not in (root / api_path).read_text():
             raise ValueError(f"The API version in {api_path} differs from the project version")
     if project.get("license") != "Apache-2.0" or package.get("license") != "Apache-2.0":
         raise ValueError("Expected Apache-2.0 project metadata")
-    found = local_secrets(root.glob(".env*"))
+    found = local_secrets([*root.glob(".env*"), *root.glob("*.env")])
     for path in files:
         relative = path.relative_to(root).as_posix()
         if path.suffix in BINARY_SUFFIXES:
@@ -115,7 +120,8 @@ def check(root=ROOT):
             raise ValueError(f"Local credential found in {relative}; value suppressed")
         if re.search(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", content):
             raise ValueError(f"Private key found in {relative}")
-        if re.search(r"/home/[a-zA-Z0-9_-]+/|192\.168\.\d{1,3}\.\d{1,3}", content):
+        # A network range such as the chart's private ranges is not a machine's address.
+        if re.search(r"/home/[a-zA-Z0-9_-]+/|192\.168\.\d{1,3}\.\d{1,3}(?![\d/])", content):
             raise ValueError(f"Machine-specific path or LAN address found in {relative}")
         if path.suffix == ".md":
             for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", content):

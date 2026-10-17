@@ -44,6 +44,16 @@ jobs:
           else
             uv run --no-project python -m scripts.release --tag "$GITHUB_REF_NAME" --build
           fi
+      - name: Package the Helm chart
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
+          PREVIEW: ${{ steps.version.outputs.preview }}
+        run: |
+          sh ../../dev/kubernetes/tools.sh "$RUNNER_TEMP/bin"
+          # A chart version is SemVer: a preview's chart is the coming version plus its image tag.
+          chart="$VERSION"; [ "$PREVIEW" != true ] || chart="$VERSION-$IMAGE_TAG"
+          "$RUNNER_TEMP/bin/helm" package deploy/helm/iceberg-dbt --version "$chart" --app-version "$IMAGE_TAG" -d dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dbt-source
@@ -123,6 +133,21 @@ jobs:
             docker buildx imagetools create --tag "ghcr.io/sanderdw/${image}:${IMAGE_TAG}" \
               "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-amd64" "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-arm64"
           done
+      - name: Publish the Helm chart
+        # Like the images, a new GHCR package starts private: make charts/iceberg-dbt public, then re-run.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail --silent --show-error --location https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz -o "$RUNNER_TEMP/helm.tar.gz"
+          echo '86584a54def73570558f66f5111cc53dfed56689637ae32c1201205d494f54fb  '"$RUNNER_TEMP/helm.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/helm.tar.gz" -C "$RUNNER_TEMP" linux-amd64/helm
+          helm="$RUNNER_TEMP/linux-amd64/helm"
+          echo "$GH_TOKEN" | "$helm" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          package=$(ls dist/iceberg-dbt-*.tgz)
+          "$helm" push "$package" oci://ghcr.io/sanderdw/charts
+          version=$(basename "$package" .tgz); version=${version#iceberg-dbt-}
+          HELM_REGISTRY_CONFIG=$(mktemp) "$helm" show chart oci://ghcr.io/sanderdw/charts/iceberg-dbt --version "$version" > /dev/null \
+            || { echo "ghcr.io/sanderdw/charts/iceberg-dbt is not public" >&2; exit 1; }
       - name: The images are public
         # The platform installer pulls them without signing in. A new GHCR package starts private:
         # make it public in the package settings, then re-run this job.
@@ -140,7 +165,7 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
         # Never "latest": releases/latest/download/install.sh must stay the platform's installer.
         run: |
-          gh release create "dbt-v${VERSION}" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --latest=false \
+          gh release create "dbt-v${VERSION}" dist/*.tar.gz dist/*.tgz --repo "$GITHUB_REPOSITORY" --latest=false \
             --title "dbt extension ${VERSION}" --notes "dbt extension ${VERSION} for the Iceberg Data Platform (Bridge contract 0.1). Images: ghcr.io/sanderdw/iceberg-dbt:${VERSION} and ghcr.io/sanderdw/iceberg-dbt-runner:${VERSION}."
       - name: Create the preview prerelease
         if: needs.validate.outputs.preview == 'true'
@@ -151,7 +176,7 @@ jobs:
           IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
           RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
         run: |
-          gh release create "$RELEASE_TAG" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+          gh release create "$RELEASE_TAG" dist/*.tar.gz dist/*.tgz --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --prerelease --latest=false --title "dbt extension preview ${IMAGE_TAG}" \
             --notes "dbt extension ${VERSION} built from commit ${GITHUB_SHA} on the ${BRANCH} branch (Bridge contract 0.1). Images: ghcr.io/sanderdw/iceberg-dbt:${IMAGE_TAG} and ghcr.io/sanderdw/iceberg-dbt-runner:${IMAGE_TAG}."
       - name: Prune older previews of this branch

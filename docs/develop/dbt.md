@@ -38,7 +38,7 @@ flowchart LR
     subgraph Dbt["dbt extension (Compose project iceberg-dbt)"]
       DP["dbt-portal MCP<br/>localhost:3004/mcp<br/>pipeline tools + viewer"]
         Git[("Git repos + run store")]
-        L["dbt-launcher<br/>only Docker socket"]
+        L["dbt-launcher<br/>only Docker socket,<br/>or Jobs on Kubernetes"]
         R["runner container<br/>dbt v2 + DuckDB<br/>no internet, read-only"]
     end
 
@@ -110,7 +110,7 @@ sequenceDiagram
 ## Runs
 
 - **Credentials.** Each run receives a Polaris token from the Bridge, `write` for `build`/`run`/`seed` and `read` for everything else. Storage uses Polaris-vended, table-scoped credentials. The extension never holds a platform secret beyond its own Keycloak client.
-- **Isolation.** A run is one container from the pinned runner image, started by the launcher (the only container with the Docker socket). The container has a read-only root, no capabilities and no internet. It sits on a private network with only the catalog and storage. Two builds of the same project and environment never overlap.
+- **Isolation.** A run is one container from the pinned runner image, started by the launcher (the only container with the Docker socket; on Kubernetes a Job in the runs namespace, see the note under the limits below). The container has a read-only root, no capabilities and no internet. It sits on a private network with only the catalog and storage. Two builds of the same project and environment never overlap.
 - **Capacity.** At most `MAX_CONCURRENT_RUNS` runs (default 4) run at once across all teams, and at most `MAX_RUNS_PER_TEAM` (default 2) of one team, so one team cannot take every slot. A waiting build holds no slot. Each run gets `RUN_MEMORY` (2g) and `RUN_CPUS` (2). Logs and files are kept for the newest `RUN_RETENTION` (30) finished runs per project and environment, plus the run the pipeline is drawn from and the newest docs run of a `main` head; older runs keep their status and results.
 - **Pipelines** are drawn from dbt v2's Parquet information schema (`--generate-info-schema`).
 
@@ -139,4 +139,4 @@ uv run pytest && uv run ruff check .
 uv run python -m scripts.api_contract    # after an API change; review contracts/dbt-api/v1/openapi.yaml
 ```
 
-A run ends 15 minutes before its catalog token expires; `RUN_TIMEOUT_SECONDS` can only lower that. All runs share the Docker host of the extension; see the [Kubernetes design](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/dbt/DECISIONS.md#run-jobs-on-kubernetes-proposed-for-dbt-020-2026-10-07) for running them elsewhere.
+A run ends 15 minutes before its catalog token expires; `RUN_TIMEOUT_SECONDS` can only lower that. With Compose, all runs share the Docker host of the extension. On Kubernetes (`LAUNCHER_BACKEND=kubernetes`, set by the chart) each run is a Job in the namespace `<platform namespace>-dbt-runs`, so capacity grows with the cluster's nodes; see the [design](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/dbt/DECISIONS.md#run-jobs-on-kubernetes-dbt-011-designed-2026-10-07-built-2026-10-17) and [Kubernetes](kubernetes.md).

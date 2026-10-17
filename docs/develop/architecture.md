@@ -10,10 +10,10 @@ flowchart LR
     end
     subgraph UserPortal[User portal · iceberg-workspaces]
         UserAPI[FastAPI user portal :3002<br/>UI and /mcp<br/>Keycloak client iceberg-users]
-        Docker[Trusted Docker daemon]
-        Notebook[Session marimo container]
+        Docker[Trusted Docker daemon<br/>or Kubernetes API]
+        Notebook[Session marimo container<br/>or pod]
     end
-    subgraph Extension[Extension, e.g. Conversational BI, dbt, Ingestion or OpenMetadata · own Compose project]
+    subgraph Extension[Extension, e.g. Conversational BI, dbt, Ingestion or OpenMetadata · own Compose project or Helm chart]
         ExtApp[Gateway: UI, API and /mcp<br/>Keycloak clients of the extension]
         Worker[Query worker]
     end
@@ -60,7 +60,7 @@ flowchart LR
 
 The two portals are separate applications with separate sign-ins. The **admin portal** accepts only Keycloak accounts with the `platform-admin` role and manages teams, users, databases and storage. The **user portal** accepts only Keycloak accounts linked to a platform user, and serves catalog browsing, shares and notebooks. Signing in with an account meant for the other portal fails: `platform-admin` is not a platform user, and a platform user is not an administrator.
 
-**Extensions** are a third kind of application, for platform users. Each one runs in its own Compose project and signs in through its own Keycloak clients, whose tokens Polaris refuses. It reaches the core only through the **Extension Bridge**, which runs in the platform project next to the admin portal. The user portal links to each registered extension. See the [Extension Bridge](extension-bridge.md).
+**Extensions** are a third kind of application, for platform users. Each one runs in its own Compose project, or with its own Helm chart, and signs in through its own Keycloak clients, whose tokens Polaris refuses. It reaches the core only through the **Extension Bridge**, which runs in the platform project next to the admin portal. The user portal links to each registered extension. See the [Extension Bridge](extension-bridge.md).
 
 The third party never signs in to a portal. A team administrator hands over the share credential, and the recipient reads only the shared tables, views and semantic models through Polaris and RustFS.
 
@@ -81,7 +81,7 @@ The third party never signs in to a portal. A team administrator hands over the 
 
 ## Extensions
 
-Extensions add functionality in their own Compose project and release cycle, and reach the core
+Extensions add functionality in their own Compose project (or Helm chart) and release cycle, and reach the core
 only through the Extension Bridge (`bridge` service, `/bridge/v1`), Iceberg REST and S3. See the
 [Extension Bridge](extension-bridge.md).
 
@@ -91,7 +91,7 @@ only through the Extension Bridge (`bridge` service, `/bridge/v1`), Iceberg REST
 - Each session and database runs in its own container on a private network with the portal, Polaris and RustFS. The container runs as a non-root user with a read-only root filesystem and resource limits, and it never receives the Docker socket or platform secrets.
 - Logging out, switching team or environment, or losing access stops that session's containers. Saved files persist.
 
-The user portal controls Docker and is therefore a trusted service. The same goes for the internal `monitor` collector, which feeds the admin portal's Infrastructure page, and for the launchers of the dbt and Ingestion extensions (`dbt-launcher`, `ing-launcher`), which start their isolated run containers. See the [security model](../security.md).
+The [Helm chart](kubernetes.md) runs the same services on Kubernetes, with notebooks and extension runs as pods in namespaces of their own instead of containers on the Docker host. With Compose, the user portal controls Docker and is therefore a trusted service. The same goes for the internal `monitor` collector, which feeds the admin portal's Infrastructure page, and for the launchers of the dbt and Ingestion extensions (`dbt-launcher`, `ing-launcher`), which start their isolated run containers. See the [security model](../security.md).
 
 ## Repository layout
 
@@ -103,9 +103,12 @@ The user portal controls Docker and is therefore a trusted service. The same goe
 | `user_portal/public/` | User interface |
 | `user_portal/notebook/` | Notebook image, connection helpers and example notebooks |
 | `scripts/` | Setup, integration checks and release tooling |
-| `pgadmin/` | Preconfigured pgAdmin connection |
+| `pgadmin/` | Preconfigured pgAdmin connection (Compose only) |
+| `deploy/helm/` | The platform's Helm chart; see [Kubernetes](kubernetes.md) |
+| `dev/kubernetes/` | Maintainer tooling for Kubernetes: kind and Scaleway test clusters, network checks; not released |
+| `.agents/skills/` | Agent skills that ship in the installation folder |
 | `test/` | Unit and authorization tests |
 | `docs/` | Documentation site, built with Zensical (`zensical.toml`): installer users at the top level, `docs/develop/` for building and internals |
 | `contracts/bridge/` | Extension Bridge contract: OpenAPI, table-property, network and handshake conventions |
-| `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi`, `extensions/dbt`, `extensions/ingestion` and `extensions/openmetadata` |
+| `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi`, `extensions/dbt`, `extensions/ingestion` and `extensions/openmetadata`; each but OpenMetadata has a chart in `deploy/helm/` |
 | `presentation/` | reveal.js deck, published under `/presentation/` of the documentation site and excluded from source releases |

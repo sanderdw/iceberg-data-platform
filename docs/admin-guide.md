@@ -1,6 +1,6 @@
 # Administration guide
 
-The administration portal at http://localhost:3000 manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role. For the service list, see the [first steps](first-steps.md#services); to start and stop the platform, see [installation](install.md#update-or-restart).
+The administration portal at http://localhost:3000 (on Kubernetes `https://admin.<domain>`) manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role. For the service list, see the [first steps](first-steps.md#services); to start and stop the platform, see [installation](install.md#update-or-restart).
 
 You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). The portal's **Getting started** page has instructions and examples for each, using this installation's address.
 
@@ -27,7 +27,7 @@ You can set up teams, databases and users in three ways: in the portal, through 
 | `writer` | Read & write | Also create and write namespaces, tables and views |
 | `admin` | Administrator | Also manage catalog access, databases and data shares |
 
-The portal's user management uses the `iceberg-provisioner` service account in the `iceberg` realm. For anything else, use the Keycloak console at http://localhost:8080/admin: sign in as `admin` and select the **iceberg** realm. You grant portal administration there by assigning the `iceberg-admin` client role `platform-admin`. **Revoke** refuses accounts that have this role.
+The portal's user management uses the `iceberg-provisioner` service account in the `iceberg` realm. For anything else, use the Keycloak console at http://localhost:8080/admin: sign in as `admin` and select the **iceberg** realm. On Kubernetes the console is not published; open it with `kubectl -n iceberg port-forward svc/keycloak 8080` and sign in with `KEYCLOAK_ADMIN_PASSWORD` from the Secret `iceberg-platform`. You grant portal administration there by assigning the `iceberg-admin` client role `platform-admin`. **Revoke** refuses accounts that have this role.
 
 Lists refresh every 30 seconds while visible. Navigation and filters are kept in the URL.
 
@@ -39,7 +39,7 @@ When an [extension](extensions.md) such as Conversational BI is registered, the 
 
 Team administrators create data shares in the [user portal](data-shares.md). The **Data shares** page lists every share with its database, team, objects, expiry and creator, and you can revoke any of them there. A database that has shares can't be moved until they are revoked.
 
-Recipients outside this machine need addresses they can reach: see [deploying beyond localhost](security.md#deploying-beyond-localhost). For a temporary class or demo, the [quick-share skill](agent-skills.md) sets this up through Cloudflare quick tunnels.
+Recipients outside this machine need addresses they can reach: see [deploying beyond localhost](security.md#deploying-beyond-localhost). A Kubernetes installation has them already. For a temporary class or demo, the [quick-share skill](agent-skills.md) sets this up through Cloudflare quick tunnels.
 
 ## Catalog browser
 
@@ -47,7 +47,7 @@ The **Catalog** page browses all Polaris catalogs, namespaces, tables, views and
 
 ## Semantic models
 
-Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic models beside the tables they describe. The platform enables the beta feature with `ENABLE_SEMANTIC_MODELS` in `compose.yaml`. Set `POLARIS_SEMANTIC_MODELS=false` in `.env` and restart Polaris to turn it off. Polaris then answers 406 and the user portal lists no models.
+Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic models beside the tables they describe. The platform enables the beta feature with `ENABLE_SEMANTIC_MODELS` in `compose.yaml`. Set `POLARIS_SEMANTIC_MODELS=false` in `.env` and restart Polaris to turn it off (on Kubernetes: `polaris.semanticModels=false`). Polaris then answers 406 and the user portal lists no models.
 
 - **Access:** the Reader role of a new database gets `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ`. Writers and administrators already have `CATALOG_MANAGE_CONTENT`, which covers creating, replacing and dropping models.
 - **Deleting a database** removes its semantic models first. Polaris refuses to drop a namespace that still holds one.
@@ -56,15 +56,15 @@ Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic mode
 
 ## Infrastructure
 
-The **Infrastructure** page shows service health, per-container resources, PostgreSQL statistics, bucket totals and RustFS disk space. The data comes from the internal `monitor` collector. The page refreshes every 15 seconds, and buckets are scanned every five minutes. Probe history is kept in memory only. Set `MONITOR_PROJECTS` to choose which Compose projects are measured. When you run the portal outside Compose, set `MONITOR_URL` to the collector's address.
+The **Infrastructure** page shows service health, per-container resources, PostgreSQL statistics, bucket totals and RustFS disk space. The data comes from the internal `monitor` collector. The page refreshes every 15 seconds, and buckets are scanned every five minutes. Probe history is kept in memory only. Set `MONITOR_PROJECTS` to choose which Compose projects are measured; on Kubernetes the collector lists the pods of the platform and notebooks namespaces, with CPU and memory from metrics-server. When you run the portal outside Compose, set `MONITOR_URL` to the collector's address.
 
 ## pgAdmin
 
-At http://localhost:5050, expand **Iceberg Platform → Polaris metadata** and enter `POSTGRES_PASSWORD` from `.env`. This is Polaris's metadata database. Make all changes through the portal so that grants and bucket policies stay in sync.
+With Compose only (the Kubernetes chart has no pgAdmin): at http://localhost:5050, expand **Iceberg Platform → Polaris metadata** and enter `POSTGRES_PASSWORD` from `.env`. This is Polaris's metadata database. Make all changes through the portal so that grants and bucket policies stay in sync.
 
 ## Connect an MCP client
 
-The portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp` for platform administrators. Register it in your coding agent. Replace `http://localhost:3000` with your `PORTAL_ORIGIN` if you changed it.
+The portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp` for platform administrators. Register it in your coding agent. Replace `http://localhost:3000` with your `PORTAL_ORIGIN` if you changed it, or on Kubernetes with `https://admin.<domain>`.
 
 | Agent | Register the server | Sign in |
 |---|---|---|
@@ -93,7 +93,7 @@ Any other MCP client needs:
 - OAuth with the public client ID `iceberg-mcp`, with no client secret and no dynamic client registration
 - the scopes `openid`, `profile` and `offline_access`
 
-Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. Sign in with your platform administrator account.
+Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env` (the chart's `mcpCallbackPort` on Kubernetes). Sign in with your platform administrator account.
 
 Every call requires the `platform-admin` role. The tools are the administration API's operations:
 
@@ -105,7 +105,7 @@ Every call requires the `platform-admin` role. The tools are the administration 
 
 ## API
 
-Interactive documentation is at http://localhost:3000/docs after sign-in. **Try it out** uses your session and adds the write headers. From a script, send the `iceberg_admin` cookie from your browser:
+Interactive documentation is at `/docs` on the portal (http://localhost:3000/docs with Compose) after sign-in. **Try it out** uses your session and adds the write headers. From a script, send the `iceberg_admin` cookie from your browser:
 
 ```bash
 curl -b 'iceberg_admin=<cookie>' -H 'Content-Type: application/json' -H 'X-Portal-Request: 1' \
@@ -140,6 +140,6 @@ Mutations require `Content-Type: application/json` and `X-Portal-Request: 1`, in
 
 - Run one portal replica; see [deployment boundaries](develop/keycloak.md#deployment-boundaries).
 - Creations and moves roll back when Polaris or RustFS fails. Database deletion can always be resumed.
-- Polaris 1.8 does not create the PostgreSQL schema when it bootstraps, so `compose.yaml` names it (`currentSchema=public` in the JDBC URL). A different schema must exist before the first start.
+- Polaris 1.8 does not create the PostgreSQL schema when it bootstraps, so `compose.yaml` and the Helm chart name it (`currentSchema=public` in the JDBC URL). A different schema must exist before the first start.
 - List calls return pages when a client sends a `pageToken` (`LIST_PAGINATION_ENABLED`). Without a token the answer is complete, as the Iceberg REST specification requires, so DuckDB and PyIceberg see every table.
-- To stop the platform or reset all data, see [stop and preserve data](install.md#stop-and-preserve-data).
+- To stop the platform or reset all data, see [stop and preserve data](install.md#stop-and-preserve-data), or on Kubernetes [uninstall](install-kubernetes.md#uninstall).

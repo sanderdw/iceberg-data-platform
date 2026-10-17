@@ -10,7 +10,7 @@ Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) e
 | dbt pipelines | `http://localhost:3004/mcp` | `ext-dbt-mcp` | Building, testing and scheduling pipelines. See [dbt pipelines](dbt.md) |
 | Ingestion (dlt) | `http://localhost:3008/mcp` | `ext-ingestion-mcp` | Loading APIs, databases and files. See [Ingestion (dlt)](ingestion.md) |
 
-The extension servers exist only when that [extension](extensions.md) is installed.
+The extension servers exist only when that [extension](extensions.md) is installed. On Kubernetes the addresses are `https://users.<domain>/mcp`, `https://admin.<domain>/mcp` and `https://<host>.<domain>/mcp` for each extension; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in). Use them in the commands below instead of the `localhost` ones.
 
 ## Connect the user portal
 
@@ -38,7 +38,7 @@ GitHub Copilot in VS Code, in `.vscode/mcp.json`:
 
 The [administration guide](admin-guide.md#connect-an-mcp-client) also covers GitHub Copilot CLI and other clients.
 
-Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again.
+Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again. On Kubernetes the port is the chart's `mcpCallbackPort`, applied by `helm upgrade`.
 
 ## What the agent can do
 

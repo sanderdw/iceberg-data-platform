@@ -1,0 +1,135 @@
+{{- $ns := include "ing.runsNamespace" . -}}
+{{- $platform := printf "%s.svc.%s" .Release.Namespace .Values.clusterDomain -}}
+# Runs execute pipeline code: their own namespace, held to the restricted Pod Security standard.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    {{- include "ing.labels" . | nindent 4 }}
+    # Platform services refuse connections from namespaces with this label (contracts/bridge/v1/network.md).
+    io.iceberg-platform.isolated: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+{{- range $name := list "polaris-control-plane" "rustfs" "ing-launcher" }}
+---
+# The Bridge aliases (contracts/bridge/v1/network.md) and the launcher, under their Docker names.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ing.labels" $ | nindent 4 }}
+spec:
+  type: ExternalName
+  externalName: {{ $name }}.{{ $platform }}
+{{- end }}
+---
+# The launcher's rights: Jobs and their Secrets in the runs namespace, nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: iceberg-ing-launcher
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ing.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, create, delete, deletecollection]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, patch, delete, deletecollection]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: iceberg-ing-launcher
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ing.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: iceberg-ing-launcher
+subjects:
+  - kind: ServiceAccount
+    name: ing-launcher
+    namespace: {{ .Release.Namespace }}
+{{- with .Values.imagePullSecrets }}
+{{- range . }}
+{{- $secret := lookup "v1" "Secret" $.Release.Namespace .name }}
+{{- if $secret }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ing.labels" $ | nindent 4 }}
+type: {{ $secret.type }}
+data:
+  {{- toYaml $secret.data | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+---
+# The two Docker networks of a run, as a policy: no way in; out to the catalog, storage, the
+# launcher's job endpoints and the pipeline's source on the internet (private ranges only when
+# runs.allowPrivateSources is on). The runner's guard refuses private source addresses as well.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runs
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ing.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- range $component, $port := dict "polaris" 8181 "rustfs" 9000 }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: iceberg-data-platform
+              app.kubernetes.io/component: {{ $component }}
+      ports:
+        - {port: {{ $port }}, protocol: TCP}
+    {{- end }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "ing.selector" . | nindent 14 }}
+      ports:
+        - {port: 3018, protocol: TCP}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            {{- if not .Values.runs.allowPrivateSources }}
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16]
+            {{- end }}
+{{- end }}

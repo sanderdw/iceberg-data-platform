@@ -21,3 +21,8 @@ The extension must never commit it.
 Everything else (catalog, storage, environments) comes from `GET /bridge/v1`, so it is never
 duplicated. Registering again keeps the secret; `--remove-extension <id>` disables the extension's
 Keycloak clients on the next platform start.
+
+On Kubernetes the core chart writes the same keys to the Secret `iceberg-bridge-<id>` in the
+platform's namespace, for each extension in its `extensions` value; `PLATFORM_NETWORK` is the
+namespace. The extension's chart reads that Secret. Removing the extension from `extensions`
+disables its Keycloak clients on the next upgrade.

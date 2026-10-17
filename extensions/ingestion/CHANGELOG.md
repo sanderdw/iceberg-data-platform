@@ -1,7 +1,11 @@
 # Changelog
 
-## 0.1.1 - 2026-10-16
+## 0.1.1 - 2026-10-17
 
+- **Runs on Kubernetes.** The chart `deploy/helm/iceberg-ingestion` installs Ingestion next to the
+  platform's chart. Each run is a Kubernetes Job in a namespace of its own that reaches public sources
+  only (`runs.allowPrivateSources` for sources in your own network); the runner fetches its job and
+  returns its state through the launcher (`LAUNCHER_BACKEND=kubernetes`). The Compose installation is unchanged.
 - Secrets are masked in run logs and errors also when URL-encoded or escaped, Basic credentials are
   masked, and the query string of a failed request's URL is hidden, since an API key can travel there
   under any name.

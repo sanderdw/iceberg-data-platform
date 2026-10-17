@@ -1,0 +1,120 @@
+{{- define "idp.polarisEnv" -}}
+- {name: POLARIS_PERSISTENCE_TYPE, value: relational-jdbc}
+- {name: POLARIS_PERSISTENCE_RELATIONAL_JDBC_DATABASE_TYPE, value: postgresql}
+- name: QUARKUS_DATASOURCE_JDBC_URL
+  value: "jdbc:postgresql://{{ include "idp.pgHost" . }}:{{ include "idp.pgPort" . }}/{{ include "idp.pgDatabase" (list . "polaris") }}?currentSchema=public&sslmode={{ include "idp.pgSslmode" . }}"
+- name: QUARKUS_DATASOURCE_USERNAME
+  value: {{ include "idp.pgUser" (list . "polaris") | quote }}
+{{ include "idp.pgPasswordEnv" (list . "QUARKUS_DATASOURCE_PASSWORD" "polaris") }}
+- {name: POLARIS_REALM_CONTEXT_REALMS, value: POLARIS}
+- {name: QUARKUS_OTEL_SDK_DISABLED, value: "true"}
+{{- end -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: polaris
+  labels:
+    {{- include "idp.component" (list . "polaris") | nindent 4 }}
+spec:
+  selector:
+    {{- include "idp.selector" "polaris" | nindent 4 }}
+  ports:
+    - {name: http, port: 8181}
+    - {name: management, port: 8182}
+---
+# The catalog's name in the Extension Bridge contract (contracts/bridge/v1/network.md). Both Services
+# select the Polaris pods by label, also when the official Apache Polaris chart runs them.
+apiVersion: v1
+kind: Service
+metadata:
+  name: polaris-control-plane
+  labels:
+    {{- include "idp.component" (list . "polaris") | nindent 4 }}
+spec:
+  selector:
+    {{- include "idp.selector" "polaris" | nindent 4 }}
+  ports:
+    - {name: http, port: 8181}
+{{- if not .Values.polaris.external.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: polaris
+  labels:
+    {{- include "idp.component" (list . "polaris") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "idp.selector" "polaris" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "idp.component" (list . "polaris") | nindent 8 }}
+        io.iceberg-platform.role: catalog
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "idp.pullSecrets" . | nindent 6 }}
+      initContainers:
+        # Creates the realm and root credentials once; later runs find them and change nothing.
+        - name: bootstrap
+          image: {{ .Values.images.polarisAdminTool }}
+          # Java directly: the image's run-java.sh logs its whole command line, the credential included.
+          command: [java, -XX:MaxRAMPercentage=80.0, -jar, /deployments/polaris-admin-tool.jar]
+          args: [bootstrap, --realm=POLARIS, "--credential=POLARIS,$(POLARIS_CLIENT_ID),$(POLARIS_CLIENT_SECRET)"]
+          env:
+            {{- include "idp.polarisEnv" . | nindent 12 }}
+            - name: POLARIS_CLIENT_ID
+              value: {{ .Values.polarisClientId | quote }}
+            {{- include "idp.secretEnv" (list . "POLARIS_CLIENT_SECRET") | nindent 12 }}
+      containers:
+        - name: polaris
+          image: {{ .Values.images.polaris }}
+          env:
+            {{- include "idp.polarisEnv" . | nindent 12 }}
+            - name: AWS_REGION
+              value: {{ .Values.awsRegion | quote }}
+            - name: AWS_ACCESS_KEY_ID
+              value: {{ .Values.rustfsAccessKey | quote }}
+            {{- include "idp.secretEnv" (list . "AWS_SECRET_ACCESS_KEY" "RUSTFS_SECRET_KEY") | nindent 12 }}
+            - {name: POLARIS_AUTHENTICATION_TYPE, value: mixed}
+            - name: polaris.features."ENABLE_SEMANTIC_MODELS"
+              value: {{ .Values.polaris.semanticModels | quote }}
+            - name: polaris.authentication.token-broker.max-token-generation
+              value: PT{{ .Values.polaris.tokenLifetime }}S
+            - name: polaris.features."STORAGE_CREDENTIAL_DURATION_SECONDS"
+              value: {{ .Values.polaris.tokenLifetime | quote }}
+            - name: polaris.features."LIST_PAGINATION_ENABLED"
+              value: "true"
+            - {name: QUARKUS_OIDC_TENANT_ENABLED, value: "true"}
+            - {name: QUARKUS_OIDC_AUTH_SERVER_URL, value: "http://keycloak:8080/realms/iceberg"}
+            - {name: QUARKUS_OIDC_CLIENT_ID, value: polaris}
+            - name: QUARKUS_OIDC_TOKEN_ISSUER
+              value: {{ include "idp.issuer" . | quote }}
+            - {name: QUARKUS_OIDC_TOKEN_AUDIENCE, value: polaris}
+            - {name: QUARKUS_OIDC_JWKS_PATH, value: "http://keycloak:8080/realms/iceberg/protocol/openid-connect/certs"}
+            - {name: QUARKUS_OIDC_DISCOVERY_ENABLED, value: "false"}
+            - {name: QUARKUS_OIDC_ROLES_ROLE_CLAIM_PATH, value: polaris/roles}
+            - {name: POLARIS_OIDC_PRINCIPAL_MAPPER_ID_CLAIM_PATH, value: polaris/principal_id}
+            - {name: POLARIS_OIDC_PRINCIPAL_MAPPER_NAME_CLAIM_PATH, value: polaris/principal_name}
+          ports:
+            - {name: http, containerPort: 8181}
+            - {name: management, containerPort: 8182}
+          readinessProbe:
+            httpGet: {path: /q/health/ready, port: management}
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: {path: /q/health/live, port: management}
+            periodSeconds: 20
+            failureThreshold: 6
+            initialDelaySeconds: 30
+          resources:
+            {{- toYaml .Values.polaris.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+{{- end }}

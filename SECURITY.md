@@ -1,6 +1,6 @@
 # Security policy
 
-This project is a local development platform. It has not had an independent security audit. Only the latest release receives fixes.
+This project is an educational development platform, for a laptop with Compose or a Kubernetes cluster with Helm. It has not had an independent security audit. Only the latest release receives fixes.
 
 ## Reporting a vulnerability
 

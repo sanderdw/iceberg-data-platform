@@ -20,6 +20,7 @@ Five principles behind every choice. Check a change against all five.
 - [Resource model](resource-model.md): how users, teams, roles, databases and shares are stored in Polaris.
 - [Keycloak](keycloak.md): realm, clients, configuration and deployment boundaries.
 - [Form validation](form-validation.md): the rules both portals and the API enforce.
+- [Kubernetes](kubernetes.md): the Helm charts, the Kubernetes backends and testing on kind.
 - [Extension Bridge](extension-bridge.md): the contract between the core and its extensions.
 - Extension internals: [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md) and [OpenMetadata](openmetadata.md).
 - [Publishing a release](releasing.md).

@@ -1,0 +1,29 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := include "ing.host" . }}
+{{- if not $host }}{{ fail "Register ingestion in the platform chart first (extensions.ingestion), or set ingress.host" }}{{ end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: iceberg-ingestion
+  labels:
+    {{- include "ing.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.tls.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ . }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  tls:
+    - secretName: {{ .Values.tls.secretName }}
+      hosts: [{{ $host }}]
+  rules:
+    - host: {{ $host }}
+      http:
+        paths:
+          - {path: /, pathType: Prefix, backend: {service: {name: ing-gateway, port: {number: 3008}}}}
+{{- end }}

@@ -1,0 +1,3 @@
+Conversational BI {{ .Chart.AppVersion }} is starting in namespace {{ .Release.Namespace }}.
+
+  Chat  https://{{ include "cbi.host" . }}

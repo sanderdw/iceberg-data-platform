@@ -1,4 +1,4 @@
-"""Internal, cached monitoring service. Docker access never reaches the portal.
+"""Internal, cached monitoring service. Docker or Kubernetes API access never reaches the portal.
 
 Each source has its own polling loop; a failed source preserves its last successful
 sample with an explicit unavailable status. No exception bodies or credentials are
@@ -11,6 +11,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import shutil
 import time
 from collections import deque
@@ -23,6 +24,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from psycopg.rows import dict_row
 
+from .kube import Kube
 from .polaris import PolarisProvider
 from .storage import RustFSStorage
 
@@ -48,6 +50,47 @@ def container_usage(stats):
         "memoryBytes": max(0, memory["usage"] - inactive) if "usage" in memory else None,
         "memoryLimitBytes": memory.get("limit"),
     }
+
+
+UNITS = {"n": 1e-9, "u": 1e-6, "m": 1e-3, "": 1, "k": 1e3, "M": 1e6, "G": 1e9, "T": 1e12,
+         "Ki": 2**10, "Mi": 2**20, "Gi": 2**30, "Ti": 2**40}
+
+
+def quantity(value):
+    """A Kubernetes quantity such as 250m, 12345678n or 512Mi as a number."""
+    if value is None:
+        return None
+    number, unit = re.fullmatch(r"([0-9.]+)([a-zA-Z]*)", value).groups()
+    return float(number) * UNITS[unit]
+
+
+def pod_rows(pods, metrics):
+    """Container rows like Docker's from pods and metrics.k8s.io samples (CPU in percent of one core)."""
+    usage = {(m["metadata"]["namespace"], m["metadata"]["name"], c["name"]): c["usage"]
+             for m in metrics for c in m.get("containers", [])}
+    states = {"Running": "running", "Pending": "created", "Succeeded": "exited", "Failed": "exited"}
+    rows = []
+    for pod in pods:
+        meta, spec, status = pod["metadata"], pod["spec"], pod.get("status", {})
+        labels = meta.get("labels", {})
+        statuses = {c["name"]: c for c in status.get("containerStatuses", [])}
+        for container in spec["containers"]:
+            current = statuses.get(container["name"], {})
+            sample = usage.get((meta["namespace"], meta["name"], container["name"]), {})
+            cpu, memory = quantity(sample.get("cpu")), quantity(sample.get("memory"))
+            limit = container.get("resources", {}).get("limits", {}).get("memory")
+            rows.append({
+                "name": meta["name"] if len(spec["containers"]) == 1 else f"{meta['name']}/{container['name']}",
+                "state": "running" if "running" in current.get("state", {}) else states.get(status.get("phase"), "exited"),
+                "service": labels.get("app.kubernetes.io/component", "notebook"),
+                "restarts": current.get("restartCount", 0),
+                "startedAt": current.get("state", {}).get("running", {}).get("startedAt") or status.get("startTime"),
+                "cpuPercent": round(cpu * 100, 2) if cpu is not None else None,
+                "memoryBytes": int(memory) if memory is not None else None,
+                "memoryLimitBytes": int(quantity(limit)) if limit else None,
+                "status": "online",
+            })
+    return rows
 
 
 def bucket_usage(storage, bucket, deadline, max_pages=1000):
@@ -77,6 +120,8 @@ class Monitor:
         self.history = {}
         self.previous_transactions = None
         self.http = httpx.Client(timeout=4, trust_env=False)
+        # On Kubernetes the monitor lists pods (MONITOR_NAMESPACES) instead of Compose containers.
+        self.kube = Kube() if env.get("MONITOR_BACKEND") == "kubernetes" else None
         self.docker = httpx.Client(
             transport=httpx.HTTPTransport(uds=env.get("MONITOR_DOCKER_SOCKET", "/var/run/docker.sock")),
             base_url="http://docker",
@@ -87,6 +132,8 @@ class Monitor:
     def close(self):
         self.http.close()
         self.docker.close()
+        if self.kube:
+            self.kube.close()
         self.provider.close()
 
     async def poll(self, key, collect, interval):
@@ -161,6 +208,17 @@ class Monitor:
         return response.json()
 
     def containers(self):
+        if self.kube:
+            pods, metrics = [], []
+            for namespace in filter(None, (n.strip() for n in self.env.get("MONITOR_NAMESPACES", "").split(","))):
+                pods += self.kube.list(f"/api/v1/namespaces/{namespace}/pods")
+                try:
+                    metrics += self.kube.list(f"/apis/metrics.k8s.io/v1beta1/namespaces/{namespace}/pods")
+                except Exception as exc:  # noqa: BLE001 -- without metrics-server pods are listed without usage
+                    logging.getLogger(__name__).info("No pod metrics: %s", type(exc).__name__)
+            # Completed hook and bootstrap jobs are not part of the running stack.
+            pods = [p for p in pods if p.get("status", {}).get("phase") != "Succeeded"]
+            return sorted(pod_rows(pods, metrics), key=lambda row: row["name"])
         projects = self.env.get("MONITOR_PROJECTS", "iceberg-platform,iceberg-workspaces").split(",")
         # Extensions label their containers (contracts/bridge/v1/network.md) and need no configuration here.
         filters = [{"label": [f"com.docker.compose.project={project.strip()}"]} for project in projects]

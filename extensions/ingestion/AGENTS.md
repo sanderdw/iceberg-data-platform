@@ -18,5 +18,11 @@
 - The launcher is the only component with the Docker socket: keep its inputs fixed (image, flags,
   mounts, networks). Runner code (`runner/`) runs inside the isolated image; its address guard
   refuses private addresses unless the platform administrator allows them.
+- On Kubernetes (`LAUNCHER_BACKEND=kubernetes`, `launcher/kubernetes.py`) the launcher creates one Job
+  per run in the runs namespace; it is the only container with a service account token. The runner
+  (`runner/remote.py`) fetches its job and returns `out/` through the launcher's two job endpoints with
+  a ticket valid for one run, and lifts the address guard only for that upload. `launcher/kube.py` is a
+  copy of the platform's `server/kube.py`. Keep `deploy/helm/iceberg-ingestion/Chart.yaml` at the
+  extension's version. `scripts/k8s_smoke.py` checks runs on a cluster.
 - `scripts/e2e_smoke.py` checks a live installation through MCP. `DECISIONS.md` records why dlt is
   used the way it is.

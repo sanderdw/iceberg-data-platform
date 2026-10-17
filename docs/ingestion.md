@@ -24,7 +24,9 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 A team administrator enables it once per environment with **Enable** on the page, creates pipelines and enters their secrets, such as an API key or a database password. Secrets are write-only: no page, API or MCP response returns them. Writers start runs; a schedule starts them too.
 
-`ingestion/.env` in the installation directory holds `ING_SECRET_KEY`, which decrypts the pipelines' secrets. Rerunning the installer keeps it, with the extension, its pipelines and their runs.
+`ingestion/.env` in the installation directory holds `ING_SECRET_KEY`, which decrypts the pipelines' secrets. Rerunning the installer keeps it, with the extension, its pipelines and their runs. On Kubernetes it is in the Secret `iceberg-ingestion`; back it up, because the stored secrets can't be read without it.
+
+On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 
 ## Pipelines
 
@@ -60,9 +62,9 @@ The `ingestion` [agent skill](agent-skills.md) in the installation folder guides
 
 ## Isolation and limits
 
-- Each run is its own container from the pinned runner image, with a read-only file system, that writes as the team's service account. It reaches the catalog, storage and the internet, but not the platform's other services.
-- Sources on loopback, private or link-local addresses (including cloud metadata) are refused when a pipeline is saved, and again for every address a run resolves, redirects included. For a demo against a database on your own computer, set `ING_ALLOW_PRIVATE_SOURCES=true` in `ingestion/.env` and restart the extension with `docker compose -f ingestion/compose.yaml up -d --wait`; the run then reaches your computer as `host.docker.internal`.
-- A run ends 15 minutes before its catalog token expires: 45 minutes with the platform's default `POLARIS_TOKEN_LIFETIME` of one hour. Raise that in `.env`, for example to 7200, for longer loads; see [configuration](configuration.md).
+- Each run is its own container from the pinned runner image (on Kubernetes a Job in `<namespace>-ingestion-runs`), with a read-only file system, that writes as the team's service account. It reaches the catalog, storage and the internet, but not the platform's other services.
+- Sources on loopback, private or link-local addresses (including cloud metadata) are refused when a pipeline is saved, and again for every address a run resolves, redirects included. For a demo against a database on your own computer, set `ING_ALLOW_PRIVATE_SOURCES=true` in `ingestion/.env` and restart the extension with `docker compose -f ingestion/compose.yaml up -d --wait`; the run then reaches your computer as `host.docker.internal`. On Kubernetes, install the chart with `runs.allowPrivateSources=true` instead; a source in your own network then keeps its own address.
+- A run ends 15 minutes before its catalog token expires: 45 minutes with the platform's default `POLARIS_TOKEN_LIFETIME` of one hour. Raise that in `.env`, for example to 7200, for longer loads (on Kubernetes `polaris.tokenLifetime`); see [configuration](configuration.md).
 - At most 4 runs at once, 2 per team, and one per pipeline. A schedule skips its time while the pipeline is still running.
 
 Ingestion is batch only, with the three declarative sources. Custom Python pipelines, dlt's verified sources and change data capture are not included.

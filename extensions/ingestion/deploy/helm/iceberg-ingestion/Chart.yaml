@@ -1,0 +1,13 @@
+apiVersion: v2
+name: iceberg-ingestion
+description: Ingestion (dlt) for the Iceberg Data Platform - the ingestion gateway and its launcher, with runs as Kubernetes Jobs.
+type: application
+version: 0.1.1
+appVersion: "0.1.1"
+kubeVersion: ">=1.32.0-0"
+home: https://sanderdw.github.io/iceberg-data-platform/ingestion/
+sources:
+  - https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/ingestion
+annotations:
+  artifacthub.io/license: Apache-2.0
+keywords: [iceberg, dlt, ingestion, polaris]

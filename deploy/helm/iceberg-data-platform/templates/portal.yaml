@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: portal
+  labels:
+    {{- include "idp.component" (list . "portal") | nindent 4 }}
+spec:
+  selector:
+    {{- include "idp.selector" "portal" | nindent 4 }}
+  ports:
+    - {name: http, port: 3000}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal
+  labels:
+    {{- include "idp.component" (list . "portal") | nindent 4 }}
+spec:
+  replicas: 1
+  # Sessions live in memory: exactly one portal process at a time.
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "idp.selector" "portal" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "idp.component" (list . "portal") | nindent 8 }}
+      annotations:
+        checksum/extensions: {{ toJson .Values.extensions | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "idp.pullSecrets" . | nindent 6 }}
+      containers:
+        - name: portal
+          image: {{ include "idp.image" (list . "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [/app/.venv/bin/python, -m, server]
+          env:
+            {{- include "idp.platformEnv" . | nindent 12 }}
+            - {name: OIDC_CLIENT_ID, value: iceberg-admin}
+            {{- include "idp.secretEnv" (list . "OIDC_CLIENT_SECRET" "OIDC_PORTAL_SECRET") | nindent 12 }}
+            {{- include "idp.secretEnv" (list . "OIDC_MANAGEMENT_SECRET") | nindent 12 }}
+            - name: OIDC_ORIGIN
+              value: {{ include "idp.origin" (list . "admin") | quote }}
+            - {name: HOST, value: 0.0.0.0}
+            - {name: PORT, value: "3000"}
+            - name: FORWARDED_ALLOW_IPS
+              value: {{ .Values.forwardedAllowIps | quote }}
+            {{- if .Values.monitor.enabled }}
+            - {name: MONITOR_URL, value: "http://monitor:3003"}
+            {{- end }}
+            {{- include "idp.secretEnv" (list . "PORTAL_PASSWORD") | nindent 12 }}
+            - {name: PROVIDER, value: polaris}
+            - {name: POLARIS_URL, value: "http://polaris:8181"}
+            {{- include "idp.rustfsAdminEnv" . | nindent 12 }}
+            - {name: HOME, value: /tmp}
+          ports:
+            - {name: http, containerPort: 3000}
+          {{- include "idp.probes" (list "/api/health" "http" 20) | nindent 10 }}
+          resources:
+            {{- toYaml .Values.portal.resources | nindent 12 }}
+          {{- include "idp.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}

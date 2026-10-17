@@ -20,9 +20,12 @@ claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 ice
 claude mcp add --transport http --client-id ext-dbt-mcp --callback-port 3010 iceberg-dbt http://localhost:3004/mcp
 ```
 
-Other agents use the same addresses and client ids (`AGENTS.md` in the installation folder shows
-the recipes). If `http://localhost:3004` does not answer, the dbt extension is not installed: stop
-and tell the user to run the installer again with `ICEBERG_EXTENSIONS=dbt`.
+On a Kubernetes installation the addresses are `https://dbt.<domain>/mcp` and
+`https://users.<domain>/mcp` instead (the viewer at `https://dbt.<domain>`); ask the user for the
+domain. Other agents use the same addresses and client ids (`AGENTS.md` in the installation folder
+shows the recipes). If the dbt address does not answer, the extension is not installed: stop and
+tell the user to run the installer again with `ICEBERG_EXTENSIONS=dbt`, or on Kubernetes to register
+it and install its chart (`kubernetes-install` skill, or the documentation's "Add extensions").
 
 ## Workflow
 

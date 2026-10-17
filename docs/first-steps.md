@@ -1,5 +1,7 @@
 # First steps
 
+The addresses below are those of the [Compose installation](install.md). On Kubernetes, use `https://admin.<domain>` and `https://users.<domain>`, and read the one-time password from the platform Secret; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in).
+
 1. Open the administration portal at http://localhost:3000, sign in as `platform-admin` and change the temporary password. The installer prints it, and it is `PLATFORM_ADMIN_PASSWORD` in `.env`; entering the same one again keeps `.env` as a reference.
 2. Create a team, a database for that team, and a user in that team with the **Read & write** role. The [administration guide](admin-guide.md) explains each step.
 3. Sign out of the administration portal, because signing in to the user portal can fail while you are still signed in there. Open the user portal at http://localhost:3002, sign in as that user with the one-time password, and change it.
@@ -23,7 +25,7 @@
 | Ingestion (dlt) | http://localhost:3008 | Optional [extension](ingestion.md); Keycloak account, MCP through the `ext-ingestion-mcp` client |
 | OpenMetadata | http://localhost:3011 | Optional [extension](openmetadata.md); opens your OpenMetadata server, sync status at `/api/status` |
 
-Credentials are in `.env` in the installation directory. All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [deploying beyond localhost](security.md#deploying-beyond-localhost) or the [quick-share skill](agent-skills.md).
+Credentials are in `.env` in the installation directory. All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [deploying beyond localhost](security.md#deploying-beyond-localhost) or the [quick-share skill](agent-skills.md). On Kubernetes every portal has its own HTTPS host, the credentials are in the Secret `iceberg-platform`, and pgAdmin and the RustFS console don't exist; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in).
 
 ## Next
 

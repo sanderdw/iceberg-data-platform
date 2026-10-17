@@ -1,0 +1,45 @@
+# The Ingestion extension, installed in the platform's namespace after the platform chart registered it:
+#   helm upgrade iceberg <platform chart> --reuse-values --set extensions.ingestion.host=ingest
+#   helm install ingestion <this chart> -n <platform namespace>
+image:
+  registry: ghcr.io/sanderdw
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+images:
+  portal: iceberg-ingestion
+  runner: iceberg-ingestion-runner
+
+# The handshake Secret the platform chart writes for this extension.
+bridgeSecret: iceberg-bridge-ingestion
+clusterDomain: cluster.local
+
+ingress:
+  enabled: true
+  # The platform's ingress settings; the host comes from EXTENSION_ORIGIN in the handshake.
+  host: ""
+  className: ""
+  annotations: {}
+tls:
+  clusterIssuer: ""
+  secretName: iceberg-ingestion-tls
+
+runs:
+  maxConcurrent: 4
+  maxPerTeam: 2
+  retention: 30
+  timeoutSeconds: 43200
+  memory: 2g
+  cpus: "2"
+  workSize: 4Gi
+  # Sources on private addresses (a database inside your network). Off: runs reach only public sources.
+  allowPrivateSources: false
+
+storage:
+  state: 5Gi
+  artifacts: 10Gi
+storageClass: ""
+
+networkPolicy:
+  enabled: true

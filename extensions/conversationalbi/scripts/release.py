@@ -17,8 +17,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SUFFIXES = {".py", ".js", ".mjs", ".ts", ".tsx", ".css", ".html", ".svg", ".md", ".yml", ".yaml", ".toml", ".lock",
-            ".txt", ".ttf", ".example", ".json", ".parquet"}
-PLAIN = {"Dockerfile", ".gitignore", ".dockerignore", ".python-version", "LICENSE", "NOTICE"}
+            ".txt", ".ttf", ".example", ".json", ".parquet", ".tpl"}
+PLAIN = {".helmignore", "Dockerfile", ".gitignore", ".dockerignore", ".python-version", "LICENSE", "NOTICE"}
 BINARY = {".ttf", ".parquet"}
 SECRET = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|BRIDGE_CLIENT_SECRET=[0-9a-f]{16,}|"
                     r"(?:GOOGLE|GEMINI|ANTHROPIC|OPENAI)_API_KEY=[A-Za-z0-9_.-]{16,}|AIza[0-9A-Za-z_-]{30,}|"
@@ -40,6 +40,10 @@ def check(root=ROOT, tag=None):
             raise SystemExit(f"{package} version differs from pyproject.toml")
     if f"## {version}" not in (root / "CHANGELOG.md").read_text():
         raise SystemExit(f"CHANGELOG.md has no section for {version}")
+    chart = (root / "deploy/helm/iceberg-conversationalbi/Chart.yaml").read_text()
+    if not all(re.search(rf'^{key}: "?{re.escape(version)}"?$', chart, re.MULTILINE)
+               for key in ("version", "appVersion")):
+        raise SystemExit("deploy/helm/iceberg-conversationalbi/Chart.yaml has another version")
     for compose in ("compose.yaml",):
         text = (root / compose).read_text()
         images = (f"iceberg-conversationalbi:{version}", f"iceberg-conversationalbi-runtime:{version}")

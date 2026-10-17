@@ -1,0 +1,43 @@
+# The dbt extension, installed in the platform's namespace after the platform chart registered it:
+#   helm upgrade iceberg <platform chart> --reuse-values --set extensions.dbt.host=dbt
+#   helm install dbt <this chart> -n <platform namespace>
+image:
+  registry: ghcr.io/sanderdw
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+images:
+  portal: iceberg-dbt
+  runner: iceberg-dbt-runner
+
+# The handshake Secret the platform chart writes for this extension.
+bridgeSecret: iceberg-bridge-dbt
+clusterDomain: cluster.local
+
+ingress:
+  enabled: true
+  # The platform's ingress settings; the host comes from EXTENSION_ORIGIN in the handshake.
+  host: ""
+  className: ""
+  annotations: {}
+tls:
+  clusterIssuer: ""
+  secretName: iceberg-dbt-tls
+
+runs:
+  maxConcurrent: 4
+  maxPerTeam: 2
+  retention: 30
+  timeoutSeconds: 43200
+  memory: 2g
+  cpus: "2"
+  workSize: 4Gi
+
+storage:
+  state: 5Gi
+  artifacts: 10Gi
+storageClass: ""
+
+networkPolicy:
+  enabled: true
