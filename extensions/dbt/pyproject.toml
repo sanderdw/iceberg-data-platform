@@ -22,7 +22,7 @@ launcher = ["docker==7.2.0"]
 # The isolated run image: dbt v2 OSS with its DuckDB driver and extensions, PyIceberg for metadata and
 # PyYAML for the project's semantic models.
 runner = [
-  "dbt-oss==2.0.5",
+  "dbt-oss==2.0.8",
   "duckdb==1.5.5",
   "duckdb-extension-iceberg==1.5.5",
   "duckdb-extension-httpfs==1.5.5",
