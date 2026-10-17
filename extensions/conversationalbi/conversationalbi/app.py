@@ -154,7 +154,7 @@ def create_app(settings=None, *, bridge=None, verifier=None, catalog=None, execu
         person = await login.caller(session_id)
         body = await request.body()
         if len(body) > MAX_BODY:
-            raise CbiError(413, "The conversation is too long. Start a new chat.", "too_large")
+            raise CbiError(413, "The conversation is too long. Clear it and ask again.", "too_large")
         thread = path.rsplit("/", 1)[-1] if "/stop/" in path else None
         if path.endswith(("/run", "/connect")):
             try:

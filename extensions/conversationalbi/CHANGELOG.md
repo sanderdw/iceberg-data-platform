@@ -5,6 +5,12 @@
 - **Runs on Kubernetes.** The chart `deploy/helm/iceberg-conversationalbi` installs Conversational BI
   next to the platform's chart, with the LLM settings in a Secret and the runtime limited to the
   gateway by a NetworkPolicy, as the internal chat network does on Docker.
+- **Clear** next to the conversation replaces the header's New chat. After a confirmation it stops a
+  running answer and starts over with nothing of the conversation sent to the LLM again, and keeps
+  the selected model.
+- On a phone the chat fills the visible screen, and the keyboard shrinks it, so the question field
+  stays directly above the keyboard instead of ending up between the messages. Picking a model
+  scrolls to the chat.
 - KaTeX 0.18.11 in the web app, which fixes a prototype-pollution advisory (GHSA-238p-pmpm-9mq7) in
   the math rendering of chat answers.
 - A semantic model's declared field type becomes a cast only when it is a known type, so a shared model

@@ -47,7 +47,7 @@ def create_agent_app(settings, services, login, tickets, agent=None, model=None)
                 request.headers.get("x-cbi-runtime-key", "").encode(), settings.runtime_key.encode()):
             return refuse(401, "Unknown caller.")
         if int(request.headers.get("content-length") or 0) > MAX_BODY:
-            return refuse(413, "The conversation is too long. Start a new chat.")
+            return refuse(413, "The conversation is too long. Clear it and ask again.")
         found = tickets.resolve(request.headers.get("x-cbi-run-ticket"))
         if found is None:
             return refuse(401, "The run ticket expired. Reload the page.")
