@@ -37,11 +37,16 @@ const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const roleNames = { reader: 'Read', writer: 'Read & write', admin: 'Administrator', 'bucket-admin': 'Database + bucket administration' };
 const envNames = { development: 'Development', acceptance: 'Acceptance', production: 'Production' };
 const date = timestamp => timestamp ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(timestamp)) : 'Just now';
+// A stopped server answers through the proxy with plain text, or not at all.
+const serverDown = 'The admin server is not responding. Try again in a moment.';
 async function api(path, method = 'GET', body) {
   if (method !== 'GET') activeMutations++;
   try {
-  const response = await fetch(`/api${path}`, { method, headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1' }, ...(body ? { body: JSON.stringify(body) } : {}) });
-  const result = await response.json();
+  let response, result;
+  try { response = await fetch(`/api${path}`, { method, headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1' }, ...(body ? { body: JSON.stringify(body) } : {}) }); }
+  catch { throw new Error(serverDown); }
+  try { result = await response.json(); }
+  catch { throw new Error(response.status >= 500 ? serverDown : `The request failed with HTTP ${response.status}.`); }
   if (!response.ok) {
     if (response.status === 401 && path !== '/session') { closeModal(); login(); }
     throw new Error(result.error || 'The action failed.');
@@ -363,6 +368,7 @@ async function refreshOverview() {
   const previous = state.data, page = state.page;
   try {
     const next = await api('/overview');
+    if (state.status === serverDown) { state.status = ''; if ($('#status')) $('#status').textContent = ''; }
     if (!state.data || state.data !== previous || page !== state.page || activeMutations || modal.open || document.activeElement?.matches('input, select, textarea')) return;
     if (JSON.stringify(previous) === JSON.stringify(next)) return;
     state.data = next;
