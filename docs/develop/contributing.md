@@ -31,6 +31,11 @@ npm run check:release    # release allowlist, versions, licenses and Markdown li
 uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
 ```
 
+`test/test_helm_chart.py` renders the Helm chart and is skipped without `helm`. Install the pinned
+tools with `sh dev/kubernetes/tools.sh .local/bin` to run it, and `sh dev/kubernetes/kind_check.sh`
+(add `POLARIS=official` for the official Polaris chart) to install the chart on kind and run the
+smoke tests against it, as CI does; see [Kubernetes](kubernetes.md).
+
 Browser checks run against fixtures and don't need a running stack:
 
 ```bash

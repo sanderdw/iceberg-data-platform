@@ -1,0 +1,77 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /* The services with credentials to the data: only the components that need them connect. */ -}}
+{{- $rules := dict "monitor" (dict "port" 3003 "from" (list "portal")) }}
+{{- if not (include "idp.pgExternal" .) }}
+{{- $_ := set $rules "postgres" (dict "port" 5432 "from" (list "polaris" "polaris-bootstrap" "keycloak" "monitor")) }}
+{{- end }}
+{{- range $target, $rule := $rules }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $target }}
+  labels:
+    {{- include "idp.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "idp.selector" $target | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range $rule.from }}
+        - podSelector:
+            matchLabels:
+              {{- include "idp.selector" . | nindent 14 }}
+        {{- end }}
+      ports:
+        - {port: {{ $rule.port }}, protocol: TCP}
+{{- end }}
+{{- /* Sign-in and the portals: anyone but notebooks and extension runs. An egress policy's ipBlock
+may or may not cover pod addresses, depending on the CNI, so the receiving side refuses them too. */ -}}
+{{- range $target, $port := dict "keycloak" 8080 "portal" 3000 "users" 3002 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $target }}
+  labels:
+    {{- include "idp.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "idp.selector" $target | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - {key: io.iceberg-platform.isolated, operator: DoesNotExist}
+        {{- if eq $target "users" }}
+        # Notebooks fetch their session token here (the token endpoint checks the notebook itself).
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "idp.notebooksNamespace" $ }}
+        {{- end }}
+      ports:
+        - {port: {{ $port }}, protocol: TCP}
+{{- end }}
+---
+# The Bridge serves extensions, which run in this namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bridge
+  labels:
+    {{- include "idp.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "idp.selector" "bridge" | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - {port: 3005, protocol: TCP}
+{{- end }}

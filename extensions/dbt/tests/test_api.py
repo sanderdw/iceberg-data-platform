@@ -85,7 +85,9 @@ def test_branches_commits_and_protected_main(stack):
     merged = stack.call("POST", f"/projects/{id}/merge", "alice", json={"branch": "feature"}).json()
     assert merged["merged"] is True
     history = stack.call("GET", f"/projects/{id}/history", "carol").json()
-    assert history[0]["subject"] == "Add orders" and history[0]["author"] == "bob (via agent)"
+    assert history[0]["subject"] == "Merge feature into main"
+    assert {"subject": "Add orders", "author": "bob (via agent)"}.items() <= next(
+        h for h in history if h["subject"] == "Add orders").items()
 
 
 def test_runs_use_the_right_token_and_follow_promotion_rules(stack):
@@ -425,3 +427,65 @@ def test_development_is_shared_and_the_viewer_points_at_what_built_it(stack):
     main = stack.call("GET", f"/projects/{id}/pipeline?ref=main", "carol").json()
     assert main["overwrittenBy"]["ref"] == "wip"
     assert "hint" not in stack.call("POST", f"/projects/{id}/merge", "alice", json={"branch": "wip"}).json()
+
+
+def test_docs_site_serves_only_docs_runs_of_main(stack):
+    # Project code can write any file under out/; the site runs scripts with the viewer's session.
+    def plant(run):
+        docs = stack.launcher.artifacts / run / "out" / "docs"
+        docs.mkdir(parents=True)
+        (docs / "index.html").write_text("<script>planted</script>")
+
+    stack.launcher.on_start = plant
+    id = create(stack)["id"]
+    enable(stack)
+    head = stack.call("POST", f"/projects/{id}/branches", "bob", json={"name": "wip"}).json()["revision"]
+    stack.call("POST", f"/projects/{id}/commits", "bob", json={
+        "branch": "wip", "message": "x", "expected_revision": head, "files": {"models/x.sql": "select 1"}})
+
+    def site(body):
+        run = stack.call("POST", f"/projects/{id}/runs", "carol", json={**body, "wait": 30}).json()
+        assert run["status"] == "success", run
+        return stack.client.get(f"/docs-site/{run['id']}/index.html", headers={"Authorization": "Bearer carol"})
+
+    assert site({"command": "compile"}).status_code == 404
+    assert site({"command": "docs", "ref": "wip"}).status_code == 404
+    served = site({"command": "docs"})
+    assert served.status_code == 200 and "script-src" in served.headers["content-security-policy"]
+
+
+def test_only_heads_of_main_reach_production_and_docs(stack):
+    # A Writer hides a commit inside a branch: the review sees only the branch's final tree.
+    def plant(run):
+        docs = stack.launcher.artifacts / run / "out" / "docs"
+        docs.mkdir(parents=True)
+        (docs / "index.html").write_text("<script>planted</script>")
+
+    stack.launcher.on_start = plant
+    id = create(stack)["id"]
+    enable(stack)
+    enable(stack, "production")
+    head = stack.call("POST", f"/projects/{id}/branches", "bob", json={"name": "wip"}).json()["revision"]
+    hidden = stack.call("POST", f"/projects/{id}/commits", "bob", json={
+        "branch": "wip", "message": "wip", "expected_revision": head,
+        "files": {"models/evil.sql": "select 1"}}).json()["revision"]
+    reviewed = stack.call("POST", f"/projects/{id}/commits", "bob", json={
+        "branch": "wip", "message": "tidy", "expected_revision": hidden,
+        "files": {"models/evil.sql": None, "models/good.sql": "select 2"}}).json()["revision"]
+    stale = stack.call("POST", f"/projects/{id}/merge", "alice", json={"branch": "wip", "revision": hidden})
+    assert (stale.status_code, stale.json()["code"]) == (409, "stale_branch")
+    merged = stack.call("POST", f"/projects/{id}/merge", "alice", json={"branch": "wip", "revision": reviewed}).json()
+    assert merged["merged"] is True
+
+    def run(body, user="bob"):
+        return stack.call("POST", f"/projects/{id}/runs", user, json={**body, "wait": 30}).json()
+
+    for ref in (hidden, reviewed):
+        assert run({"command": "build", "environment": "production", "ref": ref})["code"] == "main_required"
+        docs = run({"command": "docs", "ref": ref}, "carol")
+        assert stack.client.get(f"/docs-site/{docs['id']}/index.html",
+                                headers={"Authorization": "Bearer alice"}).status_code == 404
+    assert run({"command": "build", "environment": "production"})["status"] == "success"
+    docs = run({"command": "docs"}, "carol")
+    served = stack.client.get(f"/docs-site/{docs['id']}/index.html", headers={"Authorization": "Bearer alice"})
+    assert served.status_code == 200

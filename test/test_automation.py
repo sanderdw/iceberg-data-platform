@@ -275,3 +275,27 @@ def test_scope_lists_granted_objects_of_received_shares_only(partner):
     assert shared["id"] == source and shared["team"] == owner
     # The dropped table's grant is gone; the model is still readable.
     assert shared["sharedObjects"] == [MODEL]
+
+
+@pytest.mark.parametrize("schedule", ["during", "stale-scope", "enable-during"])
+def test_a_database_move_never_leaves_the_old_teams_automation_a_grant(stack, schedule):
+    # The Bridge grants from its own process while the admin portal moves the database.
+    provider, team, dev, _ = stack
+    other = provider.save_team(TeamInput(name="other-team"))["id"]
+    if schedule != "enable-during":
+        id = provider.create_automation(team, "development", "dbt", CREATOR)[0]["id"]
+        stale = provider.automation_scope(id)
+
+    def bridge(*_):
+        if schedule == "during":
+            provider.reconcile_automation(id)
+        elif schedule == "enable-during":
+            provider.create_automation(team, "development", "dbt", CREATOR)
+
+    provider.storage.tag_bucket.side_effect = bridge
+    provider.move_database(dev, other)
+    if schedule == "stale-scope":
+        # The scope was read before the move; its grants land after the move finished.
+        provider.automation_scope = lambda *_a, **_k: stale
+        provider.reconcile_automation(id)
+    assert not [g for g in provider.grants if "svc-" in g and f"/catalog-roles/{dev}/" in g]

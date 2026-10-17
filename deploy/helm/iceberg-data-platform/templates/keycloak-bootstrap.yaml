@@ -1,0 +1,54 @@
+# Reconciles the Keycloak clients, the provisioning account and the extensions on every install and
+# upgrade, like the keycloak-bootstrap service on each docker compose up.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-bootstrap
+  labels:
+    {{- include "idp.component" (list . "keycloak-bootstrap") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook-weight: "0"
+spec:
+  backoffLimit: 20
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "idp.component" (list . "keycloak-bootstrap") | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "idp.pullSecrets" . | nindent 6 }}
+      containers:
+        - name: bootstrap
+          image: {{ include "idp.image" (list . "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [/app/.venv/bin/python, -m, server.keycloak_bootstrap{{ if .Values.demo }}, --demo{{ end }}]
+          env:
+            {{- include "idp.platformEnv" . | nindent 12 }}
+            - {name: POLARIS_URL, value: "http://polaris:8181"}
+            {{- include "idp.rustfsAdminEnv" . | nindent 12 }}
+            {{- include "idp.secretEnv" (list . "OIDC_MANAGEMENT_SECRET") | nindent 12 }}
+            {{- include "idp.secretEnv" (list . "KEYCLOAK_ADMIN_PASSWORD") | nindent 12 }}
+            {{- include "idp.secretEnv" (list . "PLATFORM_EXTENSION_SECRETS") | nindent 12 }}
+            - name: PLATFORM_ADMIN_USERNAME
+              value: {{ .Values.platformAdminUsername | quote }}
+            - name: MCP_CALLBACK_PORT
+              value: {{ .Values.mcpCallbackPort | quote }}
+            - name: KEYCLOAK_ADMIN_ORIGIN
+              value: {{ .Values.keycloak.adminOrigin | default "http://localhost:8080" | quote }}
+            {{- if .Values.demo }}
+            {{- range $account := list "ADMIN" "WRITER" "READER" "OUTSIDER" }}
+            {{- include "idp.secretEnv" (list $ (printf "DEMO_%s_PASSWORD" $account)) | nindent 12 }}
+            {{- end }}
+            {{- end }}
+            - {name: HOME, value: /tmp}
+          {{- include "idp.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}

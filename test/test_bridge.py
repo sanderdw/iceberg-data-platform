@@ -84,7 +84,7 @@ def bridge():
 
 def test_discovery_is_public_and_complete(bridge):
     body = bridge.call("GET", "").json()
-    assert body["contractVersion"] == "0.1.1"
+    assert body["contractVersion"] == "0.1.2"
     assert body["capabilities"] == ["user-context", "automation-principals", "automation-tokens", "shared-data",
                                     "listings"]
     assert body["oidc"] == {"issuer": ISSUER, "internalIssuer": ISSUER, "bridgeAudience": "iceberg-bridge"}

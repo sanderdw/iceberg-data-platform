@@ -235,6 +235,40 @@ def test_values_never_become_sql():
     assert run(compiled) == [(None,)]
 
 
+@pytest.mark.parametrize("datatype", ["decimal) OR 1=1 OR (1=0", "decimal(10,2)) OR (1=1", "Date) OR (1=1"])
+def test_a_declared_datatype_never_becomes_sql(datatype):
+    # A shared model's datatype is as untrusted as its expressions; only known types become a cast.
+    model = ossie.parse(flights_with({"name": "delay_cost", "expression": "dep_delay * 2", "datatype": datatype}),
+                        ["ai_flights"])
+    compiled = compile_query(model, flights.schemas(model), spec(
+        metrics=["cancellation_pct"], filters=[{"field": "FLIGHT.delay_cost", "op": "=", "value": -999999}]))
+    assert "1=1" not in compiled.sql and compiled.sql.count("?") == 1
+    assert run(compiled) == [(None,)]
+
+
+@pytest.mark.parametrize(("kind", "placeholder"), [
+    ("decimal(10, 2)", "CAST(? AS DECIMAL(10, 2))"), ("decimal(38)", "CAST(? AS DECIMAL(38, 0))"),
+    ("decimal(99,2)", "?"), ("decimal(4,6)", "?"), ("Date", "CAST(? AS DATE)"), ("timestamp(6)", "?"), (None, "?"),
+])
+def test_only_known_types_become_casts(kind, placeholder):
+    assert compiler.typed(kind) == placeholder
+
+
+@pytest.mark.parametrize(("op", "value", "where"), [
+    ("=", True, "(cancelled OR dep_delay > 15) = true"),
+    ("is_null", None, "(cancelled OR dep_delay > 15) IS NULL"),
+    ("is_not_null", None, "(cancelled OR dep_delay > 15) IS NOT NULL"),
+])
+def test_derived_fields_keep_their_meaning_in_filters(op, value, where):
+    model = ossie.parse(flights_with(
+        {"name": "disrupted", "expression": "cancelled OR dep_delay > 15", "datatype": "Boolean"}), ["ai_flights"])
+    compiled = compile_query(model, flights.schemas(model), spec(
+        metrics=["cancellation_pct"], filters=[{"field": "FLIGHT.disrupted", "op": op, "value": value}]))
+    expected = flights.local().execute(
+        f"SELECT 100.0 * count(*) FILTER (WHERE cancelled) / nullif(count(*), 0) FROM FLIGHT WHERE {where}").fetchall()
+    assert run(compiled) == expected
+
+
 @pytest.mark.parametrize(("kwargs", "code"), [
     ({"metrics": ["nope"]}, "unknown_metric"),
     ({"metrics": ["cancellation_pct"], "dimensions": [{"field": "CARRIER.nope"}]}, "unknown_field"),

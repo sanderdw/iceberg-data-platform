@@ -1,0 +1,13 @@
+apiVersion: v2
+name: iceberg-conversationalbi
+description: Conversational BI for the Iceberg Data Platform - chat with your data through its semantic models.
+type: application
+version: 0.1.3
+appVersion: "0.1.3"
+kubeVersion: ">=1.32.0-0"
+home: https://sanderdw.github.io/iceberg-data-platform/conversational-bi/
+sources:
+  - https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/conversationalbi
+annotations:
+  artifacthub.io/license: Apache-2.0
+keywords: [iceberg, bi, llm, mcp]

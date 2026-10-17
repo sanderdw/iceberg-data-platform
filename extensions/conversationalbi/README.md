@@ -6,7 +6,7 @@ through data shares. The model owner decides what a metric means, how datasets j
 fields exist; the agent only picks names. Every answer shows the query it ran, the join path and
 the metric definitions, and charts load their numbers from the result, never from the LLM.
 
-This is an extension: its own Compose project (`iceberg-conversationalbi`), dependencies,
+This is an extension: its own Compose project (`iceberg-conversationalbi`) and Helm chart (`deploy/helm/iceberg-conversationalbi`, published as `oci://ghcr.io/sanderdw/charts/iceberg-conversationalbi`), dependencies,
 images, version and releases. It uses the platform only through the **Extension Bridge**
 (`contracts/bridge` in the platform repository), Iceberg REST and S3.
 

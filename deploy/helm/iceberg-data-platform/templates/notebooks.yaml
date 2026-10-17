@@ -1,0 +1,101 @@
+{{- if .Values.notebooks.enabled }}
+{{- $ns := include "idp.notebooksNamespace" . -}}
+{{- $platform := printf "%s.svc.%s" .Release.Namespace .Values.clusterDomain }}
+# Notebooks run user code: their own namespace, held to the restricted Pod Security standard.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  annotations:
+    # Notebook files live on volumes in this namespace; uninstalling the platform keeps them.
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "idp.labels" . | nindent 4 }}
+    # Platform services refuse connections from namespaces with this label (contracts/bridge/v1/network.md).
+    io.iceberg-platform.isolated: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+{{- range $name, $target := dict "polaris" "polaris" "rustfs" "rustfs" "workspace-gateway" "users" }}
+---
+# Notebooks reach the platform under the same names as on Docker.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "idp.labels" $ | nindent 4 }}
+spec:
+  type: ExternalName
+  externalName: {{ $target }}.{{ $platform }}
+{{- end }}
+{{- with .Values.imagePullSecrets }}
+{{- range . }}
+{{- $secret := lookup "v1" "Secret" $.Release.Namespace .name }}
+{{- if $secret }}
+---
+# A copy of the platform's image pull Secret, for the notebook image.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "idp.labels" $ | nindent 4 }}
+type: {{ $secret.type }}
+data:
+  {{- toYaml $secret.data | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+---
+# The per-session Docker network, as a policy: only the user portal reaches a notebook; a notebook
+# reaches Polaris, RustFS, the portal's token endpoint and the internet, nothing else in the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: notebooks
+  namespace: {{ $ns }}
+  labels:
+    {{- include "idp.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "idp.selector" "users" | nindent 14 }}
+      ports:
+        - {port: 2718, protocol: TCP}
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- range $component, $port := dict "polaris" 8181 "rustfs" 9000 "users" 3002 }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "idp.selector" $component | nindent 14 }}
+      ports:
+        - {port: {{ $port }}, protocol: TCP}
+    {{- end }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml .Values.networkPolicy.privateRanges | nindent 14 }}
+{{- end }}
+{{- end }}

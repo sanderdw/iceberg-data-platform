@@ -79,6 +79,8 @@ Both portals serve a Model Context Protocol endpoint at `/mcp`, and so does each
 | `iceberg-dbt` | `http://localhost:3004/mcp` | with the dbt extension installed (client id `ext-dbt-mcp`) | dbt pipelines of the person's teams: `create_project`, `create_branch`, `write_files`, `compile`, `run`, `get_pipeline`, `set_schedule`, …; follow the `dbt-platform` skill. People who prefer a terminal use `iceberg_dbt.py` from the dbt viewer: dbt's commands, run on the platform |
 | `iceberg-ingestion` | `http://localhost:3008/mcp` | with the Ingestion (dlt) extension installed (client id `ext-ingestion-mcp`) | declarative dlt pipelines that load REST APIs, SQL tables and files into the person's team databases: `list_templates`, `validate_pipeline`, `create_pipeline`, `set_pipeline_secrets` (write-only), `run_pipeline`, `get_run`, `set_schedule`, …; team admins create pipelines and set secrets, writers run them |
 
+On a Kubernetes installation the addresses are HTTPS hosts instead: `https://users.<domain>/mcp`, `https://admin.<domain>/mcp`, and `https://<host>.<domain>/mcp` for each extension (`dbt`, `ingest`, `cbi` by default). Ask the person for the domain, or read it from `kubectl get ingress -A`.
+
 Register a server in your agent (replace `iceberg-user` and the address for another server; extensions use their own client id from the table):
 
 - **Claude Code:** `claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-user http://localhost:3002/mcp`
@@ -89,7 +91,7 @@ Register a server in your agent (replace `iceberg-user` and the address for anot
 Notes:
 - The MCP tools work with the person's grants and never run free-form SQL. `query_semantic_model` answers business questions from a model's agreed metrics; use `iceberg_connect.py` for anything else and for writing data.
 - `publish_semantic_model` stores a model (Writer role). To replace one, pass the `entityVersion` that `describe_semantic_model` returned as `entity_version`. Build and check models with the semantic-model skill below first.
-- Claude Code's callback port must equal `MCP_CALLBACK_PORT` in `.env` (3010 by default).
+- Claude Code's callback port must equal `MCP_CALLBACK_PORT` in `.env` (3010 by default; the chart's `mcpCallbackPort` on Kubernetes).
 - An MCP server that "failed to connect" with `ENOTFOUND` usually points at an address that no longer exists, such as an ended quick-share tunnel. Register it again with the current address.
 
 ## 3. Semantic models
@@ -126,7 +128,8 @@ The portal shows models under **Catalog** (with a **Diagram** of the joins), dat
 | `dbt-platform` | build, test and schedule dbt pipelines on your tables (needs the dbt extension and its MCP server) |
 | `ingestion` | load data from an API, a database or files into your tables (needs the Ingestion extension and its MCP server) |
 | `demo-company` | fill the platform with a fictional company and accounts for a class (needs the admin MCP server) |
-| `quick-share` | make the portals reachable from anywhere for a temporary session, and undo that |
+| `quick-share` | make the portals of a Compose installation reachable from anywhere for a temporary session, and undo that |
+| `kubernetes-install` | install, upgrade or remove the platform on a Kubernetes cluster with its Helm charts |
 
 Claude Code reads skills from `.claude/skills`; the pointers there lead to `.agents/skills`. See [agent skills](https://sanderdw.github.io/iceberg-data-platform/agent-skills/) in the documentation.
 
@@ -137,6 +140,6 @@ Claude Code reads skills from `.claude/skills`; the pointers there lead to `.age
 | "You are not signed in" / "sign-in has expired" | The person runs `uv run iceberg_connect.py login` |
 | "Could not reach …" | The platform is stopped, or `iceberg_connect.py` points at an old address: download it again from the portal |
 | 403 / "Your role may not do this" | The person lacks the Writer (or Admin) role in the database's team |
-| "Query slots are busy" / "Preview slots are busy" | Every query slot stayed taken for 15 seconds: ask fewer questions at once and retry, or an administrator raises `USER_QUERY_SLOTS` in `.env` |
-| 406 on semantic models | Semantic models are switched off; an administrator sets `POLARIS_SEMANTIC_MODELS=true` in `.env` |
+| "Query slots are busy" / "Preview slots are busy" | Every query slot stayed taken for 15 seconds: ask fewer questions at once and retry, or an administrator raises `USER_QUERY_SLOTS` in `.env` (`users.queries.slots` on Kubernetes) |
+| 406 on semantic models | Semantic models are switched off; an administrator sets `POLARIS_SEMANTIC_MODELS=true` in `.env` (`polaris.semanticModels=true` on Kubernetes) |
 | DuckDB write fails with "Metadata-log exists but none of the entries were valid" | Clock skew; `iceberg_connect.py` already turns the lookup off, so connect through it and keep the host clock in sync |

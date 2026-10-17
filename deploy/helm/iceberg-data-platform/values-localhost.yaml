@@ -1,0 +1,24 @@
+# Try the chart on kind or another local cluster, without ingress or certificates:
+#
+#   helm install iceberg deploy/helm/iceberg-data-platform -n iceberg --create-namespace \
+#     -f deploy/helm/iceberg-data-platform/values-localhost.yaml --wait --timeout 15m
+#   kubectl -n iceberg port-forward svc/portal 3000 & kubectl -n iceberg port-forward svc/users 3002 &
+#   kubectl -n iceberg port-forward svc/keycloak 8080 & kubectl -n iceberg port-forward svc/polaris 8181 &
+#   kubectl -n iceberg port-forward svc/rustfs 9000 &
+#
+# The browser addresses are the Compose ones, so plain HTTP sign-in works on localhost.
+origins:
+  admin: http://localhost:3000
+  users: http://localhost:3002
+  auth: http://localhost:8080
+  catalog: http://localhost:8181
+  s3: http://localhost:9000
+ingress:
+  enabled: false
+postgres:
+  storage: 2Gi
+rustfs:
+  storage: 5Gi
+notebooks:
+  storage: 1Gi
+  memoryRequest: 256m

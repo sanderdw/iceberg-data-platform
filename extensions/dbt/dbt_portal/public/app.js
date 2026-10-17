@@ -268,7 +268,7 @@ async function renderPipeline() {
   renderLegend();
   renderTimeline();
   watchPipeline();
-  const docs = pipeline.runs.find(r => r.command === 'docs' && r.status === 'success');
+  const docs = pipeline.runs.find(r => r.command === 'docs' && r.status === 'success' && r.ref === 'main');
   $('#docs-link').hidden = !docs;
   if (docs) $('#docs-link').href = `/docs-site/${docs.id}/index.html`;
   const env = project.environments.find(e => e.environment === route.environment);
@@ -598,14 +598,14 @@ async function openEditor(node, box) {
     if (!confirm(`Merge ${name} into main? Acceptance and production build main.`)) return;
     button.disabled = true;
     try {
-      const result = await api(`/projects/${id}/merge`, {method: 'POST', body: JSON.stringify({branch: name})});
+      const result = await api(`/projects/${id}/merge`, {method: 'POST', body: JSON.stringify({branch: name, revision: loaded?.revision})});
       say((result.merged ? `Merged ${name} into main @ ${result.revision.slice(0, 7)}.` : `main already contains ${name}.`)
         + (result.hint ? ' The pipeline shows main once main is built in Development.' : ''));
       const development = project.environments.find(e => e.environment === 'development');
       if (result.hint && development?.enabled) after.replaceChildren(h('button', {class: 'quiet', type: 'button', onclick: event => buildMain(event.currentTarget), text: 'Build main in Development'}));
     } catch (error) {
       say(error.code === 'merge_conflict' ? `${error.message} Conflicting: ${(error.detail?.files || []).join(', ')}.` : error.message, true);
-      button.disabled = false;
+      button.disabled = error.code === 'stale_branch';
     }
   }
 

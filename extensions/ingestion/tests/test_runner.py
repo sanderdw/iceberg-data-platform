@@ -89,6 +89,14 @@ def test_scrubbing_masks_tokens_secrets_and_credentials_in_urls():
     assert "k1" not in text and ":pw@" not in text and "abc" not in Scrubber(["abc"]).values
 
 
+def test_scrubbing_masks_encoded_secrets_and_failed_request_queries():
+    scrub = Scrubber(["Ab12+cd/ef=gh"])
+    text = scrub("404 Client Error: Not Found for url: https://api.example.test/v1/x?zz=Ab12%2Bcd%2Fef%3Dgh&page=2\n"
+                 "k=Ab12%2Bcd/ef%3Dgh 'Ab12+cd/ef=gh' Authorization: Basic dXNlcjpBYjEyK2Nk")
+    assert "Ab12" not in text and "dXNlcjpB" not in text
+    assert "for url: https://api.example.test/v1/x?***" in text
+
+
 def test_secrets_replace_their_placeholders_only():
     config = {"client": {"auth": {"token": "$secret:token"}, "base_url": "$secret:is-not-a-name"}, "x": ["$secret:a"]}
     assert sources.substitute(config, {"token": "t", "a": "A"}) == {

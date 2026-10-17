@@ -1,0 +1,3 @@
+Ingestion {{ .Chart.AppVersion }} is starting in namespace {{ .Release.Namespace }}; runs go to {{ include "ing.runsNamespace" . }}.
+
+  Ingestion  https://{{ include "ing.host" . }}

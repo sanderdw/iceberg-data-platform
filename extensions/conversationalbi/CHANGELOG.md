@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3 - 2026-10-17
+
+- **Runs on Kubernetes.** The chart `deploy/helm/iceberg-conversationalbi` installs Conversational BI
+  next to the platform's chart, with the LLM settings in a Secret and the runtime limited to the
+  gateway by a NetworkPolicy, as the internal chat network does on Docker.
+- KaTeX 0.18.11 in the web app, which fixes a prototype-pollution advisory (GHSA-238p-pmpm-9mq7) in
+  the math rendering of chat answers.
+- A semantic model's declared field type becomes a cast only when it is a known type, so a shared model
+  can no longer add SQL to a governed query through it.
+- Filters on derived fields that combine conditions with `AND` or `OR` keep their meaning: the field's
+  expression is parenthesised wherever a query uses it.
+
 ## 0.1.2 - 2026-10-14
 
 - Pydantic AI 2.56.0, which adds Gemini 4 Argon: set `LLM_MODEL=google:gemini-4-argon`. It also

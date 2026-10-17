@@ -5,7 +5,7 @@ and MySQL/MariaDB tables, and CSV, JSONL or Parquet files into a team's Apache I
 on demand or on a schedule. People use the pipelines page; AI agents and scripts use the same
 capabilities through MCP and a REST API.
 
-This is an extension: its own Compose project (`iceberg-ingestion`), dependencies, images, version
+This is an extension: its own Compose project (`iceberg-ingestion`) and Helm chart (`deploy/helm/iceberg-ingestion`, published as `oci://ghcr.io/sanderdw/charts/iceberg-ingestion`), dependencies, images, version
 and releases. It uses the platform only through the **Extension Bridge v1** (`contracts/bridge` in
 the platform repository), Iceberg REST and S3, so the platform and this extension upgrade
 independently.

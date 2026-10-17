@@ -32,7 +32,8 @@ def test_commits_are_atomic_and_detect_concurrent_writers(repos):
     assert same.value.code == "empty_commit"
 
 
-@pytest.mark.parametrize("path", ["/etc/passwd", "../x", "a/../b", ".git/config", "a//b", "models/.git/x"])
+@pytest.mark.parametrize("path", ["/etc/passwd", "../x", "a/../b", ".git/config", "a//b", "models/.git/x",
+                                  "C:/Users/Public/x.cmd", "C:x.sql", "models/a.sql:stream"])
 def test_paths_stay_inside_the_project(repos, path):
     with pytest.raises(DbtError) as error:
         repos.commit("prj-a", "main", {path: "x"}, "Escape", AUTHOR)
@@ -45,11 +46,18 @@ def test_branch_names_are_validated(repos, name):
         repos.create_branch("prj-a", name)
 
 
-def test_merge_fast_forward_merge_commit_and_conflict(repos):
+def test_merges_always_commit_and_only_merge_results_become_main_heads(repos):
     repos.create_branch("prj-a", "one")
-    repos.commit("prj-a", "one", {"models/one.sql": "select 1\n"}, "One", AUTHOR)
-    assert repos.merge("prj-a", "one", "", AUTHOR)["merged"] is True
-    assert repos.resolve("prj-a", "main") == repos.resolve("prj-a", "one")
+    hidden = repos.commit("prj-a", "one", {"models/evil.sql": "select 1\n"}, "wip", AUTHOR)
+    head = repos.commit("prj-a", "one", {"models/evil.sql": None, "models/one.sql": "select 1\n"}, "One", AUTHOR)
+    with pytest.raises(DbtError) as moved:
+        repos.merge("prj-a", "one", "", AUTHOR, revision=hidden)
+    assert moved.value.code == "stale_branch"
+    merged = repos.merge("prj-a", "one", "", AUTHOR, revision=head)
+    # A merge commit even where a fast-forward was possible: the branch's commits never become heads of main.
+    assert merged["merged"] is True and merged["revision"] not in (head, hidden)
+    assert repos.was_main_head("prj-a", merged["revision"])
+    assert not repos.was_main_head("prj-a", hidden) and not repos.was_main_head("prj-a", head)
     assert repos.merge("prj-a", "one", "", AUTHOR)["merged"] is False
     repos.create_branch("prj-a", "two")
     repos.create_branch("prj-a", "three")
@@ -77,7 +85,7 @@ def test_archive_is_the_exact_revision(repos):
     repos.commit("prj-a", "next", {"models/b.sql": "select 2\n"}, "B", AUTHOR)
     with tarfile.open(fileobj=io.BytesIO(repos.archive("prj-a", first))) as tar:
         assert sorted(tar.getnames()) == ["dbt_project.yml", "models", "models/a.sql"]
-    assert repos.is_on_main("prj-a", first) and not repos.is_on_main("prj-a", repos.resolve("prj-a", "next"))
+    assert repos.was_main_head("prj-a", first) and not repos.was_main_head("prj-a", repos.resolve("prj-a", "next"))
     with pytest.raises(DbtError) as missing:
         repos.resolve("prj-a", "nope")
     assert missing.value.code == "unknown_ref"

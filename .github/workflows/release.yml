@@ -111,6 +111,17 @@ jobs:
           extension=()
           [ "$PREVIEW" != true ] || extension=(--extension-image-tag "$IMAGE_TAG")
           uv run python -m scripts.release --build --install --release-tag "$RELEASE_TAG" --image-tag "$IMAGE_TAG" "${extension[@]}"
+      - name: Package the Helm chart
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
+          PREVIEW: ${{ steps.version.outputs.preview }}
+        run: |
+          sh dev/kubernetes/tools.sh "$RUNNER_TEMP/bin"
+          # A chart version is SemVer: a preview's chart is the coming version plus its image tag.
+          chart="$VERSION"; [ "$PREVIEW" != true ] || chart="$VERSION-$IMAGE_TAG"
+          "$RUNNER_TEMP/bin/helm" package deploy/helm/iceberg-data-platform --version "$chart" --app-version "$IMAGE_TAG" -d dist
+          (cd dist && sha256sum "$(basename dist/*.tgz)" >> SHA256SUMS)
       - name: Scan source archive
         run: |
           curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
@@ -279,6 +290,21 @@ jobs:
                 "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-amd64" "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-arm64"
             done
           fi
+      - name: Publish the Helm chart
+        # Like the images, a new GHCR package starts private: make charts/iceberg-data-platform public, then re-run.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail --silent --show-error --location https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz -o "$RUNNER_TEMP/helm.tar.gz"
+          echo '86584a54def73570558f66f5111cc53dfed56689637ae32c1201205d494f54fb  '"$RUNNER_TEMP/helm.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/helm.tar.gz" -C "$RUNNER_TEMP" linux-amd64/helm
+          helm="$RUNNER_TEMP/linux-amd64/helm"
+          echo "$GH_TOKEN" | "$helm" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          package=$(ls dist/iceberg-data-platform-*.tgz)
+          "$helm" push "$package" oci://ghcr.io/sanderdw/charts
+          version=$(basename "$package" .tgz); version=${version#iceberg-data-platform-}
+          HELM_REGISTRY_CONFIG=$(mktemp) "$helm" show chart oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version "$version" > /dev/null \
+            || { echo "ghcr.io/sanderdw/charts/iceberg-data-platform is not public" >&2; exit 1; }
       - name: Check public image access
         if: needs.validate.outputs.preview == 'true'
         env:
@@ -391,6 +417,12 @@ jobs:
           - \`ghcr.io/${GH_REPO}-notebook:${VERSION}\`
 
           The installation bundle requires only Docker with Compose. It generates local credentials and preserves existing configuration and data volumes.
+
+          ## Install on Kubernetes
+
+          \`helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version ${VERSION} -n iceberg --create-namespace --set baseDomain=data.example.com --set tls.clusterIssuer=letsencrypt-prod --wait --timeout 15m\`
+
+          The chart is also attached below (\`iceberg-data-platform-${VERSION}.tgz\`). See https://sanderdw.github.io/iceberg-data-platform/install-kubernetes/.
           EOF_NOTES
           # Only the highest version serves /releases/latest; a later fix on an older line must not.
           highest=$({ gh release list --limit 200 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName' |

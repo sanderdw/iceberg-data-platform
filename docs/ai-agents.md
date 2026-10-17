@@ -10,7 +10,7 @@ Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) e
 | dbt pipelines | `http://localhost:3004/mcp` | `ext-dbt-mcp` | Building, testing and scheduling pipelines. See [dbt pipelines](dbt.md) |
 | Ingestion (dlt) | `http://localhost:3008/mcp` | `ext-ingestion-mcp` | Loading APIs, databases and files. See [Ingestion (dlt)](ingestion.md) |
 
-The extension servers exist only when that [extension](extensions.md) is installed.
+The extension servers exist only when that [extension](extensions.md) is installed. On Kubernetes the addresses are `https://users.<domain>/mcp`, `https://admin.<domain>/mcp` and `https://<host>.<domain>/mcp` for each extension; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in). Use them in the commands below instead of the `localhost` ones.
 
 ## Connect the user portal
 
@@ -38,12 +38,10 @@ GitHub Copilot in VS Code, in `.vscode/mcp.json`:
 
 The [administration guide](admin-guide.md#connect-an-mcp-client) also covers GitHub Copilot CLI and other clients.
 
-Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again.
+Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again. On Kubernetes the port is the chart's `mcpCallbackPort`, applied by `helm upgrade`.
 
 ## What the agent can do
 
-Tools: `list_databases`, `list_namespaces`, `list_tables`, `describe_table`, `describe_view`, `list_semantic_models`, `describe_semantic_model`, `query_semantic_model`, `list_dimension_values` and `preview_rows`. Writers also get `publish_semantic_model`, which needs the `entityVersion` you read to replace a model, and `delete_semantic_model`, which requires `confirm_name`. The semantic-model tools are described under [semantic models](semantic-models.md). Team administrators also get `create_database`, `rename_database` and `delete_database`, which requires `confirm_name`.
-
-Data shares: `list_shares` and `list_received_shares` show shares with their objects, and `list_share_teams` names the teams that can receive one. Team administrators also get `create_share`, `update_share`, `rotate_share_credential` and `delete_share`; `delete_share` requires `confirm_name`. By default, sharing a semantic model also shares the tables it reads, as in the portal. `create_share` for an external share and `rotate_share_credential` return the client secret once, so the agent sees it; hand it only to the recipient.
+Every team member can browse the catalog, preview rows and answer questions from semantic models. Writers also publish and delete semantic models; team administrators also create, rename and delete databases and manage data shares. Destructive tools require the exact name. An external share's client secret is returned once, so the agent sees it; hand it only to the recipient.
 
 [MCP tools](mcp.md) describes every tool and why it works the way it does. The [agent skills](agent-skills.md) in the installation folder teach an agent common tasks, such as building a semantic model or setting up a class.

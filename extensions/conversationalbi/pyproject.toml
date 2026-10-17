@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-conversationalbi"
-version = "0.1.2"
+version = "0.1.3"
 description = "Conversational BI for the Iceberg Data Platform: ask questions of your own and shared semantic models"
 readme = "README.md"
 license = "Apache-2.0"

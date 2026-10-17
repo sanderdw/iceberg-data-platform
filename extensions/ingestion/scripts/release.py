@@ -18,8 +18,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SUFFIXES = {".py", ".js", ".css", ".html", ".svg", ".md", ".yml", ".yaml", ".sql", ".csv", ".toml", ".lock",
-            ".txt", ".ttf", ".example", ".json"}
-PLAIN = {"Dockerfile", ".gitignore", ".dockerignore", ".python-version", "LICENSE", "NOTICE"}
+            ".txt", ".ttf", ".example", ".json", ".tpl"}
+PLAIN = {".helmignore", "Dockerfile", ".gitignore", ".dockerignore", ".python-version", "LICENSE", "NOTICE"}
 BINARY = {".ttf"}
 SECRET = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|BRIDGE_CLIENT_SECRET=[0-9a-f]{16,}"
                     r"|ING_SECRET_KEY=[0-9a-f]{64}")
@@ -36,6 +36,10 @@ def check(root=ROOT, tag=None):
         raise SystemExit("ingestion/config.py VERSION differs from pyproject.toml")
     if f"## {version}" not in (root / "CHANGELOG.md").read_text():
         raise SystemExit(f"CHANGELOG.md has no section for {version}")
+    chart = (root / "deploy/helm/iceberg-ingestion/Chart.yaml").read_text()
+    if not all(re.search(rf'^{key}: "?{re.escape(version)}"?$', chart, re.MULTILINE)
+               for key in ("version", "appVersion")):
+        raise SystemExit("deploy/helm/iceberg-ingestion/Chart.yaml has another version")
     for compose in ("compose.yaml",):
         text = (root / compose).read_text()
         if f"iceberg-ingestion:{version}" not in text or f"iceberg-ingestion-runner:{version}" not in text:

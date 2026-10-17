@@ -36,6 +36,7 @@ DUCKDB_TYPES = {"string": "VARCHAR", "int": "INTEGER", "long": "BIGINT", "float"
 # Ossie's logical datatypes as the Iceberg types this module reads; Iceberg names pass through.
 OSSIE_TYPES = {"datetime": "timestamp", "datetimetz": "timestamptz", "integer": "long", "float": "double",
                "decimal": "double", "opaque": ""}
+DECIMAL = re.compile(r"decimal\((\d{1,2})(?:,\s*(\d{1,2}))?\)")
 MAX_DEPTH = 4
 UNIT = re.compile(r"\bUnit:\s*([^.;\n]{1,40})", re.IGNORECASE)
 
@@ -266,9 +267,12 @@ class Plan:
 
 
 def typed(kind):
-    duck = DUCKDB_TYPES.get((kind or "").split("(")[0])
-    if kind and kind.startswith("decimal"):
-        duck = kind.upper()
+    """A parameter cast to a field's type. The type can come from a shared model, so it is never copied into SQL."""
+    kind = (kind or "").strip().lower()
+    if decimal := DECIMAL.fullmatch(kind):
+        precision, scale = int(decimal[1]), int(decimal[2] or 0)
+        return f"CAST(? AS DECIMAL({precision}, {scale}))" if 1 <= precision <= 38 and scale <= precision else "?"
+    duck = DUCKDB_TYPES.get(kind)
     return f"CAST(? AS {duck})" if duck else "?"
 
 
@@ -279,7 +283,7 @@ def field_expression(dataset, field, alias):
         raise fail(422, f"{dataset.name}.{field.name} is an aggregate and cannot be a dimension.", "invalid_model")
     if expressions.datasets(tree) - {dataset.name}:
         raise fail(422, f"{dataset.name}.{field.name} reads another dataset.", "invalid_model")
-    return expressions.sql(expressions.qualify(tree, {dataset.name: alias}, default=dataset.name))
+    return expressions.operand(expressions.qualify(tree, {dataset.name: alias}, default=dataset.name))
 
 
 def compile_query(model, schemas, spec, max_rows=5000):

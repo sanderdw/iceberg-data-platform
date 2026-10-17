@@ -1,6 +1,6 @@
 # Conversational BI internals
 
-How the [Conversational BI](../conversational-bi.md) extension is built. Its source is in [`extensions/conversationalbi`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/conversationalbi): its own Compose project (`iceberg-conversationalbi`), dependencies, images, version and releases. It uses the platform only through the [Extension Bridge](extension-bridge.md), Iceberg REST and S3.
+How the [Conversational BI](../conversational-bi.md) extension is built. Its source is in [`extensions/conversationalbi`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/conversationalbi): its own Compose project (`iceberg-conversationalbi`) and Helm chart (`deploy/helm/iceberg-conversationalbi`, where a NetworkPolicy takes the place of the internal chat network), dependencies, images, version and releases. It uses the platform only through the [Extension Bridge](extension-bridge.md), Iceberg REST and S3.
 
 | | |
 | --- | --- |

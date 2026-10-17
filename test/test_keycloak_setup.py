@@ -2,11 +2,14 @@
 
 import json
 import shutil
+import subprocess
+import sys
 from unittest.mock import Mock
 
+import httpx
 import pytest
 
-from scripts.setup import ROOT, read_env, setup
+from scripts.setup import REALM_SECURITY, ROOT, read_env, setup
 from server import entrypoints
 
 
@@ -27,6 +30,8 @@ def test_keycloak_setup_is_repeatable_and_does_not_seed_demo_data(config_root):
     assert document["users"][0]["credentials"][0]["temporary"] is True
     assert "UPDATE_PASSWORD" in document["users"][0]["requiredActions"]
     assert document["users"][0]["realmRoles"] == ["default-roles-iceberg"]
+    assert document["bruteForceProtected"] and not document["permanentLockout"]
+    assert "passwordPolicy" not in document
     assert values["PLATFORM_ADMIN_PASSWORD"] not in json.dumps(document)
     assert document["clients"][0]["redirectUris"] == ["http://localhost:3000/auth/callback"]
     mcp = next(c for c in document["clients"] if c["clientId"] == "iceberg-mcp")
@@ -168,3 +173,50 @@ def test_bootstrap_reconciles_and_disables_extension_clients():
     assert disabled == [{"id": "old", "clientId": "ext-legacy", "enabled": False}]
     with pytest.raises(RuntimeError):
         reconcile_extensions(kc, "/admin/realms/iceberg", {"PLATFORM_EXTENSIONS": "dbt=http://localhost:3004"})
+
+
+def test_entrypoints_emit_the_audit_trail_and_keep_libraries_quiet():
+    # Uvicorn configures only its own loggers; the real handler, not caplog, must show INFO records.
+    code = ("import logging; from server.entrypoints import logs; logs(); "
+            "logging.getLogger('iceberg.bridge.audit').info('token issued'); "
+            "logging.getLogger('user_portal.app').info('session closed'); "
+            "logging.getLogger('httpx').info('HTTP Request')")
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert "INFO iceberg.bridge.audit: token issued" in result.stderr
+    assert "INFO user_portal.app: session closed" in result.stderr
+    assert "HTTP Request" not in result.stderr
+
+
+def test_bootstrap_keeps_sign_in_protection_and_closes_the_realm_password_grant(monkeypatch):
+    from server import keycloak_bootstrap
+
+    puts = []
+
+    def handler(request):
+        path = request.url.path
+        if path == "/realms/master/protocol/openid-connect/token":
+            return httpx.Response(200, json={"access_token": "t"})
+        if request.method == "PUT":
+            puts.append((path, json.loads(request.content)))
+            return httpx.Response(204)
+        if path.endswith("/clients") and request.url.params.get("clientId") == "admin-cli":
+            return httpx.Response(200, json=[{"id": "cli-1", "clientId": "admin-cli", "directAccessGrantsEnabled": True}])
+        raise StopBootstrap
+
+    class StopBootstrap(Exception):
+        pass
+
+    client = httpx.Client
+    monkeypatch.setattr(keycloak_bootstrap.httpx, "Client",
+                        lambda **kw: client(transport=httpx.MockTransport(handler), **kw))
+    monkeypatch.setattr(keycloak_bootstrap, "PolarisProvider", Mock())
+    monkeypatch.setattr(keycloak_bootstrap, "RustFSStorage", Mock())
+    monkeypatch.setattr(sys, "argv", ["keycloak_bootstrap"])
+    for key, value in {"OIDC_ISSUER": "http://localhost:8080/realms/iceberg", "KEYCLOAK_ADMIN_PASSWORD": "x",
+                       "OIDC_INTERNAL_ISSUER": "http://keycloak:8080/realms/iceberg"}.items():
+        monkeypatch.setenv(key, value)
+    with pytest.raises(StopBootstrap):
+        keycloak_bootstrap.main()
+    assert puts[0] == ("/admin/realms/iceberg", REALM_SECURITY)
+    assert puts[1] == ("/admin/realms/iceberg/clients/cli-1",
+                       {"id": "cli-1", "clientId": "admin-cli", "directAccessGrantsEnabled": False})

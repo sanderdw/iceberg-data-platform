@@ -177,7 +177,7 @@ services:
   # smoke tests. It holds no storage credentials.
   bridge:
     build: .
-    command: ["/app/.venv/bin/uvicorn", "server.bridge:create_bridge_app", "--factory", "--host", "0.0.0.0", "--port", "3005", "--no-access-log"]
+    command: ["/app/.venv/bin/uvicorn", "server.entrypoints:bridge", "--factory", "--host", "0.0.0.0", "--port", "3005", "--no-access-log"]
     labels:
       io.iceberg-platform.role: bridge
     networks:
@@ -220,7 +220,7 @@ services:
   monitor:
     build: .
     user: "0:0"
-    command: ["/app/.venv/bin/uvicorn", "server.monitoring:create_monitor_app", "--factory", "--host", "0.0.0.0", "--port", "3003"]
+    command: ["/app/.venv/bin/uvicorn", "server.entrypoints:monitor", "--factory", "--host", "0.0.0.0", "--port", "3003"]
     environment:
       PORTAL_PASSWORD: ${PORTAL_PASSWORD}
       POLARIS_URL: http://polaris:8181

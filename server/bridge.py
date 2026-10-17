@@ -39,7 +39,7 @@ from .polaris import AUTOMATION_ROLES, PolarisProvider, enc
 from .storage import RustFSStorage
 from .validation import validation_message
 
-CONTRACT_VERSION = "0.1.1"
+CONTRACT_VERSION = "0.1.2"
 CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "shared-data", "listings"]
 BRIDGE_AUDIENCE = "iceberg-bridge"
 CONTRACT = Path(__file__).resolve().parent.parent / "contracts" / "bridge" / "v1" / "openapi.yaml"
@@ -87,6 +87,9 @@ class Network(BaseModel):
     aliases: dict[str, str]
     roleLabel: str
     extensionLabel: str
+    # Where the aliases resolve: Docker network aliases, or Kubernetes Services in `namespace`.
+    platform: Literal["docker", "kubernetes"] = "docker"
+    namespace: str | None = None
 
 
 class Extension(BaseModel):
@@ -593,7 +596,9 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                      "bridgeAudience": BRIDGE_AUDIENCE},
             "environments": list(ENVIRONMENTS),
             "network": {
-                "name": env.get("PLATFORM_NETWORK", "iceberg-platform_default"),
+                "name": env.get("PLATFORM_NETWORK", env.get("BRIDGE_NAMESPACE", "iceberg-platform_default")),
+                "platform": env.get("BRIDGE_PLATFORM", "docker"),
+                "namespace": env.get("BRIDGE_NAMESPACE"),
                 "aliases": {"bridge": "bridge", "catalog": "polaris-control-plane",
                             "storage": "rustfs", "oidc": "keycloak"},
                 "roleLabel": "io.iceberg-platform.role",

@@ -1,0 +1,42 @@
+# Conversational BI, installed in the platform's namespace after the platform chart registered it:
+#   helm upgrade iceberg <platform chart> --reuse-values --set extensions.conversationalbi.host=cbi
+#   helm install conversationalbi <this chart> -n <platform namespace> --set llm.model=anthropic:claude-sonnet-5-5 \
+#     --set-string llm.env.ANTHROPIC_API_KEY=...
+image:
+  registry: ghcr.io/sanderdw
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+images:
+  gateway: iceberg-conversationalbi
+  runtime: iceberg-conversationalbi-runtime
+
+bridgeSecret: iceberg-bridge-conversationalbi
+
+# The LLM: a Pydantic AI model string and its provider's variables (see scripts/setup.py), or an
+# existing Secret with LLM_MODEL and those variables.
+llm:
+  existingSecret: ""
+  model: ""
+  env: {}
+
+query:
+  llmRows: 20
+  llmBytes: 8192
+  maxRows: 5000
+  timeoutSeconds: 30
+  maxQueries: 4
+
+memory: 3Gi
+
+ingress:
+  enabled: true
+  host: ""
+  className: ""
+  annotations: {}
+tls:
+  clusterIssuer: ""
+  secretName: iceberg-conversationalbi-tls
+
+networkPolicy:
+  enabled: true

@@ -1,0 +1,3 @@
+dbt {{ .Chart.AppVersion }} is starting in namespace {{ .Release.Namespace }}; runs go to {{ include "dbt.runsNamespace" . }}.
+
+  dbt portal  https://{{ include "dbt.host" . }}
