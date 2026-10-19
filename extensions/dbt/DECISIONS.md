@@ -7,7 +7,7 @@ contract change.
 
 ## Engine: dbt v2 OSS, installed from PyPI
 
-- `dbt-oss==2.0.5` (Apache-2.0) on PyPI is a 5 KB source shim. Its build step installs the
+- `dbt-oss==2.0.8` (Apache-2.0) on PyPI is a 5 KB source shim. Its build step installs the
   platform wheel with the Rust engine (`dbt/_core.abi3.so`) from dbt's GitHub release and checks the
   sha256 the shim pins. Wheels exist for Linux x86_64 and arm64 (manylinux_2_28), macOS and Windows.
   The dbt extension's `uv.lock` pins the shim's hash, so image builds are reproducible. The download

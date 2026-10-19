@@ -16,6 +16,7 @@
   the installers pass the key on.
 - KaTeX 0.18.11 in the web app, which fixes a prototype-pollution advisory (GHSA-238p-pmpm-9mq7) in
   the math rendering of chat answers.
+- The web app is built and the chat runtime runs on Node.js 26.
 - A semantic model's declared field type becomes a cast only when it is a known type, so a shared model
   can no longer add SQL to a governed query through it.
 - Filters on derived fields that combine conditions with `AND` or `OR` keep their meaning: the field's

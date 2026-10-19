@@ -13,6 +13,7 @@
 - `merge_to_main` takes the reviewed branch head as `revision` and refuses the merge if the branch moved.
 - `iceberg_dbt.py` refuses any file path from the project that would leave the folder (a drive letter such as
   `C:/` on Windows, an absolute path or `..`) before writing anything, and the server refuses `:` in file paths.
+- dbt v2 OSS 2.0.8.
 
 ## 0.1.0 - 2026-10-13
 
