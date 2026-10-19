@@ -35,6 +35,7 @@ def no_credentials(monkeypatch):
     ("bedrock:global.anthropic.claude-sonnet-5-5", BEDROCK, "BedrockConverseModel"),
     ("bedrock-mantle:openai.gpt-oss-120b", BEDROCK, "BedrockMantleResponsesModel"),
     ("anthropic-bedrock:global.anthropic.claude-sonnet-5-5", BEDROCK, "AnthropicModel"),
+    ("openrouter:anthropic/claude-sonnet-5.5", {"OPENROUTER_API_KEY": "r"}, "OpenRouterModel"),
 ])
 def test_every_provider_builds(monkeypatch, model, env, expected):
     for name, value in env.items():

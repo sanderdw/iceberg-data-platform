@@ -6,7 +6,8 @@ from scripts.release import SECRET, channel
 
 
 @pytest.mark.parametrize("text", ["ANTHROPIC_API_KEY=" + "a" * 20, "AWS_BEARER_TOKEN_BEDROCK=" + "t" * 30,
-                                  "AKIA" + "A" * 16, "sk-ant-" + "a" * 40, "sk-proj-" + "a" * 40])
+                                  "AKIA" + "A" * 16, "sk-ant-" + "a" * 40, "sk-proj-" + "a" * 40,
+                                  "OPENROUTER_API_KEY=" + "r" * 20, "sk-or-v1-" + "a" * 64])
 def test_llm_credentials_are_secrets(text):
     assert SECRET.search(text)
 

@@ -85,6 +85,7 @@ The model and key are in `conversationalbi/llm.env` in the installation director
 | OpenAI | `openai:gpt-5.5`, `openai-chat:…` | `OPENAI_API_KEY`; `OPENAI_BASE_URL` for a compatible endpoint |
 | Amazon Bedrock | `bedrock:global.anthropic.claude-sonnet-5-5`, `bedrock-mantle:…` | `AWS_BEARER_TOKEN_BEDROCK` and `AWS_REGION` |
 | Claude on Bedrock, Anthropic client | `anthropic-bedrock:global.anthropic.claude-sonnet-5-5` | as Bedrock |
+| OpenRouter | `openrouter:anthropic/claude-sonnet-5.5`, with any model name from [openrouter.ai/models](https://openrouter.ai/models) | `OPENROUTER_API_KEY` |
 
 To keep data on your own hardware, point `OPENAI_BASE_URL` at a local OpenAI-compatible server. After a change, restart the gateway from the installation directory:
 

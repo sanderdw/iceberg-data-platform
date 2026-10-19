@@ -288,7 +288,7 @@ setup_run() {
 
 # Conversational BI's setup writes llm.env from these variables (names only: no value reaches a
 # command line) or, in a terminal, from its questions.
-cbi_variables='LLM_MODEL BI_ALLOW_TEST_MODEL GOOGLE_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY OPENAI_BASE_URL AWS_BEARER_TOKEN_BEDROCK AWS_REGION'
+cbi_variables='LLM_MODEL BI_ALLOW_TEST_MODEL GOOGLE_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY OPENAI_BASE_URL AWS_BEARER_TOKEN_BEDROCK AWS_REGION OPENROUTER_API_KEY'
 
 cbi_setup() {
     set -- run --rm --user "$(id -u):$(id -g)" --mount "type=bind,src=$install_dir,dst=/install" --entrypoint python

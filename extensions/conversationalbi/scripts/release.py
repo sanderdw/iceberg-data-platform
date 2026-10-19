@@ -21,9 +21,9 @@ SUFFIXES = {".py", ".js", ".mjs", ".ts", ".tsx", ".css", ".html", ".svg", ".md",
 PLAIN = {".helmignore", "Dockerfile", ".gitignore", ".dockerignore", ".python-version", "LICENSE", "NOTICE"}
 BINARY = {".ttf", ".parquet"}
 SECRET = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|BRIDGE_CLIENT_SECRET=[0-9a-f]{16,}|"
-                    r"(?:GOOGLE|GEMINI|ANTHROPIC|OPENAI)_API_KEY=[A-Za-z0-9_.-]{16,}|AIza[0-9A-Za-z_-]{30,}|"
+                    r"(?:GOOGLE|GEMINI|ANTHROPIC|OPENAI|OPENROUTER)_API_KEY=[A-Za-z0-9_.-]{16,}|AIza[0-9A-Za-z_-]{30,}|"
                     r"AWS_BEARER_TOKEN_BEDROCK=[A-Za-z0-9_.+/=-]{16,}|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|"
-                    r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{32,}|RUNTIME_KEY=[0-9a-f]{16,}")
+                    r"\bsk-(?:ant-|proj-|or-v1-)?[A-Za-z0-9_-]{32,}|RUNTIME_KEY=[0-9a-f]{16,}")
 
 
 def tracked(root=ROOT):

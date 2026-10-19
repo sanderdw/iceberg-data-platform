@@ -8,7 +8,7 @@
     $TemporaryDir = Join-Path ([IO.Path]::GetTempPath()) ('iceberg-install-' + [guid]::NewGuid().ToString('N'))
     # Conversational BI's setup writes llm.env from these variables (names only: no value reaches a
     # command line) or, in a terminal, from its questions.
-    $CbiVariables = @('LLM_MODEL', 'BI_ALLOW_TEST_MODEL', 'GOOGLE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION')
+    $CbiVariables = @('LLM_MODEL', 'BI_ALLOW_TEST_MODEL', 'GOOGLE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION', 'OPENROUTER_API_KEY')
     $Interactive = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and
         -not ([Environment]::GetCommandLineArgs() | Where-Object { $_ -match '^-NonI' })
 

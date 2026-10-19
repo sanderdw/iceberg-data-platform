@@ -17,7 +17,7 @@ dependencies = [
   "duckdb-extension-iceberg==1.5.5",
   "duckdb-extension-httpfs==1.5.5",
   "duckdb-extension-avro==1.5.5",
-  "pydantic-ai-slim[ag-ui,spec,google,openai,anthropic,bedrock,bedrock-mantle]>=2.56.0,<3",
+  "pydantic-ai-slim[ag-ui,spec,google,openai,anthropic,bedrock,bedrock-mantle,openrouter]>=2.56.0,<3",
 ]
 
 [dependency-groups]

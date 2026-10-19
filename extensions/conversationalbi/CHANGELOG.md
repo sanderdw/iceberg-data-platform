@@ -11,6 +11,9 @@
 - On a phone the chat fills the visible screen, and the keyboard shrinks it, so the question field
   stays directly above the keyboard instead of ending up between the messages. Picking a model
   scrolls to the chat.
+- **OpenRouter as a model provider.** Set `LLM_MODEL=openrouter:<vendor>/<model>`, such as
+  `openrouter:anthropic/claude-sonnet-5.5`, and `OPENROUTER_API_KEY`. Setup offers it in its menu, and
+  the installers pass the key on.
 - KaTeX 0.18.11 in the web app, which fixes a prototype-pollution advisory (GHSA-238p-pmpm-9mq7) in
   the math rendering of chat answers.
 - A semantic model's declared field type becomes a cast only when it is a known type, so a shared model

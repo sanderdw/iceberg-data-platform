@@ -12,6 +12,7 @@
 
   What is still open is listed in the [security review](security-review.md).
 - **Notebooks keep running through a short outage.** When Polaris or Keycloak restarts you stay signed in, and notebooks stop only after 90 seconds without them.
+- **OpenRouter in Conversational BI.** Set `LLM_MODEL=openrouter:<vendor>/<model>` and `OPENROUTER_API_KEY` to reach any model OpenRouter offers.
 - **See who used the Bridge.** Its logs show every automation account created or revoked and every token issued.
 - Fixed: filters that combine conditions with `AND` or `OR` on calculated fields give the right answer, MCP accepts semantic models up to 1 MB, and the guides name the correct session cookie and OpenMetadata bot permissions.
 

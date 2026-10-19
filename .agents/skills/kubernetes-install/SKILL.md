@@ -102,7 +102,7 @@ helm upgrade --install dbt oci://ghcr.io/sanderdw/charts/iceberg-dbt $common
 helm upgrade --install ingestion oci://ghcr.io/sanderdw/charts/iceberg-ingestion $common
 ```
 
-Conversational BI takes its LLM from a Secret, so the key never appears in a command or in Helm's values. Ask the user to set the key in an environment variable named after the provider (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, or `AWS_BEARER_TOKEN_BEDROCK` with `AWS_REGION`), then:
+Conversational BI takes its LLM from a Secret, so the key never appears in a command or in Helm's values. Ask the user to set the key in an environment variable named after the provider (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, or `AWS_BEARER_TOKEN_BEDROCK` with `AWS_REGION`), then:
 
 ```bash
 kubectl -n <namespace> create secret generic conversationalbi-llm \
