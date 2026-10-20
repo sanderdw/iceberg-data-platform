@@ -1,0 +1,3336 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An open lakehouse you actually own: Apache Iceberg with open, replaceable building blocks, on one laptop.">
+      
+      
+      
+        <link rel="canonical" href="https://sanderdw.github.io/iceberg-data-platform/install-kubernetes/">
+      
+      
+      
+        <link rel="prev" href="../install/">
+      
+      
+        <link rel="next" href="../first-steps/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/favicon.svg">
+      <meta name="generator" content="zensical-0.0.70">
+    
+    
+      
+        <title>Install on Kubernetes - Iceberg Data Platform</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.e442bf79.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.b60ce83d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-hidden="true"></label>
+    <div data-md-component="skip">
+      <a href="#__skip" class="md-skip">
+        Skip to content
+      </a>
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="Iceberg Data Platform" class="md-header__button md-logo" aria-label="Iceberg Data Platform" data-md-component="logo">
+      
+  <img src="../assets/favicon.svg" alt="Iceberg Data Platform">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Iceberg Data Platform
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Install on Kubernetes
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="none" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Light"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Light" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="none" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Dark"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Dark" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/sanderdw/iceberg-data-platform" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    sanderdw/iceberg-data-platform
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./.." class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../faq/" class="md-tabs__link">
+        
+  
+  FAQ
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../develop/" class="md-tabs__link">
+          
+  
+  Develop
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../changelog/" class="md-tabs__link">
+          
+  
+  Releases
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://sanderdw.github.io/iceberg-data-platform/presentation/" class="md-tabs__link">
+        
+  
+  Presentation
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="Iceberg Data Platform" class="md-nav__button md-logo" aria-label="Iceberg Data Platform" data-md-component="logo">
+      
+  <img src="../assets/favicon.svg" alt="Iceberg Data Platform">
+
+    </a>
+    Iceberg Data Platform
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/sanderdw/iceberg-data-platform" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    sanderdw/iceberg-data-platform
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="./.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_1">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Guide
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1_2" id="__nav_1_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Get started
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_1_2">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Get started
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Installation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Install on Kubernetes
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Install on Kubernetes
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-need" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        What you need
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Install
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#addresses-and-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Addresses and sign-in
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#postgres-object-storage-and-volumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Postgres, object storage and volumes
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Postgres, object storage and volumes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-a-managed-postgresql" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Use a managed PostgreSQL
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#use-the-official-apache-polaris-chart" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Use the official Apache Polaris chart
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-platform-secret" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The platform Secret
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#add-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Add extensions
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Settings
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Files
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#try-it-on-your-computer" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Try it on your computer
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#update" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Update
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#restart-and-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Restart and logs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-the-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Check the installation
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#uninstall" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Uninstall
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#more" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        More
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../first-steps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  First steps
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Agent skills
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_3" id="__nav_1_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Use the platform
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_3_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_1_3">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Use the platform
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user-portal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  User portal
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Notebooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../semantic-models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Semantic models
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-shares/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Data shares
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../connect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connect from your computer
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ai-agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  AI agents
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  MCP tools
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Administer
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_1_4">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Administer
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../admin-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Administration guide
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Security model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security-review/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Security review
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extensions
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_1_5">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Extensions
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extensions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conversational-bi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Conversational BI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dbt/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  dbt pipelines
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ingestion (dlt)
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../openmetadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OpenMetadata
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  FAQ
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../develop/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Develop
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_3">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Develop
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/run-from-source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Run from source
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Contributing
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Architecture
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Kubernetes
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/resource-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resource model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/keycloak/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Keycloak identity and access
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/form-validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Form validation rules
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/extension-bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extension Bridge
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_10" id="__nav_3_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extension internals
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_10_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_3_10">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Extension internals
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/conversational-bi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Conversational BI internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/dbt/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  dbt internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ingestion internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/openmetadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OpenMetadata internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/releasing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Publishing a release
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Releases
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_4">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Releases
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Changelog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.9.9/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.9.9
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.9.2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.9.2
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.9.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.9.1
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.9.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.9.0
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.7.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.7.0
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.6.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.6.0
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.5.3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.5.3
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.5.2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.5.2
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.5.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.5.1
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.5.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Iceberg Data Platform 0.5.0
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://sanderdw.github.io/iceberg-data-platform/presentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Presentation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-need" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        What you need
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Install
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#addresses-and-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Addresses and sign-in
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#postgres-object-storage-and-volumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Postgres, object storage and volumes
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Postgres, object storage and volumes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-a-managed-postgresql" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Use a managed PostgreSQL
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#use-the-official-apache-polaris-chart" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Use the official Apache Polaris chart
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-platform-secret" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The platform Secret
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#add-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Add extensions
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Settings
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Files
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#try-it-on-your-computer" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Try it on your computer
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#update" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Update
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#restart-and-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Restart and logs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-the-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Check the installation
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#uninstall" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Uninstall
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#more" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        More
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                <a id="__skip" tabindex="-1"></a>
+                
+                  
+
+  
+    <a href="https://github.com/sanderdw/iceberg-data-platform/edit/main/docs/install-kubernetes.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="install-on-kubernetes">Install on Kubernetes<a class="headerlink" href="#install-on-kubernetes" title="Permanent link">&para;</a></h1>
+<p>The Helm chart runs the same platform as the <a href="../install/">Compose installation</a> on a Kubernetes
+cluster. It covers Apache Polaris, RustFS, Keycloak, Postgres and both portals, and starts notebooks
+as pods. Extensions have their own charts and install next to it.</p>
+<p>An AI agent can do these steps with you: the <a href="../agent-skills/"><code>kubernetes-install</code></a> skill checks the cluster, asks the choices below, installs after you approve each command, and verifies every host.</p>
+<h2 id="what-you-need">What you need<a class="headerlink" href="#what-you-need" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Kubernetes 1.32 or later, with a default StorageClass and NetworkPolicy support (most CNIs, such as Cilium and Calico)</li>
+<li>An ingress controller, such as Traefik, with an IngressClass</li>
+<li><a href="https://cert-manager.io/">cert-manager</a> with a ClusterIssuer, for example Let's Encrypt with HTTP-01</li>
+<li>A DNS name for each host, usually one wildcard record pointing at the ingress controller's load balancer</li>
+<li>Optionally a managed PostgreSQL 15 or later (see <a href="#use-a-managed-postgresql">use a managed PostgreSQL</a>)</li>
+<li><code>helm</code> 3.15 or later, and metrics-server for the CPU and memory figures on the Infrastructure page</li>
+</ul>
+<p>Plain HTTP sign-in only works on <code>localhost</code>, so a cluster needs HTTPS. Each portal gets its own host under one base domain:</p>
+<table>
+<thead>
+<tr>
+<th>Host</th>
+<th>Serves</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>admin.&lt;domain&gt;</code></td>
+<td>Administration portal</td>
+</tr>
+<tr>
+<td><code>users.&lt;domain&gt;</code></td>
+<td>User portal and notebooks</td>
+</tr>
+<tr>
+<td><code>auth.&lt;domain&gt;</code></td>
+<td>Keycloak sign-in (only the <code>iceberg</code> realm)</td>
+</tr>
+<tr>
+<td><code>catalog.&lt;domain&gt;</code></td>
+<td>Iceberg REST catalog for your own tools</td>
+</tr>
+<tr>
+<td><code>s3.&lt;domain&gt;</code></td>
+<td>S3 endpoint for your own tools</td>
+</tr>
+</tbody>
+</table>
+<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>helm<span class="w"> </span>install<span class="w"> </span>iceberg<span class="w"> </span>oci://ghcr.io/sanderdw/charts/iceberg-data-platform<span class="w"> </span>--version<span class="w"> </span><span class="m">0</span>.9.9<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>--namespace<span class="w"> </span>iceberg<span class="w"> </span>--create-namespace<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>--set<span class="w"> </span><span class="nv">baseDomain</span><span class="o">=</span>data.example.com<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>--set<span class="w"> </span>ingress.className<span class="o">=</span>traefik<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>--set<span class="w"> </span>tls.clusterIssuer<span class="o">=</span>letsencrypt-prod<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>--wait<span class="w"> </span>--timeout<span class="w"> </span>15m
+</span></code></pre></div>
+<p>Choose the base domain once: Keycloak keeps the addresses of the first installation. Install one
+platform per namespace.</p>
+<p>The chart prints where to sign in. Sign in to <code>https://admin.&lt;domain&gt;</code> as <code>platform-admin</code> with the
+one-time password from the platform Secret; Keycloak then asks for a new one:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span>iceberg-platform<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.data.PLATFORM_ADMIN_PASSWORD}'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="p">;</span><span class="w"> </span><span class="nb">echo</span>
+</span></code></pre></div>
+<p>Continue with the <a href="../first-steps/">first steps</a>, using the addresses below. Download
+<code>iceberg_connect.py</code> from the user portal (<strong>Catalog › Connect from your computer</strong>): it carries the
+catalog and S3 addresses of your cluster.</p>
+<h2 id="addresses-and-sign-in">Addresses and sign-in<a class="headerlink" href="#addresses-and-sign-in" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Address</th>
+<th>Sign-in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Administration portal</td>
+<td><code>https://admin.&lt;domain&gt;</code></td>
+<td><code>platform-admin</code> with the one-time password above</td>
+</tr>
+<tr>
+<td>User portal and notebooks</td>
+<td><code>https://users.&lt;domain&gt;</code></td>
+<td>A Keycloak account an administrator created</td>
+</tr>
+<tr>
+<td>API documentation</td>
+<td><code>/docs</code> on either portal</td>
+<td>Portal session</td>
+</tr>
+<tr>
+<td>User MCP server</td>
+<td><code>https://users.&lt;domain&gt;/mcp</code></td>
+<td>Keycloak sign-in through the <code>iceberg-mcp</code> client</td>
+</tr>
+<tr>
+<td>Administration MCP server</td>
+<td><code>https://admin.&lt;domain&gt;/mcp</code></td>
+<td>Keycloak sign-in, <code>platform-admin</code> role</td>
+</tr>
+<tr>
+<td>Iceberg REST catalog</td>
+<td><code>https://catalog.&lt;domain&gt;/api/catalog</code></td>
+<td>Keycloak token (<a href="../connect/">connect from your computer</a>)</td>
+</tr>
+<tr>
+<td>S3</td>
+<td><code>https://s3.&lt;domain&gt;</code></td>
+<td>Credentials the catalog hands out</td>
+</tr>
+<tr>
+<td>Extensions</td>
+<td><code>https://dbt.&lt;domain&gt;</code>, <code>https://ingest.&lt;domain&gt;</code>, <code>https://cbi.&lt;domain&gt;</code>, each with <code>/mcp</code></td>
+<td>Keycloak account</td>
+</tr>
+<tr>
+<td>Keycloak administration console</td>
+<td><code>http://localhost:8080/admin</code> after <code>kubectl -n iceberg port-forward svc/keycloak 8080</code></td>
+<td><code>admin</code> with <code>KEYCLOAK_ADMIN_PASSWORD</code> from the platform Secret</td>
+</tr>
+</tbody>
+</table>
+<p>MCP clients still listen on <code>localhost</code> for their sign-in callback (<code>mcpCallbackPort</code>, 3010), as on
+Compose; see <a href="../ai-agents/">AI agents</a>. The Keycloak console is never published: it opens only through
+the port-forward, for someone with access to the cluster. There is no pgAdmin and no RustFS console.</p>
+<p>Every credential is a key in the Secret <code>iceberg-platform</code>. With <code>demo=true</code> the demo accounts'
+passwords are there too, as <code>DEMO_ADMIN_PASSWORD</code>, <code>DEMO_WRITER_PASSWORD</code>, <code>DEMO_READER_PASSWORD</code> and
+<code>DEMO_OUTSIDER_PASSWORD</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span>iceberg-platform<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.data.DEMO_WRITER_PASSWORD}'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="p">;</span><span class="w"> </span><span class="nb">echo</span>
+</span></code></pre></div>
+<h2 id="postgres-object-storage-and-volumes">Postgres, object storage and volumes<a class="headerlink" href="#postgres-object-storage-and-volumes" title="Permanent link">&para;</a></h2>
+<p>Cloud providers offer managed PostgreSQL, object storage and file storage next to their Kubernetes
+service. What the platform can use:</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Bundled in the chart</th>
+<th>Provider service</th>
+<th>Choice</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Postgres</strong> (Polaris's catalog, Keycloak's users)</td>
+<td>One Postgres pod with a block volume</td>
+<td>Managed PostgreSQL, such as Scaleway Managed Database</td>
+<td>Managed is better beyond a demo: backups, point-in-time recovery, high availability and upgrades, and it stays plain PostgreSQL. See <a href="#use-a-managed-postgresql">use a managed PostgreSQL</a>.</td>
+</tr>
+<tr>
+<td><strong>Object storage</strong> (table data)</td>
+<td>RustFS on a block volume</td>
+<td>S3-compatible object storage, such as Scaleway Object Storage</td>
+<td>Keep RustFS. The platform creates a storage account and policy per user through the RustFS administration API, and Polaris hands out short-lived credentials scoped to one table through STS. Provider object storage has neither in this form, so it cannot replace RustFS without giving up that access control. It does suit backups of the RustFS volume.</td>
+</tr>
+<tr>
+<td><strong>Notebook files</strong> (per team and environment)</td>
+<td>A volume per team from the default StorageClass</td>
+<td>The provider's block storage, through its CSI driver</td>
+<td>Already the provider's block storage. Choose a StorageClass that keeps volumes when their claim is deleted (<code>storageClass</code>, such as <code>sbs-default-retain</code> on Scaleway). The volumes are ReadWriteOnce, so the notebooks of one team and environment run on the same node.</td>
+</tr>
+</tbody>
+</table>
+<p>Whatever you choose, back up these together, because each needs the others to restore a working
+platform:</p>
+<ul>
+<li>Postgres (the bundled volume <code>data-postgres-0</code>, or your managed database) and the RustFS volume
+  <code>data-rustfs-0</code>;</li>
+<li>the Secret <code>iceberg-platform</code>, and the extensions' Secrets <code>iceberg-dbt</code>, <code>iceberg-ingestion</code> (its
+  <code>ING_SECRET_KEY</code> encrypts the stored source passwords) and <code>iceberg-conversationalbi</code>;</li>
+<li>the extensions' volumes <code>dbt-state</code> (projects and their Git repositories), <code>dbt-artifacts</code>,
+  <code>ing-state</code> and <code>ing-artifacts</code>, and the notebook volumes in <code>iceberg-notebooks</code>.</li>
+</ul>
+<h3 id="use-a-managed-postgresql">Use a managed PostgreSQL<a class="headerlink" href="#use-a-managed-postgresql" title="Permanent link">&para;</a></h3>
+<p>The platform needs two databases on PostgreSQL 15 or later, each with its own user: one for Polaris's
+catalog and one for Keycloak. Give the database an address on the cluster's private network, so it
+needs no public endpoint.</p>
+<ol>
+<li>
+<p>Create the database server, with the two databases and their users. Each user needs all rights on
+   its own database, including creating tables in its <code>public</code> schema. On Scaleway, for example:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>scw<span class="w"> </span>rdb<span class="w"> </span>instance<span class="w"> </span>create<span class="w"> </span><span class="nv">name</span><span class="o">=</span>iceberg<span class="w"> </span><span class="nv">engine</span><span class="o">=</span>PostgreSQL-17<span class="w"> </span>node-type<span class="o">=</span>db-play2-nano<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>user-name<span class="o">=</span>iceberg-owner<span class="w"> </span>generate-password<span class="o">=</span><span class="nb">true</span><span class="w"> </span>volume-type<span class="o">=</span>sbs_5k<span class="w"> </span>volume-size<span class="o">=</span>20GB<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>init-endpoints.0.private-network.private-network-id<span class="o">=</span>&lt;the<span class="w"> </span>cluster<span class="err">'</span>s<span class="w"> </span>private<span class="w"> </span>network&gt;<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>init-endpoints.0.private-network.enable-ipam<span class="o">=</span><span class="nb">true</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="k">for</span><span class="w"> </span>name<span class="w"> </span><span class="k">in</span><span class="w"> </span>polaris<span class="w"> </span>keycloak<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>scw<span class="w"> </span>rdb<span class="w"> </span>user<span class="w"> </span>create<span class="w"> </span>instance-id<span class="o">=</span>&lt;id&gt;<span class="w"> </span><span class="nv">name</span><span class="o">=</span><span class="nv">$name</span><span class="w"> </span><span class="nv">password</span><span class="o">=</span>&lt;password&gt;
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span>scw<span class="w"> </span>rdb<span class="w"> </span>database<span class="w"> </span>create<span class="w"> </span>instance-id<span class="o">=</span>&lt;id&gt;<span class="w"> </span><span class="nv">name</span><span class="o">=</span><span class="nv">$name</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">  </span>scw<span class="w"> </span>rdb<span class="w"> </span>privilege<span class="w"> </span><span class="nb">set</span><span class="w"> </span>instance-id<span class="o">=</span>&lt;id&gt;<span class="w"> </span>database-name<span class="o">=</span><span class="nv">$name</span><span class="w"> </span>user-name<span class="o">=</span><span class="nv">$name</span><span class="w"> </span><span class="nv">permission</span><span class="o">=</span>all
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="k">done</span>
+</span></code></pre></div>
+</li>
+<li>
+<p>Store both passwords in a Secret in the platform's namespace:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>iceberg
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>iceberg-postgres<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">POLARIS_DB_PASSWORD</span><span class="o">=</span>&lt;password&gt;<span class="w"> </span>--from-literal<span class="o">=</span><span class="nv">KEYCLOAK_DB_PASSWORD</span><span class="o">=</span>&lt;password&gt;
+</span></code></pre></div>
+</li>
+<li>
+<p>Install with the database's private address:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>helm<span class="w"> </span>install<span class="w"> </span>iceberg<span class="w"> </span>oci://ghcr.io/sanderdw/charts/iceberg-data-platform<span class="w"> </span>--version<span class="w"> </span><span class="m">0</span>.9.9<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--set<span class="w"> </span><span class="nv">baseDomain</span><span class="o">=</span>data.example.com<span class="w"> </span>--set<span class="w"> </span>tls.clusterIssuer<span class="o">=</span>letsencrypt-prod<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--set<span class="w"> </span>postgres.external.enabled<span class="o">=</span><span class="nb">true</span><span class="w"> </span>--set<span class="w"> </span>postgres.external.host<span class="o">=</span>&lt;private<span class="w"> </span>address&gt;<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--set<span class="w"> </span>postgres.external.existingSecret<span class="o">=</span>iceberg-postgres<span class="w"> </span>--wait<span class="w"> </span>--timeout<span class="w"> </span>15m
+</span></code></pre></div>
+</li>
+</ol>
+<p>The chart then starts no Postgres of its own. Polaris, Keycloak and the Infrastructure page connect
+with <code>sslmode=require</code>, which encrypts the connection; <code>postgres.external.sslmode=verify-full</code> also
+checks the server's certificate. Other names for the databases or users go in
+<code>postgres.external.polaris</code> and <code>postgres.external.keycloak</code>. The provider's backups now cover the
+catalog and the users; back up the RustFS volume and the Secret <code>iceberg-platform</code> with them.</p>
+<h2 id="use-the-official-apache-polaris-chart">Use the official Apache Polaris chart<a class="headerlink" href="#use-the-official-apache-polaris-chart" title="Permanent link">&para;</a></h2>
+<p>By default the chart runs Polaris itself, as one pod. To run Polaris with the official
+<a href="https://polaris.apache.org/">Apache Polaris chart</a> instead, for its replicas, autoscaling, metrics
+and maintenance job, install the two charts together. The platform chart then:</p>
+<ul>
+<li>runs no Polaris of its own, but creates the realm and its root credentials in the database (the
+  official chart has no bootstrap);</li>
+<li>keeps the Services <code>polaris</code> and <code>polaris-control-plane</code>, which find the official chart's pods by
+  label, so the portals, notebooks and extensions reach Polaris as before;</li>
+<li>writes the official chart's values, computed from your settings, to the ConfigMap
+  <code>iceberg-polaris-values</code>: the database, RustFS's credentials, Keycloak sign-in, the labels and the
+  feature flags.</li>
+</ul>
+<p>That Polaris belongs to this platform: the platform creates catalogs, principals and roles in it with
+the realm's root principal. It is not a way to share an existing Polaris with other applications.</p>
+<p>Install in this order, because the official chart's values come from the platform, and demo data
+needs a running Polaris:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>helm<span class="w"> </span>install<span class="w"> </span>iceberg<span class="w"> </span>oci://ghcr.io/sanderdw/charts/iceberg-data-platform<span class="w"> </span>--version<span class="w"> </span><span class="m">0</span>.9.9<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--create-namespace<span class="w"> </span>--set<span class="w"> </span><span class="nv">baseDomain</span><span class="o">=</span>data.example.com<span class="w"> </span>--set<span class="w"> </span>tls.clusterIssuer<span class="o">=</span>letsencrypt-prod<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--set<span class="w"> </span>polaris.external.enabled<span class="o">=</span><span class="nb">true</span><span class="w"> </span>--wait<span class="w"> </span>--timeout<span class="w"> </span>15m
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>get<span class="w"> </span>configmap<span class="w"> </span>iceberg-polaris-values<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.data.values\.yaml}'</span><span class="w"> </span>&gt;<span class="w"> </span>polaris-values.yaml
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>helm<span class="w"> </span>install<span class="w"> </span>catalog<span class="w"> </span>polaris<span class="w"> </span>--repo<span class="w"> </span>https://downloads.apache.org/polaris/helm-chart<span class="w"> </span>--version<span class="w"> </span><span class="m">1</span>.8.0<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span>-n<span class="w"> </span>iceberg<span class="w"> </span>-f<span class="w"> </span>polaris-values.yaml<span class="w"> </span>--wait<span class="w"> </span>--timeout<span class="w"> </span>10m
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># Optional, now that Polaris runs: demo accounts and data.</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>iceberg<span class="w"> </span>oci://ghcr.io/sanderdw/charts/iceberg-data-platform<span class="w"> </span>--version<span class="w"> </span><span class="m">0</span>.9.9<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">  </span>--reset-then-reuse-values<span class="w"> </span>--set<span class="w"> </span><span class="nv">demo</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>--wait
+</span></code></pre></div>
+<p>Keep <code>polaris-values.yaml</code> as it is and put your own settings, such as <code>replicaCount</code>, <code>resources</code> or
+<code>autoscaling</code>, in a second file (<code>-f polaris-values.yaml -f my-polaris.yaml</code>). With more than one
+replica, every replica needs the same token signing keys: set <code>authentication.tokenBroker.secret</code> in
+your file. Install the Polaris version the platform names in <code>images.polaris</code>. After a platform
+upgrade, read the ConfigMap again and upgrade the <code>catalog</code> release with it.</p>
+<h2 id="the-platform-secret">The platform Secret<a class="headerlink" href="#the-platform-secret" title="Permanent link">&para;</a></h2>
+<p>The chart generates every credential once and stores it in the Secret <code>iceberg-platform</code>. Upgrades
+keep it, and it stays after <code>helm uninstall</code>. Back it up: the data in Postgres and RustFS only
+opens with these credentials. An upgrade that finds no Secret stops instead of creating new ones.</p>
+<p>GitOps tools that render charts without cluster access, such as Argo CD, cannot read the live
+Secret. Create it yourself and set <code>existingSecret</code>; the keys are listed in the chart's <code>values.yaml</code>.</p>
+<h2 id="add-extensions">Add extensions<a class="headerlink" href="#add-extensions" title="Permanent link">&para;</a></h2>
+<p>Each extension is two steps: register it in the platform release, which creates its Keycloak clients
+and its handshake Secret <code>iceberg-bridge-&lt;id&gt;</code>, then install its chart in the same namespace. The
+extension gets the host <code>&lt;host&gt;.&lt;domain&gt;</code> and its own certificate.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nv">chart</span><span class="o">=</span>oci://ghcr.io/sanderdw/charts
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># 1. Register the extensions you want, with their hosts.</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>iceberg<span class="w"> </span><span class="nv">$chart</span>/iceberg-data-platform<span class="w"> </span>--version<span class="w"> </span><span class="m">0</span>.9.9<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>--reset-then-reuse-values<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--set<span class="w"> </span>extensions.dbt.host<span class="o">=</span>dbt<span class="w"> </span>--set<span class="w"> </span>extensions.ingestion.host<span class="o">=</span>ingest<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--set<span class="w"> </span>extensions.conversationalbi.host<span class="o">=</span>cbi<span class="w"> </span>--wait
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="c1"># 2. Install their charts, with the same ingress settings as the platform.</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="nv">common</span><span class="o">=</span><span class="s2">"-n iceberg --set ingress.className=traefik --set tls.clusterIssuer=letsencrypt-prod --wait"</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>helm<span class="w"> </span>install<span class="w"> </span>dbt<span class="w"> </span><span class="nv">$chart</span>/iceberg-dbt<span class="w"> </span>--version<span class="w"> </span><span class="m">0</span>.1.1<span class="w"> </span><span class="nv">$common</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>helm<span class="w"> </span>install<span class="w"> </span>ingestion<span class="w"> </span><span class="nv">$chart</span>/iceberg-ingestion<span class="w"> </span>--version<span class="w"> </span><span class="m">0</span>.1.1<span class="w"> </span><span class="nv">$common</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># Conversational BI reads its LLM from a Secret, so the key stays out of Helm's values.</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>conversationalbi-llm<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">LLM_MODEL</span><span class="o">=</span>anthropic:claude-sonnet-5-5<span class="w"> </span>--from-literal<span class="o">=</span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span><span class="s2">"</span><span class="nv">$ANTHROPIC_API_KEY</span><span class="s2">"</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>helm<span class="w"> </span>install<span class="w"> </span>conversationalbi<span class="w"> </span><span class="nv">$chart</span>/iceberg-conversationalbi<span class="w"> </span>--version<span class="w"> </span><span class="m">0</span>.1.3<span class="w"> </span><span class="nv">$common</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="w">  </span>--set<span class="w"> </span>llm.existingSecret<span class="o">=</span>conversationalbi-llm
+</span></code></pre></div>
+<ul>
+<li><strong>dbt and Ingestion</strong> run every build or load as a Kubernetes Job in a namespace of their own
+  (<code>iceberg-dbt-runs</code>, <code>iceberg-ingestion-runs</code>), with the same isolation as on Docker. Ingestion runs
+  reach public sources only; <code>--set runs.allowPrivateSources=true</code> also allows sources in your own network.</li>
+<li><strong>Conversational BI</strong> needs an LLM: <code>LLM_MODEL</code> is a Pydantic AI model string, next to its
+  provider's variables, as in <a href="../conversational-bi/#change-the-model">change the model</a>. To change the
+  model, replace the Secret and restart the gateway: <code>kubectl -n iceberg rollout restart deploy/cbi-gateway</code>.
+  For a quick test, <code>--set llm.model=... --set-string llm.env.&lt;VARIABLE&gt;=...</code> also works, but then the
+  key is stored in Helm's release history.</li>
+</ul>
+<p><code>helm show values oci://ghcr.io/sanderdw/charts/iceberg-dbt</code> lists every setting of an extension
+chart. See <a href="../extensions/">extensions</a> for what each one does. OpenMetadata has no chart yet: it runs
+with Compose only.</p>
+<h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
+<p><code>helm show values oci://ghcr.io/sanderdw/charts/iceberg-data-platform</code> lists every setting with its
+meaning. The ones you are most likely to change:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>baseDomain</code></td>
+<td>(required)</td>
+<td>Each portal gets <code>&lt;host&gt;.&lt;baseDomain&gt;</code></td>
+</tr>
+<tr>
+<td><code>hosts.admin</code>, <code>hosts.users</code>, …</td>
+<td><code>admin</code>, <code>users</code>, <code>auth</code>, <code>catalog</code>, <code>s3</code></td>
+<td>The host names under the base domain</td>
+</tr>
+<tr>
+<td><code>ingress.className</code></td>
+<td>cluster default</td>
+<td>Your IngressClass, such as <code>traefik</code></td>
+</tr>
+<tr>
+<td><code>tls.clusterIssuer</code></td>
+<td>(none)</td>
+<td>The cert-manager ClusterIssuer; without it, provide the Secret <code>tls.secretName</code> yourself</td>
+</tr>
+<tr>
+<td><code>storageClass</code></td>
+<td>cluster default</td>
+<td>For Postgres, RustFS and notebook storage</td>
+</tr>
+<tr>
+<td><code>polaris.external.enabled</code></td>
+<td>off</td>
+<td>Polaris from the official Apache Polaris chart; see <a href="#use-the-official-apache-polaris-chart">use the official Apache Polaris chart</a></td>
+</tr>
+<tr>
+<td><code>postgres.external.enabled</code>, <code>.host</code>, <code>.existingSecret</code></td>
+<td>off</td>
+<td>Your own PostgreSQL instead of the bundled one; see <a href="#use-a-managed-postgresql">use a managed PostgreSQL</a></td>
+</tr>
+<tr>
+<td><code>postgres.storage</code>, <code>rustfs.storage</code></td>
+<td><code>10Gi</code>, <code>50Gi</code></td>
+<td>Volume sizes (<code>postgres.storage</code> only for the bundled Postgres)</td>
+</tr>
+<tr>
+<td><code>notebooks.max</code>, <code>notebooks.memory</code>, <code>notebooks.storage</code></td>
+<td><code>8</code>, <code>2g</code>, <code>5Gi</code></td>
+<td>Notebooks at once, memory per notebook, files per team and environment</td>
+</tr>
+<tr>
+<td><code>polaris.tokenLifetime</code></td>
+<td><code>3600</code></td>
+<td>Seconds that catalog tokens and storage credentials stay valid (<code>POLARIS_TOKEN_LIFETIME</code> on Compose)</td>
+</tr>
+<tr>
+<td><code>polaris.semanticModels</code></td>
+<td><code>true</code></td>
+<td>Semantic models in Polaris (<code>POLARIS_SEMANTIC_MODELS</code>)</td>
+</tr>
+<tr>
+<td><code>users.queries.slots</code>, <code>users.queries.waitSeconds</code></td>
+<td><code>2</code>, <code>15</code></td>
+<td>Previews and governed queries at once, and how long MCP waits for a slot (<code>USER_QUERY_SLOTS</code>, <code>USER_QUERY_WAIT_SECONDS</code>)</td>
+</tr>
+<tr>
+<td><code>notebooks.startSeconds</code></td>
+<td><code>180</code></td>
+<td>How long a notebook may take to start; the first on a node pulls its image</td>
+</tr>
+<tr>
+<td><code>mcpCallbackPort</code></td>
+<td><code>3010</code></td>
+<td>The loopback port MCP clients use for their sign-in callback (<code>MCP_CALLBACK_PORT</code>)</td>
+</tr>
+<tr>
+<td><code>forwardedAllowIps</code></td>
+<td><code>*</code></td>
+<td>Addresses whose <code>X-Forwarded-For</code> the portals trust; see the <a href="../security/#on-kubernetes">security model</a></td>
+</tr>
+<tr>
+<td><code>keycloak.adminOrigin</code></td>
+<td><code>http://localhost:8080</code></td>
+<td>The address of the Keycloak administration console, through a port-forward</td>
+</tr>
+<tr>
+<td><code>keycloak.proxyTrustedAddresses</code></td>
+<td>(all)</td>
+<td>Addresses Keycloak takes <code>X-Forwarded-*</code> from</td>
+</tr>
+<tr>
+<td><code>networkPolicy.enabled</code>, <code>networkPolicy.privateRanges</code></td>
+<td>on, private ranges</td>
+<td>The NetworkPolicies, and the ranges notebooks may not reach</td>
+</tr>
+<tr>
+<td><code>extensions.&lt;id&gt;.host</code>, <code>.origin</code>, <code>.listing</code></td>
+<td>(none)</td>
+<td>Registers an extension; see <a href="#add-extensions">add extensions</a></td>
+</tr>
+<tr>
+<td><code>existingSecret</code></td>
+<td>(none)</td>
+<td>Your own platform Secret, for GitOps tools</td>
+</tr>
+<tr>
+<td><code>imagePullSecrets</code></td>
+<td>(none)</td>
+<td>For a mirror of the images in a private registry</td>
+</tr>
+<tr>
+<td><code>demo</code></td>
+<td><code>false</code></td>
+<td>Demo accounts and data, as in a demo installation</td>
+</tr>
+</tbody>
+</table>
+<h2 id="files">Files<a class="headerlink" href="#files" title="Permanent link">&para;</a></h2>
+<p>You need no files from this repository: Helm pulls the charts from <code>oci://ghcr.io/sanderdw/charts</code>,
+and the images from <code>ghcr.io/sanderdw</code>. Each GitHub release also attaches its chart
+(<code>iceberg-data-platform-&lt;version&gt;.tgz</code>, and <code>iceberg-&lt;extension&gt;-&lt;version&gt;.tgz</code> on the extension
+releases) for installations without access to ghcr.io; install it with <code>helm install iceberg ./&lt;file&gt;.tgz</code>.</p>
+<p>The <a href="../agent-skills/">agent skills</a>, <code>kubernetes-install</code> included, and the <code>AGENTS.md</code> for AI agents
+are in the release's installation archive (<code>iceberg-data-platform-&lt;version&gt;-install.tar.gz</code>). Unpack
+it anywhere and start your agent there; you don't need to run its installer. A checkout of the
+repository has them too.</p>
+<h2 id="try-it-on-your-computer">Try it on your computer<a class="headerlink" href="#try-it-on-your-computer" title="Permanent link">&para;</a></h2>
+<p><a href="https://kind.sigs.k8s.io/">kind</a> runs the chart without ingress or certificates, on the Compose
+addresses:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kind<span class="w"> </span>create<span class="w"> </span>cluster
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>helm<span class="w"> </span>pull<span class="w"> </span>oci://ghcr.io/sanderdw/charts/iceberg-data-platform<span class="w"> </span>--version<span class="w"> </span><span class="m">0</span>.9.9<span class="w"> </span>--untar
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>helm<span class="w"> </span>install<span class="w"> </span>iceberg<span class="w"> </span>./iceberg-data-platform<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>--create-namespace<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span>-f<span class="w"> </span>iceberg-data-platform/values-localhost.yaml<span class="w"> </span>--wait<span class="w"> </span>--timeout<span class="w"> </span>15m
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="k">for</span><span class="w"> </span>forward<span class="w"> </span><span class="k">in</span><span class="w"> </span>portal:3000<span class="w"> </span>users:3002<span class="w"> </span>keycloak:8080<span class="w"> </span>polaris:8181<span class="w"> </span>rustfs:9000<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>port-forward<span class="w"> </span><span class="s2">"svc/</span><span class="si">${</span><span class="nv">forward</span><span class="p">%%:*</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">forward</span><span class="p">##*:</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="p">&amp;</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="k">done</span>
+</span></code></pre></div>
+<p>Open <code>http://localhost:3000</code>. <code>helm show values</code> lists every setting of the chart.</p>
+<h2 id="update">Update<a class="headerlink" href="#update" title="Permanent link">&para;</a></h2>
+<p>Install a newer version with <code>helm upgrade</code>. The platform Secret and the volumes stay; the hook job
+reconciles Keycloak's clients again:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>iceberg<span class="w"> </span>oci://ghcr.io/sanderdw/charts/iceberg-data-platform<span class="w"> </span>--version<span class="w"> </span>&lt;version&gt;<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--reset-then-reuse-values<span class="w"> </span>--wait<span class="w"> </span>--timeout<span class="w"> </span>15m
+</span></code></pre></div>
+<p><code>--reset-then-reuse-values</code> keeps your settings and also applies the defaults of settings the new
+version added; <code>--reuse-values</code> would leave those empty. Update an extension the same way with its own
+chart and version. The portals and Keycloak run as one instance each and restart in place, so they are
+unavailable for a minute during an upgrade.</p>
+<h2 id="restart-and-logs">Restart and logs<a class="headerlink" href="#restart-and-logs" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>rollout<span class="w"> </span>restart<span class="w"> </span>deploy/portal<span class="w"> </span>deploy/users<span class="w">     </span><span class="c1"># restart the portals</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>logs<span class="w"> </span>deploy/bridge<span class="w">                             </span><span class="c1"># the Bridge's audit trail</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>logs<span class="w"> </span>deploy/portal<span class="w">                             </span><span class="c1"># the administration portal</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>logs<span class="w"> </span>deploy/keycloak
+</span></code></pre></div>
+<p>The workloads are the Deployments <code>portal</code>, <code>users</code>, <code>bridge</code>, <code>keycloak</code>, <code>monitor</code> and <code>polaris</code>,
+and the StatefulSets <code>postgres</code> and <code>rustfs</code>; each extension adds its own (<code>dbt</code>, <code>ingestion</code>,
+<code>cbi-gateway</code>, <code>cbi-runtime</code>).</p>
+<h2 id="check-the-installation">Check the installation<a class="headerlink" href="#check-the-installation" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>get<span class="w"> </span>pods<span class="w">                 </span><span class="c1"># every pod Running, the keycloak-bootstrap job Completed</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>get<span class="w"> </span>certificate<span class="w">          </span><span class="c1"># READY True once Let's Encrypt has issued the certificate</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>kubectl<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w"> </span>logs<span class="w"> </span>job/keycloak-bootstrap
+</span></code></pre></div>
+<ul>
+<li><strong>A certificate stays not ready:</strong> HTTP-01 needs port 80 of every host to reach the ingress
+  controller. Check the DNS record and <code>kubectl -n iceberg describe certificaterequest</code>.</li>
+<li><strong>Sign-in fails with "Invalid redirect URI":</strong> the browser address differs from the one at the first
+  install. <code>baseDomain</code> and the hosts are fixed once Keycloak has imported its realm.</li>
+<li><strong>A notebook does not start:</strong> the first notebook on a node pulls a large image. Raise
+  <code>notebooks.startSeconds</code>, and check <code>kubectl -n iceberg-notebooks get events</code>.</li>
+</ul>
+<h2 id="uninstall">Uninstall<a class="headerlink" href="#uninstall" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>helm<span class="w"> </span>uninstall<span class="w"> </span>conversationalbi<span class="w"> </span>dbt<span class="w"> </span>ingestion<span class="w"> </span>-n<span class="w"> </span>iceberg<span class="w">   </span><span class="c1"># the extensions you installed</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>helm<span class="w"> </span>uninstall<span class="w"> </span>iceberg<span class="w"> </span>-n<span class="w"> </span>iceberg
+</span></code></pre></div>
+<p>This removes the platform and the extensions, but keeps their Secrets (<code>iceberg-platform</code>,
+<code>iceberg-dbt</code>, <code>iceberg-ingestion</code>, <code>iceberg-conversationalbi</code>), the volumes with your data and the
+notebooks namespace <code>iceberg-notebooks</code> with the notebook files. Installing again with the same
+names finds them. To remove everything, delete the namespaces <code>iceberg</code> and <code>iceberg-notebooks</code>;
+this cannot be undone. A managed PostgreSQL is not part of the cluster: delete its databases yourself.</p>
+<h2 id="more">More<a class="headerlink" href="#more" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../security/#on-kubernetes">Security model on Kubernetes</a>: namespaces, rights and NetworkPolicies.</li>
+<li><a href="../develop/kubernetes/">Kubernetes for developers</a>: how the chart maps Compose, and testing on kind.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../install/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Installation">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Installation
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../first-steps/" class="md-footer__link md-footer__link--next" aria-label="Next: First steps">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                First steps
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Apache-2.0. An independent project, not an Apache Software Foundation project.
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.tabs","navigation.sections","navigation.indexes","navigation.top","navigation.footer","navigation.instant","search.highlight","toc.follow","content.code.copy","content.action.edit"],"redirect":null,"search":"../assets/javascripts/workers/search.c47bb847.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a2388154.min.js"></script>
+      
+        <script src="../javascripts/deck-redirect.js"></script>
+      
+    
+  </body>
+</html>
