@@ -135,6 +135,8 @@ main() {
         fi
     done
     cp -R "$bundle_dir/." "$install_dir/"
+    # pgAdmin reads its bind-mounted server list as uid 5050, which umask 077 would lock out.
+    chmod 644 "$install_dir/pgadmin/servers.json"
     cd "$install_dir"
     # Only a new .env still holds the password the administrator signs in with.
     new_env=true

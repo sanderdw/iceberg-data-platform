@@ -219,6 +219,7 @@ def test_shell_install_and_rerun_preserve_configuration(shell_installer):
     assert_next_steps(result.stdout, target)
     original = use_shared_origins(target)
     assert (target / ".env").stat().st_mode & 0o777 == 0o600
+    assert (target / "pgadmin" / "servers.json").stat().st_mode & 0o777 == 0o644
     (target / "compose.yaml").write_text("previous config")
     result = run()
     assert result.returncode == 0, result.stdout + result.stderr

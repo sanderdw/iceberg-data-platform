@@ -23,6 +23,7 @@ flowchart LR
         Polaris[Apache Polaris]
         Storage[RustFS S3 and IAM]
         Postgres[(PostgreSQL metadata)]
+        H2[(H2 Keycloak data)]
     end
     subgraph ThirdParty[Third party: external data share]
         Recipient[DuckDB or other Iceberg client]
@@ -46,6 +47,8 @@ flowchart LR
     Worker -->|Short-lived Iceberg REST token| Polaris
     Worker -->|Vended credentials| Storage
     Polaris --> Postgres
+    Keycloak -->|Compose| H2
+    Keycloak -.->|Helm chart| Postgres
 
     User -.->|Client ID, secret and DuckDB script| Recipient
     Recipient -.->|Read-only client credentials| Polaris

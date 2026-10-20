@@ -48,6 +48,14 @@ A role applies to every database of that team. The roles are described under [te
 
 A platform administrator uses **Reset password** on the Users page, which issues a new temporary password. That works only for accounts the portal created. Reset a linked account in the Keycloak console (on Kubernetes through a port-forward; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in)). See the [administration guide](admin-guide.md#teams-databases-and-users).
 
+### How do tools get access to the table files, and why not request signing?
+
+No one receives a permanent storage key. When a tool loads a table, Polaris checks the user's grants and vends short-lived storage credentials through STS on RustFS: limited to that table's location, read-only for readers and data shares, valid for up to one hour. The tool then reads and writes the files directly. Vended credentials are part of the Iceberg REST standard, so DuckDB, PyIceberg, dbt, dlt and DBeaver work without anything extra.
+
+The alternative is remote request signing: the catalog signs every single S3 request, so access is checked and logged per request and revocation takes effect at once. It works on any S3-compatible storage without STS. The cost is a catalog call for every request on the data path, and every client needs signer support, which most don't have. Polaris doesn't offer it.
+
+The trade-off is that revoking access doesn't end credentials that were already vended; they stay valid until they expire. It is also why the platform keeps RustFS instead of a provider's object storage, which has no STS in this form. See the [security model](security.md) and [object storage on Kubernetes](install-kubernetes.md#postgres-object-storage-and-volumes).
+
 ## Notebooks and your own tools
 
 ### A package I installed is gone.
