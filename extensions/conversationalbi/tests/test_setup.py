@@ -57,6 +57,7 @@ def test_unattended_writes_private_files_without_a_model(root, capsys):
     ("anthropic-bedrock:global.anthropic.claude-sonnet-5-5",
      {"AWS_BEARER_TOKEN_BEDROCK": "t" * 20, "AWS_REGION": "us-east-1"},
      {"AWS_BEARER_TOKEN_BEDROCK": "t" * 20, "AWS_REGION": "us-east-1", "AWS_DEFAULT_REGION": "us-east-1"}),
+    ("openrouter:anthropic/claude-sonnet-5.5", {"OPENROUTER_API_KEY": "r" * 20}, {"OPENROUTER_API_KEY": "r" * 20}),
 ])
 def test_each_provider_from_the_environment(root, model, env, expected):
     stray = {"OPENAI_API_KEY": "x" * 20} if not model.startswith("openai") else {"GOOGLE_API_KEY": "x" * 20}

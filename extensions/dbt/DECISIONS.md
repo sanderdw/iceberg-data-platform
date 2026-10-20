@@ -7,7 +7,7 @@ contract change.
 
 ## Engine: dbt v2 OSS, installed from PyPI
 
-- `dbt-oss==2.0.5` (Apache-2.0) on PyPI is a 5 KB source shim. Its build step installs the
+- `dbt-oss==2.0.8` (Apache-2.0) on PyPI is a 5 KB source shim. Its build step installs the
   platform wheel with the Rust engine (`dbt/_core.abi3.so`) from dbt's GitHub release and checks the
   sha256 the shim pins. Wheels exist for Linux x86_64 and arm64 (manylinux_2_28), macOS and Windows.
   The dbt extension's `uv.lock` pins the shim's hash, so image builds are reproducible. The download
@@ -105,9 +105,22 @@ The dbt extension reads these files with DuckDB. `run_results.json` (v6) and `ma
 also written. The information schema has no compiled SQL; it is in `target/compiled/<package>/<path>`. `dbt docs generate` builds a static, self-contained docs site; its DuckDB-WASM
 location is set with `--duckdb-cdn-base`.
 
-## Run jobs on Kubernetes (proposed for dbt 0.2.0, 2026-10-07)
+## Run jobs on Kubernetes (dbt 0.1.1, designed 2026-10-07, built 2026-10-17)
 
-Not implemented. This records how runs can move from the platform's Docker host to a Kubernetes
+Implemented in dbt 0.1.1 (`launcher/kubernetes.py`, `runner/remote.py`, `deploy/helm/iceberg-dbt`), and
+the same way in Ingestion 0.1.1. It differs from the design below in three places, found while building it:
+
+- **Runs have a namespace of their own** (`<platform namespace>-dbt-runs`), not the launcher's: the right
+  to create pods in a namespace exposes every Secret in it. That namespace holds `ExternalName`
+  Services under the Bridge aliases, is held to the restricted Pod Security standard, and carries
+  `io.iceberg-platform.isolated`, so Keycloak and the portals refuse its connections.
+- **The launcher is a second container in the portal pod**, not a Deployment of its own, so both share
+  the ReadWriteOnce artifacts volume. Only the launcher container gets a service account token.
+- **The Docker backend still uses `put_archive` and `get_archive`.** The job contract (`RUN_URL`,
+  `RUN_TICKET`, `GET /jobs/{id}/input`, `PUT /jobs/{id}/output`) is used by the Kubernetes backend
+  only, so the Docker path did not change.
+
+The design as proposed: this records how runs can move from the platform's Docker host to a Kubernetes
 cluster, so that build capacity grows with nodes instead of with the platform machine.
 
 ### What ties a run to Docker today
@@ -194,7 +207,7 @@ narrower than the Docker socket, which amounts to root on the host.
    verified by `scripts/e2e_smoke.py` and the viewer flow.
 2. The Kubernetes backend with example manifests (namespace, ServiceAccount and Role,
    NetworkPolicy, launcher Deployment and Service), tested on a local kind cluster in Docker.
-3. Installation docs and a dbt 0.2.0 release.
+3. Installation docs and a dbt release (shipped as dbt 0.1.1).
 
 ## dbt from your terminal, run on the platform (2026-10-07)
 

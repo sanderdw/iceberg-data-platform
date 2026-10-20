@@ -104,4 +104,4 @@ Ask for approval or corrections. Return to step 4 or 5 until the user approves. 
 3. Replay **every** interview question through `query_semantic_model` with the call from the questions file (metrics, dimensions with an optional `day`, `week`, `month`, `quarter` or `year` grain, `via` where needed, and filters) and compare the answers with the check's. Look up exact filter values, such as names with a suffix, with `list_dimension_values`. This is how chat agents will answer them. Fix the model when a question can't be asked this way, or, with the user's agreement, write the limit into the instructions.
 4. Finish with one line per question the model now answers, and where the work files are.
 
-If publishing answers that semantic models are switched off, an administrator sets `POLARIS_SEMANTIC_MODELS=true` in `.env`. A role error means the user needs the Writer role in the database's team.
+If publishing answers that semantic models are switched off, an administrator sets `POLARIS_SEMANTIC_MODELS=true` in `.env` (on Kubernetes the chart value `polaris.semanticModels=true`). A role error means the user needs the Writer role in the database's team.

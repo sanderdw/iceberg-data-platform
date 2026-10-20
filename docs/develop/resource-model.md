@@ -18,9 +18,9 @@ Managed records carry `portal.managed-by=iceberg-portal-v2`.
 | --- | --- |
 | Users, teams, shares, grants and catalogs | PostgreSQL `polaris` database |
 | Iceberg metadata and Parquet data | RustFS, one bucket per database |
-| Saved notebooks | A Docker volume per team and environment |
+| Saved notebooks | A Docker volume per team and environment; on Kubernetes a PVC in `<namespace>-notebooks` |
 | Sessions and notebook state | Process and container memory |
-| Service configuration and bootstrap credentials | `.env` |
+| Service configuration and bootstrap credentials | `.env`; on Kubernetes chart values and the Secret `iceberg-platform` |
 
 ## Users
 

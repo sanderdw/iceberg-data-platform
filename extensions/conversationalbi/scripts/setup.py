@@ -20,7 +20,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parent.parent
 # Variables the setup takes from the environment; the release installers pass the same names.
 PASSTHROUGH = ("LLM_MODEL", "BI_ALLOW_TEST_MODEL", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
-               "OPENAI_BASE_URL", "AWS_BEARER_TOKEN_BEDROCK", "AWS_REGION")
+               "OPENAI_BASE_URL", "AWS_BEARER_TOKEN_BEDROCK", "AWS_REGION", "OPENROUTER_API_KEY")
 VALUE = re.compile(r"^[^\s'\"$#\\`]+$")
 
 
@@ -44,6 +44,7 @@ PROVIDERS = (
              optional=("OPENAI_BASE_URL",)),
     Provider(("bedrock", "bedrock-mantle", "anthropic-bedrock"), "Amazon Bedrock",
              "bedrock:global.anthropic.claude-sonnet-5-5", "AWS_BEARER_TOKEN_BEDROCK", region=True),
+    Provider(("openrouter",), "OpenRouter", "openrouter:anthropic/claude-sonnet-5.5", "OPENROUTER_API_KEY"),
 )
 HEADER = """# Conversational BI's LLM, read by the gateway only. Written by scripts/setup.py; edit and restart:
 #   docker compose up -d --wait cbi-gateway
@@ -52,6 +53,7 @@ HEADER = """# Conversational BI's LLM, read by the gateway only. Written by scri
 #   anthropic:…                          ANTHROPIC_API_KEY
 #   openai:…, openai-chat:…              OPENAI_API_KEY (OPENAI_BASE_URL for a compatible endpoint)
 #   bedrock:…, anthropic-bedrock:…       AWS_BEARER_TOKEN_BEDROCK and AWS_REGION
+#   openrouter:<vendor>/<model>          OPENROUTER_API_KEY
 """
 
 

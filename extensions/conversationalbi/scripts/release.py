@@ -17,13 +17,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SUFFIXES = {".py", ".js", ".mjs", ".ts", ".tsx", ".css", ".html", ".svg", ".md", ".yml", ".yaml", ".toml", ".lock",
-            ".txt", ".ttf", ".example", ".json", ".parquet"}
-PLAIN = {"Dockerfile", ".gitignore", ".dockerignore", ".python-version", "LICENSE", "NOTICE"}
+            ".txt", ".ttf", ".example", ".json", ".parquet", ".tpl"}
+PLAIN = {".helmignore", "Dockerfile", ".gitignore", ".dockerignore", ".python-version", "LICENSE", "NOTICE"}
 BINARY = {".ttf", ".parquet"}
 SECRET = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|BRIDGE_CLIENT_SECRET=[0-9a-f]{16,}|"
-                    r"(?:GOOGLE|GEMINI|ANTHROPIC|OPENAI)_API_KEY=[A-Za-z0-9_.-]{16,}|AIza[0-9A-Za-z_-]{30,}|"
+                    r"(?:GOOGLE|GEMINI|ANTHROPIC|OPENAI|OPENROUTER)_API_KEY=[A-Za-z0-9_.-]{16,}|AIza[0-9A-Za-z_-]{30,}|"
                     r"AWS_BEARER_TOKEN_BEDROCK=[A-Za-z0-9_.+/=-]{16,}|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|"
-                    r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{32,}|RUNTIME_KEY=[0-9a-f]{16,}")
+                    r"\bsk-(?:ant-|proj-|or-v1-)?[A-Za-z0-9_-]{32,}|RUNTIME_KEY=[0-9a-f]{16,}")
 
 
 def tracked(root=ROOT):
@@ -40,6 +40,10 @@ def check(root=ROOT, tag=None):
             raise SystemExit(f"{package} version differs from pyproject.toml")
     if f"## {version}" not in (root / "CHANGELOG.md").read_text():
         raise SystemExit(f"CHANGELOG.md has no section for {version}")
+    chart = (root / "deploy/helm/iceberg-conversationalbi/Chart.yaml").read_text()
+    if not all(re.search(rf'^{key}: "?{re.escape(version)}"?$', chart, re.MULTILINE)
+               for key in ("version", "appVersion")):
+        raise SystemExit("deploy/helm/iceberg-conversationalbi/Chart.yaml has another version")
     for compose in ("compose.yaml",):
         text = (root / compose).read_text()
         images = (f"iceberg-conversationalbi:{version}", f"iceberg-conversationalbi-runtime:{version}")
@@ -78,7 +82,7 @@ def channel(ref, version, run_id, attempt):
     """A conversationalbi-vX.Y.Z tag is a release; a branch is a preview with its own image and release tags."""
     if ref == f"refs/tags/conversationalbi-v{version}":
         return {"version": version, "preview": "false", "image_tag": version,
-                "release_tag": f"conversationalbi-v{version}", "slug": ""}
+                "release_tag": f"conversationalbi-v{version}", "slug": "", "chart_version": version}
     if not ref.startswith("refs/heads/"):
         raise SystemExit(f"Run this workflow on a branch or on tag conversationalbi-v{version}, not {ref}")
     # The same names as the platform's branch previews, so one branch's images line up.
@@ -86,8 +90,10 @@ def channel(ref, version, run_id, attempt):
     if not slug or re.match(r"v\d", slug):
         raise SystemExit("This branch name cannot be used for a preview")
     build = f"{slug}-{run_id}-{attempt}"
+    # A chart version is SemVer: its prerelease part allows letters, digits and hyphens only.
     return {"version": version, "preview": "true", "image_tag": build, "release_tag": f"conversationalbi-{build}",
-            "slug": slug}
+            "slug": slug,
+            "chart_version": f"{version}-{re.sub(r'[._]', '-', build)}"}
 
 
 def main():

@@ -40,11 +40,14 @@ from server.validation import validation_message
 from .directory import UserDirectory, validate_namespace
 from .mcp_server import create_mcp
 from .preview import run_preview
-from .runtime import NotebookRuntime, filespace_key
+from .runtime import RuntimeBackendError, filespace_key, notebook_runtime
 
 PUBLIC = Path(__file__).parent / "public"
 CONNECT_SCRIPT = Path(__file__).parent / "client" / "iceberg_connect.py"
 COOKIE = "iceberg_user_session"
+SWEEP_SECONDS = 30
+# Sweeps in a row that may fail to check a session before its notebooks stop: 90 seconds of outage.
+UNCHECKED_PASSES = 3
 LOG = logging.getLogger(__name__)
 
 
@@ -98,7 +101,7 @@ def same_origin(origin, url):
 
 def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE):
     directory = directory or UserDirectory(os.environ)
-    runtime = runtime or NotebookRuntime(os.environ)
+    runtime = runtime or notebook_runtime(os.environ)
     sessions, attempts = {}, {}
     lock = asyncio.Lock()
     # Previews and governed queries share these slots; MCP calls wait up to USER_QUERY_WAIT_SECONDS for one.
@@ -161,43 +164,74 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             "extensions": extensions.public(os.environ),
         }
 
+    # Passes in a row in which a session's authorization could not be checked (Polaris or Keycloak down).
+    unchecked = {}
+
+    async def close_session(id, status):
+        LOG.info("Closing user session after authorization check: %s", status)
+        sessions.pop(id, None)
+        unchecked.pop(id, None)
+        try:
+            await run_in_threadpool(runtime.stop_session, id)
+        except (DockerException, RuntimeBackendError):
+            LOG.error("Notebook cleanup failed; retrying on next sweep")
+
+    async def unavailable(id, reason):
+        # An outage is not a revocation: keep the session, and stop its notebooks only
+        # when their authorization stays uncheckable for UNCHECKED_PASSES passes.
+        unchecked[id] = unchecked.get(id, 0) + 1
+        LOG.warning("Authorization check unavailable (%s), pass %d of %d", reason, unchecked[id], UNCHECKED_PASSES)
+        if unchecked[id] >= UNCHECKED_PASSES:
+            try:
+                await run_in_threadpool(runtime.stop_session, id)
+            except (DockerException, RuntimeBackendError):
+                LOG.error("Notebook cleanup failed; retrying on next sweep")
+
+    async def sweep_once():
+        try:
+            # Expiry is a real revocation in Polaris, not a hidden row.
+            await run_in_threadpool(directory.metadata.expire_shares)
+        except ServiceError as exc:
+            LOG.error("Data share expiry failed; retrying on next sweep: %s", exc.status)
+        now = time.monotonic()
+        for key, (_, until) in list(attempts.items()):
+            if until < now:
+                attempts.pop(key, None)
+        for id, session in list(sessions.items()):
+            try:
+                if session.expires <= now:
+                    raise ServiceError(401, "Session expired.")
+                if any(w.session_id == id for w in runtime.workspaces.values()):
+                    await renew_session(session)
+                await run_in_threadpool(workspace_state, session)
+                unchecked.pop(id, None)
+            except ServiceError as exc:
+                if exc.status < 500:
+                    await close_session(id, exc.status)
+                else:
+                    await unavailable(id, exc.status)
+            except (DockerException, RuntimeBackendError):
+                LOG.error("Notebook cleanup failed; retrying on next sweep")
+            except Exception:  # One malformed record must not skip every later session and orphan cleanup.
+                LOG.exception("Authorization check failed unexpectedly")
+                await unavailable(id, "unexpected error")
+        for id in set(unchecked) - set(sessions):
+            unchecked.pop(id, None)
+        for workspace in list(runtime.workspaces.values()):
+            if workspace.session_id not in sessions:
+                try:
+                    await run_in_threadpool(runtime.stop, workspace.id)
+                except (DockerException, RuntimeBackendError):
+                    LOG.error("Orphan notebook cleanup failed")
+
     async def sweep():
         while True:
-            await asyncio.sleep(30)
+            await asyncio.sleep(SWEEP_SECONDS)
             async with lock:
                 try:
-                    # Expiry is a real revocation in Polaris, not a hidden row.
-                    await run_in_threadpool(directory.metadata.expire_shares)
-                except ServiceError as exc:
-                    LOG.error("Data share expiry failed; retrying on next sweep: %s", exc.status)
-                now = time.monotonic()
-                for key, (_, until) in list(attempts.items()):
-                    if until < now:
-                        attempts.pop(key, None)
-                for id, session in list(sessions.items()):
-                    try:
-                        if session.expires <= now:
-                            raise ServiceError(401, "Session expired.")
-                        if any(w.session_id == id for w in runtime.workspaces.values()):
-                            await renew_session(session)
-                        await run_in_threadpool(workspace_state, session)
-                    except ServiceError as exc:
-                        # Fail closed on metadata outages as well: notebooks must
-                        # not keep running when their authorization can't be checked.
-                        LOG.info("Closing user session after authorization check: %s", exc.status)
-                        sessions.pop(id, None)
-                        try:
-                            await run_in_threadpool(runtime.stop_session, id)
-                        except DockerException:
-                            LOG.error("Notebook cleanup failed; retrying on next sweep")
-                    except DockerException:
-                        LOG.error("Notebook cleanup failed; retrying on next sweep")
-                for workspace in list(runtime.workspaces.values()):
-                    if workspace.session_id not in sessions:
-                        try:
-                            await run_in_threadpool(runtime.stop, workspace.id)
-                        except DockerException:
-                            LOG.error("Orphan notebook cleanup failed")
+                    await sweep_once()
+                except Exception:  # Expiry enforcement must outlive any one failed pass.
+                    LOG.exception("Session sweep failed; retrying on next sweep")
 
     mcp_running = None
 
@@ -223,7 +257,7 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                     directory.close()
 
     app = FastAPI(
-        title="Iceberg User Workspace", version="0.9.2", docs_url=None, redoc_url=None, lifespan=lifespan,
+        title="Iceberg User Workspace", version="0.9.9", docs_url=None, redoc_url=None, lifespan=lifespan,
         description=(
             "Sign in to the user portal first, then open /docs to call these APIs with your session. "
             "Your team roles and selected team/environment apply to every operation. "
@@ -231,6 +265,8 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
             "Try it out supplies these headers automatically."
         ),
     )
+
+    app.state.sweep_once = sweep_once
 
     def user_openapi():
         if app.openapi_schema is None:
@@ -538,12 +574,16 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
 
     @app.get("/internal/notebooks/{id}/token", include_in_schema=False)
     async def notebook_token(id: str, request: Request):
-        # A runtime may retrieve only its owner's short-lived token. Portal cookies
-        # never authorize this endpoint, and refresh tokens never leave the gateway.
+        # A runtime may retrieve only its owner's short-lived token, and only from its own container's
+        # address on the session network. Portal cookies never authorize this endpoint, and refresh
+        # tokens never leave the gateway.
         async with lock:
             workspace = runtime.workspaces.get(id)
             supplied = request.headers.get("authorization", "")
-            if not workspace or not secrets.compare_digest(supplied, f"Bearer {workspace.token}"):
+            # The address check holds only for direct connections: a forwarded request could name any address.
+            forwarded = "x-forwarded-for" in request.headers or "forwarded" in request.headers
+            if (forwarded or not workspace or not secrets.compare_digest(supplied, f"Bearer {workspace.token}")
+                    or not request.client or request.client.host != urlsplit(workspace.upstream).hostname):
                 raise ServiceError(401, "Notebook authorization required.")
             session = sessions.get(workspace.session_id)
             if not session or session.expires <= time.monotonic() or not session.oidc_session:

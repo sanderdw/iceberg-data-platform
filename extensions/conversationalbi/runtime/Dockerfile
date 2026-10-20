@@ -1,5 +1,5 @@
 # The CopilotKit runtime: internal network only, no credentials, no telemetry. Context: extensions/conversationalbi/runtime.
-FROM node:24-slim
+FROM node:26-slim
 WORKDIR /runtime
 COPY package.json package-lock.json ./
 RUN SCARF_ANALYTICS=false npm ci --ignore-scripts --omit=dev --no-audit --no-fund

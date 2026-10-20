@@ -1,5 +1,5 @@
 # Conversational BI gateway and agent (one process, ports 3007 and 3017). Context: extensions/conversationalbi.
-FROM node:24-slim AS web
+FROM node:26-slim AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 # No install scripts: nothing phones home at build time.
@@ -7,7 +7,7 @@ RUN SCARF_ANALYTICS=false npm ci --ignore-scripts --no-audit --no-fund
 COPY web/ ./
 RUN mkdir -p /conversationalbi && npx vite build --outDir /conversationalbi/public
 
-FROM ghcr.io/astral-sh/uv:0.13.0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
 FROM python:3.14.8-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app

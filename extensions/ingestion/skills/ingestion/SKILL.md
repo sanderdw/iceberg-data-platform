@@ -17,10 +17,13 @@ claude mcp add --transport http --client-id ext-ingestion-mcp --callback-port 30
 claude mcp add --transport http --client-id iceberg-mcp --callback-port 3010 iceberg-user http://localhost:3002/mcp
 ```
 
-The user portal's server (`iceberg-user`) reads the loaded tables. Other agents use the same
-addresses and client ids (`AGENTS.md` in the installation folder shows the recipes). If
-`http://localhost:3008` does not answer, the extension is not installed: stop and tell the user to
-run the installer again with `ICEBERG_EXTENSIONS=ingestion`.
+The user portal's server (`iceberg-user`) reads the loaded tables. On a Kubernetes installation the
+addresses are `https://ingest.<domain>/mcp` and `https://users.<domain>/mcp` instead (the pipelines
+page at `https://ingest.<domain>`); ask the user for the domain. Other agents use the same addresses
+and client ids (`AGENTS.md` in the installation folder shows the recipes). If the Ingestion address
+does not answer, the extension is not installed: stop and tell the user to run the installer again
+with `ICEBERG_EXTENSIONS=ingestion`, or on Kubernetes to register it and install its chart
+(`kubernetes-install` skill, or the documentation's "Add extensions").
 
 ## Workflow
 

@@ -1,0 +1,138 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: users
+  labels:
+    {{- include "idp.component" (list . "users") | nindent 4 }}
+automountServiceAccountToken: false
+{{- if .Values.notebooks.enabled }}
+---
+# The user portal starts notebooks in their own namespace, which holds nothing else: creating pods
+# there grants no access to the platform's Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: iceberg-notebooks
+  namespace: {{ include "idp.notebooksNamespace" . }}
+  labels:
+    {{- include "idp.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, create, delete, deletecollection]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, patch, delete, deletecollection]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: iceberg-notebooks
+  namespace: {{ include "idp.notebooksNamespace" . }}
+  labels:
+    {{- include "idp.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: iceberg-notebooks
+subjects:
+  - kind: ServiceAccount
+    name: users
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: users
+  labels:
+    {{- include "idp.component" (list . "users") | nindent 4 }}
+spec:
+  selector:
+    {{- include "idp.selector" "users" | nindent 4 }}
+  ports:
+    - {name: http, port: 3002}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users
+  labels:
+    {{- include "idp.component" (list . "users") | nindent 4 }}
+spec:
+  replicas: 1
+  # Sessions and notebooks belong to one process; a new one removes the old one's notebooks.
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "idp.selector" "users" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "idp.component" (list . "users") | nindent 8 }}
+      annotations:
+        checksum/extensions: {{ toJson .Values.extensions | sha256sum | trunc 16 }}
+    spec:
+      serviceAccountName: users
+      automountServiceAccountToken: {{ .Values.notebooks.enabled }}
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 45
+      {{- include "idp.pullSecrets" . | nindent 6 }}
+      containers:
+        - name: users
+          image: {{ include "idp.image" (list . "users") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [/app/.venv/bin/python, -m, user_portal]
+          env:
+            {{- include "idp.platformEnv" . | nindent 12 }}
+            - {name: OIDC_CLIENT_ID, value: iceberg-users}
+            {{- include "idp.secretEnv" (list . "OIDC_CLIENT_SECRET" "OIDC_USERS_SECRET") | nindent 12 }}
+            - name: OIDC_ORIGIN
+              value: {{ include "idp.origin" (list . "users") | quote }}
+            - {name: USER_PORT, value: "3002"}
+            - {name: USER_HOST, value: 0.0.0.0}
+            - name: FORWARDED_ALLOW_IPS
+              value: {{ .Values.forwardedAllowIps | quote }}
+            - {name: USER_STACK_NAME, value: iceberg-workspaces}
+            - {name: POLARIS_URL, value: "http://polaris-control-plane:8181"}
+            {{- include "idp.rustfsAdminEnv" . | nindent 12 }}
+            - name: USER_QUERY_SLOTS
+              value: {{ .Values.users.queries.slots | quote }}
+            - name: USER_QUERY_WAIT_SECONDS
+              value: {{ .Values.users.queries.waitSeconds | quote }}
+            - {name: NOTEBOOK_BACKEND, value: {{ ternary "kubernetes" "none" .Values.notebooks.enabled }}}
+            - name: NOTEBOOK_NAMESPACE
+              value: {{ include "idp.notebooksNamespace" . | quote }}
+            - name: NOTEBOOK_IMAGE
+              value: {{ include "idp.image" (list . "notebook") | quote }}
+            - name: NOTEBOOK_PULL_POLICY
+              value: {{ .Values.image.pullPolicy | quote }}
+            - name: NOTEBOOK_PULL_SECRETS
+              value: {{ $names := list }}{{ range .Values.imagePullSecrets }}{{ $names = append $names .name }}{{ end }}{{ join "," $names | quote }}
+            - name: MAX_NOTEBOOKS
+              value: {{ .Values.notebooks.max | quote }}
+            - name: NOTEBOOK_MEMORY
+              value: {{ .Values.notebooks.memory | quote }}
+            - name: NOTEBOOK_MEMORY_REQUEST
+              value: {{ .Values.notebooks.memoryRequest | quote }}
+            - name: NOTEBOOK_STORAGE
+              value: {{ .Values.notebooks.storage | quote }}
+            - name: NOTEBOOK_STORAGE_CLASS
+              value: {{ .Values.storageClass | quote }}
+            - name: NOTEBOOK_START_SECONDS
+              value: {{ .Values.notebooks.startSeconds | quote }}
+            - {name: HOME, value: /tmp}
+          ports:
+            - {name: http, containerPort: 3002}
+          {{- include "idp.probes" (list "/api/health" "http" 30) | nindent 10 }}
+          resources:
+            {{- toYaml .Values.users.resources | nindent 12 }}
+          {{- include "idp.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -11,4 +11,9 @@
 - Authorization lives in `Services`; runs only get tokens from the Bridge, never secrets.
 - The launcher is the only component with the Docker socket: keep its inputs fixed (image, flags,
   mounts). Runner code (`runner/`) runs inside the isolated image without network.
+- On Kubernetes (`LAUNCHER_BACKEND=kubernetes`, `launcher/kubernetes.py`) the launcher creates one Job
+  per run in the runs namespace; it is the only container with a service account token. The runner
+  (`runner/remote.py`) reaches only the launcher's two job endpoints, with a ticket valid for one run.
+  `launcher/kube.py` is a copy of the platform's `server/kube.py`, because extensions never import
+  platform code. Keep `deploy/helm/iceberg-dbt/Chart.yaml` at the extension's version.
 - `scripts/e2e_smoke.py` checks a live installation through MCP.

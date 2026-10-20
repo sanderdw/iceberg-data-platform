@@ -1,5 +1,14 @@
 # Bridge contract changelog
 
+## 0.1.2 - 2026-10-17
+
+Released with core 0.9.9. Additive: extensions built for 0.1.0 and 0.1.1 keep working.
+
+- Discovery: `network` has `platform`, `docker` or `kubernetes`, and `namespace`, the Kubernetes
+  namespace of the platform. On Kubernetes the aliases are Services in that namespace and `name`
+  is the namespace (contracts/bridge/v1/network.md).
+- On Kubernetes, an extension's namespace for isolated jobs carries `io.iceberg-platform.isolated: "true"`.
+
 ## 0.1.1 - 2026-10-14
 
 Released with core 0.9.1. Additive: extensions built for 0.1.0 keep working.

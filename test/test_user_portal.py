@@ -1,5 +1,6 @@
 """Authorization boundaries of the standalone user gateway."""
 
+import asyncio
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -11,6 +12,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
 from test.conftest import SEMANTIC_MODEL, MemoryPolaris, members
+from user_portal import app as user_app
 from user_portal.app import COOKIE, create_app
 from user_portal.directory import UserDirectory
 from user_portal.runtime import Workspace, filespace_key
@@ -488,6 +490,75 @@ def test_revoked_membership_stops_runtime(users):
     assert state["activeTeam"] == users.teams[1]
     assert not users.runtime.workspaces
     assert c.get("/api/contents", params={"database": users.databases[0]}).status_code == 403
+
+
+def sweep(users):
+    asyncio.run(users.app.state.sweep_once())
+
+
+def test_sweep_keeps_sessions_through_an_outage_and_stops_notebooks_after_three_passes(users, monkeypatch):
+    c = users.client
+    login(c)
+    assert c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS).status_code == 201
+
+    def outage(session):
+        raise ServiceError(503, "Polaris is unavailable.")
+
+    profile = users.directory.profile
+    monkeypatch.setattr(users.directory, "profile", outage)
+    sweep(users)
+    sweep(users)
+    assert users.runtime.workspaces
+    sweep(users)
+    assert not users.runtime.workspaces
+    monkeypatch.setattr(users.directory, "profile", profile)
+    sweep(users)
+    assert c.get("/api/workspace").status_code == 200
+
+
+def test_sweep_closes_a_revoked_session_at_once_and_survives_a_failed_pass(users, monkeypatch):
+    c = users.client
+    login(c)
+    c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS)
+    monkeypatch.setattr(users.directory, "profile", Mock(side_effect=ServiceError(403, "No access.")))
+    sweep(users)
+    assert not users.runtime.workspaces
+    assert c.get("/api/workspace").status_code == 401
+
+
+def test_one_sessions_unexpected_error_does_not_skip_the_others(users, monkeypatch):
+    first, second = TestClient(users.app), TestClient(users.app)
+    login(first)
+    login(second)
+    broken = first.cookies.get(COOKIE)
+    profile = users.directory.profile
+
+    def check(session):
+        if session.id == broken:
+            raise KeyError("portal.team")  # a catalog left without its portal properties
+        raise ServiceError(403, "No access.")
+
+    monkeypatch.setattr(users.directory, "profile", check)
+    sweep(users)
+    monkeypatch.setattr(users.directory, "profile", profile)
+    assert second.get("/api/workspace").status_code == 401
+    assert first.get("/api/workspace").status_code == 200
+
+
+def test_sweep_task_survives_a_pass_that_fails_unexpectedly(users, monkeypatch):
+    passes = []
+
+    def broken():
+        passes.append(1)
+        raise RuntimeError("Docker connection lost")
+
+    monkeypatch.setattr(user_app, "SWEEP_SECONDS", 0.01)
+    monkeypatch.setattr(users.directory.metadata, "expire_shares", broken)
+    with TestClient(create_app(users.directory, FakeRuntime())):
+        deadline = time.monotonic() + 5
+        while len(passes) < 3 and time.monotonic() < deadline:
+            time.sleep(0.01)
+    assert len(passes) >= 3
 
 
 def test_logout_removes_runtime_and_cookie(users):

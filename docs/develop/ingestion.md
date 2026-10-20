@@ -16,7 +16,7 @@ flowchart LR
     Agent[AI agent] -->|MCP| GW
     subgraph Ext[Compose project iceberg-ingestion]
         GW[ing-gateway<br/>page, API, MCP, scheduler<br/>SQLite: pipelines, encrypted secrets, runs, dlt state]
-        L[ing-launcher<br/>only Docker socket]
+        L[ing-launcher<br/>only Docker socket,<br/>or Jobs on Kubernetes]
         R[run container<br/>dlt + PyIceberg<br/>read-only, no capabilities]
     end
     subgraph Core[Platform core]
@@ -55,6 +55,11 @@ See [DECISIONS.md](https://github.com/sanderdw/iceberg-data-platform/blob/main/e
   10001, `RUN_MEMORY` (2 GB) and `RUN_CPUS` (2), with dlt's working files on the run's own disk.
 - It has a private network with only the platform's catalog and storage, and its own network to
   reach the source. It cannot resolve the platform's other services.
+- On Kubernetes (`LAUNCHER_BACKEND=kubernetes`, set by the chart) a run is a Job in the namespace
+  `<platform namespace>-ingestion-runs`, with the same limits. A NetworkPolicy takes the place of
+  both networks: the catalog, storage, the launcher's job endpoints and public addresses only. The
+  runner fetches its job and returns `out/` through the launcher with a one-run ticket
+  (`runner/remote.py`); see [Kubernetes](kubernetes.md).
 - Sources on loopback, private or link-local addresses (including cloud metadata) are refused when a
   pipeline is saved, and again for every address a run resolves, redirects included. For a demo on a
   laptop, `ING_ALLOW_PRIVATE_SOURCES=true` allows them; a database on the same machine is then
@@ -92,6 +97,6 @@ uv run pytest
 uv run ruff check .
 uv run python -m scripts.api_contract     # after API changes
 uv run python -m scripts.release          # versions, files and secrets
-docker build -f runner/Dockerfile -t iceberg-ingestion-runner:0.1.0 .
+docker build -f runner/Dockerfile -t iceberg-ingestion-runner:dev .
 uv run python -m scripts.e2e_smoke        # against a running platform; see its docstring
 ```

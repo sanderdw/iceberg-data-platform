@@ -23,6 +23,13 @@ Everything goes through the administration portal's MCP server, the same API the
 - Only create teams and databases from the chosen blueprint, and people from the people pool. Never rename, move or delete existing teams, databases or users unless the user explicitly asks for cleanup.
 - These accounts are fictional demo accounts, and the user asked for their passwords. Collecting each `identity.temporaryPassword` into the summary below is the purpose of this skill. Show the passwords in that summary and in the credentials file; do not copy them anywhere else.
 
+## On a Kubernetes installation
+
+This skill reads a few values from `.env`, which a Kubernetes installation does not have. Use these instead, and ask the user for the domain:
+- `PORTAL_ORIGIN` is `https://admin.<domain>` and `USER_ORIGIN` is `https://users.<domain>`.
+- The platform administrator is `platform-admin`; the user reads its one-time password themselves with `kubectl -n <namespace> get secret iceberg-platform -o jsonpath='{.data.PLATFORM_ADMIN_PASSWORD}' | base64 -d`.
+- Write the credentials file and the slips to the current folder, instead of the installation directory.
+
 ## 1. Check the MCP connection
 
 You need the tools of the administration MCP server: `get_overview`, `create_team`, `create_database`, `create_user`, `find_accounts`, `link_user`, `list_users`, `update_user_access` and `retry_user_setup`. Your agent may show them with a prefix, usually the server name (`iceberg-admin`). Call `get_overview` once. It must succeed and report the provider online.

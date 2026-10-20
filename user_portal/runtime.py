@@ -17,8 +17,61 @@ from server.models import ServiceError
 LABEL = "iceberg.users.runtime"
 
 
+class RuntimeBackendError(Exception):
+    """A notebook backend other than Docker failed; handled like a Docker error."""
+
+
 def filespace_key(team, environment):
     return sha256(json.dumps([team, environment]).encode()).hexdigest()[:32]
+
+
+def notebook_environment(id, token, session, database, namespace, table, database_name, shared_objects):
+    """The notebook's environment: its own catalog session and the in-network service addresses."""
+    return {
+        "HOME": "/tmp/home",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "/tmp/packages:/app",
+        "MARIMO_UV_TARGET": "/tmp/packages",
+        "MARIMO_SKIP_UPDATE_CHECK": "1",
+        "MARIMO_BASE_URL": f"/workspaces/{id}",
+        "MARIMO_GATEWAY_TOKEN": token,
+        "ICEBERG_DATABASE": database,
+        "ICEBERG_DATABASE_NAME": database_name or database,
+        "ICEBERG_ENVIRONMENT": session.environment,
+        "ICEBERG_NAMESPACE": json.dumps(namespace),
+        "ICEBERG_TABLE": table or "",
+        **({"ICEBERG_SHARED_OBJECTS": json.dumps(shared_objects)}
+           if shared_objects is not None else {}),
+        **({
+            "ICEBERG_ACCESS_TOKEN": session.token,
+            "ICEBERG_SESSION_TOKEN_URL": f"http://workspace-gateway:3002/internal/notebooks/{id}/token",
+        } if session.oidc_subject else {
+            "ICEBERG_CLIENT_ID": session.client_id,
+            "ICEBERG_CLIENT_SECRET": session.secret,
+        }),
+        "ICEBERG_CATALOG_URI": "http://polaris:8181/api/catalog",
+        "ICEBERG_TOKEN_URI": "http://polaris:8181/api/catalog/v1/oauth/tokens",
+        "ICEBERG_S3_ENDPOINT": "http://rustfs:9000",
+    }
+
+
+def wait_ready(workspace, alive, seconds=45):
+    """Poll marimo until it answers; False when the runtime stopped or the time ran out."""
+    deadline = time.monotonic() + seconds
+    with httpx.Client(timeout=1, trust_env=False) as client:
+        while time.monotonic() < deadline:
+            try:
+                response = client.get(
+                    workspace.upstream + workspace.url, headers={"Authorization": f"Bearer {workspace.token}"}
+                )
+                if response.status_code == 200:
+                    return True
+            except httpx.HTTPError:
+                pass
+            if not alive():
+                return False
+            time.sleep(0.25)
+    return False
 
 
 @dataclass
@@ -83,6 +136,43 @@ class Workspace:
                 },
             ],
         }
+
+
+class DisabledNotebookRuntime:
+    """NOTEBOOK_BACKEND=none: the portal runs without notebooks."""
+
+    def __init__(self):
+        self.workspaces = {}
+
+    def recover(self):
+        pass
+
+    def start(self, *args, **kwargs):
+        raise ServiceError(409, "Notebooks are turned off on this platform.")
+
+    def get(self, id, session):
+        raise ServiceError(404, "This notebook is unavailable in your session, team and environment.")
+
+    def stop(self, id):
+        raise KeyError(id)
+
+    def stop_session(self, session_id):
+        pass
+
+    def close(self):
+        pass
+
+
+def notebook_runtime(env):
+    """The notebook backend: Docker (the default), Kubernetes pods or none (NOTEBOOK_BACKEND)."""
+    backend = env.get("NOTEBOOK_BACKEND", "docker")
+    if backend == "kubernetes":
+        from .runtime_kubernetes import KubernetesNotebookRuntime
+
+        return KubernetesNotebookRuntime(env)
+    if backend == "none":
+        return DisabledNotebookRuntime()
+    return NotebookRuntime(env)
 
 
 class NotebookRuntime:
@@ -160,32 +250,9 @@ class NotebookRuntime:
                 volumes={volume_name: {"bind": "/work", "mode": "rw"}},
                 tmpfs={"/tmp": "rw,nosuid,nodev,size=256m,mode=1777"},
                 log_config=LogConfig(type="none"),
-                environment={
-                    "HOME": "/tmp/home",
-                    "PYTHONDONTWRITEBYTECODE": "1",
-                    "PYTHONPATH": "/tmp/packages:/app",
-                    "MARIMO_UV_TARGET": "/tmp/packages",
-                    "MARIMO_SKIP_UPDATE_CHECK": "1",
-                    "MARIMO_BASE_URL": f"/workspaces/{id}",
-                    "MARIMO_GATEWAY_TOKEN": token,
-                    "ICEBERG_DATABASE": database,
-                    "ICEBERG_DATABASE_NAME": database_name or database,
-                    "ICEBERG_ENVIRONMENT": session.environment,
-                    "ICEBERG_NAMESPACE": json.dumps(namespace),
-                    "ICEBERG_TABLE": table or "",
-                    **({"ICEBERG_SHARED_OBJECTS": json.dumps(shared_objects)}
-                       if shared_objects is not None else {}),
-                    **({
-                        "ICEBERG_ACCESS_TOKEN": session.token,
-                        "ICEBERG_SESSION_TOKEN_URL": f"http://workspace-gateway:3002/internal/notebooks/{id}/token",
-                    } if session.oidc_subject else {
-                        "ICEBERG_CLIENT_ID": session.client_id,
-                        "ICEBERG_CLIENT_SECRET": session.secret,
-                    }),
-                    "ICEBERG_CATALOG_URI": "http://polaris:8181/api/catalog",
-                    "ICEBERG_TOKEN_URI": "http://polaris:8181/api/catalog/v1/oauth/tokens",
-                    "ICEBERG_S3_ENDPOINT": "http://rustfs:9000",
-                },
+                environment=notebook_environment(
+                    id, token, session, database, namespace, table, database_name, shared_objects
+                ),
             )
             container.reload()
             ip = container.attrs["NetworkSettings"]["Networks"][network.name]["IPAddress"]
@@ -203,22 +270,14 @@ class NotebookRuntime:
                 session.environment,
                 shared=shared_objects is not None,
             )
-            deadline = time.monotonic() + 45
-            with httpx.Client(timeout=1, trust_env=False) as client:
-                while time.monotonic() < deadline:
-                    try:
-                        response = client.get(
-                            workspace.upstream + workspace.url, headers={"Authorization": f"Bearer {token}"}
-                        )
-                        if response.status_code == 200:
-                            self.workspaces[id] = workspace
-                            return workspace
-                    except httpx.HTTPError:
-                        pass
-                    container.reload()
-                    if container.status != "running":
-                        break
-                    time.sleep(0.25)
+
+            def alive():
+                container.reload()
+                return container.status == "running"
+
+            if wait_ready(workspace, alive):
+                self.workspaces[id] = workspace
+                return workspace
             raise ServiceError(503, "Marimo could not start. Check the notebook image and try again.")
         except Exception:
             if container is not None:

@@ -183,6 +183,55 @@ jobs:
             docker compose -f compose.users.yaml down --remove-orphans
             docker compose down --remove-orphans --volumes
           fi
+  kubernetes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # The chart's own Polaris, and Polaris from the official Apache Polaris chart.
+        polaris: [bundled, official]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.13.0'
+          enable-cache: true
+          save-cache: false
+      - run: uv sync --locked --all-groups
+      - name: Install pinned kubectl, helm, kind and kubeconform
+        run: |
+          sh dev/kubernetes/tools.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Lint and validate the chart
+        run: |
+          chart=deploy/helm/iceberg-data-platform
+          helm lint "$chart" --set baseDomain=example.com
+          helm template iceberg "$chart" -n iceberg --set baseDomain=example.com --set tls.clusterIssuer=letsencrypt \
+            --set extensions.dbt.host=dbt --set demo=true \
+            | kubeconform -strict -summary -kubernetes-version 1.37.1 -ignore-missing-schemas
+          for extension in dbt ingestion conversationalbi; do
+            extension_chart="extensions/$extension/deploy/helm/iceberg-$extension"
+            helm lint "$extension_chart" --set ingress.host=x.example.com --set llm.model=test
+            helm template "$extension" "$extension_chart" -n iceberg --set ingress.host=x.example.com --set llm.model=test \
+              | kubeconform -strict -summary -kubernetes-version 1.37.1 -ignore-missing-schemas
+          done
+          uv run --all-groups pytest -q test/test_helm_chart.py
+      - name: Install the chart on kind and run the smoke tests
+        env:
+          POLARIS: ${{ matrix.polaris }}
+        run: sh dev/kubernetes/kind_check.sh
+      - name: Show the cluster state on failure
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl -n iceberg describe pods | tail -200
+          kubectl -n iceberg logs job/keycloak-bootstrap --tail 100 || true
+      - name: Delete the kind cluster
+        if: always()
+        run: kind delete cluster --name iceberg-ci || true
   installers:
     strategy:
       fail-fast: false

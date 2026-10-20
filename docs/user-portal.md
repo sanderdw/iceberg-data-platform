@@ -1,8 +1,8 @@
 # User portal
 
-The user portal at http://localhost:3002. Team members sign in with Keycloak, pick a team and environment, and work with their databases in shared [marimo](https://marimo.io/) notebooks.
+The user portal runs at http://localhost:3002, or on Kubernetes at `https://users.<domain>`. Team members sign in with Keycloak, pick a team and environment, and work with their databases in shared [marimo](https://marimo.io/) notebooks.
 
-To open the portals from a phone or another computer for a class or demo, use the [`quick-share` agent skill](agent-skills.md). Sign-in needs HTTPS off `localhost`, so a plain port binding such as `compose.users.lan.yaml` is not enough on its own.
+To open the portals of a Compose installation from a phone or another computer for a class or demo, use the [`quick-share` agent skill](agent-skills.md); a [Kubernetes installation](install-kubernetes.md) is reachable that way already. Sign-in needs HTTPS off `localhost`, so a plain port binding such as `compose.users.lan.yaml` is not enough on its own.
 
 ## Using the portal
 
@@ -16,4 +16,4 @@ The top menu has six sections, all scoped to the selected **Active team** and **
 - **Data shares:** see [data shares](data-shares.md).
 - **Getting started:** three ways to work with your data: the portal, [your own tools](connect.md) and an [AI agent](ai-agents.md). It includes the commands for this installation, filled in for a database of the active team.
 
-The API is documented at http://localhost:3002/docs, and **Try it out** works with your session and permissions.
+The API is documented at `/docs` on the portal (http://localhost:3002/docs with Compose), and **Try it out** works with your session and permissions.

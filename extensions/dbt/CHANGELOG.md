@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.1 - 2026-10-17
+
+- **Runs on Kubernetes.** The chart `deploy/helm/iceberg-dbt` installs dbt next to the platform's chart.
+  Each run is a Kubernetes Job in a namespace of its own, with the same isolation as a Docker run: the
+  runner fetches its staged project and returns its results through the launcher with a ticket valid
+  for one run (`LAUNCHER_BACKEND=kubernetes`). The Compose installation is unchanged.
+- Acceptance and production builds and the docs site take only revisions that were the head of `main`:
+  merging always adds a merge commit, so a commit hidden inside a merged branch is never promoted. The
+  docs site, which runs scripts with the viewer's session, comes only from a successful docs run of such
+  a revision; other runs keep no `out/docs`.
+- `merge_to_main` takes the reviewed branch head as `revision` and refuses the merge if the branch moved.
+- `iceberg_dbt.py` refuses any file path from the project that would leave the folder (a drive letter such as
+  `C:/` on Windows, an absolute path or `..`) before writing anything, and the server refuses `:` in file paths.
+- dbt v2 OSS 2.0.8.
+
 ## 0.1.0 - 2026-10-13
 
 - First version of the dbt extension for the Iceberg Data Platform, on Extension Bridge contract 0.1.

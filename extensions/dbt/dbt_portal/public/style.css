@@ -12,6 +12,7 @@
   --source: #3f7fd9; --seed: #9a6bd6; --model: #e8e8e8; --snapshot: #3fb6b0; --exposure: #d9a23b;
   --body: 'Space Grotesk', system-ui, sans-serif; --mono: 'Space Mono', ui-monospace, monospace; --display: Doto, var(--mono);
   --large: 4.5rem; --medium: 1rem; --small: .75rem;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23e8e8e8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   font: var(--medium)/1.5 var(--body); font-synthesis: none; background: var(--black); color: var(--text-primary);
 }
 :root[data-theme='light'] {
@@ -19,6 +20,7 @@
   --black: #f5f5f5; --surface: #fff; --surface-raised: #f0f0f0; --border: #e8e8e8; --border-visible: #ccc;
   --text-disabled: #999; --text-secondary: #666; --text-primary: #1a1a1a; --text-display: #000;
   --model: #1a1a1a; --idle: #bbb;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%231a1a1a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; background: var(--black); }
@@ -173,6 +175,8 @@ th { font: .7rem var(--mono); color: var(--text-secondary); font-weight: 400; te
 .edit .tabs { margin-bottom: 0; flex-wrap: wrap; }
 .field { display: grid; gap: 4px; }
 .field select, .field input { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-visible); background: var(--surface-raised); color: var(--text-primary); font: .75rem var(--mono); }
+/* A drawn chevron: the native arrow ignores padding and sits against the border. */
+.branch select, .field select { appearance: none; padding-right: 32px; background-image: var(--chevron); background-repeat: no-repeat; background-position: right 12px center; background-size: 10px 7px; }
 .code.editor { width: 100%; min-height: 280px; max-height: none; resize: vertical; border: 1px solid var(--border-visible); color: var(--text-primary); font: .75rem/1.5 var(--mono); tab-size: 2; }
 .small.error { color: var(--fail); }
 .links { display: flex; flex-direction: column; gap: 4px; font: .75rem var(--mono); }

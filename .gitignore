@@ -1,5 +1,6 @@
 # Local credentials and data
 .env
+*.env
 .env.*
 !.env.example
 *.pem

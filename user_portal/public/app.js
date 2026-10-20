@@ -117,9 +117,28 @@ function renderNotebookContext(notebook) {
   $('#editor-title').textContent = `${db?.name || notebook.database} · ${envNames[notebook.environment]}`;
   renderDatabaseContext($('#editor-database-context'), db);
 }
-function resetEditor() { $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
+// A red 3x3 dot matrix covers the notebook frame from opening a notebook until marimo has loaded.
+let loaderTimer = null;
+function notebookLoader(label) {
+  let loader = $('#notebook-loader');
+  if (!loader) {
+    loader = element('div', undefined, 'notebook-loader'); loader.id = 'notebook-loader'; loader.setAttribute('role', 'status');
+    const matrix = element('div', undefined, 'notebook-loader-matrix'); matrix.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 9; i++) { const dot = element('span'); dot.style.setProperty('--wave', Math.floor(i / 3) + i % 3); matrix.append(dot); }
+    const meta = element('div'), time = element('span', '00:00', 'notebook-loader-time'); time.setAttribute('aria-hidden', 'true');
+    meta.append(element('span', '', 'notebook-loader-label'), time); loader.append(matrix, meta);
+    const start = Date.now(); clearInterval(loaderTimer);
+    loaderTimer = setInterval(() => { const s = Math.floor((Date.now() - start) / 1000); time.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }, 1000);
+  }
+  loader.querySelector('.notebook-loader-label').textContent = `[ ${label} ]`;
+  return loader;
+}
+function hideNotebookLoader() { clearInterval(loaderTimer); loaderTimer = null; $('#notebook-loader')?.remove(); }
+function resetEditor() { hideNotebookLoader(); $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
 function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; $('#guide-nav').hidden = true; sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#workspace-screen').classList.remove('started'); $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
-async function api(path, method = 'GET', body) { const response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); const result = await response.json(); if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
+// A stopped server answers through the proxy with plain text, or not at all.
+const serverDown = 'The workspace server is not responding. Try again in a moment.';
+async function api(path, method = 'GET', body) { let response, result; try { response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); } catch { throw new Error(serverDown); } try { result = await response.json(); } catch { throw new Error(response.status >= 500 ? serverDown : `The request failed with HTTP ${response.status}.`); } if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
 // Extensions open in their own origin; the portal only links to them.
 const extensionLabels = {conversationalbi: 'Conversational BI', dbt: 'Pipelines', ingestion: 'Ingestion (dlt)', openmetadata: 'OpenMetadata'};
@@ -340,8 +359,8 @@ function renderListing(db, ns, detail, result) {
     renderCatalogListing(detail, result, rows);
     $('#objects').dataset.listing = JSON.stringify([detail, result]);
 }
-function showNotebook(notebook, targetUrl = notebook.url) { if (activeNotebook?.id !== notebook.id || activeNotebook?.selectedUrl !== targetUrl) { const frame = element('iframe'); frame.title = `marimo · ${notebook.database}`; frame.src = targetUrl; frame.allow = 'clipboard-read; clipboard-write'; $('#frame-host').replaceChildren(frame); } activeNotebook = {...notebook, selectedUrl: targetUrl}; $('#notebook-file').replaceChildren(...[{title: 'Shared files', url: notebook.filesUrl}, {title: 'Starter notebook', url: notebook.url}, ...(notebook.examples || [])].map(n => { const option = element('option', n.title); option.value = n.url; return option; })); $('#notebook-file').value = targetUrl; renderNotebookContext(notebook); $('#editor-external').href = targetUrl; $('#browser').hidden = false; $('#editor').hidden = false; $('#notebook-empty').hidden = true; startWork(); showPage('notebooks'); }
-async function openNotebook(db) { const existing = state.notebooks.find(n => n.database === db); if (existing) { showNotebook(existing); notice('Your existing notebook for this database has resumed. Select the table you want to work with there.'); return; } notice('Opening your team’s shared workspace…'); const notebook = await api('/notebooks', 'POST', {database: db, namespace: [], table: null}); await loadState(); showNotebook(notebook); notice('Marimo is ready. Saved files are shared with your team in this environment.'); }
+function showNotebook(notebook, targetUrl = notebook.url) { if (activeNotebook?.id !== notebook.id || activeNotebook?.selectedUrl !== targetUrl) { const frame = element('iframe'); frame.title = `marimo · ${notebook.database}`; frame.src = targetUrl; frame.allow = 'clipboard-read; clipboard-write'; frame.addEventListener('load', () => { if (frame.isConnected) hideNotebookLoader(); }, {once: true}); $('#frame-host').replaceChildren(frame, notebookLoader('Loading notebook')); } activeNotebook = {...notebook, selectedUrl: targetUrl}; $('#notebook-file').replaceChildren(...[{title: 'Shared files', url: notebook.filesUrl}, {title: 'Starter notebook', url: notebook.url}, ...(notebook.examples || [])].map(n => { const option = element('option', n.title); option.value = n.url; return option; })); $('#notebook-file').value = targetUrl; renderNotebookContext(notebook); $('#editor-external').href = targetUrl; $('#browser').hidden = false; $('#editor').hidden = false; $('#notebook-empty').hidden = true; startWork(); showPage('notebooks'); }
+async function openNotebook(db) { const existing = state.notebooks.find(n => n.database === db); if (existing) { showNotebook(existing); notice('Your existing notebook for this database has resumed. Select the table you want to work with there.'); return; } notice('Opening your team’s shared workspace…'); const previous = activeNotebook; activeNotebook = null; $('#frame-host').replaceChildren(notebookLoader('Starting your session')); $('#notebook-file').replaceChildren(); renderNotebookContext({database: db, environment: state.activeEnvironment}); $('#editor').hidden = false; $('#notebook-empty').hidden = true; startWork(); showPage('notebooks'); let notebook; try { notebook = await api('/notebooks', 'POST', {database: db, namespace: [], table: null}); } catch (error) { if (previous) showNotebook(previous, previous.selectedUrl); else resetEditor(); throw error; } await loadState(); showNotebook(notebook); notice('Marimo is ready. Saved files are shared with your team in this environment.'); }
 $('#login').addEventListener('submit', e => { e.preventDefault(); const form = e.currentTarget; busy(form.querySelector('button'), async () => { const data = Object.fromEntries(new FormData(form)); await api('/session', 'POST', data); form.reset(); clearBrowser(); await loadState(); await restoreRoute(); }); });
 $('#logout').addEventListener('click', e => busy(e.currentTarget, async () => { const result = await api('/session', 'DELETE'); if (result.logoutUrl) { location.assign(result.logoutUrl); return; } loginScreen(); }));
 $('#team').addEventListener('change', e => busy(e.currentTarget, async () => { try { const next = await api('/team', 'PATCH', {team: e.target.value}); resetEditor(); clearBrowser(); state = next; renderState(); saveRoute(); } catch (error) { $('#team').value = state.activeTeam; throw error; } }));
@@ -355,6 +374,7 @@ async function refreshWorkspace() {
   refreshingWorkspace = true;
   try {
     await loadState(true);
+    if ($('#notice').textContent.includes(serverDown)) clearNotice();
     if (!state || pendingActions || restoringRoute || document.activeElement?.matches('input, select, textarea')) return;
     if (workspacePage === 'team') await loadTeamMembers();
     else if (workspacePage === 'shares') await refreshTeamShares();

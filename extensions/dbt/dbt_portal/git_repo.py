@@ -23,7 +23,8 @@ MAX_FILES = 2000
 
 def valid_path(path, *, write=True):
     parts = path.split("/")
-    if (not path or len(path) > 300 or path.startswith("/") or "\\" in path or "\0" in path
+    # ':' would let a Windows checkout of the terminal client read `C:/...` as a drive.
+    if (not path or len(path) > 300 or path.startswith("/") or "\\" in path or "\0" in path or ":" in path
             or any(p in ("", ".", "..") or p.startswith(".git") for p in parts)):
         raise DbtError(422, f"Invalid file path: {path[:80]!r}.", "invalid_path")
     if write and path in RESERVED:
@@ -192,27 +193,31 @@ class GitRepos:
         return {"base": base, "head": head, "files": files, "patch": patch[:200_000],
                 "truncated": len(patch) > 200_000}
 
-    def merge(self, project, branch, message, author):
-        """Merge `branch` into main: a fast-forward when possible, otherwise a merge commit."""
+    def merge(self, project, branch, message, author, revision=None):
+        """Merge `branch` into main, always with a merge commit.
+
+        main's first-parent line then holds only the project's first commit and merge results, which
+        `was_main_head` checks: a branch's intermediate commits never become promotable. With
+        `revision`, the branch must still be at the head that was reviewed.
+        """
         source, target = self.resolve(project, branch), self.resolve(project, "main")
+        if revision and self.resolve(project, revision) != source:
+            raise DbtError(409, f"{branch} changed since it was reviewed. Review it again, then merge.", "stale_branch")
         if self.git(project, "merge-base", "--is-ancestor", source, target, check=False).returncode == 0:
             return {"revision": target, "merged": False}
-        if self.git(project, "merge-base", "--is-ancestor", target, source, check=False).returncode == 0:
-            revision = source
-        else:
-            result = self.git(project, "merge-tree", "--write-tree", "--name-only", "--no-messages", target, source,
-                              check=False)
-            lines = result.stdout.decode().splitlines()
-            if result.returncode == 1:
-                raise DbtError(409, "The branch conflicts with main. Update the branch from main first.",
-                               "merge_conflict", {"files": lines[1:]})
-            if result.returncode != 0:
-                raise DbtError(502, "The merge failed.", "git_error")
-            identity = {"GIT_AUTHOR_NAME": author["name"], "GIT_AUTHOR_EMAIL": author["email"],
-                        "GIT_COMMITTER_NAME": author["name"], "GIT_COMMITTER_EMAIL": author["email"]}
-            revision = self.git(project, "commit-tree", lines[0], "-p", target, "-p", source, "-F", "-",
-                                input=(message or f"Merge {branch} into main").encode(), env=identity,
-                                ).stdout.decode().strip()
+        result = self.git(project, "merge-tree", "--write-tree", "--name-only", "--no-messages", target, source,
+                          check=False)
+        lines = result.stdout.decode().splitlines()
+        if result.returncode == 1:
+            raise DbtError(409, "The branch conflicts with main. Update the branch from main first.",
+                           "merge_conflict", {"files": lines[1:]})
+        if result.returncode != 0:
+            raise DbtError(502, "The merge failed.", "git_error")
+        identity = {"GIT_AUTHOR_NAME": author["name"], "GIT_AUTHOR_EMAIL": author["email"],
+                    "GIT_COMMITTER_NAME": author["name"], "GIT_COMMITTER_EMAIL": author["email"]}
+        revision = self.git(project, "commit-tree", lines[0], "-p", target, "-p", source, "-F", "-",
+                            input=(message or f"Merge {branch} into main").encode(), env=identity,
+                            ).stdout.decode().strip()
         if self.git(project, "update-ref", "refs/heads/main", revision, target, check=False).returncode != 0:
             raise DbtError(409, "main moved while merging. Retry.", "stale_branch")
         return {"revision": revision, "merged": True}
@@ -220,6 +225,11 @@ class GitRepos:
     def archive(self, project, revision):
         return self.git(project, "archive", "--format=tar", revision).stdout
 
-    def is_on_main(self, project, revision):
-        main = self.resolve(project, "main")
-        return self.git(project, "merge-base", "--is-ancestor", revision, main, check=False).returncode == 0
+    def was_main_head(self, project, revision):
+        """Whether `revision` has been the head of main: the project's first commit or a merge result.
+
+        Being an ancestor of main is not enough: a merge also brings in every intermediate commit of
+        the branch, and those were never reviewed as a whole.
+        """
+        heads = self.git(project, "rev-list", "--first-parent", "refs/heads/main").stdout.decode().split()
+        return revision in heads

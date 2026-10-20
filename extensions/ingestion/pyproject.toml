@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-ingestion"
-version = "0.1.0"
+version = "0.1.1"
 description = "Ingestion (dlt) for the Iceberg Data Platform: declarative dlt pipelines that load REST APIs, databases and files into Iceberg, with a UI, API and MCP server"
 readme = "README.md"
 license = "Apache-2.0"

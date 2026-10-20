@@ -35,9 +35,9 @@ button, input, select { font: inherit; }
 }
 :is(button:not([data-copilotkit] *), .gen-card button):hover { background: var(--text-primary); }
 button.quiet { background: transparent; border-color: var(--border-visible); color: var(--text-primary); }
-button.quiet:hover { border-color: var(--text-primary); color: var(--text-display); }
+button.quiet:hover { background: transparent; border-color: var(--text-primary); color: var(--text-display); }
 button.ghost { background: transparent; border-color: transparent; color: var(--text-secondary); padding-inline: 8px; }
-button.ghost:hover { color: var(--text-display); }
+button.ghost:hover { background: transparent; color: var(--text-display); }
 button:disabled { cursor: not-allowed; opacity: .4; }
 button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 4px; }
 svg { width: 20px; height: 20px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -117,6 +117,12 @@ h1 { font: 500 var(--large)/1.1 var(--display); letter-spacing: -.03em; color: v
 section.chat { min-width: 0; min-height: 440px; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
 .catalog { overflow-y: auto; }
 section.chat > * { flex: 1; min-height: 0; }
+/* CopilotKit's chat is 100% high; it takes what the heading leaves, however long the conversation. */
+section.chat .copilotKitChat { flex: 1; height: auto; min-height: 0; }
+section.chat > .panel-heading { flex: none; padding-top: 24px; }
+.started section.chat > .panel-heading { padding-top: 0; }
+#clear, .confirm button { min-height: 44px; padding: 8px 20px; }
+.confirm { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px 12px; }
 
 /* CopilotKit v2 chat on the portal tokens, in both themes. */
 html [data-copilotkit] {
@@ -188,7 +194,9 @@ th:first-child, td:first-child { padding-left: 0; }
   #login-screen { display: block; min-height: calc(100vh - 80px); padding: 64px 24px; }
   .intro { display: none; }
   #workspace-screen { padding: 48px 24px 24px; height: auto; min-height: 0; display: block; }
-  section.chat { height: 80vh; }
+  /* The chat fills the visible screen; the keyboard shrinks it (interactive-widget=resizes-content),
+     so the question field stays directly above the keyboard. */
+  section.chat { height: 100dvh; min-height: 320px; padding-bottom: 8px; }
   .workspace-heading { align-items: stretch; flex-direction: column; gap: 32px; margin-bottom: 48px; }
   .workspace-heading.compact { flex-direction: row; align-items: center; gap: 16px; }
   .workspace-heading.compact .workspace-context { display: none; }

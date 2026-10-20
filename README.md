@@ -1,12 +1,12 @@
 # Iceberg Data Platform
 
-**An open lakehouse you actually own.** Apache Iceberg as the table format, with every other building block open source and replaceable. It runs on a single laptop with one command.
+**An open lakehouse you actually own.** Apache Iceberg as the table format, with every other building block open source and replaceable. It runs on a laptop with one command, or on a Kubernetes cluster with Helm.
 
 Getting started with Iceberg takes more than a table format. You need a catalog, object storage, identity, an engine and a place to work. Vendors make that part easy, and that is usually where lock-in starts. This platform shows the other route: Apache Polaris, Keycloak, RustFS, PostgreSQL, marimo and DuckDB, connected through open interfaces (Iceberg REST, S3, OIDC and MCP). You can replace one block without touching the others.
 
 Teams create, own and share their databases. People, notebooks and AI agents all sign in through Keycloak and work with the same grants.
 
-# Use it as:
+## Use it as
 - **A reference architecture.** See how catalog, storage, identity and engines fit together with team ownership, data sharing and AI agents on one identity. Every choice and boundary is documented, so you can reuse what fits your own platform.
 - **A classroom.** The demo-company skill sets up a fictional company for up to 48 participants, with one account each and a sign-in list to hand out. The quick-share skill opens the portals to a room for the session.
 - **A personal lab.** Learn Iceberg hands-on: create tables in a notebook, follow a query from the catalog to the Parquet files, and try snapshots, branches and Iceberg v3 with no cloud account or trial clock.
@@ -24,7 +24,7 @@ Teams create, own and share their databases. People, notebooks and AI agents all
 - **MCP servers:** AI agents such as Claude Code sign in through Keycloak to explore data and semantic models, manage databases and data shares, or administer the platform.
 - **Extensions:** add Conversational BI, a chat over your semantic models, dbt pipelines that agents build and test on your tables, Ingestion (dlt) that loads APIs, databases and files into them, and OpenMetadata, which lists your data products in a data catalog. Each is released on its own; see [extensions](https://sanderdw.github.io/iceberg-data-platform/extensions/).
 
-This is an **educational local development platform**. Read [the security model](https://sanderdw.github.io/iceberg-data-platform/security/) before deploying it elsewhere.
+This is an **educational development platform**, not an audited production service. Read [the security model](https://sanderdw.github.io/iceberg-data-platform/security/) before deploying it elsewhere.
 
 ## Quick start
 
@@ -42,11 +42,14 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 The installer creates `~/iceberg-data-platform`, generates `.env`, pulls the images and starts the platform. Open http://localhost:3000 and follow the [first steps](https://sanderdw.github.io/iceberg-data-platform/first-steps/).
 
+On a Kubernetes cluster, install the Helm chart instead; see [Install on Kubernetes](https://sanderdw.github.io/iceberg-data-platform/install-kubernetes/).
+
 ## Documentation
 
 The documentation is at **https://sanderdw.github.io/iceberg-data-platform/**.
 
 - [Installation](https://sanderdw.github.io/iceberg-data-platform/install/): pinned versions, branch previews, updates and stopping
+- [Install on Kubernetes](https://sanderdw.github.io/iceberg-data-platform/install-kubernetes/): the Helm charts, managed PostgreSQL and the official Apache Polaris chart
 - [First steps](https://sanderdw.github.io/iceberg-data-platform/first-steps/) and the [services](https://sanderdw.github.io/iceberg-data-platform/first-steps/#services)
 - Use the platform: [user portal](https://sanderdw.github.io/iceberg-data-platform/user-portal/), [notebooks](https://sanderdw.github.io/iceberg-data-platform/notebooks/), [semantic models](https://sanderdw.github.io/iceberg-data-platform/semantic-models/), [data shares](https://sanderdw.github.io/iceberg-data-platform/data-shares/), [your own tools](https://sanderdw.github.io/iceberg-data-platform/connect/) and [AI agents](https://sanderdw.github.io/iceberg-data-platform/ai-agents/)
 - [Administration guide](https://sanderdw.github.io/iceberg-data-platform/admin-guide/), [configuration](https://sanderdw.github.io/iceberg-data-platform/configuration/) and the [security model](https://sanderdw.github.io/iceberg-data-platform/security/)

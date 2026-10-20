@@ -1,0 +1,161 @@
+# Iceberg Data Platform on Kubernetes. One release per namespace: Services keep the names the
+# Extension Bridge contract promises (bridge, polaris-control-plane, rustfs, keycloak).
+
+# Every portal gets <host>.<baseDomain>, such as admin.data.example.com. Set it once at install:
+# the sign-in clients keep the addresses of the first install.
+baseDomain: ""
+
+hosts:
+  admin: admin
+  users: users
+  auth: auth
+  catalog: catalog
+  s3: s3
+
+# Full browser origins instead of <host>.<baseDomain>; values-localhost.yaml uses these for
+# kind and port-forwarding. Plain HTTP works only on localhost.
+origins:
+  admin: ""
+  users: ""
+  auth: ""
+  catalog: ""
+  s3: ""
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+
+tls:
+  # A cert-manager ClusterIssuer; one certificate covers every host. Empty: bring your own Secret.
+  clusterIssuer: ""
+  secretName: iceberg-tls
+
+image:
+  registry: ghcr.io/sanderdw
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+images:
+  portal: iceberg-data-platform-portal
+  users: iceberg-data-platform-users
+  notebook: iceberg-data-platform-notebook
+  postgres: postgres:18-alpine
+  polaris: apache/polaris:1.8.0
+  polarisAdminTool: apache/polaris-admin-tool:1.8.0
+  rustfs: rustfs/rustfs:1.0.1
+  keycloak: quay.io/keycloak/keycloak:26.8.0
+
+# A Secret with the platform credentials, for GitOps tools that cannot use Helm's lookup.
+# Keys: POSTGRES_PASSWORD, KEYCLOAK_DB_PASSWORD, POLARIS_CLIENT_SECRET, RUSTFS_SECRET_KEY,
+# KEYCLOAK_ADMIN_PASSWORD, OIDC_PORTAL_SECRET, OIDC_USERS_SECRET, OIDC_MANAGEMENT_SECRET,
+# PLATFORM_ADMIN_PASSWORD, PORTAL_PASSWORD. Empty: the chart generates and keeps them.
+existingSecret: ""
+
+platformAdminUsername: platform-admin
+polarisClientId: portal-admin
+rustfsAccessKey: iceberg-local
+awsRegion: us-east-1
+# Loopback port MCP clients listen on for the Keycloak OAuth callback.
+mcpCallbackPort: 3010
+clusterDomain: cluster.local
+
+# Addresses whose X-Forwarded-For the portals trust: the ingress controller. The notebook token
+# endpoint refuses forwarded requests whatever this says.
+forwardedAllowIps: "*"
+
+polaris:
+  # Run Polaris with the official Apache Polaris chart (https://downloads.apache.org/polaris/helm-chart)
+  # instead of this chart's Deployment. This chart then bootstraps the realm, keeps the Services the
+  # Extension Bridge names, and writes the official chart's values to the ConfigMap iceberg-polaris-values.
+  # See docs/install-kubernetes.md, "Use the official Apache Polaris chart".
+  external:
+    enabled: false
+  # Lifetime in seconds of tokens and storage credentials that Polaris issues.
+  tokenLifetime: 3600
+  semanticModels: true
+  resources:
+    requests: {cpu: 200m, memory: 512Mi}
+    limits: {memory: 1Gi}
+
+keycloak:
+  # Where the administration console opens: kubectl -n <namespace> port-forward svc/keycloak 8080, then
+  # this address. It is never routed through the Ingress.
+  adminOrigin: http://localhost:8080
+  # Keycloak trusts X-Forwarded-* only from these addresses (comma-separated CIDRs); empty trusts all.
+  proxyTrustedAddresses: ""
+  resources:
+    requests: {cpu: 200m, memory: 768Mi}
+    limits: {memory: 1536Mi}
+
+postgres:
+  # Your own PostgreSQL instead of the bundled one, such as a cloud provider's managed database (see
+  # docs/install-kubernetes.md). Create both databases and their users first; each user owns its database.
+  external:
+    enabled: false
+    host: ""
+    port: 5432
+    # disable, require (encrypted) or verify-full (also checks the server certificate against the system CAs).
+    sslmode: require
+    polaris:
+      database: polaris
+      username: polaris
+    keycloak:
+      database: keycloak
+      username: keycloak
+    # A Secret in this namespace with POLARIS_DB_PASSWORD and KEYCLOAK_DB_PASSWORD.
+    existingSecret: ""
+  # The bundled Postgres: one pod with a volume, when external.enabled is false.
+  storage: 10Gi
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 1Gi}
+
+rustfs:
+  storage: 50Gi
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 2Gi}
+
+storageClass: ""
+
+portal:
+  resources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 1Gi}
+
+users:
+  resources:
+    requests: {cpu: 50m, memory: 384Mi}
+    limits: {memory: 2Gi}
+  queries:
+    slots: 2
+    waitSeconds: 15
+
+notebooks:
+  enabled: true
+  max: 8
+  memory: 2g
+  memoryRequest: 512m
+  storage: 5Gi
+  startSeconds: 180
+
+monitor:
+  enabled: true
+
+networkPolicy:
+  enabled: true
+  # Notebooks may reach the internet (package installs) except these ranges.
+  privateRanges: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16]
+
+# Registered extensions: id -> {host, origin, listing}. Each gets a Keycloak client and the handshake
+# Secret iceberg-bridge-<id> (contracts/bridge/v1/handshake.md); install its chart in this namespace.
+#   extensions:
+#     dbt: {host: dbt}
+#     conversationalbi: {host: cbi}
+extensions: {}
+
+# Optional demo users and data (keycloak-bootstrap --demo), as in scripts.setup --demo.
+demo: false

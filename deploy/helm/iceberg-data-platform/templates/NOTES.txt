@@ -1,0 +1,13 @@
+Iceberg Data Platform {{ .Chart.AppVersion }} is starting in namespace {{ .Release.Namespace }}.
+
+  Administration portal  {{ include "idp.origin" (list . "admin") }}
+  User portal            {{ include "idp.origin" (list . "users") }}
+  Iceberg REST catalog   {{ include "idp.origin" (list . "catalog") }}/api/catalog
+  S3 endpoint            {{ include "idp.origin" (list . "s3") }}
+
+Sign in as {{ .Values.platformAdminUsername }} with this one-time password; Keycloak asks for a new one:
+
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "idp.secretName" . }} -o jsonpath='{.data.PLATFORM_ADMIN_PASSWORD}' | base64 -d; echo
+
+The Secret {{ include "idp.secretName" . }} holds every platform credential and stays after helm uninstall.
+Keep it: the data in Postgres and RustFS only opens with these credentials.

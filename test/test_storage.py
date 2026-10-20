@@ -8,7 +8,7 @@ from botocore.stub import Stubber
 
 from server.models import ServiceError
 from server.polaris import PolarisProvider
-from server.storage import RustFSStorage, bucket_name, bucket_policy
+from server.storage import BUCKET, RustFSStorage, bucket_name, bucket_policy
 
 
 @pytest.fixture
@@ -21,11 +21,18 @@ def storage():
 def test_bucket_names_and_policy_scope():
     for name in ("analytics_dev", "analytics-dev", "a" * 48, "abc---"):
         assert re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", bucket_name(name))
+        assert BUCKET.fullmatch(bucket_name(name))
+    assert BUCKET.fullmatch(bucket_name(f"db-{'f' * 32}"))
     assert bucket_name("analytics_dev") != bucket_name("analytics-dev")
-    statement = bucket_policy(["own-bucket"])["Statement"][0]
+    own = bucket_name("analytics")
+    statement = bucket_policy([own])["Statement"][0]
     assert statement["Effect"] == "Allow"
-    assert statement["Resource"] == ["arn:aws:s3:::own-bucket", "arn:aws:s3:::own-bucket/*"]
+    assert statement["Resource"] == [f"arn:aws:s3:::{own}", f"arn:aws:s3:::{own}/*"]
     assert bucket_policy([])["Statement"][0]["Effect"] == "Deny"
+    # A policy never names a wildcard, path or anything but a bucket the portal created.
+    for name in ("*", "db-*", "own-bucket", f"{own}/*", "arn:aws:s3:::x"):
+        with pytest.raises(ServiceError):
+            bucket_policy([own, name])
 
 
 def test_existing_bucket_is_never_adopted(storage):

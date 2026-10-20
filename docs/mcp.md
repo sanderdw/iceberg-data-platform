@@ -8,7 +8,8 @@ Platform administrators have a separate endpoint on the administration portal, d
 [administration guide](admin-guide.md#connect-an-mcp-client). [Extensions](extensions.md) serve their
 own: Conversational BI at `http://localhost:3007/mcp` (client `ext-conversationalbi-mcp`), dbt at
 `http://localhost:3004/mcp` (client `ext-dbt-mcp`) and Ingestion (dlt) at `http://localhost:3008/mcp`
-(client `ext-ingestion-mcp`).
+(client `ext-ingestion-mcp`). On Kubernetes each is `/mcp` on its own HTTPS host; see
+[addresses and sign-in](install-kubernetes.md#addresses-and-sign-in).
 
 ## How every tool works
 

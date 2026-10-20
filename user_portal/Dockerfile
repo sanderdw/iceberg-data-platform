@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.13.0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
 FROM python:3.14.8-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
@@ -10,8 +10,8 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --group 
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
 COPY user_portal/duckdb_extensions.py ./user_portal/
 RUN /app/.venv/bin/python user_portal/duckdb_extensions.py
-COPY server/__init__.py server/catalog_metadata.py server/models.py server/polaris.py server/storage.py server/oidc.py server/entrypoints.py server/validation.py server/mcp_auth.py server/extensions.py ./server/
-COPY user_portal/__init__.py user_portal/app.py user_portal/directory.py user_portal/runtime.py user_portal/__main__.py ./user_portal/
+COPY server/__init__.py server/catalog_metadata.py server/models.py server/polaris.py server/storage.py server/oidc.py server/entrypoints.py server/validation.py server/mcp_auth.py server/extensions.py server/kube.py ./server/
+COPY user_portal/__init__.py user_portal/app.py user_portal/directory.py user_portal/runtime.py user_portal/runtime_kubernetes.py user_portal/__main__.py ./user_portal/
 COPY user_portal/preview.py user_portal/mcp_server.py ./user_portal/
 COPY user_portal/semantic ./user_portal/semantic
 COPY user_portal/public ./user_portal/public

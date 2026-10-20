@@ -1,6 +1,7 @@
 """RustFS S3 and signed admin API. Policies contain only the user's team buckets."""
 
 import json
+import re
 import secrets
 from urllib.parse import quote
 
@@ -14,12 +15,17 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from .models import ServiceError
 
+# The names bucket_name() makes: never a wildcard, path or ARN fragment.
+BUCKET = re.compile(r"db-[a-z0-9][a-z0-9-]{0,39}-[0-9a-f]{12}")
+
 
 def bucket_name(database):
     return f"db-{database.replace('_', '-')[:40].rstrip('-')}-{secrets.token_hex(6)}"
 
 
 def bucket_policy(buckets):
+    if any(not BUCKET.fullmatch(b) for b in buckets):
+        raise ServiceError(502, "A storage policy may name only buckets the portal created.")
     resources = [arn for b in sorted(set(buckets)) for arn in (f"arn:aws:s3:::{b}", f"arn:aws:s3:::{b}/*")]
     # IAM policies must have a statement even when a team has no databases yet.
     return {
@@ -133,6 +139,17 @@ class RustFSStorage:
     def bucket_database(self, bucket):
         tags = {t["Key"]: t["Value"] for t in self.call("get_bucket_tagging", Bucket=bucket)["TagSet"]}
         return tags.get("database") if tags.get("managed-by") == "iceberg-portal" else None
+
+    def owns_bucket(self, bucket, database):
+        """Whether the tags written at creation bind `bucket` to `database`; False for a missing or untagged bucket."""
+        if not BUCKET.fullmatch(bucket):
+            return False
+        try:
+            return self.bucket_database(bucket) == database
+        except ServiceError as exc:
+            if exc.status != 404:
+                raise
+            return False
 
     def check_bucket_owner(self, bucket, database):
         """Returns False when the bucket is already gone, as in a resumed deletion."""

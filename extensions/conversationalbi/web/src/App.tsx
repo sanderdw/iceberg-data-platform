@@ -1,5 +1,5 @@
 import { CopilotChat, CopilotKitProvider, useAgent } from "@copilotkit/react-core/v2";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { api, CSRF, sameRef, type ModelEntry, type ModelRef, type NotEnabled } from "./api";
 import { Icon } from "./components/Icon";
 import { ModelPicker } from "./components/ModelPicker";
@@ -146,6 +146,66 @@ function Workspace({ user }: { user: string }) {
     );
   }, [select]);
   useEffect(load, [load]);
+  // The agent is stateless: every run sends the conversation it is given. Clearing stops a running
+  // answer, empties the messages and starts a new thread, so nothing of it reaches the LLM again.
+  // Switching threads resets the agent's state more than once, the last time when the connection to
+  // the new thread replays it; the selected model is put back after each reset until the next question.
+  const kept = useRef<ModelRef | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const clear = useCallback(() => {
+    setConfirming(false);
+    kept.current = selected;
+    agent.abortRun();
+    agent.setMessages([]);
+    setThreadId(crypto.randomUUID());
+  }, [agent, selected]);
+  useEffect(() => {
+    const subscription = agent.subscribe({
+      onStateChanged: ({ state }) => {
+        if (!kept.current || (state as { model?: ModelRef } | undefined)?.model) return;
+        const model = kept.current;
+        queueMicrotask(() => agent.setState({ ...(agent.state ?? {}), model, lastResultId: null }));
+      },
+      onMessagesChanged: ({ messages }) => {
+        if (messages.length) kept.current = null;
+      },
+    });
+    return () => subscription.unsubscribe();
+  }, [agent]);
+  // On a phone the page scrolls, the models come first and the chat is one screen high. Picking a
+  // model scrolls to the chat. While the question field has focus, also after the keyboard resized the
+  // page, the chat fills the screen with the field at the bottom.
+  const chat = useRef<HTMLElement>(null);
+  const phone = () => matchMedia("(max-width: 700px)").matches;
+  const picked = useRef(false);
+  const pick = useCallback((entry: ModelEntry) => {
+    picked.current = phone();
+    select(entry);
+  }, [select]);
+  // After the render: the heading above the chat grows with the selected model's details.
+  useEffect(() => {
+    if (!picked.current || !selected) return;
+    picked.current = false;
+    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    chat.current?.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" });
+  }, [selected]);
+  useEffect(() => {
+    const fit = () => {
+      const section = chat.current;
+      // Only for the field: scrolling when a button takes focus would move it away from the tap.
+      const field = document.activeElement;
+      if (section && phone() && field instanceof HTMLTextAreaElement && section.contains(field)) {
+        section.scrollIntoView({ block: "end" });
+      }
+    };
+    const section = chat.current;
+    section?.addEventListener("focusin", fit);
+    addEventListener("resize", fit);
+    return () => {
+      section?.removeEventListener("focusin", fit);
+      removeEventListener("resize", fit);
+    };
+  }, []);
   useEffect(() => {
     api<{ userPortalUrl?: string }>("/api/v1/me").then((me) => setPortal(me.userPortalUrl), () => undefined);
   }, []);
@@ -158,7 +218,6 @@ function Workspace({ user }: { user: string }) {
   const nav = (
     <nav aria-label="Conversational BI">
       <button type="button" className="nav-item" aria-current="page">Ask</button>
-      <button type="button" className="nav-item" onClick={() => setThreadId(crypto.randomUUID())}>New chat</button>
       {portal && <a className="nav-item extension-link" href={portal + "/#catalog"} target="_blank" rel="noopener">Workspaces</a>}
     </nav>
   );
@@ -195,13 +254,25 @@ function Workspace({ user }: { user: string }) {
               <button type="button" id="refresh" className="quiet" aria-label="Refresh models" onClick={load}><Icon kind="refresh" /></button>
             </div>
             {models ? (
-              <ModelPicker models={models.models} notEnabled={models.notEnabled} selected={selected} onSelect={select} onEnabled={load} />
+              <ModelPicker models={models.models} notEnabled={models.notEnabled} selected={selected} onSelect={pick} onEnabled={load} />
             ) : (
               <p className="hint">[ LOADING ]</p>
             )}
             {problem && <p className="notice-error" role="alert">{problem}</p>}
           </aside>
-          <section className="chat" aria-label="Chat">
+          <section className="chat" aria-label="Chat" ref={chat}>
+            <div className="panel-heading">
+              <h2>Conversation</h2>
+              {confirming && started ? (
+                <div className="confirm" role="group" aria-label="Clear the conversation?">
+                  <span className="eyebrow">Clear the conversation?</span>
+                  <button type="button" className="quiet" onClick={() => setConfirming(false)} autoFocus>Cancel</button>
+                  <button type="button" id="clear-confirm" onClick={clear}>Clear</button>
+                </div>
+              ) : (
+                <button type="button" id="clear" className="quiet" onClick={() => setConfirming(true)} disabled={!started}>Clear</button>
+              )}
+            </div>
             <CopilotChat key={threadId} threadId={threadId} agentId="analyst"
               labels={{
                 chatInputPlaceholder: current ? `Ask about ${current.name}…` : "Select a model, or ask which data you can explore…",

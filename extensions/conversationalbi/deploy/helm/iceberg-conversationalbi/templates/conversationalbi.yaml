@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cbi-gateway
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "cbi.selector" "gateway" | nindent 4 }}
+  ports:
+    - {name: http, port: 3007}
+    - {name: agent, port: 3017}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cbi-runtime
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "cbi.selector" "runtime" | nindent 4 }}
+  ports:
+    - {name: http, port: 4000}
+---
+# Sign-in, REST API and MCP, the chat UI, the agent and the query worker. The only part with the LLM
+# settings, the Bridge credentials and a route to the platform.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cbi-gateway
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "cbi.selector" "gateway" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cbi.labels" . | nindent 8 }}
+        app.kubernetes.io/component: gateway
+      annotations:
+        checksum/llm: {{ toJson .Values.llm | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "cbi.pullSecrets" . | nindent 6 }}
+      containers:
+        - name: gateway
+          image: {{ include "cbi.image" (dict "root" . "name" "gateway") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The Bridge values come last and win over anything in the LLM Secret, as on Docker.
+          envFrom:
+            - secretRef: {name: {{ .Values.llm.existingSecret | default "iceberg-conversationalbi-llm" }}}
+            - secretRef: {name: {{ .Values.bridgeSecret }}}
+          env:
+            - {name: RUNTIME_URL, value: "http://cbi-runtime:4000"}
+            - name: RUNTIME_KEY
+              valueFrom: {secretKeyRef: {name: iceberg-conversationalbi, key: RUNTIME_KEY}}
+            - {name: BI_LLM_ROWS, value: {{ .Values.query.llmRows | quote }}}
+            - {name: BI_LLM_BYTES, value: {{ .Values.query.llmBytes | quote }}}
+            - {name: BI_MAX_ROWS, value: {{ .Values.query.maxRows | quote }}}
+            - {name: BI_QUERY_TIMEOUT, value: {{ .Values.query.timeoutSeconds | quote }}}
+            - {name: BI_MAX_QUERIES, value: {{ .Values.query.maxQueries | quote }}}
+            - {name: HOME, value: /tmp}
+          ports:
+            - {name: http, containerPort: 3007}
+            - {name: agent, containerPort: 3017}
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 20
+            failureThreshold: 6
+            initialDelaySeconds: 30
+          resources:
+            requests: {cpu: 100m, memory: 512Mi}
+            limits: {memory: {{ .Values.memory }}}
+          {{- include "cbi.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+---
+# The CopilotKit runtime between the chat UI and the agent: no platform access, no internet, no
+# credentials beyond the key that identifies it to the agent listener.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cbi-runtime
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cbi.selector" "runtime" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cbi.labels" . | nindent 8 }}
+        app.kubernetes.io/component: runtime
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "cbi.pullSecrets" . | nindent 6 }}
+      containers:
+        - name: runtime
+          image: {{ include "cbi.image" (dict "root" . "name" "runtime") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: RUNTIME_KEY
+              valueFrom: {secretKeyRef: {name: iceberg-conversationalbi, key: RUNTIME_KEY}}
+            - {name: AGENT_URL, value: "http://cbi-gateway:3017/"}
+          ports:
+            - {name: http, containerPort: 4000}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 20m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          {{- include "cbi.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+{{- if .Values.networkPolicy.enabled }}
+---
+# The internal chat network, as policies: the runtime talks to the gateway's agent port only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cbi-runtime
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cbi.selector" "runtime" | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "cbi.selector" "gateway" | nindent 14 }}
+      ports:
+        - {port: 4000, protocol: TCP}
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "cbi.selector" "gateway" | nindent 14 }}
+      ports:
+        - {port: 3017, protocol: TCP}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cbi-gateway-agent
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cbi.selector" "gateway" | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    # The chat UI, API and MCP, through the ingress controller.
+    - ports:
+        - {port: 3007, protocol: TCP}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "cbi.selector" "runtime" | nindent 14 }}
+      ports:
+        - {port: 3017, protocol: TCP}
+{{- end }}

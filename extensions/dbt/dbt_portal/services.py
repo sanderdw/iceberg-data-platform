@@ -266,9 +266,10 @@ class Services:
         await self.project_for(caller, project_id)
         return await asyncio.to_thread(self.repos.diff, project_id, base, head)
 
-    async def merge_to_main(self, caller, project_id, branch, message=""):
+    async def merge_to_main(self, caller, project_id, branch, message="", revision=None):
         _, me, _ = await self.project_for(caller, project_id, "admin")
-        result = await asyncio.to_thread(self.repos.merge, project_id, branch, message, self.author(caller, me))
+        result = await asyncio.to_thread(self.repos.merge, project_id, branch, message, self.author(caller, me),
+                                         revision)
         built = next((r for r in self.store.runs(project_id, "development", 200, "main")
                       if r["command"] in WRITE_COMMANDS and r["status"] == "success"), None)
         if not built or built["revision"] != result.get("revision"):
@@ -298,9 +299,9 @@ class Services:
                                                     "writer" if command in WRITE_COMMANDS else "reader")
         revision = await asyncio.to_thread(self.repos.resolve, project_id, ref)
         if environment != "development" and command in WRITE_COMMANDS and not await asyncio.to_thread(
-                self.repos.is_on_main, project_id, revision):
-            raise DbtError(403, f"{environment.title()} only builds revisions on main. Merge the branch first.",
-                           "main_required")
+                self.repos.was_main_head, project_id, revision):
+            raise DbtError(403, f"{environment.title()} only builds main, or an earlier head of main. "
+                                "Merge the branch first.", "main_required")
         principal = await self.bridge.principal_for(project["team"], environment)
         args = ["docs", "generate"] if command == "docs" else [command]
         if select:
@@ -492,6 +493,10 @@ class Services:
             raise DbtError(404, "No pipeline yet: run build, compile or parse first.", "no_pipeline")
         return {"environment": environment, "structureRun": run["id"],
                 **lineage.neighbours(structure, node, max(1, min(depth, 20)))}
+
+    async def publishes_docs(self, run):
+        return run["command"] == "docs" and run["status"] == "success" and await asyncio.to_thread(
+            self.repos.was_main_head, run["project"], run["revision"])
 
     def docs_path(self, run_id):
         return self.runs.artifacts / run_id / "out" / "docs"

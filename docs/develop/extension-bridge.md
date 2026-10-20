@@ -1,6 +1,6 @@
 # Extension Bridge
 
-Larger capabilities, such as conversational BI, dbt pipelines, ingestion with dlt and the OpenMetadata data catalog, live in [extensions](../extensions.md). Each one has its own Compose project, dependencies, images, version, changelog and CI, and talks to the core only through the **Extension Bridge**. The core and an extension are released independently and work together as long as both support the same contract version.
+Larger capabilities, such as conversational BI, dbt pipelines, ingestion with dlt and the OpenMetadata data catalog, live in [extensions](../extensions.md). Each one has its own Compose project (and, except OpenMetadata, a Helm chart), dependencies, images, version, changelog and CI, and talks to the core only through the **Extension Bridge**. The core and an extension are released independently and work together as long as both support the same contract version.
 
 ```mermaid
 flowchart LR
@@ -36,6 +36,8 @@ docker compose -f compose.users.yaml up -d --wait users
 
 Add `--listing` for an extension that publishes listings, such as OpenMetadata; it is added to `PLATFORM_LISTING_EXTENSIONS`, and the user portal then offers **Listed in the data catalog** on data shares. Recreating the platform services creates the extension's Keycloak clients and adds a link in the user portal. On the administration portal's Teams page, platform administrators see every automation principal and can revoke it. `--remove-extension <id>` unregisters an extension; its clients are disabled on the next start.
 
+On Kubernetes, the platform chart's `extensions` value registers an extension: `--set extensions.<id>.host=<host>` writes its handshake to the Secret `iceberg-bridge-<id>`, which the extension's chart reads in the same namespace. Its isolated jobs run in a namespace of its own with the label `io.iceberg-platform.isolated` (see the [network contract](https://github.com/sanderdw/iceberg-data-platform/blob/main/contracts/bridge/v1/network.md#on-kubernetes)).
+
 ## Extensions in this repository
 
 | Extension | Folder | Internals |
@@ -43,4 +45,4 @@ Add `--listing` for an extension that publishes listings, such as OpenMetadata; 
 | Conversational BI | [`extensions/conversationalbi`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/conversationalbi) | [Conversational BI](conversational-bi.md) |
 | dbt pipelines | [`extensions/dbt`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/dbt) | [dbt pipelines](dbt.md) |
 | Ingestion (dlt) | [`extensions/ingestion`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/ingestion) | [Ingestion (dlt)](ingestion.md) |
-| OpenMetadata | [`extensions/openmetadata`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/openmetadata) | [OpenMetadata](../openmetadata.md) |
+| OpenMetadata | [`extensions/openmetadata`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/openmetadata) | [OpenMetadata](openmetadata.md) |

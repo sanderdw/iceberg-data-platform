@@ -18,8 +18,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SUFFIXES = {".py", ".js", ".css", ".html", ".svg", ".md", ".yml", ".yaml", ".sql", ".csv", ".toml", ".lock",
-            ".txt", ".ttf", ".example", ".json"}
-PLAIN = {"Dockerfile", ".gitignore", ".dockerignore", ".python-version", "LICENSE", "NOTICE"}
+            ".txt", ".ttf", ".example", ".json", ".tpl"}
+PLAIN = {".helmignore", "Dockerfile", ".gitignore", ".dockerignore", ".python-version", "LICENSE", "NOTICE"}
 BINARY = {".ttf"}
 SECRET = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|BRIDGE_CLIENT_SECRET=[0-9a-f]{16,}"
                     r"|ING_SECRET_KEY=[0-9a-f]{64}")
@@ -36,6 +36,10 @@ def check(root=ROOT, tag=None):
         raise SystemExit("ingestion/config.py VERSION differs from pyproject.toml")
     if f"## {version}" not in (root / "CHANGELOG.md").read_text():
         raise SystemExit(f"CHANGELOG.md has no section for {version}")
+    chart = (root / "deploy/helm/iceberg-ingestion/Chart.yaml").read_text()
+    if not all(re.search(rf'^{key}: "?{re.escape(version)}"?$', chart, re.MULTILINE)
+               for key in ("version", "appVersion")):
+        raise SystemExit("deploy/helm/iceberg-ingestion/Chart.yaml has another version")
     for compose in ("compose.yaml",):
         text = (root / compose).read_text()
         if f"iceberg-ingestion:{version}" not in text or f"iceberg-ingestion-runner:{version}" not in text:
@@ -76,7 +80,7 @@ def channel(ref, version, run_id, attempt):
     """An ingestion-vX.Y.Z tag is a release; a branch is a preview with its own image and release tags."""
     if ref == f"refs/tags/ingestion-v{version}":
         return {"version": version, "preview": "false", "image_tag": version, "release_tag": f"ingestion-v{version}",
-                "slug": ""}
+                "slug": "", "chart_version": version}
     if not ref.startswith("refs/heads/"):
         raise SystemExit(f"Run this workflow on a branch or on tag ingestion-v{version}, not {ref}")
     # The same names as the platform's branch previews, so one branch's images line up.
@@ -84,8 +88,10 @@ def channel(ref, version, run_id, attempt):
     if not slug or re.match(r"v\d", slug):
         raise SystemExit("This branch name cannot be used for a preview")
     build = f"{slug}-{run_id}-{attempt}"
+    # A chart version is SemVer: its prerelease part allows letters, digits and hyphens only.
     return {"version": version, "preview": "true", "image_tag": build, "release_tag": f"ingestion-{build}",
-            "slug": slug}
+            "slug": slug,
+            "chart_version": f"{version}-{re.sub(r'[._]', '-', build)}"}
 
 
 def main():

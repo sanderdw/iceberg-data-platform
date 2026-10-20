@@ -539,3 +539,21 @@ def test_access_edit_validation_and_provider_failure(portal):
     assert portal.provider.list_users() == [account]
     portal.client.delete("/api/session", headers=HEADERS)
     assert portal.patch(path, {"memberships": members([owner], "admin")}).status_code == 401
+
+
+@pytest.mark.parametrize("tampered", ["*", "victim"])
+def test_storage_policies_name_only_buckets_bound_to_their_database(portal, tampered):
+    # portal.bucket is a catalog property that catalog roles can edit; the bucket's own tags decide.
+    p = portal
+    victim_team, own_team = team(p), team(p, "second-team")
+    victim = database(p, victim_team)
+    own = database(p, own_team, "own_data")
+    p.provider.resources["catalogs"][own["id"]]["properties"]["portal.bucket"] = (
+        victim["bucket"] if tampered == "victim" else tampered)
+    mallory = user(p, [own_team], "mallory", "bucket-admin")
+    assert p.patch(f"/users/{mallory['id']}", {"memberships": members([own_team], "admin")}).status_code == 200
+    assert p.patch(f"/users/{mallory['id']}", {"memberships": members([own_team], "bucket-admin")}).status_code == 200
+    for call in p.provider.storage.set_user_buckets.call_args_list + p.provider.storage.create_user.call_args_list:
+        assert victim["bucket"] not in call.args[1] and "*" not in call.args[1]
+    assert p.patch(f"/databases/{own['id']}", {"team": victim_team}).status_code == 409
+    p.provider.storage.tag_bucket.assert_not_called()

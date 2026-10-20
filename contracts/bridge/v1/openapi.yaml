@@ -3,7 +3,7 @@
   "info": {
     "title": "Iceberg Platform Bridge",
     "description": "The stable interface for extensions. Authenticate with a Keycloak access token for the `iceberg-bridge` audience: a user token issued to the extension's clients, or the service-account token of the extension's confidential client. See contracts/bridge for the compatibility policy.",
-    "version": "0.1.1"
+    "version": "0.1.2"
   },
   "paths": {
     "/bridge/v1": {
@@ -2075,6 +2075,26 @@
           "extensionLabel": {
             "type": "string",
             "title": "Extensionlabel"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "kubernetes"
+            ],
+            "title": "Platform",
+            "default": "docker"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
           }
         },
         "type": "object",

@@ -1,0 +1,86 @@
+{{- if not (include "idp.pgExternal" .) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  labels:
+    {{- include "idp.component" (list . "postgres") | nindent 4 }}
+data:
+  # Keycloak keeps its realms here instead of in its development database.
+  keycloak.sh: |
+    #!/bin/sh
+    set -eu
+    psql -v ON_ERROR_STOP=1 -v password="$KEYCLOAK_DB_PASSWORD" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'SQL'
+    CREATE ROLE keycloak LOGIN PASSWORD :'password';
+    CREATE DATABASE keycloak OWNER keycloak;
+    SQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    {{- include "idp.component" (list . "postgres") | nindent 4 }}
+spec:
+  selector:
+    {{- include "idp.selector" "postgres" | nindent 4 }}
+  ports:
+    - {name: postgres, port: 5432}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    {{- include "idp.component" (list . "postgres") | nindent 4 }}
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "idp.selector" "postgres" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "idp.component" (list . "postgres") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "idp.pullSecrets" . | nindent 6 }}
+      containers:
+        - name: postgres
+          image: {{ .Values.images.postgres }}
+          env:
+            - {name: POSTGRES_DB, value: polaris}
+            - {name: POSTGRES_USER, value: polaris}
+            {{- include "idp.secretEnv" (list . "POSTGRES_PASSWORD") | nindent 12 }}
+            {{- include "idp.secretEnv" (list . "KEYCLOAK_DB_PASSWORD") | nindent 12 }}
+          ports:
+            - {name: postgres, containerPort: 5432}
+          readinessProbe:
+            exec: {command: [pg_isready, -U, polaris, -d, polaris]}
+            periodSeconds: 5
+          livenessProbe:
+            exec: {command: [pg_isready, -U, polaris, -d, polaris]}
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d}
+      volumes:
+        - name: init
+          configMap: {name: postgres-init, defaultMode: 0555}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}
+{{- end }}

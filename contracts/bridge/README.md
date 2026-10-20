@@ -1,7 +1,7 @@
 # Extension Bridge
 
 The Bridge is the stable interface between the core platform and **extensions**: separately
-versioned Compose projects, such as Conversational BI, that add functionality without changing the core.
+versioned Compose projects or Helm charts, such as Conversational BI, that add functionality without changing the core.
 The core owns this contract. An extension depends on this contract only, never on core source code,
 container names or the Polaris management API.
 
@@ -33,7 +33,8 @@ An extension reaches the core through four doors:
   shares with its service-account token: names, schemas, descriptions and semantic models,
   never data or a credential. It publishes them in its catalog so others can find the data
   product and ask the owning team for a share.
-- **Discovery.** `GET /bridge/v1` returns the endpoints, environments, network aliases and
+- **Discovery.** `GET /bridge/v1` returns the endpoints, environments, network aliases (and, since
+  0.1.2, whether they are Docker aliases or Kubernetes Services in `network.namespace`) and
   registered extensions, so the handshake file holds only the extension's identity.
 
 ## Capabilities
@@ -49,7 +50,9 @@ An extension reaches the core through four doors:
 ## Registering an extension
 
 `scripts.setup --extension <id> --origin <url> --handshake <file>` registers an extension and writes
-its [handshake file](v1/handshake.md). Add `--listing` for an extension that publishes listings. See [extensions](../../docs/develop/extension-bridge.md#register-an-extension)
+its [handshake file](v1/handshake.md). Add `--listing` for an extension that publishes listings. On
+Kubernetes the platform chart's `extensions.<id>.host` registers it and writes the same keys to the
+Secret `iceberg-bridge-<id>` ([network](v1/network.md#on-kubernetes)). See [extensions](../../docs/develop/extension-bridge.md#register-an-extension)
 for the full steps.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for versioning and [CHANGELOG.md](CHANGELOG.md) for changes.

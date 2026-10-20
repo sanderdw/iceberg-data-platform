@@ -19,6 +19,13 @@ BRIDGE_URL = "http://bridge:3005"
 PLATFORM_NETWORK = "iceberg-platform_default"
 INTERNAL_ISSUER = "http://keycloak:8080/realms/iceberg"
 EXTENSION_ID = re.compile(r"^[a-z][a-z0-9]{1,23}$")
+# Sign-in is reachable from the internet once quick-share runs: lock an account for a minute after
+# 10 failed passwords, doubling up to 15 minutes. People choose their own passwords; no policy applies.
+REALM_SECURITY = {
+    "bruteForceProtected": True, "permanentLockout": False, "failureFactor": 10,
+    "waitIncrementSeconds": 60, "maxFailureWaitSeconds": 900, "maxDeltaTimeSeconds": 43200,
+    "quickLoginCheckMilliSeconds": 1000, "minimumQuickLoginWaitSeconds": 60,
+}
 
 
 def mapper(name, kind, config):
@@ -161,6 +168,7 @@ def realm(env):
         "realm": "iceberg", "enabled": True, "registrationAllowed": False,
         "resetPasswordAllowed": False, "rememberMe": False, "accessTokenLifespan": 900,
         "ssoSessionIdleTimeout": 1800, "ssoSessionMaxLifespan": 28800,
+        **REALM_SECURITY,
         "roles": {"client": {"iceberg-admin": [{"name": "platform-admin"}]}},
         "clients": clients, "users": users,
     }
@@ -295,6 +303,19 @@ def setup(root=ROOT, demo=False):
     print("Start compose.yaml (platform), then compose.users.yaml (workspaces).")
 
 
+def write_realm(path, env=os.environ):
+    """Write only the realm import from the environment, as on Kubernetes, where secrets live in Secrets.
+
+    The import holds ${...} placeholders that Keycloak resolves from its own environment.
+    """
+    values = {"PLATFORM_ADMIN_USERNAME": "platform-admin", "MCP_CALLBACK_PORT": "3010",
+              **{key: env[key] for key in ("PORTAL_ORIGIN", "USER_ORIGIN", "PLATFORM_ADMIN_USERNAME",
+                                           "MCP_CALLBACK_PORT") if env.get(key)}}
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(realm(values), indent=2) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demo", action="store_true", help="Generate credentials for optional test fixtures")
@@ -304,7 +325,12 @@ def main():
     parser.add_argument("--listing", action="store_true",
                         help="With --extension: it publishes listed data shares to a data catalog")
     parser.add_argument("--remove-extension", metavar="ID", help="Unregister an extension")
+    parser.add_argument("--realm-json", metavar="PATH",
+                        help="Only write the Keycloak realm import from PORTAL_ORIGIN and USER_ORIGIN; no .env")
     args = parser.parse_args()
+    if args.realm_json:
+        write_realm(args.realm_json)
+        return
     setup(demo=args.demo)
     if args.extension:
         if not args.origin or not args.handshake:

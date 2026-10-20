@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.9 - 2026-10-17
+
+- **Install on Kubernetes.** Run the platform and its extensions on your own Kubernetes cluster with one `helm install` and your domain. Every portal gets its own HTTPS address. You can use your cloud provider's PostgreSQL and the official Apache Polaris chart. The `kubernetes-install` agent skill guides you through it. The Docker installation stays as it is. See [Install on Kubernetes](install-kubernetes.md).
+- **Safer by default.** Fixes from two security reviews, in the platform, Conversational BI, dbt and Ingestion:
+  - Semantic models can no longer be used to sneak SQL into a query.
+  - Keycloak locks an account for a while after 10 wrong passwords.
+  - Teams can no longer reach another team's storage.
+  - When a database moves to another team, the old team's extensions lose access to it.
+  - Ingestion run logs hide secrets better.
+
+  What is still open is listed in the [security review](security-review.md).
+- **Notebooks keep running through a short outage.** When Polaris or Keycloak restarts you stay signed in, and notebooks stop only after 90 seconds without them.
+- **OpenRouter in Conversational BI.** Set `LLM_MODEL=openrouter:<vendor>/<model>` and `OPENROUTER_API_KEY` to reach any model OpenRouter offers.
+- **See who used the Bridge.** Its logs show every automation account created or revoked and every token issued.
+- Fixed: filters that combine conditions with `AND` or `OR` on calculated fields give the right answer, MCP accepts semantic models up to 1 MB, and the guides name the correct session cookie and OpenMetadata bot permissions.
+
 ## 0.9.2 - 2026-10-14
 
 - **Install OpenMetadata with one command.** The OpenMetadata extension has its own installer: it adds the extension to your installation, registers it, asks for your OpenMetadata address and bot token, and starts it. With `--demo` it also starts a local OpenMetadata to try it out. See [OpenMetadata](openmetadata.md#install).
