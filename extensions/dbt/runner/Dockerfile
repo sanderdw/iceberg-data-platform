@@ -1,5 +1,5 @@
 # The isolated run image. Built with context extensions/dbt; it has no network at run time.
-FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.3 AS uv
 FROM python:3.14.8-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /opt/runner
