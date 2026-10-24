@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
           version: '0.13.0'
           enable-cache: true
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
           version: '0.13.0'
           enable-cache: true
@@ -137,7 +137,7 @@ jobs:
             if git cat-file -e "$tag:contracts/bridge/v1/openapi.yaml" 2>/dev/null; then echo "tag=$tag" >> "$GITHUB_OUTPUT"; exit 0; fi
           done
           echo "No platform release ships the Bridge yet; the integration job covers this commit." >> "$GITHUB_STEP_SUMMARY"
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         if: steps.core.outputs.tag
         with:
           version: '0.13.0'
