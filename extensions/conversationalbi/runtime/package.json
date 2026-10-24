@@ -8,6 +8,6 @@
   },
   "dependencies": {
     "@ag-ui/client": "1.0.2",
-    "@copilotkit/runtime": "1.79.0"
+    "@copilotkit/runtime": "1.79.1"
   }
 }
