@@ -30,7 +30,7 @@
     "promo:render": "node scripts/promo-render.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.0"
+    "@playwright/test": "1.64.1"
   },
   "license": "Apache-2.0"
 }
