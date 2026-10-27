@@ -10,32 +10,12 @@ Make your data products findable. Every data share that a team administrator lis
 
 OpenMetadata 2.0 has no Iceberg connector of its own: it reaches Iceberg only through a query engine such as Trino or Snowflake, and never read semantic models. This extension pushes the listings to OpenMetadata's API instead, so no catalog credential leaves the platform.
 
-## What is published
-
-| Platform | OpenMetadata |
-| --- | --- |
-| Environment | Database service `iceberg-<environment>` |
-| Database | Database, with the database name as display name |
-| Namespace | Database schema |
-| Listed table or view | Table (type Iceberg or View) with columns, types, descriptions and partitioning |
-| Semantic model metric | Metric with its description, synonyms, AI context, SQL expression and dimensions, and lineage from the tables it reads |
-| Semantic model, its datasets and described fields | Glossary terms in the `Iceberg Data Platform` glossary. Tables and columns are tagged with the terms of the datasets and fields that read them; a table's description adds what its dataset means and its AI context, and a column without a description gets its field's description, synonyms and AI context (such as examples) |
-| Field label | Tag in the `Iceberg Data Platform labels` classification (named `iceberg__Iceberg Data Platform labels`), on the field's column and glossary term. Ossie calls a label a "label for categorization"; the flights example uses it for the ontology concept a field holds, such as `Delay` or `AirportCode`, so one tag finds every delay column |
-| Owning team | Team, as owner |
-| Listed data share | Data product in the `Iceberg Data Platform` domain, with the description, the contact for access requests, a section per semantic model (its description, AI instructions, datasets and metrics) and an ER diagram of its tables and keys. Its schemas, tables and metrics are its assets |
-
-Never published: data, row counts, view SQL, storage locations, snapshots or credentials. A semantic model's expressions are published and can name tables that aren't listed, so check a model before you list it.
-
-The ER diagram is drawn from the primary and foreign keys of the listed semantic models; the same keys show in each table's **Table Constraints**. Descriptions follow the platform: a description changed there replaces the one in OpenMetadata, and what people write in OpenMetadata where the platform has none stays.
-
-Unlisting a share, revoking it or letting it expire removes it from OpenMetadata within a minute. Listing it again brings back the same tables and metrics.
-
 ## Install
 
 OpenMetadata runs with the Compose installation only; it has no Helm chart yet. The platform installer doesn't add this extension, because it needs your OpenMetadata server and a bot token. It has its own installer instead. On the machine where the platform is installed (in `~/iceberg-data-platform`, version 0.9.1 or later):
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.1/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | sh
 ```
 
 It asks for:
@@ -47,7 +27,7 @@ It asks for:
 To install without questions, pass them in the environment:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.1/install.sh | \
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | \
   OM_URL=https://metadata.example.com/api OM_JWT_TOKEN=eyJ... OM_UI_URL=https://metadata.example.com sh
 ```
 
@@ -64,7 +44,7 @@ Use `--dir` when the platform is installed elsewhere: `| sh -s -- --dir /opt/ice
 No OpenMetadata yet? `--demo` also starts one next to the extension, with about 4 GB of memory:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.1/install.sh | sh -s -- --demo
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | sh -s -- --demo
 ```
 
 The first start takes a few minutes. Open `http://localhost:8585` and sign in as `admin@open-metadata.org` with password `admin`. It's for trying the extension out, not for production. To switch to your own OpenMetadata later, remove the `COMPOSE_FILE` line from `extensions/openmetadata/.env`, set `OM_URL` and `OM_JWT_TOKEN` there, and run `docker compose up -d --wait` in that folder.
@@ -89,6 +69,26 @@ From `~/iceberg-data-platform/extensions/openmetadata`:
     ```
 
 From a source checkout, follow the [extension's README](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/openmetadata#install-from-source).
+
+## What is published
+
+| Platform | OpenMetadata |
+| --- | --- |
+| Environment | Database service `iceberg-<environment>` |
+| Database | Database, with the database name as display name |
+| Namespace | Database schema |
+| Listed table or view | Table (type Iceberg or View) with columns, types, descriptions and partitioning |
+| Semantic model metric | Metric with its description, synonyms, AI context, SQL expression and dimensions, and lineage from the tables it reads |
+| Semantic model, its datasets and described fields | Glossary terms in the `Iceberg Data Platform` glossary. Tables and columns are tagged with the terms of the datasets and fields that read them; a table's description adds what its dataset means and its AI context, and a column without a description gets its field's description, synonyms and AI context (such as examples) |
+| Field label | Tag in the `Iceberg Data Platform labels` classification (named `iceberg__Iceberg Data Platform labels`), on the field's column and glossary term. Ossie calls a label a "label for categorization"; the flights example uses it for the ontology concept a field holds, such as `Delay` or `AirportCode`, so one tag finds every delay column |
+| Owning team | Team, as owner |
+| Listed data share | Data product in the `Iceberg Data Platform` domain, with the description, the contact for access requests, a section per semantic model (its description, AI instructions, datasets and metrics) and an ER diagram of its tables and keys. Its schemas, tables and metrics are its assets |
+
+Never published: data, row counts, view SQL, storage locations, snapshots or credentials. A semantic model's expressions are published and can name tables that aren't listed, so check a model before you list it.
+
+The ER diagram is drawn from the primary and foreign keys of the listed semantic models; the same keys show in each table's **Table Constraints**. Descriptions follow the platform: a description changed there replaces the one in OpenMetadata, and what people write in OpenMetadata where the platform has none stays.
+
+Unlisting a share, revoking it or letting it expire removes it from OpenMetadata within a minute. Listing it again brings back the same tables and metrics.
 
 ## Settings
 

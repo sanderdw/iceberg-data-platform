@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 - 2026-10-27
+
+- eMudhra emSign certificates are no longer trusted, after that authority's security incident.
+- Updated dependencies.
+
 ## 0.1.1 - 2026-10-17
 
 - **Runs on Kubernetes.** The chart `deploy/helm/iceberg-ingestion` installs Ingestion next to the

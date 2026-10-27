@@ -14,13 +14,22 @@ Five principles behind every choice. Check a change against all five.
 
 ## Pages
 
+How-to guides:
+
 - [Run from source](run-from-source.md): build and start both stacks from a checkout.
 - [Contributing](contributing.md): development setup, tests and pull requests.
-- [Architecture](architecture.md): components, authorization boundaries and the repository layout.
-- [Resource model](resource-model.md): how users, teams, roles, databases and shares are stored in Polaris.
-- [Keycloak](keycloak.md): realm, clients, configuration and deployment boundaries.
-- [Form validation](form-validation.md): the rules both portals and the API enforce.
 - [Kubernetes](kubernetes.md): the Helm charts, the Kubernetes backends and testing on kind.
-- [Extension Bridge](extension-bridge.md): the contract between the core and its extensions.
-- Extension internals: [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md) and [OpenMetadata](openmetadata.md).
 - [Publishing a release](releasing.md).
+
+Reference:
+
+- [Resource model](resource-model.md): how users, teams, roles, databases and shares are stored in Polaris.
+- [Form validation](form-validation.md): the rules both portals and the API enforce.
+- [Extension Bridge](extension-bridge.md): the contract between the core and its extensions.
+
+Concepts:
+
+- [Architecture](architecture.md): components, authorization boundaries and the repository layout.
+- [Keycloak](keycloak.md): realm, clients, configuration and deployment boundaries.
+
+Extension internals: [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md) and [OpenMetadata](openmetadata.md).

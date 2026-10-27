@@ -22,6 +22,14 @@ This is an educational development platform, for a laptop with Compose or a Kube
 - **Sessions** stay in server memory, so each portal runs as one replica. Issued tokens and vended storage credentials stay valid until they expire. See [deployment boundaries](develop/keycloak.md#deployment-boundaries).
 - The active team and environment only filter the UI. A user's credentials stay valid for all of their teams.
 
+## Storage credentials
+
+No one receives a permanent storage key. When a tool loads a table, Polaris checks the user's grants and vends short-lived storage credentials through STS on RustFS: limited to that table's location, read-only for readers and data shares, valid for up to one hour. The tool then reads and writes the files directly. Vended credentials are part of the Iceberg REST standard, so DuckDB, PyIceberg, dbt, dlt and DBeaver work without anything extra.
+
+The alternative is remote request signing: the catalog signs every single S3 request, so access is checked and logged per request and revocation takes effect at once. It works on any S3-compatible storage without STS. The cost is a catalog call for every request on the data path, and every client needs signer support, which most don't have. Polaris doesn't offer it.
+
+The trade-off is that revoking access doesn't end credentials that were already vended; they stay valid until they expire. It is also why the platform keeps RustFS instead of a provider's object storage, which has no STS in this form. See [object storage on Kubernetes](install-kubernetes.md#postgres-object-storage-and-volumes).
+
 ## Deploying beyond localhost
 
 Default ports bind to localhost. For anything beyond a trusted local network:

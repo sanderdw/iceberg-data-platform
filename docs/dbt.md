@@ -28,20 +28,6 @@ A team administrator enables dbt once per environment, through an agent (`enable
 
 On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 
-## How it works
-
-- **Projects** belong to a team and are Git repositories kept by the extension. A new project is empty apart from `dbt_project.yml`, a README and the namespace macro. `main` is protected: writers commit to branches, and team administrators merge.
-- **The viewer** shows each pipeline per environment and branch (`main` unless you pick another), follows running builds live, filters and focuses the graph (`+name+`), previews a model's rows and builds a node with its upstream or downstream. **Files** edits any project file on a branch, **Schedules** manages schedules and **Settings** enables environments and deletes branches. Writers create projects there. Team administrators delete them under **Settings**: the project, its history and the dbt properties on its tables go, the tables stay. Writers can edit a node's file from its panel, save it to a branch and build that branch in development. Team administrators can merge it to `main`.
-- **Runs** execute as the team's service account for one environment, with a short-lived catalog token: `write` for `build`, `run` and `seed`, `read` for everything else. Two builds of the same project and environment never overlap.
-- **Promotion.** Development builds any branch. Acceptance and production build only revisions that were the head of `main`: a merge always adds a merge commit, so a commit from inside a merged branch never reaches them. Their schedules need a team administrator.
-- **Pipelines** are drawn from dbt's information schema, with each node's latest status and test results. After a build, each table gets the platform's producer, lineage and quality properties and its column docs, so the catalog shows where it comes from under **Produced by**.
-
-| Role in the team | Can |
-| --- | --- |
-| reader | View projects, files, runs, schedules and pipelines; compile, preview and test |
-| writer | Also create projects and branches, commit to branches, build in development, schedule development |
-| admin | Also merge to main, enable environments, schedule acceptance and production |
-
 ## Connect an AI agent
 
 Register both the user portal MCP and the dbt MCP. The agent uses the user portal tools to find the team's databases and tables, and the dbt tools to build and manage pipelines.
@@ -115,6 +101,16 @@ The [dbt MCP server](https://docs.getdbt.com/docs/dbt-ai/about-mcp?version=2#loc
 ```
 
 Not available on the platform: `show --inline`, `list`, `debug`, `deps` and `clean`.
+
+## How it works
+
+- **Projects** belong to a team and are Git repositories kept by the extension. A new project is empty apart from `dbt_project.yml`, a README and the namespace macro. `main` is protected: writers commit to branches, and team administrators merge.
+- **The viewer** shows each pipeline per environment and branch (`main` unless you pick another), follows running builds live, filters and focuses the graph (`+name+`), previews a model's rows and builds a node with its upstream or downstream. **Files** edits any project file on a branch, **Schedules** manages schedules and **Settings** enables environments and deletes branches. Writers create projects there. Team administrators delete them under **Settings**: the project, its history and the dbt properties on its tables go, the tables stay. Writers can edit a node's file from its panel, save it to a branch and build that branch in development. Team administrators can merge it to `main`.
+- **Runs** execute as the team's service account for one environment, with a short-lived catalog token: `write` for `build`, `run` and `seed`, `read` for everything else. Two builds of the same project and environment never overlap.
+- **Promotion.** Development builds any branch. Acceptance and production build only revisions that were the head of `main`: a merge always adds a merge commit, so a commit from inside a merged branch never reaches them. Their schedules need a team administrator.
+- **Pipelines** are drawn from dbt's information schema, with each node's latest status and test results. After a build, each table gets the platform's producer, lineage and quality properties and its column docs, so the catalog shows where it comes from under **Produced by**.
+
+What each team role may do in the viewer, API and MCP server is listed in [roles and permissions](reference/roles.md#extensions).
 
 ## Project conventions
 

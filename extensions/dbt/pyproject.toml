@@ -1,19 +1,19 @@
 [project]
 name = "iceberg-dbt"
-version = "0.1.1"
+version = "0.1.2"
 description = "dbt v2 pipelines for the Iceberg Data Platform: an API and MCP server for agents, and pipeline visualization"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.143.0",
+  "fastapi==0.162.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
-  "joserfc>=1.7.5",
+  "joserfc>=1.7.7",
   "mcp>=2.3.0,<3",
   "croniter>=6.2.4",
-  "duckdb==1.5.5",
+  "duckdb==2.0.0",
 ]
 
 [dependency-groups]
@@ -23,14 +23,11 @@ launcher = ["docker==7.2.0"]
 # PyYAML for the project's semantic models.
 runner = [
   "dbt-oss==2.0.8",
-  "duckdb==1.5.5",
-  "duckdb-extension-iceberg==1.5.5",
-  "duckdb-extension-httpfs==1.5.5",
-  "duckdb-extension-avro==1.5.5",
+  "duckdb==2.0.0",
   "pyiceberg>=0.12.0",
   "pyyaml>=6.0.2",
 ]
-dev = [{include-group = "launcher"}, "pytest>=9.1.1", "ruff>=0.17.0", "pyiceberg>=0.12.0", "pyyaml>=6.0.2"]
+dev = [{include-group = "launcher"}, "pytest>=9.1.1", "ruff>=0.17.3", "pyiceberg>=0.12.0", "pyyaml>=6.0.2"]
 
 [tool.iceberg-dbt]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
@@ -38,6 +35,8 @@ bridge-contract = ">=0.1,<0.2"
 
 [tool.uv]
 package = false
+# The platform and the other extensions get python-dateutil 2.x through botocore (<3); keep the same.
+constraint-dependencies = ["python-dateutil<3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

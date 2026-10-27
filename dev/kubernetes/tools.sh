@@ -17,8 +17,8 @@ fetch https://dl.k8s.io/release/v1.37.1/bin/linux/amd64/kubectl \
   65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8 kubectl
 install -m 0755 "$work/kubectl" "$bin/kubectl"
 
-fetch https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz \
-  86584a54def73570558f66f5111cc53dfed56689637ae32c1201205d494f54fb helm.tar.gz
+fetch https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz \
+  0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b helm.tar.gz
 tar -xzf "$work/helm.tar.gz" -C "$work" linux-amd64/helm
 install -m 0755 "$work/linux-amd64/helm" "$bin/helm"
 
@@ -31,4 +31,4 @@ fetch https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-
 tar -xzf "$work/kubeconform.tar.gz" -C "$work" kubeconform
 install -m 0755 "$work/kubeconform" "$bin/kubeconform"
 
-echo "Installed kubectl 1.37.1, helm 4.3.0, kind 0.33.0 and kubeconform 0.8.0 in $bin"
+echo "Installed kubectl 1.37.1, helm 4.3.1, kind 0.33.0 and kubeconform 0.8.0 in $bin"

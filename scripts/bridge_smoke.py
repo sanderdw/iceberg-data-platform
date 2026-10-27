@@ -164,7 +164,7 @@ def main():
         writable.execute(f'CREATE SCHEMA lake."{namespace}"')
         writable.execute(f'CREATE TABLE lake."{namespace}".checks AS SELECT 1 AS id')
         readable = attach(token("read"))
-        assert readable.execute(f'SELECT count(*) FROM lake."{namespace}".checks').fetchone() == (1,)
+        assert readable.execute(f'SELECT count(*) FROM lake."{namespace}".checks').fetchall() == [(1,)]
         try:
             readable.execute(f'INSERT INTO lake."{namespace}".checks VALUES (2)')
         except duckdb.Error:

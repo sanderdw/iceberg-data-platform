@@ -1,0 +1,34 @@
+{
+  "name": "iceberg-explained",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Explainer video: how Apache Iceberg works, on the Iceberg Data Platform",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "freezes": "edit/freezes.sh",
+    "voice": "uv run tts/generate.py",
+    "build": "python3 edit/build.py",
+    "music": "uv run audio/make_music.py",
+    "studio": "remotion studio src/index.ts",
+    "still": "remotion still src/index.ts",
+    "render": "remotion render src/index.ts Demo out/iceberg-explained.mp4 --codec=h264 --crf=18 --audio-bitrate=256k --concurrency=8",
+    "voice:gemini": "uv run tts/generate.py --voice gemini && python3 edit/build.py --voice gemini && uv run audio/make_music.py --voice gemini",
+    "render:gemini": "remotion render src/index.ts DemoGemini out/iceberg-explained-4k.mp4 --scale=2 --codec=h264 --crf=18 --audio-bitrate=256k --concurrency=8",
+    "voice:en": "uv run tts/generate.py --voice gemini-en && python3 edit/build.py --voice gemini-en && uv run audio/make_music.py --voice gemini-en",
+    "render:en": "remotion render src/index.ts DemoEnglish out/iceberg-explained-4k-en.mp4 --scale=2 --codec=h264 --crf=18 --audio-bitrate=256k --concurrency=8",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.533",
+    "@remotion/cli": "4.0.533",
+    "@remotion/renderer": "4.0.533",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.533"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,6 +1,6 @@
 # The Ingestion extension's service image: the API/MCP/page (ing-gateway) and the launcher. Context: extensions/ingestion.
-FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
-FROM python:3.14.8-slim
+FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
+FROM python:3.14.10-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1

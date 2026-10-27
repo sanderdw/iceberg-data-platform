@@ -126,7 +126,7 @@ def main():
             connection = duckdb.connect()
             for statement in sql.splitlines():
                 connection.execute(statement)
-            count = connection.execute(f'SELECT count(*) FROM lakehouse."{namespace}".events').fetchone()[0]
+            count = connection.execute(f'SELECT count(*) FROM lakehouse."{namespace}".events').fetchall()[0][0]
             assert count == 3, count
             try:
                 connection.execute(f"INSERT INTO lakehouse.\"{namespace}\".events VALUES (4, 'denied')")
@@ -135,7 +135,7 @@ def main():
                 pass
             connection.close()
             connection = helper.duckdb_connection(database)
-            assert connection.execute(f'SELECT max(id) FROM lakehouse."{namespace}".events').fetchone()[0] == 3
+            assert connection.execute(f'SELECT max(id) FROM lakehouse."{namespace}".events').fetchall()[0][0] == 3
             connection.close()
             print("PASS: reader attached the database from the CLI's SQL and from Python; writes are refused")
 

@@ -31,6 +31,10 @@ def test_existing_workspace_receives_examples_without_overwriting_edits(tmp_path
         # These examples run from top to bottom without input.
         assert "mo.ui." not in source and "mo.stop(" not in source
     assert "'format-version' = 3" in (tmp_path / "04_duckdb_iceberg_v3_write.py").read_text()
+    explained = (tmp_path / "11_duckdb_iceberg_explained.py").read_text()
+    # Replaces only its own table on a rerun, and runs from top to bottom without input.
+    assert "drop_example_table(" in explained and "EXAMPLE_PROPERTY" in explained
+    assert "mo.ui." not in explained and "mo.stop(" not in explained
 
 
 def test_sensor_events_are_reproducible_and_need_iceberg_v3_types():

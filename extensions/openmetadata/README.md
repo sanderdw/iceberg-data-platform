@@ -17,7 +17,7 @@ version and releases. It uses the platform only through the **Extension Bridge v
 On an installed platform, with Docker:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.1/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | sh
 ```
 
 It asks for the OpenMetadata address and a bot token; `sh -s -- --demo` also starts a local OpenMetadata.

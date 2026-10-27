@@ -39,9 +39,9 @@ def flights():
 def test_generated_product_matches_all_mapped_fields_and_is_reproducible(flights):
     connection, model, contract = flights
     require_quality(quality_report(connection, contract))
-    assert connection.execute("SELECT count(*) FROM FLIGHT").fetchone() == (12000,)
-    assert connection.execute("SELECT count(*) FROM ROUTE").fetchone() == (56,)
-    assert connection.execute("SELECT count(*) FROM AIRCRAFT").fetchone() == (120,)
+    assert connection.execute("SELECT count(*) FROM FLIGHT").fetchall() == [(12000,)]
+    assert connection.execute("SELECT count(*) FROM ROUTE").fetchall() == [(56,)]
+    assert connection.execute("SELECT count(*) FROM AIRCRAFT").fetchall() == [(120,)]
     for dataset in datasets(model):
         relation = connection.execute(f"SELECT * FROM {dataset['name']} ORDER BY ALL")
         assert [c[0] for c in relation.description] == [f["name"] for f in dataset["fields"]] + ["synthetic"]
@@ -112,7 +112,7 @@ def test_both_notebooks_execute_and_explain_metrics(tmp_path, monkeypatch):
         def publication(conn, model, namespace):
             assert conn is connection and namespace == ["ai_flights"]
             return [
-                {"dataset": d["name"], "rows": conn.execute(f"SELECT count(*) FROM {d['name']}").fetchone()[0]}
+                {"dataset": d["name"], "rows": conn.execute(f"SELECT count(*) FROM {d['name']}").fetchall()[0][0]}
                 for d in datasets(model)
             ]
 
@@ -149,7 +149,7 @@ def test_publication_preflights_all_tables_before_replacing_any():
     model, _ = load_semantics(EXAMPLES)
     connection = Mock()
     # A foreign table late in the dataset list must not cause earlier tables to be dropped.
-    connection.execute.return_value.fetchone.side_effect = [(0,)] * 5 + [(1,), ("someone_else",)]
+    connection.execute.return_value.fetchall.side_effect = [[(0,)]] * 5 + [[(1,)], [("someone_else",)]]
     with pytest.raises(RuntimeError, match="not owned"):
         publish_flights(connection, model, ["ai_flights"])
     assert all(call.args[0].startswith("SELECT") for call in connection.execute.call_args_list)
@@ -204,9 +204,9 @@ def test_semantic_model_rejects_a_label_outside_the_ontology(flights):
 def test_stored_metrics_give_the_same_answer_as_notebook_seven(flights):
     connection, model, contract = flights
     semantic = semantic_model(model, contract, ["ai_flights"])
-    expected = connection.execute(f"SELECT round({contract['metrics']['cancellation_pct']['sql']}, 3) FROM FLIGHT f").fetchone()
+    expected = connection.execute(f"SELECT round({contract['metrics']['cancellation_pct']['sql']}, 3) FROM FLIGHT f").fetchall()
     stored = next(m for m in semantic["metrics"] if m["name"] == "cancellation_pct")["expression"]["dialects"][0]["expression"]
-    assert connection.execute(f"SELECT round({stored}, 3) FROM FLIGHT").fetchone() == expected
+    assert connection.execute(f"SELECT round({stored}, 3) FROM FLIGHT").fetchall() == expected
 
 
 def test_semantic_model_rejects_a_mapping_without_the_join_columns(flights):

@@ -27,10 +27,12 @@ On a Kubernetes cluster, install the Helm chart instead: see [Install on Kuberne
 ## Use it as
 
 - **A reference architecture.** See how catalog, storage, identity and engines fit together with team ownership, data sharing and AI agents on one identity. Every choice and boundary is documented, so you can reuse what fits your own platform.
-- **A classroom.** The [demo-company skill](agent-skills.md) sets up a fictional company for up to 48 participants, with one account each and a sign-in list to hand out. The quick-share skill opens the portals to a room for the session.
+- **A classroom.** Install it on Kubernetes and let the demo-company skill set up a fictional company for up to 48 participants, with one account each and a sign-in slip to hand out. See [run a class](run-a-class.md).
 - **A personal lab.** Learn Iceberg hands-on: create tables in a notebook, follow a query from the catalog to the Parquet files, and try snapshots, branches and Iceberg v3 with no cloud account or trial clock.
 
 [![Iceberg Data Platform](portal.png)](https://www.youtube.com/watch?v=T8D3tp1hWQk "Apache Iceberg Data Platform - An open source lakehouse you actually own")
+
+More videos are in the [YouTube playlist](https://www.youtube.com/playlist?list=PLZGAfmMjv2lQ): an end-to-end demo from install to Conversational BI, Apache Iceberg explained from Parquet file to catalog, and short demos of semantic models and Conversational BI. The end-to-end demo and the explainer are also in Dutch.
 
 ## What it does
 

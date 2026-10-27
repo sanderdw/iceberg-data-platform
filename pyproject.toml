@@ -1,44 +1,44 @@
 [project]
 name = "iceberg-platform-portal"
-version = "0.9.9"
+version = "0.9.10"
 description = "Team-based Apache Iceberg administration and shared team marimo workspaces"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.143.0",
+  "fastapi==0.162.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
-  "boto3>=1.43.112",
+  "boto3>=1.43.120",
   "python-dotenv>=1.2.4",
   "psycopg[binary]>=3.3.6,<4",
 ]
 
 [dependency-groups]
-oidc = ["Authlib==1.8.0", "httpx2>=2.13.1"]
+oidc = ["Authlib==1.9.1", "httpx2>=2.16.0"]
 mcp = [
     "mcp>=2.3.0,<3",
-    "sqlglot>=30.22.0",
+    "sqlglot>=30.25.0",
 ]
-dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.17.0"]
+dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.17.3"]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "numpy>=2.5.4"]
 # The documentation site; see docs/develop/contributing.md.
-docs = ["zensical==0.0.70"]
+docs = ["zensical==0.0.73"]
 users = [
     "docker==7.2.0",
-    "duckdb==1.5.6",
+    "duckdb==2.0.0",
     "pytz>=2026.5",
 ]
 notebook = [
     "altair>=6.3.0",
     "dlt[pyiceberg]==1.31.0",
-    "duckdb==1.5.6",
-    "marimo[sql]==0.25.1",
+    "duckdb==2.0.0",
+    "marimo[sql]==0.25.2",
     "matplotlib>=3.11.2",
     "nbformat>=5.11.1",
-    "pandas>=3.0.6",
-    "polars>=2.0.0",
+    "pandas>=3.1.0",
+    "polars>=2.1.0",
     "pyyaml>=6.0.3",
     "pyiceberg[duckdb,pyarrow]>=0.12.0",
 ]

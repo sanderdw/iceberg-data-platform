@@ -32,7 +32,7 @@ Stop every Compose project with `docker compose down --volumes`, then remove the
 
 ### Can people in my class use one installation from their own laptops?
 
-Yes. A [Kubernetes installation](install-kubernetes.md) has public HTTPS addresses already, for a class of any size. With Compose it works with limits: the [`quick-share` skill](agent-skills.md) gives the portals public HTTPS addresses for the session through [Cloudflare quick tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/), but quick tunnels have [serious limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/#limitations). For anything more than a short session, use a stable [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/), or let everyone run their own local installation.
+Yes, on a [Kubernetes installation](install-kubernetes.md): it has stable public HTTPS addresses and no Docker socket. See [run a class](run-a-class.md). The [`quick-share` skill](agent-skills.md) can open a Compose installation through [Cloudflare quick tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/), but that puts your own machine on the internet at a public address without access control, and quick tunnels have [serious limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/#limitations). Keep it for a short demo. [Why Kubernetes and not a laptop](run-a-class.md#why-kubernetes-and-not-a-laptop) explains the risks.
 
 ## Accounts and access
 
@@ -42,7 +42,7 @@ The administration portal needs the Keycloak role `iceberg-admin/platform-admin`
 
 ### What can Read, Read & write and Administrator do?
 
-A role applies to every database of that team. The roles are described under [teams, databases and users](admin-guide.md#teams-databases-and-users).
+A role applies to every database of that team. Read can read data, Read & write can also write tables and semantic models, and Administrator also manages the team's databases and data shares. See [roles and permissions](reference/roles.md).
 
 ### A user forgot their password.
 
@@ -50,11 +50,7 @@ A platform administrator uses **Reset password** on the Users page, which issues
 
 ### How do tools get access to the table files, and why not request signing?
 
-No one receives a permanent storage key. When a tool loads a table, Polaris checks the user's grants and vends short-lived storage credentials through STS on RustFS: limited to that table's location, read-only for readers and data shares, valid for up to one hour. The tool then reads and writes the files directly. Vended credentials are part of the Iceberg REST standard, so DuckDB, PyIceberg, dbt, dlt and DBeaver work without anything extra.
-
-The alternative is remote request signing: the catalog signs every single S3 request, so access is checked and logged per request and revocation takes effect at once. It works on any S3-compatible storage without STS. The cost is a catalog call for every request on the data path, and every client needs signer support, which most don't have. Polaris doesn't offer it.
-
-The trade-off is that revoking access doesn't end credentials that were already vended; they stay valid until they expire. It is also why the platform keeps RustFS instead of a provider's object storage, which has no STS in this form. See the [security model](security.md) and [object storage on Kubernetes](install-kubernetes.md#postgres-object-storage-and-volumes).
+Polaris vends short-lived storage credentials, limited to one table's location and read-only for readers, and the tool reads the files directly. Remote request signing would check every request at the catalog, but most clients can't use it and Polaris doesn't offer it. See [storage credentials](security.md#storage-credentials).
 
 ## Notebooks and your own tools
 
@@ -101,3 +97,7 @@ Run the installer again and answer yes, or name the extensions in `ICEBERG_EXTEN
 ### Ingestion refuses my local database.
 
 Sources on loopback, private or link-local addresses are refused. For a demo against a database on your own computer, set `ING_ALLOW_PRIVATE_SOURCES=true` in `ingestion/.env` and restart the extension. The run then reaches your computer as `host.docker.internal`. On Kubernetes, install the chart with `runs.allowPrivateSources=true` to reach sources in your own network. See [isolation and limits](ingestion.md#isolation-and-limits).
+
+### Does the dbt extension use Git?
+
+Yes, as its version control on the extension side. Each dbt project is a Git repository the extension keeps itself, so you need no GitHub or other Git server, and no Git on your own computer. Every save is a commit on a branch, team administrators merge to `main`, and every run records the revision it built. `clone`, `pull` and `push` in `iceberg_dbt.py` go through the extension. See [how it works](dbt.md#how-it-works).

@@ -28,7 +28,7 @@ Plain HTTP sign-in only works on `localhost`, so a cluster needs HTTPS. Each por
 ## Install
 
 ```bash
-helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.9 \
+helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 \
   --namespace iceberg --create-namespace \
   --set baseDomain=data.example.com \
   --set ingress.className=traefik \
@@ -129,7 +129,7 @@ needs no public endpoint.
 3. Install with the database's private address:
 
     ```bash
-    helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.9 -n iceberg \
+    helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 -n iceberg \
       --set baseDomain=data.example.com --set tls.clusterIssuer=letsencrypt-prod \
       --set postgres.external.enabled=true --set postgres.external.host=<private address> \
       --set postgres.external.existingSecret=iceberg-postgres --wait --timeout 15m
@@ -162,14 +162,14 @@ Install in this order, because the official chart's values come from the platfor
 needs a running Polaris:
 
 ```bash
-helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.9 -n iceberg \
+helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 -n iceberg \
   --create-namespace --set baseDomain=data.example.com --set tls.clusterIssuer=letsencrypt-prod \
   --set polaris.external.enabled=true --wait --timeout 15m
 kubectl -n iceberg get configmap iceberg-polaris-values -o jsonpath='{.data.values\.yaml}' > polaris-values.yaml
 helm install catalog polaris --repo https://downloads.apache.org/polaris/helm-chart --version 1.8.0 \
   -n iceberg -f polaris-values.yaml --wait --timeout 10m
 # Optional, now that Polaris runs: demo accounts and data.
-helm upgrade iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.9 -n iceberg \
+helm upgrade iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 -n iceberg \
   --reset-then-reuse-values --set demo=true --wait
 ```
 
@@ -197,17 +197,17 @@ extension gets the host `<host>.<domain>` and its own certificate.
 ```bash
 chart=oci://ghcr.io/sanderdw/charts
 # 1. Register the extensions you want, with their hosts.
-helm upgrade iceberg $chart/iceberg-data-platform --version 0.9.9 -n iceberg --reset-then-reuse-values \
+helm upgrade iceberg $chart/iceberg-data-platform --version 0.9.10 -n iceberg --reset-then-reuse-values \
   --set extensions.dbt.host=dbt --set extensions.ingestion.host=ingest \
   --set extensions.conversationalbi.host=cbi --wait
 # 2. Install their charts, with the same ingress settings as the platform.
 common="-n iceberg --set ingress.className=traefik --set tls.clusterIssuer=letsencrypt-prod --wait"
-helm install dbt $chart/iceberg-dbt --version 0.1.1 $common
-helm install ingestion $chart/iceberg-ingestion --version 0.1.1 $common
+helm install dbt $chart/iceberg-dbt --version 0.1.2 $common
+helm install ingestion $chart/iceberg-ingestion --version 0.1.2 $common
 # Conversational BI reads its LLM from a Secret, so the key stays out of Helm's values.
 kubectl -n iceberg create secret generic conversationalbi-llm \
   --from-literal=LLM_MODEL=anthropic:claude-sonnet-5-5 --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
-helm install conversationalbi $chart/iceberg-conversationalbi --version 0.1.3 $common \
+helm install conversationalbi $chart/iceberg-conversationalbi --version 0.1.4 $common \
   --set llm.existingSecret=conversationalbi-llm
 ```
 
@@ -226,33 +226,9 @@ with Compose only.
 
 ## Settings
 
-`helm show values oci://ghcr.io/sanderdw/charts/iceberg-data-platform` lists every setting with its
-meaning. The ones you are most likely to change:
-
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `baseDomain` | (required) | Each portal gets `<host>.<baseDomain>` |
-| `hosts.admin`, `hosts.users`, … | `admin`, `users`, `auth`, `catalog`, `s3` | The host names under the base domain |
-| `ingress.className` | cluster default | Your IngressClass, such as `traefik` |
-| `tls.clusterIssuer` | (none) | The cert-manager ClusterIssuer; without it, provide the Secret `tls.secretName` yourself |
-| `storageClass` | cluster default | For Postgres, RustFS and notebook storage |
-| `polaris.external.enabled` | off | Polaris from the official Apache Polaris chart; see [use the official Apache Polaris chart](#use-the-official-apache-polaris-chart) |
-| `postgres.external.enabled`, `.host`, `.existingSecret` | off | Your own PostgreSQL instead of the bundled one; see [use a managed PostgreSQL](#use-a-managed-postgresql) |
-| `postgres.storage`, `rustfs.storage` | `10Gi`, `50Gi` | Volume sizes (`postgres.storage` only for the bundled Postgres) |
-| `notebooks.max`, `notebooks.memory`, `notebooks.storage` | `8`, `2g`, `5Gi` | Notebooks at once, memory per notebook, files per team and environment |
-| `polaris.tokenLifetime` | `3600` | Seconds that catalog tokens and storage credentials stay valid (`POLARIS_TOKEN_LIFETIME` on Compose) |
-| `polaris.semanticModels` | `true` | Semantic models in Polaris (`POLARIS_SEMANTIC_MODELS`) |
-| `users.queries.slots`, `users.queries.waitSeconds` | `2`, `15` | Previews and governed queries at once, and how long MCP waits for a slot (`USER_QUERY_SLOTS`, `USER_QUERY_WAIT_SECONDS`) |
-| `notebooks.startSeconds` | `180` | How long a notebook may take to start; the first on a node pulls its image |
-| `mcpCallbackPort` | `3010` | The loopback port MCP clients use for their sign-in callback (`MCP_CALLBACK_PORT`) |
-| `forwardedAllowIps` | `*` | Addresses whose `X-Forwarded-For` the portals trust; see the [security model](security.md#on-kubernetes) |
-| `keycloak.adminOrigin` | `http://localhost:8080` | The address of the Keycloak administration console, through a port-forward |
-| `keycloak.proxyTrustedAddresses` | (all) | Addresses Keycloak takes `X-Forwarded-*` from |
-| `networkPolicy.enabled`, `networkPolicy.privateRanges` | on, private ranges | The NetworkPolicies, and the ranges notebooks may not reach |
-| `extensions.<id>.host`, `.origin`, `.listing` | (none) | Registers an extension; see [add extensions](#add-extensions) |
-| `existingSecret` | (none) | Your own platform Secret, for GitOps tools |
-| `imagePullSecrets` | (none) | For a mirror of the images in a private registry |
-| `demo` | `false` | Demo accounts and data, as in a demo installation |
+Set chart values with `helm upgrade ... --reset-then-reuse-values --set <value>`, and list them all with
+`helm show values oci://ghcr.io/sanderdw/charts/iceberg-data-platform`. The ones you are most likely to
+change are in [configuration](configuration.md#kubernetes).
 
 ## Files
 
@@ -273,7 +249,7 @@ addresses:
 
 ```bash
 kind create cluster
-helm pull oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.9 --untar
+helm pull oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 --untar
 helm install iceberg ./iceberg-data-platform -n iceberg --create-namespace \
   -f iceberg-data-platform/values-localhost.yaml --wait --timeout 15m
 for forward in portal:3000 users:3002 keycloak:8080 polaris:8181 rustfs:9000; do

@@ -43,9 +43,11 @@ Export to PDF: open `index.html?print-pdf` in Chrome and print to PDF.
 
 `video-promo/` holds the promo videos. Each one keeps its source next to the rendered MP4.
 
+Before making another recorded demo video, read `video-lessons.md`: what we learned about the content, the recording, the voice and the edit.
+
 ### Semantic models
 
-`video-promo/semantic-models/` holds a 60 second promo that follows the grid sensor story the deck told before its current demo: a coding agent loads the SCADA export with the DuckDB CLI, the semantic-model skill interviews the team and tests every question, the catalog draws the model, noor asks Conversational BI, grid-planning shares the model, and the Extension Bridge keeps the core small. `iceberg-data-platform-promo.mp4` is the video with sound, and `index.html` plays the same timeline live in the browser (space pauses, arrows skip). The closing slide of the deck links to this video and to the launch video.
+`video-promo/semantic-models/` holds a 60 second promo that follows the grid sensor story the deck told before its current demo: a coding agent loads the SCADA export with the DuckDB CLI, the semantic-model skill interviews the team and tests every question, the catalog draws the model, noor asks Conversational BI, grid-planning shares the model, and the Extension Bridge keeps the core small. `iceberg-data-platform-promo.mp4` is the video with sound, and `index.html` plays the same timeline live in the browser (space pauses, arrows skip). The closing slide of the deck links to this video, to the launch video and to the [YouTube playlist](https://www.youtube.com/playlist?list=PLZGAfmMjv2lQ) that holds every published video.
 
 The page is rendered, not recorded. Every visual is a function of time, `timeline.json` holds the scene times and sound cues, and `data.json` holds the real numbers: the row counts and the overload answer from `query_semantic_model`, the same question noor asks in captures 55 and 56. The soundtrack is synthesized from the same timeline by `scripts/promo-audio.py`, so the cuts and sounds stay in sync.
 
@@ -70,5 +72,9 @@ npm run render                   # out/iceberg-data-platform-launch.mp4
 ```
 
 Stills for review go in `stills/`, which is git-ignored.
+
+### End-to-end demo
+
+`demo-e2e/` is a demo of about nine and a half minutes in Dutch, in 4K, with a first-person Gemini TTS voice-over. It is a real run, recorded on screen: installing 0.9.9, the first steps, Claude Code with three MCP servers, loading the Rick and Morty API every hour with Ingestion (dlt), a star model with dbt, a semantic model with the skill, a question in Conversational BI, and publishing the data product to OpenMetadata. The waits are shortened. The recording rig, the cut and the Remotion edit are described in `demo-e2e/README.md`.
 
 The deck is published at https://sanderdw.github.io/iceberg-data-platform/presentation/ by the `Pages` workflow, together with the documentation site, on every push to main that touches this folder or the documentation. The folder is excluded from source releases.

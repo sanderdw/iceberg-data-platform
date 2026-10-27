@@ -62,7 +62,8 @@ def connect(request, metadata):
     if s3.scheme not in {"http", "https"} or not s3.netloc:
         raise ValueError("Invalid internal S3 endpoint")
     # DuckDB's own limit bounds real memory; RLIMIT_AS below only caps address space.
-    settings = {"threads": 2, "memory_limit": "512MB", "temp_directory": os.getcwd()}
+    # Its async I/O threads default to four per available core, and each reserves address space.
+    settings = {"threads": 2, "async_threads": 8, "memory_limit": "512MB", "temp_directory": os.getcwd()}
     if directory := os.environ.get("DUCKDB_EXTENSION_DIRECTORY"):
         settings["extension_directory"] = directory
     connection = duckdb.connect(config=settings)

@@ -28,6 +28,14 @@ A team administrator enables it once per environment with **Enable** on the page
 
 On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 
+## Connect an AI agent
+
+```bash
+claude mcp add --transport http --client-id ext-ingestion-mcp --callback-port 3010 iceberg-ingestion http://localhost:3008/mcp
+```
+
+The `ingestion` [agent skill](agent-skills.md) in the installation folder guides an agent from a template to a first load. Register the [user portal's MCP server](ai-agents.md) too, to read the loaded tables.
+
 ## Pipelines
 
 A pipeline belongs to one team and environment, and loads into one of the team's databases there, into one namespace (dlt's dataset, such as `raw_crm`). Pipelines are configuration, never code.
@@ -46,19 +54,7 @@ Secrets (API keys, tokens, passwords) never go in a definition. Refer to them as
 
 Templates to start from: CBS StatLine open data (REST, paginated OData), a PostgreSQL table incremental on `updated_at`, MySQL or MariaDB tables, and airport codes as CSV over HTTPS.
 
-| Role in the team | Allowed |
-| --- | --- |
-| reader | View pipelines, runs, logs and schedules; validate a definition |
-| writer | Also run pipelines and stop runs |
-| admin, bucket-admin | Also create, change and delete pipelines, set secrets and schedules, enable environments |
-
-## Connect an AI agent
-
-```bash
-claude mcp add --transport http --client-id ext-ingestion-mcp --callback-port 3010 iceberg-ingestion http://localhost:3008/mcp
-```
-
-The `ingestion` [agent skill](agent-skills.md) in the installation folder guides an agent from a template to a first load. Register the [user portal's MCP server](ai-agents.md) too, to read the loaded tables.
+What each team role may do is listed in [roles and permissions](reference/roles.md#extensions).
 
 ## Isolation and limits
 

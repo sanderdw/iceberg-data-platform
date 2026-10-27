@@ -74,7 +74,7 @@ foreign.execute(f"CREATE TABLE {table_reference(['iceberg_v3'], 'foreign_events'
 try:
     drop_example_table(foreign, ['iceberg_v3'], 'foreign_events', '04_duckdb_iceberg_v3_write')
 except RuntimeError:
-    assert foreign.execute(f"SELECT count(*) FROM {table_reference(['iceberg_v3'], 'foreign_events')}").fetchone() == (0,)
+    assert foreign.execute(f"SELECT count(*) FROM {table_reference(['iceberg_v3'], 'foreign_events')}").fetchall() == [(0,)]
 else:
     raise AssertionError('Expected the example to keep a table it did not create')
 foreign.close()

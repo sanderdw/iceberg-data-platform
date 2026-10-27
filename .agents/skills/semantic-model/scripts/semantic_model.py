@@ -3,7 +3,7 @@
 # dependencies = [
 #     "httpx>=0.28",
 #     "pyiceberg[pyarrow]>=0.12",
-#     "duckdb>=1.5",
+#     "duckdb>=2.0",
 #     "pytz",
 # ]
 # ///
@@ -325,6 +325,8 @@ def run_checks(connection, model, questions):
         try:
             cursor = connection.execute(sql)
             rows = cursor.fetchmany(10 if show else 1)
+            # Results stream: run the query to its end, so an error in a later row still counts.
+            connection.complete()
             if show:
                 header = [c[0] for c in cursor.description]
                 print(f"  ok    {label}")
@@ -342,7 +344,7 @@ def run_checks(connection, model, questions):
     def violations(label, sql):
         nonlocal failures
         try:
-            found = connection.execute(sql).fetchone()[0]
+            found = connection.execute(sql).fetchall()[0][0]
         except Exception as error:  # noqa: BLE001
             failures += 1
             print(f"  FAIL  {label}: {str(error).splitlines()[0]}")
@@ -448,7 +450,7 @@ def profile(ic, database, namespace, tables):
     connection.execute("SET TimeZone = 'UTC'")
     for table in tables:
         reference = table_reference(namespace, table)
-        rows = connection.execute(f"SELECT count(*) FROM {reference}").fetchone()[0]
+        rows = connection.execute(f"SELECT count(*) FROM {reference}").fetchall()[0][0]
         print(f"\n## {'.'.join(namespace)}.{table}: {rows:,} rows")
         summary = connection.execute(f"SUMMARIZE {reference}").fetchall()
         names = [c[0] for c in connection.description]

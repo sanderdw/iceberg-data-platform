@@ -82,6 +82,19 @@ npm run docs:build    # strict: fails on broken links and anchors
 
 Pages for people who run the installer go in `docs/`; pages about building and internals go in `docs/develop/`. Add every new page to `nav` in `zensical.toml`. Link to files outside `docs/` with a full GitHub URL.
 
+The site follows [Diátaxis](https://diataxis.fr): each page serves one need, and the nav groups pages by it.
+
+| Kind | Reader | Write |
+| --- | --- | --- |
+| Tutorial | is learning | One path that always works, with the result of every step. No choices and no detours |
+| How-to guide | has a task | Steps toward one goal, titled with a verb. Assume the reader knows the platform |
+| Reference | looks something up | Tables and facts, structured like the product. No advice |
+| Concept | wants to understand | The why, the trade-offs and the context. No steps |
+
+Extension pages keep one order: an introduction with a table of addresses, **Install**, **Connect an AI agent** and other tasks, then how it works, then the reference sections such as settings and limits, and a link to its internals. Keep role tables in [roles and permissions](../reference/roles.md), not on the page.
+
+Published URLs are linked from the portals, the installer and the skills, so never rename a page or a heading that has inbound links. Move a page in `nav` instead, and when you move content to another page, leave the heading behind with a link.
+
 ## Pull requests
 
 - Keep pull requests focused, and describe the behaviour before and after the change plus the checks you ran.

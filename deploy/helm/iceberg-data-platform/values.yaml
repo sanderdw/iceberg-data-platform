@@ -45,8 +45,8 @@ images:
   postgres: postgres:18-alpine
   polaris: apache/polaris:1.8.0
   polarisAdminTool: apache/polaris-admin-tool:1.8.0
-  rustfs: rustfs/rustfs:1.0.1
-  keycloak: quay.io/keycloak/keycloak:26.8.0
+  rustfs: rustfs/rustfs:1.0.4
+  keycloak: quay.io/keycloak/keycloak:26.8.1
 
 # A Secret with the platform credentials, for GitOps tools that cannot use Helm's lookup.
 # Keys: POSTGRES_PASSWORD, KEYCLOAK_DB_PASSWORD, POLARIS_CLIENT_SECRET, RUSTFS_SECRET_KEY,

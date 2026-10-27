@@ -100,9 +100,9 @@ def test_contract_sql_and_stored_metrics_give_the_same_answer_in_polars_and_duck
         for name, table in product.items():
             connection.register(name, table.to_arrow())
         for check in contract["quality_checks"]:
-            assert polars_sql.execute(check["sql"]).item() == connection.execute(check["sql"]).fetchone()[0] == 0
+            assert polars_sql.execute(check["sql"]).item() == connection.execute(check["sql"]).fetchall()[0][0] == 0
         for label, query in model_check_queries(semantic):
-            assert polars_sql.execute(query).item() == connection.execute(query).fetchone()[0] == 0, label
+            assert polars_sql.execute(query).item() == connection.execute(query).fetchall()[0][0] == 0, label
         for metric in semantic["metrics"]:
             home = re.search(r"\b([A-Z_]+)\.", metric_sql(semantic, metric["name"])).group(1)
             path = {"LOAD_FORECAST": ["forecast_asset"], "CONGESTION": ["congestion_asset"],

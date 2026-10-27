@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4 - 2026-10-27
+
+- DuckDB 2.0, the same version as the platform.
+- eMudhra emSign certificates are no longer trusted, after that authority's security incident.
+- Updated dependencies.
+
 ## 0.1.3 - 2026-10-17
 
 - **Runs on Kubernetes.** The chart `deploy/helm/iceberg-conversationalbi` installs Conversational BI

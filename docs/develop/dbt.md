@@ -4,7 +4,7 @@ How the [dbt pipelines](../dbt.md) extension is built. Its source is in [`extens
 
 | | |
 | --- | --- |
-| Engine | dbt v2 OSS 2.0.5 (Apache-2.0) with its built-in DuckDB adapter, DuckDB 1.5.5, Iceberg REST catalogs |
+| Engine | dbt v2 OSS 2.0.8 (Apache-2.0) with its built-in DuckDB adapter, DuckDB 2.0.0, Iceberg REST catalogs |
 | API | [OpenAPI contract](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/dbt/contracts/dbt-api/v1/openapi.yaml) |
 | Agent skill | [`skills/dbt-platform/SKILL.md`](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/dbt/skills/dbt-platform/SKILL.md) |
 | Decisions | [`DECISIONS.md`](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/dbt/DECISIONS.md), including why `main` is the default for terminal commands |

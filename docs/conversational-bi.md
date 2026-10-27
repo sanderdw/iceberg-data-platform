@@ -38,6 +38,29 @@ claude mcp add --transport http --client-id ext-conversationalbi-mcp --callback-
 
 Other agents are set up as for the [user portal](ai-agents.md), with this address and client ID.
 
+## Change the model
+
+The model and key are in `conversationalbi/llm.env` in the installation directory, readable only by you and given only to the chat's gateway container. `LLM_MODEL` is a [Pydantic AI model string](https://pydantic.dev/docs/ai/models/overview); its provider needs:
+
+| Provider | `LLM_MODEL` | Variables |
+| --- | --- | --- |
+| Google Gemini | `google:gemini-3.8-flash` (the default) | `GOOGLE_API_KEY` |
+| Anthropic | `anthropic:claude-sonnet-5-5` | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai:gpt-5.5`, `openai-chat:…` | `OPENAI_API_KEY`; `OPENAI_BASE_URL` for a compatible endpoint |
+| Amazon Bedrock | `bedrock:global.anthropic.claude-sonnet-5-5`, `bedrock-mantle:…` | `AWS_BEARER_TOKEN_BEDROCK` and `AWS_REGION` |
+| Claude on Bedrock, Anthropic client | `anthropic-bedrock:global.anthropic.claude-sonnet-5-5` | as Bedrock |
+| OpenRouter | `openrouter:anthropic/claude-sonnet-5.5`, with any model name from [openrouter.ai/models](https://openrouter.ai/models) | `OPENROUTER_API_KEY` |
+
+To keep data on your own hardware, point `OPENAI_BASE_URL` at a local OpenAI-compatible server. After a change, restart the gateway from the installation directory:
+
+```bash
+docker compose -f conversationalbi/compose.yaml up -d --wait
+```
+
+On Kubernetes the model and key are in the Secret the chart's `llm.existingSecret` names (or the chart's own `llm.model` and `llm.env`). Replace the Secret with the new `LLM_MODEL` and key, then restart the gateway with `kubectl -n iceberg rollout restart deploy/cbi-gateway`. The row limits are `query.llmRows` and `query.maxRows` there; see [add extensions](install-kubernetes.md#add-extensions).
+
+A model that cannot start (unknown, or without its key) does not stop the extension: `/api/health` reports it under `llm`, the chat answers with what is missing, and the API and MCP server keep working.
+
 ## What it can read
 
 | Model | You can ask about it when |
@@ -73,29 +96,6 @@ Every result also carries:
 ## What goes to the LLM
 
 The LLM provider receives the conversation, the agent's instructions, the selected model's names, descriptions and owner guidance, the compiled SQL, the metric definitions, and **at most 20 rows of each result** (`BI_LLM_ROWS`, capped at 8 KB). `BI_LLM_ROWS=0` sends no rows: the agent still charts results, because charts and tables load their rows from the gateway. It never receives tokens, credentials or rows beyond that sample. The owner's guidance is passed as quoted data, never as instructions, and tools can only read what the person could read anyway.
-
-## Change the model
-
-The model and key are in `conversationalbi/llm.env` in the installation directory, readable only by you and given only to the chat's gateway container. `LLM_MODEL` is a [Pydantic AI model string](https://pydantic.dev/docs/ai/models/overview); its provider needs:
-
-| Provider | `LLM_MODEL` | Variables |
-| --- | --- | --- |
-| Google Gemini | `google:gemini-3.8-flash` (the default) | `GOOGLE_API_KEY` |
-| Anthropic | `anthropic:claude-sonnet-5-5` | `ANTHROPIC_API_KEY` |
-| OpenAI | `openai:gpt-5.5`, `openai-chat:…` | `OPENAI_API_KEY`; `OPENAI_BASE_URL` for a compatible endpoint |
-| Amazon Bedrock | `bedrock:global.anthropic.claude-sonnet-5-5`, `bedrock-mantle:…` | `AWS_BEARER_TOKEN_BEDROCK` and `AWS_REGION` |
-| Claude on Bedrock, Anthropic client | `anthropic-bedrock:global.anthropic.claude-sonnet-5-5` | as Bedrock |
-| OpenRouter | `openrouter:anthropic/claude-sonnet-5.5`, with any model name from [openrouter.ai/models](https://openrouter.ai/models) | `OPENROUTER_API_KEY` |
-
-To keep data on your own hardware, point `OPENAI_BASE_URL` at a local OpenAI-compatible server. After a change, restart the gateway from the installation directory:
-
-```bash
-docker compose -f conversationalbi/compose.yaml up -d --wait
-```
-
-On Kubernetes the model and key are in the Secret the chart's `llm.existingSecret` names (or the chart's own `llm.model` and `llm.env`). Replace the Secret with the new `LLM_MODEL` and key, then restart the gateway with `kubectl -n iceberg rollout restart deploy/cbi-gateway`. The row limits are `query.llmRows` and `query.maxRows` there; see [add extensions](install-kubernetes.md#add-extensions).
-
-A model that cannot start (unknown, or without its key) does not stop the extension: `/api/health` reports it under `llm`, the chat answers with what is missing, and the API and MCP server keep working.
 
 ## Limits
 

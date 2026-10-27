@@ -26,5 +26,6 @@ New filespaces receive these notebooks. Existing ones receive only the files the
 | 08 · Load data with dlt | Loading paged API data into `raw_dlt_demo` with dlt, nested lists as child tables, merging on a key | Yes |
 | 09 · Write an AI-ready grid forecast with Polars | Generating a synthetic MV load forecast and congestion outlook as lazy Polars queries, checking it with Polars SQL, writing it with Polars' Iceberg sink, and its semantic model in Polaris | Yes |
 | 10 · Read an AI-ready grid forecast with Polars | Reading the semantic model from Polaris, scanning the tables lazily with Polars, and analysing congestion in an area of substations with the stored joins and metrics; no local files | No |
+| 11 · How Apache Iceberg works | Creating a table from the Rick and Morty API with DuckDB, looking at its snapshots and files, deleting a row, and making that delete permanent: rewrite, expire snapshots, remove unused files with PyIceberg | Yes |
 
 Run the write notebook before its reader.
