@@ -9,5 +9,8 @@
   "dependencies": {
     "@ag-ui/client": "1.0.2",
     "@copilotkit/runtime": "1.81.0"
+  },
+  "overrides": {
+    "zod": "4.6.7"
   }
 }
