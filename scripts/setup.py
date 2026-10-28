@@ -184,7 +184,7 @@ def read_env(path):
     return values
 
 
-def set_env(config, updates):
+def set_env(config, updates, heading="# Extensions (scripts.setup --extension)"):
     """Replace or append keys in an .env file without touching any other line."""
     lines = config.read_text().splitlines()
     seen = set()
@@ -195,9 +195,17 @@ def set_env(config, updates):
             seen.add(key)
     missing = [key for key in updates if key not in seen]
     if missing:
-        lines += ["", "# Extensions (scripts.setup --extension)"] + [f"{k}={updates[k]}" for k in missing]
+        lines += ["", heading] + [f"{k}={updates[k]}" for k in missing]
     config.write_text("\n".join(lines) + "\n")
     config.chmod(0o600)
+
+
+def enable_profile(root, profile):
+    """Add a Compose profile, such as pgadmin, to COMPOSE_PROFILES in .env."""
+    config = root / ".env"
+    profiles = [name for name in (read_env(config).get("COMPOSE_PROFILES") or "").split(",") if name.strip()]
+    if profile not in profiles:
+        set_env(config, {"COMPOSE_PROFILES": ",".join(profiles + [profile])}, "# Compose profiles")
 
 
 def listing_ids(values):
@@ -296,6 +304,9 @@ def setup(root=ROOT, demo=False):
             file.write("\n# Keycloak identity and access management\n")
             file.writelines(f"{key}={value}\n" for key, value in additions.items())
     config.chmod(0o600)
+    if "COMPOSE_PROFILES" not in values:
+        # An .env from before pgAdmin became optional: it keeps running.
+        set_env(config, {"COMPOSE_PROFILES": "pgadmin"}, "# Compose profiles")
     target = root / values["KEYCLOAK_IMPORT_FILE"]
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(realm(values), indent=2) + "\n")
@@ -319,6 +330,8 @@ def write_realm(path, env=os.environ):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demo", action="store_true", help="Generate credentials for optional test fixtures")
+    parser.add_argument("--pgadmin", action="store_true",
+                        help="Also start pgAdmin, to look inside the Polaris metadata database")
     parser.add_argument("--extension", help="Register an extension, such as conversationalbi")
     parser.add_argument("--origin", help="The extension's browser origin, such as http://localhost:3007")
     parser.add_argument("--handshake", help="Where to write the extension's bridge credentials (mode 0600)")
@@ -332,6 +345,8 @@ def main():
         write_realm(args.realm_json)
         return
     setup(demo=args.demo)
+    if args.pgadmin:
+        enable_profile(ROOT, "pgadmin")
     if args.extension:
         if not args.origin or not args.handshake:
             parser.error("--extension requires --origin and --handshake")

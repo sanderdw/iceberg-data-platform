@@ -70,6 +70,15 @@
         $Answer = Read-Host "Add Ingestion (dlt), which loads REST APIs, databases and files into your tables? Its launcher`nuses the Docker socket to start each run in an isolated container. [y/N]"
         $Ingestion = $Answer -match '^[Yy]'
     }
+    # pgAdmin only shows the Polaris metadata database, to learn from; installations from before
+    # it became optional have no COMPOSE_PROFILES and keep it.
+    $PgAdmin = @($env:ICEBERG_EXTENSIONS -split ',' | ForEach-Object { $_.Trim() }) -contains 'pgadmin'
+    if ((Test-Path "$InstallDir/.env") -and (-not (Select-String -Path "$InstallDir/.env" -Pattern '^COMPOSE_PROFILES=' -Quiet) -or
+            (Select-String -Path "$InstallDir/.env" -Pattern '^COMPOSE_PROFILES=(.*,)?pgadmin(,|$)' -Quiet))) { $PgAdmin = $true }
+    if (-not $PgAdmin -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
+        $Answer = Read-Host "Add pgAdmin, to look inside the Polaris metadata database and learn how the catalog`nstores tables? Not needed to use the platform. [y/N]"
+        $PgAdmin = $Answer -match '^[Yy]'
+    }
 
     try {
         New-Item -ItemType Directory -Path $TemporaryDir | Out-Null
@@ -115,8 +124,9 @@
         $NewEnv = !(Test-Path "$InstallDir/.env")
         Write-Host "Preparing credentials in $InstallDir/.env..."
         Invoke-Docker pull $SetupImage
+        $SetupArgs = @(if ($PgAdmin) { '--pgadmin' })
         Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" `
-            --entrypoint python $SetupImage /install/scripts/setup.py
+            --entrypoint python $SetupImage /install/scripts/setup.py @SetupArgs
         if ($Cbi) {
             if (-not $CbiRegistered) {
                 # Before the platform starts, so it creates the extension's sign-in clients right away.
@@ -241,6 +251,12 @@
         Write-Host "`nOptional"
         Write-Host '   Connect Python, DuckDB or DBeaver (needs uv):'
         Write-Host "     Set-Location $LocationDir; uv run iceberg_connect.py login"
+        if ($PgAdmin) {
+            $PgAdminPort = Get-EnvValue PGADMIN_PORT
+            if (-not $PgAdminPort) { $PgAdminPort = '5050' }
+            Write-Host '   pgAdmin, to look inside the Polaris metadata database:'
+            Write-Host "     http://localhost:$PgAdminPort  (PGADMIN_EMAIL and PGADMIN_PASSWORD in $ShownDir/.env)"
+        }
         Write-Host '   Skills for coding agents such as Claude Code, Codex and GitHub Copilot:'
         Write-Host '     quick-share    Share the portals for a class or demo over temporary HTTPS links'
         Write-Host '     demo-company   Create an Energy, Webshop or Retail demo company, one account per participant'

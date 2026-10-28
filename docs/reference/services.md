@@ -12,7 +12,7 @@ The addresses of a [Compose installation](../install.md). Credentials are in `.e
 | Keycloak console | http://localhost:8080/admin | `admin` + `KEYCLOAK_ADMIN_PASSWORD` |
 | Polaris Iceberg REST API | http://localhost:8181/api/catalog | Keycloak bearer token ([connect from your computer](../connect.md)) or client credentials |
 | RustFS console | http://localhost:9001 | `RUSTFS_ACCESS_KEY` + `RUSTFS_SECRET_KEY` |
-| pgAdmin | http://localhost:5050 | `PGADMIN_EMAIL` + `PGADMIN_PASSWORD` |
+| pgAdmin | http://localhost:5050 | Optional ([pgAdmin](../admin-guide.md#pgadmin)); `PGADMIN_EMAIL` + `PGADMIN_PASSWORD` |
 | Conversational BI | http://localhost:3007 | Optional [extension](../conversational-bi.md); Keycloak account |
 | dbt pipelines | http://localhost:3004 | Optional [extension](../dbt.md); Keycloak account, MCP through the `ext-dbt-mcp` client |
 | Ingestion (dlt) | http://localhost:3008 | Optional [extension](../ingestion.md); Keycloak account, MCP through the `ext-ingestion-mcp` client |

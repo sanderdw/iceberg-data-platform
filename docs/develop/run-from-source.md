@@ -11,6 +11,8 @@ docker compose -f compose.users.yaml --profile images build
 docker compose -f compose.users.yaml up -d --wait users
 ```
 
+pgAdmin starts only with `COMPOSE_PROFILES=pgadmin` in `.env`; see [pgAdmin](../admin-guide.md#pgadmin).
+
 Rerun the three Docker commands after source changes. Save your notebook work first: recreating the user portal stops running notebooks.
 
 For changes to the user portal only, run `docker compose -f compose.users.yaml up -d --build --wait users`. This skips rebuilding the notebook image.

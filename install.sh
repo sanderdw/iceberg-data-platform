@@ -9,7 +9,7 @@ main() {
         1)
             if [ "$1" = --help ]; then
                 printf 'Usage: sh install.sh [--dir DIRECTORY]\nDefault: ~/iceberg-data-platform (or ICEBERG_INSTALL_DIR)\nRequires Linux or macOS, Docker with Compose v2, curl and tar.\n'
-                printf '\nExtensions (optional): ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion names the ones to add. In a\nterminal the installer asks; ICEBERG_EXTENSIONS=none skips the questions.\n'
+                printf '\nExtensions (optional): ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion,pgadmin names the ones to add. In\na terminal the installer asks; ICEBERG_EXTENSIONS=none skips the questions.\n'
                 printf '\nConversational BI also starts with LLM_MODEL and its key, for example\nLLM_MODEL=anthropic:claude-sonnet-5-5 ANTHROPIC_API_KEY=...\nVariables: %s\n' "$cbi_variables"
                 return
             fi
@@ -88,6 +88,20 @@ main() {
         read -r answer </dev/tty || answer=
         case $answer in [Yy]*) ing=true ;; esac
     fi
+    # pgAdmin only shows the Polaris metadata database, to learn from; installations from before
+    # it became optional have no COMPOSE_PROFILES and keep it.
+    pgadmin=false
+    case ",${ICEBERG_EXTENSIONS:-}," in *,pgadmin,*) pgadmin=true ;; esac
+    if [ -f "$install_dir/.env" ] && { ! grep -q '^COMPOSE_PROFILES=' "$install_dir/.env" ||
+        grep -Eq '^COMPOSE_PROFILES=(.*,)?pgadmin(,|$)' "$install_dir/.env"; }; then
+        pgadmin=true
+    fi
+    if [ "$pgadmin" = false ] && [ -z "${ICEBERG_EXTENSIONS+set}" ] && has_tty; then
+        printf 'Add pgAdmin, to look inside the Polaris metadata database and learn how the catalog\nstores tables? Not needed to use the platform. [y/N] ' >/dev/tty
+        answer=
+        read -r answer </dev/tty || answer=
+        case $answer in [Yy]*) pgadmin=true ;; esac
+    fi
 
     umask 077
     temporary_dir=$(mktemp -d)
@@ -143,7 +157,11 @@ main() {
     [ ! -f .env ] || new_env=false
     printf 'Preparing credentials in %s/.env...\n' "$install_dir"
     docker pull "$setup_image"
-    setup_run "$setup_image" /install/scripts/setup.py
+    if [ "$pgadmin" = true ]; then
+        setup_run "$setup_image" /install/scripts/setup.py --pgadmin
+    else
+        setup_run "$setup_image" /install/scripts/setup.py
+    fi
     if [ "$cbi" = true ]; then
         if [ "$cbi_registered" = false ]; then
             # Before the platform starts, so it creates the extension's sign-in clients right away.
@@ -256,6 +274,12 @@ main() {
     printf '   Update   run the install command again; your data and .env are kept\n'
     printf '\nOptional\n   Connect Python, DuckDB or DBeaver (needs uv):\n'
     printf '     cd %s && uv run iceberg_connect.py login\n' "$cd_dir"
+    if [ "$pgadmin" = true ]; then
+        pgadmin_port=$(env_value PGADMIN_PORT)
+        printf '   pgAdmin, to look inside the Polaris metadata database:\n'
+        printf '     http://localhost:%s  (PGADMIN_EMAIL and PGADMIN_PASSWORD in %s/.env)\n' \
+            "${pgadmin_port:-5050}" "$shown_dir"
+    fi
     printf '   Skills for coding agents such as Claude Code, Codex and GitHub Copilot:\n'
     printf '     quick-share    Share the portals for a class or demo over temporary HTTPS links\n'
     printf '     demo-company   Create an Energy, Webshop or Retail demo company, one account per participant\n'

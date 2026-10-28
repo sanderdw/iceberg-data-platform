@@ -26,8 +26,10 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Optional, for looking inside the Polaris metadata: COMPOSE_PROFILES=pgadmin in .env starts it.
   pgadmin:
     image: dpage/pgadmin4:9.18
+    profiles: [pgadmin]
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-${PORTAL_PASSWORD}}

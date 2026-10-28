@@ -50,7 +50,7 @@ def installer_env(tmp_path, request):
             "compose.yaml": b"name: iceberg-platform\n",
             "compose.users.yaml": b"name: iceberg-workspaces\n",
             "pgadmin/servers.json": b"{}",
-            ".env.example": b"PORTAL_PASSWORD=replace-with-generated-password\n",
+            ".env.example": b"PORTAL_PASSWORD=replace-with-generated-password\nCOMPOSE_PROFILES=\n",
             "scripts/setup.py": (ROOT / "scripts/setup.py").read_bytes(),
             "iceberg_connect.py": b"# helper\n",
             ".agents/skills/quick-share/SKILL.md": b"---\nname: quick-share\n---\n",
@@ -259,6 +259,47 @@ def test_shell_pull_failure_does_not_start_stacks(shell_installer):
     assert run().returncode != 0
     assert any("pull" in args for args in calls(env))
     assert not any("up" in args for args in calls(env))
+
+
+def profiles(env):
+    return next(line.split("=", 1)[1] for line in (Path(env["ICEBERG_INSTALL_DIR"]) / ".env").read_text().splitlines()
+                if line.startswith("COMPOSE_PROFILES="))
+
+
+def test_shell_leaves_pgadmin_out_unless_asked(shell_installer):
+    run, env = shell_installer
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert profiles(env) == ""
+    assert "pgAdmin" not in result.stdout
+    assert not any("--pgadmin" in args for args in calls(env))
+
+
+def test_shell_installs_pgadmin_and_keeps_it_on_rerun(shell_installer):
+    run, env = shell_installer
+    env["ICEBERG_EXTENSIONS"] = "pgadmin"
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert_started(env)
+    assert profiles(env) == "pgadmin"
+    assert "pgAdmin, to look inside the Polaris metadata database:\n     http://localhost:5050  " in result.stdout
+    del env["ICEBERG_EXTENSIONS"]
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert profiles(env) == "pgadmin"
+    assert "http://localhost:5050" in result.stdout
+
+
+def test_shell_keeps_pgadmin_for_an_installation_from_before_it_was_optional(shell_installer):
+    run, env = shell_installer
+    assert run().returncode == 0
+    config = Path(env["ICEBERG_INSTALL_DIR"]) / ".env"
+    config.write_text("".join(line for line in config.read_text().splitlines(keepends=True)
+                              if not line.startswith("COMPOSE_PROFILES=")))
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert profiles(env) == "pgadmin"
+    assert "http://localhost:5050" in result.stdout
 
 
 def assert_cbi_installed(result, env, model):
@@ -548,10 +589,24 @@ def test_powershell_installs_all_extensions(powershell_installer):
     assert_ingestion_installed(result, env, cbi=True, dbt=True)
     for log in ("TEST_DOCKER_LOG", "TEST_DOWNLOAD_LOG"):
         Path(env[log]).unlink()
+    assert profiles(env) == ""
     del env["ICEBERG_EXTENSIONS"]
     assert run().returncode == 0
     assert_started(env, cbi=True, dbt=True, ingestion=True)
     assert not any("--extension" in args for args in calls(env))
+
+
+def test_powershell_installs_pgadmin_and_keeps_it_on_rerun(powershell_installer):
+    run, env = powershell_installer
+    env["ICEBERG_EXTENSIONS"] = "pgadmin"
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert profiles(env) == "pgadmin"
+    assert "http://localhost:5050" in result.stdout
+    del env["ICEBERG_EXTENSIONS"]
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert profiles(env) == "pgadmin"
 
 
 def test_powershell_conversational_bi_takes_the_model_from_the_environment(powershell_installer):
