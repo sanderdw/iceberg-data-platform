@@ -48,7 +48,7 @@ def _():
 def _(mo):
     mo.md("""
     # Publish an AI-ready grid forecast with Polars
-    **Example 9 of 10 · Polars 2 → Iceberg → Polaris**
+    **Example 9 of 11 · Polars 2 → Iceberg → Polaris**
 
     Distribution network architects decide where the medium-voltage (MV) grid needs investment.
     They open a precomputed congestion overview for a few substations, then analyse the area:

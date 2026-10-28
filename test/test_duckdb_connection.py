@@ -161,7 +161,7 @@ def test_table_reference_quotes_names():
 ])
 def test_example_replaces_only_the_table_it_created(exists, owner, dropped):
     connection = Mock()
-    connection.execute.return_value.fetchone.side_effect = [(exists,), owner]
+    connection.execute.return_value.fetchall.side_effect = [[(exists,)], [owner] if owner else []]
     if dropped is None:
         with pytest.raises(RuntimeError, match="did not create it"):
             native.drop_example_table(connection, ("iceberg_v3", "nested"), "sensor_events", "04_example")

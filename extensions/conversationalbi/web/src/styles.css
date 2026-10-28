@@ -121,7 +121,46 @@ section.chat > * { flex: 1; min-height: 0; }
 section.chat .copilotKitChat { flex: 1; height: auto; min-height: 0; }
 section.chat > .panel-heading { flex: none; padding-top: 24px; }
 .started section.chat > .panel-heading { padding-top: 0; }
-#clear, .confirm button { min-height: 44px; padding: 8px 20px; }
+#clear, #guide, .confirm button { min-height: 44px; padding: 8px 20px; }
+.chat-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px 12px; }
+
+/* Model guide: a third column next to the chat; on narrower screens it covers the chat from the right. */
+.workbench.with-guide { grid-template-columns: 240px minmax(0, 1fr) 360px; gap: 40px; }
+.guide { min-width: 0; min-height: 0; overflow-y: auto; }
+.guide .panel-heading { position: sticky; top: 0; z-index: 1; background: var(--black); }
+.guide .panel-heading button { min-height: 36px; padding: 8px 16px; }
+.guide-body { display: grid; gap: 32px; padding-bottom: 24px; }
+.guide-body section { display: grid; gap: 12px; min-width: 0; }
+.guide .chip { overflow-wrap: anywhere; }
+.guide-questions { display: grid; gap: 8px; }
+.guide-list { list-style: none; margin: 0; padding: 0; }
+.guide-group + .guide-group { margin-top: 16px; }
+.guide-group .database-group-title { margin-bottom: 0; }
+.guide-row { display: grid; gap: 4px; justify-items: start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.guide-row.split { grid-template-columns: minmax(0, 1fr) auto; align-items: center; justify-items: stretch; gap: 8px 12px; padding: 6px 0; }
+.guide-row.split.several { grid-template-columns: minmax(0, 1fr); padding: 10px 0; }
+.guide-row.several .guide-asks { justify-content: flex-start; }
+.guide-asks { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.guide-asks button.ask { margin-top: 0; }
+.guide-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--text-primary); overflow-wrap: anywhere; }
+.guide-name strong { font-weight: 400; }
+.guide-name .chip { font-size: .65rem; }
+.guide-text { display: block; font-size: .85rem; line-height: 1.5; color: var(--text-secondary); }
+.guide button.question, .guide button.ask, .guide button.guide-item { text-transform: none; letter-spacing: 0; background: transparent; color: var(--text-primary); }
+.guide button.question { justify-content: flex-start; min-height: 0; padding: 10px 14px; border-color: var(--border-visible); border-radius: 12px;
+  font: .9rem/1.5 var(--body); text-align: left; }
+.guide button.ask { min-height: 28px; padding: 4px 12px; margin-top: 4px; border-color: var(--border-visible); font: var(--small)/1.5 var(--mono); }
+.guide button.guide-item { width: 100%; display: grid; justify-items: start; gap: 4px; padding: 12px 0; border: 0; border-bottom: 1px solid var(--border);
+  border-radius: 0; color: var(--text-secondary); font: var(--medium)/1.5 var(--body); text-align: left; }
+.guide button.guide-item.selected { border-bottom-color: var(--text-primary); }
+.guide button.guide-item.selected .guide-name { color: var(--text-display); }
+.guide button:is(.question, .ask):hover { background: transparent; border-color: var(--text-primary); color: var(--text-display); }
+.guide button.guide-item:hover { background: transparent; }
+.guide button.guide-item:hover .guide-name { color: var(--text-display); }
+.guidance { display: grid; gap: 6px; margin: 12px 0 0; padding-left: 18px; font-size: .85rem; color: var(--text-secondary); }
+.guide-joins { margin-top: 12px; }
+.guide-joins div { flex-direction: column; gap: 2px; }
+.guide-joins dt { min-width: 0; }
 .confirm { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px 12px; }
 
 /* CopilotKit v2 chat on the portal tokens, in both themes. */
@@ -180,7 +219,10 @@ th:first-child, td:first-child { padding-left: 0; }
   #login-screen { gap: 48px; padding-inline: 32px; }
   .intro { padding-left: 0; }
   #workspace-screen { padding-inline: 32px; }
-  .workbench { grid-template-columns: 200px minmax(0, 1fr); gap: 32px; }
+  .workbench, .workbench.with-guide { grid-template-columns: 200px minmax(0, 1fr); gap: 32px; }
+  .guide { position: fixed; inset: 0 0 0 auto; z-index: 20; width: min(420px, 100vw); padding: 0 24px; background: var(--black);
+    border-left: 1px solid var(--border-visible); }
+  .guide .panel-heading { padding-top: 24px; }
 }
 @media (max-width: 700px) {
   :root { --large: 2.25rem; }

@@ -225,7 +225,7 @@ def model_check_queries(model):
 
 def model_checks(connection, model):
     """Evidence from the stored model, run in DuckDB: primary keys are unique and every relationship finds its target."""
-    return [{"check": label, "violations": connection.execute(sql).fetchone()[0]}
+    return [{"check": label, "violations": connection.execute(sql).fetchall()[0][0]}
             for label, sql in model_check_queries(model)]
 
 

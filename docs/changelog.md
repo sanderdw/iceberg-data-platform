@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.10 - 2026-10-27
+
+- **Example notebook: how Apache Iceberg works.** Notebook 11 builds a table from the Rick and Morty API with DuckDB, shows its snapshots and files, deletes a row and then removes it for good. See [notebooks](notebooks.md).
+- **Documentation by purpose:** tutorials, how-to guides, reference and concepts. New are [Run a class](run-a-class.md), [Build a semantic model](build-a-semantic-model.md), [Teams, environments and roles](teams-and-environments.md), [Roles and permissions](reference/roles.md), [Services](reference/services.md) and [Why the MCP tools work this way](mcp-design.md).
+- **pgAdmin is optional.** It only shows the Polaris metadata database, so the installer asks whether to add it, or takes `ICEBERG_EXTENSIONS=pgadmin`. See [pgAdmin](admin-guide.md#pgadmin).
+- **DuckDB 2.0** in notebooks, table previews, Conversational BI and dbt.
+- certifi 2026.10.23 removes the distrusted eMudhra emSign roots from the Python HTTP clients. Keycloak 26.8.1 and RustFS 1.0.4.
+- Extensions: Conversational BI 0.1.4, dbt 0.1.2, Ingestion (dlt) 0.1.2 and OpenMetadata 0.1.2.
+
 ## 0.9.9 - 2026-10-17
 
 - **Install on Kubernetes.** Run the platform and its extensions on your own Kubernetes cluster with one `helm install` and your domain. Every portal gets its own HTTPS address. You can use your cloud provider's PostgreSQL and the official Apache Polaris chart. The `kubernetes-install` agent skill guides you through it. The Docker installation stays as it is. See [Install on Kubernetes](install-kubernetes.md).

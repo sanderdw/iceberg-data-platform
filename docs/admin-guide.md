@@ -1,35 +1,54 @@
 # Administration guide
 
-The administration portal at http://localhost:3000 (on Kubernetes `https://admin.<domain>`) manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role. For the service list, see the [first steps](first-steps.md#services); to start and stop the platform, see [installation](install.md#update-or-restart).
+The administration portal at http://localhost:3000 (on Kubernetes `https://admin.<domain>`) manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role. For the service list, see [services](reference/services.md); to start and stop the platform, see [installation](install.md#update-or-restart).
 
-You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). The portal's **Getting started** page has instructions and examples for each, using this installation's address.
+You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). The portal's **Getting started** page has instructions and examples for each, using this installation's address. Lists refresh every 30 seconds while visible, and navigation and filters are kept in the URL.
 
 ## Teams, databases and users
 
-1. **Create a team** on the Teams page. Renaming a team keeps its stable ID.
-2. **Create a database** under Databases, or let a team Administrator create one in the user portal. Each database is an Iceberg catalog with its own RustFS bucket, in the Development, Acceptance or Production environment. Names are unique within a team and environment. Team members get access right away, with their role in that team.
-3. **Create a user** under Users:
-   - **Create Keycloak account:** creates the account and links it to the platform. Copy the temporary password that is shown once. The user must change it at first sign-in. Email invitations are not configured.
-   - **Link existing account:** search for the exact Keycloak username. The account keeps its password. Accounts are never linked automatically by matching names.
+### Create a team
 
-   Select one or more teams and a role per team. Every user needs at least one team.
-4. **Edit access** changes a user's teams and the role in each team. A change to one team leaves the user's other teams untouched.
-5. **Reset password** issues a new temporary password. It only works for accounts that this portal created.
-6. **Revoke** removes the platform identity and its grants but keeps the Keycloak account. Active sessions are refused at their next check, and their notebooks stop within 30 seconds. If setup or revocation stops partway, use **Retry setup** or **Revoke** on that row.
-7. **Rename, move or delete a database** under Databases:
-   - A rename or move keeps the catalog ID, bucket and connection settings. After a move, members of the new team get access with their role there.
-   - Deletion is immediate and irreversible. It removes all tables, views, files, the bucket and the database's data shares. If cleanup fails, use **Resume deletion**.
-8. **Delete a team** after moving or deleting its databases. This is refused if a user would lose their last team.
+On the **Teams** page, create the team. Renaming a team later keeps its stable ID.
 
-| Role | Portal label | Access to every database of that team |
-| --- | --- | --- |
-| `reader` | Read | Read namespaces, tables, views, semantic models and data |
-| `writer` | Read & write | Also create and write namespaces, tables and views |
-| `admin` | Administrator | Also manage catalog access, databases and data shares |
+### Create a database
+
+Usually a team Administrator creates the team's databases in the user portal, as the team needs them; see [user portal](user-portal.md). A platform administrator can also create one here: under **Databases**, choose the team and the environment (Development, Acceptance or Production). Each database is an Iceberg catalog with its own RustFS bucket, and names are unique within a team and environment. Team members get access right away, with their role in that team.
+
+### Add a user
+
+Under **Users**, choose one of:
+
+- **Create Keycloak account:** creates the account and links it to the platform. Copy the temporary password that is shown once. The user must change it at first sign-in. Email invitations are not configured.
+- **Link existing account:** search for the exact Keycloak username. The account keeps its password. Accounts are never linked automatically by matching names.
+
+Select one or more teams and a role per team. Every user needs at least one team. Give a new team at least one **Administrator**, who then creates its databases and manages its data shares. The roles are listed in [roles and permissions](reference/roles.md).
+
+### Change a user's access
+
+**Edit access** changes a user's teams and the role in each team. A change to one team leaves the user's other teams untouched.
+
+### Reset a password
+
+**Reset password** issues a new temporary password. It only works for accounts that this portal created; reset a linked account in the Keycloak console.
+
+### Revoke a user
+
+**Revoke** removes the platform identity and its grants but keeps the Keycloak account. Active sessions are refused at their next check, and their notebooks stop within 30 seconds. If setup or revocation stops partway, use **Retry setup** or **Revoke** on that row.
+
+### Rename, move or delete a database
+
+Under **Databases**:
+
+- A rename or move keeps the catalog ID, bucket and connection settings. After a move, members of the new team get access with their role there.
+- Deletion is immediate and irreversible. It removes all tables, views, files, the bucket and the database's data shares. If cleanup fails, use **Resume deletion**.
+
+### Delete a team
+
+Move or delete its databases first. Deletion is refused if a user would lose their last team.
+
+### Use the Keycloak console
 
 The portal's user management uses the `iceberg-provisioner` service account in the `iceberg` realm. For anything else, use the Keycloak console at http://localhost:8080/admin: sign in as `admin` and select the **iceberg** realm. On Kubernetes the console is not published; open it with `kubectl -n iceberg port-forward svc/keycloak 8080` and sign in with `KEYCLOAK_ADMIN_PASSWORD` from the Secret `iceberg-platform`. You grant portal administration there by assigning the `iceberg-admin` client role `platform-admin`. **Revoke** refuses accounts that have this role.
-
-Lists refresh every 30 seconds while visible. Navigation and filters are kept in the URL.
 
 ## Extension service accounts
 
@@ -60,7 +79,9 @@ The **Infrastructure** page shows service health, per-container resources, Postg
 
 ## pgAdmin
 
-With Compose only (the Kubernetes chart has no pgAdmin): at http://localhost:5050, expand **Iceberg Platform → Polaris metadata** and enter `POSTGRES_PASSWORD` from `.env`. This is Polaris's metadata database. Make all changes through the portal so that grants and bucket policies stay in sync.
+pgAdmin shows Polaris's metadata database, so you can see how the catalog stores tables and grants. The platform doesn't need it, so it's optional and runs with Compose only (the Kubernetes chart has no pgAdmin). The installer asks whether to add it, and `ICEBERG_EXTENSIONS=pgadmin` adds it without the question. It starts with the `pgadmin` Compose profile: `COMPOSE_PROFILES=pgadmin` in `.env`. An installation from before 0.9.10 keeps pgAdmin. To remove it, empty `COMPOSE_PROFILES` and run `docker compose rm -sf pgadmin`.
+
+At http://localhost:5050, expand **Iceberg Platform → Polaris metadata** and enter `POSTGRES_PASSWORD` from `.env`. This is Polaris's metadata database. Make all changes through the portal so that grants and bucket policies stay in sync.
 
 ## Connect an MCP client
 

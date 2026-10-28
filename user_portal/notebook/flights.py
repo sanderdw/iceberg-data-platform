@@ -274,7 +274,7 @@ def generate_flights(connection, model, row_count=12000):
 def quality_report(connection, contract):
     """Execute the reviewed SQL checks in the local demo contract, not Ossie expressions."""
     return [
-        {"check": check["name"], "violations": connection.execute(check["sql"]).fetchone()[0]}
+        {"check": check["name"], "violations": connection.execute(check["sql"]).fetchall()[0][0]}
         for check in contract["quality_checks"]
     ]
 
@@ -297,13 +297,13 @@ def publish_flights(connection, model, namespace):
             "SELECT count(*) FROM information_schema.tables "
             "WHERE table_catalog = 'lakehouse' AND table_schema = ? AND table_name = ?",
             [".".join(namespace), name],
-        ).fetchone()[0]
+        ).fetchall()[0][0]
         if exists:
             owner = connection.execute(
                 f"SELECT value FROM iceberg_table_properties({table_reference(namespace, name)}) WHERE key = ?",
                 [EXAMPLE_PROPERTY],
-            ).fetchone()
-            if not owner or owner[0] != EXAMPLE:
+            ).fetchall()
+            if owner != [(EXAMPLE,)]:
                 raise RuntimeError(f"{name} already exists and is not owned by this example. Choose another NAMESPACE.")
     connection.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_reference(namespace)}")
     results = []
@@ -321,7 +321,7 @@ def publish_flights(connection, model, namespace):
         drop_example_table(connection, namespace, name, EXAMPLE)
         connection.execute(f"CREATE TABLE {reference} ({ddl}) WITH ({options})")
         refresh_table_credentials(connection, namespace, name, secret_name=f"flights_{name}")
-        count = connection.execute(f"INSERT INTO {reference} SELECT * FROM {source}").fetchone()[0]
+        count = connection.execute(f"INSERT INTO {reference} SELECT * FROM {source}").fetchall()[0][0]
         results.append({"dataset": dataset["name"], "table": reference, "rows": count})
     return results
 

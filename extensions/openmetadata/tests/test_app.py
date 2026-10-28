@@ -7,7 +7,7 @@ from tests.conftest import TOKEN, settings
 def test_without_openmetadata_settings_nothing_runs():
     with TestClient(create_app(settings(om_token=""))) as client:
         assert client.get("/api/health").json() == {"status": "ok"}
-        assert client.get("/api/status").json() == {"version": "0.1.1", "state": "not_configured"}
+        assert client.get("/api/status").json() == {"version": "0.1.2", "state": "not_configured"}
 
 
 def test_status_shows_counts_never_secrets():

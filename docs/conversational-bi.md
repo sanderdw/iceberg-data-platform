@@ -29,6 +29,23 @@ A **team administrator** enables Conversational BI once per environment: the **E
 
 On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 
+## Explore a model
+
+Pick a model, then open **Guide** next to the conversation. It shows the model as its owner wrote it:
+
+- **About**: the description, the datasets and their tables, and any table you cannot read.
+- **Try asking**: the owner's example questions (`ai_context.examples`), or questions built from the
+  metrics and dimensions when there are none. The empty chat offers the same questions. Click one to ask it.
+- **Metrics**: each metric with its definition, unit and synonyms. Pick one to see the dimensions it
+  can be split by, grouped by dataset with the join path. Time dimensions can be grouped by day, week, month, quarter or year.
+  When a dataset can be reached in several ways, such as the departure or the destination airport, each
+  way gets its own **Ask** button. Datasets the metric cannot reach are named, because joining them would
+  count its rows more than once.
+- **Owner guidance** and **how the datasets join**: the instructions the agent follows, and the relationships.
+
+Questions from the guide name metrics and fields exactly as the model spells them, so the agent does not
+have to guess. On narrow screens the guide covers the chat and closes when you ask.
+
 ## Connect an AI agent
 
 ```bash
@@ -37,6 +54,42 @@ claude mcp add --transport http --client-id ext-conversationalbi-mcp --callback-
 ```
 
 Other agents are set up as for the [user portal](ai-agents.md), with this address and client ID.
+
+### MCP tools
+
+| Tool | What it does |
+| --- | --- |
+| `whoami` | Your teams with your role in each, their databases, the data shares they received, and this extension. |
+| `list_environments` | Where Conversational BI is enabled for a team. |
+| `enable_environment` | Lets Conversational BI read a team environment, and the shares the team received there, with a read-only service account (team administrators). |
+| `disable_environment` | Revokes that service account (team administrators). Questions in that environment stop working. |
+| `list_models` | Semantic models you can ask questions of, your own and shared ones, and the environments that still need enabling. |
+| `describe_model` | Datasets, fields, metrics and reachable dimensions of one model, with the owner's instructions. |
+| `query` | Runs a [governed query](#governed-queries): up to 5 metrics split by up to 5 dimensions (`DATASET.field`, optionally with a grain and `via`), 10 filters and a limit of up to 5000 rows. It returns at most 200 rows and a `resultId`. |
+| `get_result` | More rows of an earlier result, by `resultId`. Results are kept for 30 minutes. |
+
+## Change the model
+
+The model and key are in `conversationalbi/llm.env` in the installation directory, readable only by you and given only to the chat's gateway container. `LLM_MODEL` is a [Pydantic AI model string](https://pydantic.dev/docs/ai/models/overview); its provider needs:
+
+| Provider | `LLM_MODEL` | Variables |
+| --- | --- | --- |
+| Google Gemini | `google:gemini-3.8-flash` (the default) | `GOOGLE_API_KEY` |
+| Anthropic | `anthropic:claude-sonnet-5-5` | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai:gpt-5.5`, `openai-chat:…` | `OPENAI_API_KEY`; `OPENAI_BASE_URL` for a compatible endpoint |
+| Amazon Bedrock | `bedrock:global.anthropic.claude-sonnet-5-5`, `bedrock-mantle:…` | `AWS_BEARER_TOKEN_BEDROCK` and `AWS_REGION` |
+| Claude on Bedrock, Anthropic client | `anthropic-bedrock:global.anthropic.claude-sonnet-5-5` | as Bedrock |
+| OpenRouter | `openrouter:anthropic/claude-sonnet-5.5`, with any model name from [openrouter.ai/models](https://openrouter.ai/models) | `OPENROUTER_API_KEY` |
+
+To keep data on your own hardware, point `OPENAI_BASE_URL` at a local OpenAI-compatible server. After a change, restart the gateway from the installation directory:
+
+```bash
+docker compose -f conversationalbi/compose.yaml up -d --wait
+```
+
+On Kubernetes the model and key are in the Secret the chart's `llm.existingSecret` names (or the chart's own `llm.model` and `llm.env`). Replace the Secret with the new `LLM_MODEL` and key, then restart the gateway with `kubectl -n iceberg rollout restart deploy/cbi-gateway`. The row limits are `query.llmRows` and `query.maxRows` there; see [add extensions](install-kubernetes.md#add-extensions).
+
+A model that cannot start (unknown, or without its key) does not stop the extension: `/api/health` reports it under `llm`, the chat answers with what is missing, and the API and MCP server keep working.
 
 ## What it can read
 
@@ -73,29 +126,6 @@ Every result also carries:
 ## What goes to the LLM
 
 The LLM provider receives the conversation, the agent's instructions, the selected model's names, descriptions and owner guidance, the compiled SQL, the metric definitions, and **at most 20 rows of each result** (`BI_LLM_ROWS`, capped at 8 KB). `BI_LLM_ROWS=0` sends no rows: the agent still charts results, because charts and tables load their rows from the gateway. It never receives tokens, credentials or rows beyond that sample. The owner's guidance is passed as quoted data, never as instructions, and tools can only read what the person could read anyway.
-
-## Change the model
-
-The model and key are in `conversationalbi/llm.env` in the installation directory, readable only by you and given only to the chat's gateway container. `LLM_MODEL` is a [Pydantic AI model string](https://pydantic.dev/docs/ai/models/overview); its provider needs:
-
-| Provider | `LLM_MODEL` | Variables |
-| --- | --- | --- |
-| Google Gemini | `google:gemini-3.8-flash` (the default) | `GOOGLE_API_KEY` |
-| Anthropic | `anthropic:claude-sonnet-5-5` | `ANTHROPIC_API_KEY` |
-| OpenAI | `openai:gpt-5.5`, `openai-chat:…` | `OPENAI_API_KEY`; `OPENAI_BASE_URL` for a compatible endpoint |
-| Amazon Bedrock | `bedrock:global.anthropic.claude-sonnet-5-5`, `bedrock-mantle:…` | `AWS_BEARER_TOKEN_BEDROCK` and `AWS_REGION` |
-| Claude on Bedrock, Anthropic client | `anthropic-bedrock:global.anthropic.claude-sonnet-5-5` | as Bedrock |
-| OpenRouter | `openrouter:anthropic/claude-sonnet-5.5`, with any model name from [openrouter.ai/models](https://openrouter.ai/models) | `OPENROUTER_API_KEY` |
-
-To keep data on your own hardware, point `OPENAI_BASE_URL` at a local OpenAI-compatible server. After a change, restart the gateway from the installation directory:
-
-```bash
-docker compose -f conversationalbi/compose.yaml up -d --wait
-```
-
-On Kubernetes the model and key are in the Secret the chart's `llm.existingSecret` names (or the chart's own `llm.model` and `llm.env`). Replace the Secret with the new `LLM_MODEL` and key, then restart the gateway with `kubectl -n iceberg rollout restart deploy/cbi-gateway`. The row limits are `query.llmRows` and `query.maxRows` there; see [add extensions](install-kubernetes.md#add-extensions).
-
-A model that cannot start (unknown, or without its key) does not stop the extension: `/api/health` reports it under `llm`, the chat answers with what is missing, and the API and MCP server keep working.
 
 ## Limits
 

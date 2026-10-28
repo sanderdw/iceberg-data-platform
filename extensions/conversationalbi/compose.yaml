@@ -15,7 +15,7 @@ services:
   # service with the LLM settings (llm.env), the Bridge credentials and a route to the platform.
   cbi-gateway:
     build: .
-    image: iceberg-conversationalbi:0.1.3
+    image: iceberg-conversationalbi:0.1.4
     <<: *hardened
     labels:
       io.iceberg-platform.extension: conversationalbi
@@ -47,7 +47,7 @@ services:
   # access, no internet, no credentials beyond the key that identifies it to the agent listener.
   cbi-runtime:
     build: runtime
-    image: iceberg-conversationalbi-runtime:0.1.3
+    image: iceberg-conversationalbi-runtime:0.1.4
     <<: *hardened
     labels:
       io.iceberg-platform.extension: conversationalbi

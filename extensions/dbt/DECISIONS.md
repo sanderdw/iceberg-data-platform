@@ -14,13 +14,13 @@ contract change.
   happens at image build only.
 - dbt v2 loads warehouse drivers through the ADBC driver manager. Without a local driver it
   downloads one from `public.cdn.getdbt.com`. Run containers have no internet, so the runner image
-  registers the ADBC entry point `duckdb_adbc_init` of the pinned `duckdb==1.5.5` wheel in a driver
-  manifest, `duckdb.toml`, found through `ADBC_DRIVER_PATH`. The runner's DuckDB is pinned to the
-  newest version with extension wheels on PyPI (below), so it can trail the platform's notebooks by a
-  patch release; both read and write the same Iceberg tables.
-- The DuckDB extensions `iceberg`, `avro` and `httpfs` come from the matching PyPI wheels
-  (`duckdb-extension-*==1.5.5`). They are copied into `$HOME/.duckdb/extensions` at image build.
-  The `extension_directory` setting in the profile does not reach the attach that dbt generates.
+  registers the ADBC entry point `duckdb_adbc_init` of the pinned `duckdb==2.0.0` wheel in a driver
+  manifest, `duckdb.toml`, found through `ADBC_DRIVER_PATH`. The runner runs the same DuckDB version
+  as the platform's notebooks.
+- The DuckDB extensions `iceberg`, `avro` and `httpfs` are installed at image build from DuckDB's
+  core repository into `$HOME/.duckdb/extensions`, the way the platform's images get them. DuckDB
+  refuses unsigned extensions, and `$HOME/VERSIONS` records the builds an image got. The
+  `extension_directory` setting in the profile does not reach the attach that dbt generates.
 - `DBT_SEND_ANONYMOUS_USAGE_STATS=false` stops all telemetry connections.
 - dbt keeps state in `~/.dbt`, so the runner points `HOME` at `/tmp` and links the image's read-only
   DuckDB extensions there.

@@ -21,7 +21,7 @@ def _():
 def _(mo):
     mo.md("""
     # Native DuckDB on Iceberg
-    **Example 3 of 10**
+    **Example 3 of 11**
 
     Attach the selected Polaris database as **lakehouse**, then query Iceberg directly
     with DuckDB SQL. DuckDB reads the manifests and Parquet files from RustFS using

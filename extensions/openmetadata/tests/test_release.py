@@ -96,32 +96,32 @@ def release_root(tmp_path):
 
 
 def test_the_install_bundle_runs_the_published_image(release_root):
-    archive = build_install(release_root, "0.1.1", "openmetadata-v0.1.1", "0.1.1")
+    archive = build_install(release_root, "0.1.2", "openmetadata-v0.1.2", "0.1.2")
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    assert hashlib.sha256(build_install(release_root, "0.1.1", "openmetadata-v0.1.1", "0.1.1")
+    assert hashlib.sha256(build_install(release_root, "0.1.2", "openmetadata-v0.1.2", "0.1.2")
                           .read_bytes()).hexdigest() == digest
     with tarfile.open(archive) as tar:
         files = {name.split("/", 1)[1]: tar.extractfile(name).read() for name in tar.getnames()}
     assert set(files) == {"compose.yaml", *INSTALL_FILES}
     compose = files["compose.yaml"].decode()
-    assert "    image: ghcr.io/sanderdw/iceberg-openmetadata:0.1.1\n" in compose and "build:" not in compose
+    assert "    image: ghcr.io/sanderdw/iceberg-openmetadata:0.1.2\n" in compose and "build:" not in compose
     assert all(files[name] == (release_root / name).read_bytes() for name in INSTALL_FILES)
     installer = (archive.parent / "install.sh").read_text()
-    assert "    release_tag=openmetadata-v0.1.1\n" in installer and "release_tag=unreleased" not in installer
+    assert "    release_tag=openmetadata-v0.1.2\n" in installer and "release_tag=unreleased" not in installer
     sums = dict(reversed(line.split("  ")) for line in (archive.parent / "SHA256SUMS").read_text().splitlines())
     assert sums == {archive.name: digest,
                     "install.sh": hashlib.sha256((archive.parent / "install.sh").read_bytes()).hexdigest()}
-    preview = build_install(release_root, "0.1.1", "openmetadata-main-7-1", "main-7-1")
+    preview = build_install(release_root, "0.1.2", "openmetadata-main-7-1", "main-7-1")
     with tarfile.open(preview) as tar:
-        compose = tar.extractfile("iceberg-openmetadata-0.1.1-install/compose.yaml").read().decode()
+        compose = tar.extractfile("iceberg-openmetadata-0.1.2-install/compose.yaml").read().decode()
     assert "iceberg-openmetadata:main-7-1\n" in compose
 
 
 def test_the_install_bundle_refuses_unsafe_tags_and_other_images(release_root):
     with pytest.raises(SystemExit, match="tag"):
-        build_install(release_root, "0.1.1", "openmetadata-v0.1.1", "x;rm -rf /")
-    with pytest.raises(SystemExit, match=r"0\.1\.2"):
-        build_install(release_root, "0.1.2", "openmetadata-v0.1.2", "0.1.2")
+        build_install(release_root, "0.1.2", "openmetadata-v0.1.2", "x;rm -rf /")
+    with pytest.raises(SystemExit, match=r"0\.1\.3"):
+        build_install(release_root, "0.1.3", "openmetadata-v0.1.3", "0.1.3")
 
 
 def test_the_install_bundle_excludes_local_credentials(release_root):
@@ -129,13 +129,13 @@ def test_the_install_bundle_excludes_local_credentials(release_root):
     (release_root / ".env").write_text(f"OM_JWT_TOKEN={secret}\n")
     (release_root / "scripts/om_token.py").write_text(f"# {secret}\n")
     with pytest.raises(SystemExit, match="credential"):
-        build_install(release_root, "0.1.1", "openmetadata-v0.1.1", "0.1.1")
+        build_install(release_root, "0.1.2", "openmetadata-v0.1.2", "0.1.2")
 
 
 def test_the_documentation_names_this_release_installer(release_root, tmp_path):
     docs = tmp_path / "openmetadata.md"
     docs.write_text("curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/"
-                    "openmetadata-v0.1.0/install.sh | sh\n")
-    with pytest.raises(SystemExit, match=r"openmetadata-v0\.1\.1"):
+                    "openmetadata-v0.1.1/install.sh | sh\n")
+    with pytest.raises(SystemExit, match=r"openmetadata-v0\.1\.2"):
         check(ROOT, docs=docs)
     check(ROOT)

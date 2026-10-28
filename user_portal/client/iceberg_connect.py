@@ -3,7 +3,7 @@
 # dependencies = [
 #     "httpx>=0.28",
 #     "pyiceberg[pyarrow]>=0.12",
-#     "duckdb>=1.5",
+#     "duckdb>=2.0",
 #     "pytz",  # DuckDB needs it to return timestamptz values to Python
 # ]
 # ///

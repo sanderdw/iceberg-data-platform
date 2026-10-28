@@ -1,14 +1,19 @@
-import { CopilotChat, CopilotKitProvider, useAgent } from "@copilotkit/react-core/v2";
+import { CopilotChat, CopilotKitProvider, useAgent, useConfigureSuggestions, useCopilotKit } from "@copilotkit/react-core/v2";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { api, CSRF, sameRef, type ModelEntry, type ModelRef, type NotEnabled } from "./api";
+import { api, CSRF, describeModel, sameRef, type ModelDescription, type ModelEntry, type ModelRef, type NotEnabled } from "./api";
 import { Icon } from "./components/Icon";
+import { ModelGuide } from "./components/ModelGuide";
 import { ModelPicker } from "./components/ModelPicker";
 import { useGenerativeUI } from "./generative";
+import { starterQuestions } from "./guide";
 import { useTheme } from "./theme";
 
 type Session = { authenticated: boolean; user?: string };
 type Models = { models: ModelEntry[]; notEnabled: NotEnabled[] };
 const RETURN_KEY = "cbi-return-hash";
+const GUIDE_KEY = "cbi-guide";
+// Below this width the guide covers the chat instead of standing next to it.
+const narrow = () => matchMedia("(max-width: 1100px)").matches;
 
 // A catalog link such as #/ask?database=db-…&namespace=["ai_flights"]&model=flights selects that model.
 function deepLink(): ModelRef | null {
@@ -116,9 +121,32 @@ function Fact({ label, value }: { label: string; value?: string }) {
   );
 }
 
+// The guide stays open on wide screens unless the person closed it; on narrow ones it opens on request.
+function useGuideOpen() {
+  const [open, setOpen] = useState(() => {
+    try {
+      return !narrow() && localStorage.getItem(GUIDE_KEY) !== "closed";
+    } catch {
+      return !narrow();
+    }
+  });
+  const set = useCallback((next: boolean) => {
+    setOpen(next);
+    try {
+      if (!narrow()) localStorage.setItem(GUIDE_KEY, next ? "open" : "closed");
+    } catch {
+      /* Storage can be blocked; the choice then lasts until the page reloads. */
+    }
+  }, []);
+  return [open, set] as const;
+}
+
+type Described = { key: string; model?: ModelDescription; error?: string };
+
 function Workspace({ user }: { user: string }) {
   useGenerativeUI();
   const { agent } = useAgent({ agentId: "analyst" });
+  const { copilotkit } = useCopilotKit();
   const [models, setModels] = useState<Models>();
   const [portal, setPortal] = useState<string>();
   const [problem, setProblem] = useState<string>();
@@ -127,6 +155,39 @@ function Workspace({ user }: { user: string }) {
   const current = models?.models.find((m) => sameRef(m.model, selected));
   // The full heading introduces a model; once the conversation starts it shrinks to one line.
   const started = (agent.messages?.length ?? 0) > 0;
+  const [guideOpen, setGuideOpen] = useGuideOpen();
+  const [described, setDescribed] = useState<Described>();
+  const description = described && current && described.key === current.key ? described : undefined;
+  const currentKey = current?.key;
+  const currentRef = current?.model;
+  // Loaded again with every model list load, so Refresh also shows what the owner changed since.
+  useEffect(() => {
+    if (!currentKey || !currentRef) return;
+    let live = true;
+    describeModel(currentRef).then(
+      (model) => live && setDescribed({ key: currentKey, model }),
+      (e: Error) => live && setDescribed({ key: currentKey, error: e.message }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [currentKey, models]);
+  // Before the first question the chat offers the owner's examples, or questions built from the model.
+  const starters = description?.model ? starterQuestions(description.model) : [];
+  useConfigureSuggestions({
+    consumerAgentId: "analyst",
+    available: "before-first-message",
+    suggestions: current
+      ? starters.map((q) => ({ title: q, message: q }))
+      : [{ title: "Which data can I explore?", message: "Which semantic models can I ask about?" }],
+  }, [current ? starters.join("\n") : null]);
+  // A question from the guide goes to the chat as if typed; on a narrow screen the guide makes way for it.
+  const ask = useCallback((question: string) => {
+    if (agent.isRunning) return;
+    agent.addMessage({ id: crypto.randomUUID(), role: "user", content: question });
+    copilotkit.runAgent({ agent }).catch(() => undefined);
+    if (narrow()) setGuideOpen(false);
+  }, [agent, copilotkit, setGuideOpen]);
 
   const select = useCallback(
     (entry: ModelEntry) => agent.setState({ ...(agent.state ?? {}), model: entry.model, lastResultId: null }),
@@ -247,7 +308,7 @@ function Workspace({ user }: { user: string }) {
             </div>
           )}
         </section>
-        <div className="workbench">
+        <div className={`workbench${current && guideOpen ? " with-guide" : ""}`}>
           <aside className="catalog">
             <div className="panel-heading">
               <h2>Models</h2>
@@ -263,15 +324,22 @@ function Workspace({ user }: { user: string }) {
           <section className="chat" aria-label="Chat" ref={chat}>
             <div className="panel-heading">
               <h2>Conversation</h2>
-              {confirming && started ? (
-                <div className="confirm" role="group" aria-label="Clear the conversation?">
-                  <span className="eyebrow">Clear the conversation?</span>
-                  <button type="button" className="quiet" onClick={() => setConfirming(false)} autoFocus>Cancel</button>
-                  <button type="button" id="clear-confirm" onClick={clear}>Clear</button>
-                </div>
-              ) : (
-                <button type="button" id="clear" className="quiet" onClick={() => setConfirming(true)} disabled={!started}>Clear</button>
-              )}
+              <div className="chat-actions">
+                {current && (
+                  <button type="button" id="guide" className="quiet" aria-expanded={guideOpen} onClick={() => setGuideOpen(!guideOpen)}>
+                    Guide
+                  </button>
+                )}
+                {confirming && started ? (
+                  <div className="confirm" role="group" aria-label="Clear the conversation?">
+                    <span className="eyebrow">Clear the conversation?</span>
+                    <button type="button" className="quiet" onClick={() => setConfirming(false)} autoFocus>Cancel</button>
+                    <button type="button" id="clear-confirm" onClick={clear}>Clear</button>
+                  </div>
+                ) : (
+                  <button type="button" id="clear" className="quiet" onClick={() => setConfirming(true)} disabled={!started}>Clear</button>
+                )}
+              </div>
             </div>
             <CopilotChat key={threadId} threadId={threadId} agentId="analyst"
               labels={{
@@ -279,6 +347,10 @@ function Workspace({ user }: { user: string }) {
                 chatDisclaimerText: "Answers come from governed queries on the selected model. Check the query card for definitions and SQL.",
               }} />
           </section>
+          {current && guideOpen && (
+            <ModelGuide key={current.key} model={description?.model} error={description?.error} busy={agent.isRunning}
+              onAsk={ask} onClose={() => setGuideOpen(false)} />
+          )}
         </div>
       </main>
     </>

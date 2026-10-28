@@ -78,6 +78,13 @@ async function load() {
   try { state.data = await api('/overview'); render(); }
   catch (error) { if (state.data) notifyStatus(error.message); else if (!$('#login-form')) $('#app').innerHTML = `<main class="initial"><p>${esc(error.message)}</p><button class="button" id="retry">Try again</button></main>`; if ($('#retry')) $('#retry').onclick = load; }
 }
+// The dialog closes only once the page shows the change, so a search or click right after it never meets the rows from before.
+async function saved(message) {
+  let data;
+  try { data = await api('/overview'); }
+  catch (error) { closeModal(); notifyStatus(error.message); return; }
+  state.data = data; closeModal(); notifyStatus(message); render();
+}
 let renderedPage = null;
 function render() {
   saveAdminRoute();
@@ -278,22 +285,22 @@ function teamModal(id) {
   const team = state.data.teams.find(t => t.id === id);
   openModal(team ? 'Edit team' : 'A new team', 'Manage teams centrally in your workspace.', `<form id="modal-form">${nameInput('Team name', 'e.g. data-platform')}<label>Description<textarea name="description" maxlength="280">${esc(team?.description)}</textarea></label><p class="form-error" role="alert"></p><div class="modal-actions"><button class="button primary" type="submit">${team ? 'Save' : 'Create team'}</button></div></form>`);
   if (team) $('#modal-form [name=name]').value = team.name;
-  formSubmit(async input => { await api(id ? `/teams/${id}` : '/teams', id ? 'PATCH' : 'POST', input); closeModal(); notifyStatus('Team saved.'); await load(); });
+  formSubmit(async input => { await api(id ? `/teams/${id}` : '/teams', id ? 'PATCH' : 'POST', input); await saved('Team saved.'); });
 }
 function databaseModal() {
   openModal('A new database', 'A dedicated place for your team data.', `<form id="modal-form">${nameInput('Database name', 'e.g. analytics')}<div class="form-row"><label>Team<select name="team" required>${teamOptions()}</select></label><label>Environment<select name="environment">${Object.entries(envNames).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label></div><label>Description <span class="optional">optional</span><textarea name="description" maxlength="280" placeholder="What will your team use this database for?"></textarea></label><div class="info-box">${icon('layers')}<span>Your database gets its own bucket. Existing team members automatically receive access with their role in this team.</span></div><p class="form-error" role="alert"></p><div class="modal-actions"><button class="button primary" type="submit">${icon('plus')}Create database</button></div></form>`);
-  formSubmit(async input => { await api('/databases', 'POST', input); closeModal(); notifyStatus('Your database has been created.'); await load(); });
+  formSubmit(async input => { await api('/databases', 'POST', input); await saved('Your database has been created.'); });
 }
 function renameDatabaseModal(id) {
   const db = state.data.databases.find(d => d.id === id);
   openModal('Rename database', `${esc(db.name)} · ${envNames[db.environment]}. The catalog ID, bucket and connection settings stay the same.`, `<form id="modal-form">${nameInput('Database name', 'e.g. analytics')}<p class="form-error" role="alert"></p><div class="modal-actions"><button class="button primary" type="submit">Save name</button></div></form>`);
   $('#modal-form [name=name]').value = db.name;
-  formSubmit(async input => { await api(`/databases/${encodeURIComponent(id)}/name`, 'PATCH', {name: input.name}); closeModal(); notifyStatus('Database renamed.'); await load(); });
+  formSubmit(async input => { await api(`/databases/${encodeURIComponent(id)}/name`, 'PATCH', {name: input.name}); await saved('Database renamed.'); });
 }
 function moveModal(id) {
   const db = state.data.databases.find(d => d.id === id);
   openModal('Move database', `${esc(db.name)} · ${envNames[db.environment]} will be owned by another team.`, `<form id="modal-form"><label>Team<select name="team" required>${teamOptions(db.team)}</select></label><div class="info-box">${icon('users')}<span>Members of the new team receive access with the role they hold in that team. Members of the previous team lose access unless they also belong to the new team. The bucket and connection details stay the same.</span></div><p class="form-error" role="alert"></p><div class="modal-actions"><button class="button primary" type="submit">Move</button></div></form>`);
-  formSubmit(async input => { await api(`/databases/${encodeURIComponent(id)}`, 'PATCH', input); closeModal(); state.team = ''; notifyStatus('Database moved and permissions updated.'); await load(); });
+  formSubmit(async input => { await api(`/databases/${encodeURIComponent(id)}`, 'PATCH', input); state.team = ''; await saved('Database moved and permissions updated.'); });
 }
 function accessModal(id) {
   const user = state.data.users.find(u => u.id === id);
@@ -302,14 +309,13 @@ function accessModal(id) {
   formSubmit(async input => {
     if (!input.memberships.length) throw new Error('Select at least one team.');
     const result = await api(`/users/${encodeURIComponent(id)}`, 'PATCH', input);
-    closeModal(); notifyStatus('Team access and permissions updated.');
+    await saved('Team access and permissions updated.');
     if (result.bucketCredentials) {
       const credentials = result.bucketCredentials;
       openModal('S3 access is ready', `Save these new S3 credentials for ${esc(user.name)} now. The secret is shown only once.`, `<div class="credential"><span>S3 access key</span><code>${esc(credentials.accessKeyId)}</code></div><div class="credential"><span>S3 secret key</span><code>${esc(credentials.secretAccessKey)}</code></div><p class="subtle">Use these credentials at ${esc(credentials.endpoint)} or in the RustFS console. Existing database credentials stay the same.</p><div class="modal-actions"><button class="button" id="copy-credentials">Copy credentials</button><button class="button primary" id="saved">Saved securely</button></div>`);
       $('#copy-credentials').onclick = () => copy(JSON.stringify(credentials, null, 2));
       $('#saved').onclick = closeModal;
     }
-    await load();
   });
 }
 function userModal(database) {
@@ -344,7 +350,7 @@ function renderShares() {
 async function confirmAction(title, description, path, status, label = 'Delete') {
   openModal(title, description, `<form id="modal-form"><p class="form-error" role="alert"></p><div class="modal-actions"><button class="button" type="button" id="cancel-delete">Cancel</button><button class="button destructive" type="submit">${label}</button></div></form>`);
   $('#cancel-delete').onclick = closeModal;
-  formSubmit(async () => { $('#cancel-delete').disabled = true; try { await api(path, 'DELETE'); closeModal(); notifyStatus(status); await load(); } finally { if ($('#cancel-delete')) $('#cancel-delete').disabled = false; } });
+  formSubmit(async () => { $('#cancel-delete').disabled = true; try { await api(path, 'DELETE'); await saved(status); } finally { if ($('#cancel-delete')) $('#cancel-delete').disabled = false; } });
 }
 async function copy(text) { try { await navigator.clipboard.writeText(text); notifyStatus('Copied to your clipboard.'); } catch { notifyStatus('Clipboard access is unavailable. Select and copy the text.'); } }
 async function connectionModal(id) {

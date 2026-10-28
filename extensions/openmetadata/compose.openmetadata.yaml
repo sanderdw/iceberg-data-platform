@@ -1,8 +1,8 @@
-# Optional: a local OpenMetadata 2.0.5 server for demos and CI, in the same Compose project.
+# Optional: a local OpenMetadata 2.0.7 server for demos and CI, in the same Compose project.
 #   docker compose -f compose.yaml -f compose.openmetadata.yaml up -d --wait
 # The UI is at http://localhost:8585 (admin@open-metadata.org / admin). scripts.om_token writes the
 # ingestion-bot's JWT to .env. For a real catalog, point OM_URL at your own OpenMetadata instead.
-# Images and settings follow OpenMetadata's docker-compose-postgres quickstart of release 2.0.5,
+# Images and settings follow OpenMetadata's docker-compose-postgres quickstart of release 2.0.7,
 # without the Airflow ingestion service: this extension pushes through the API.
 
 x-openmetadata-env: &openmetadata-env
@@ -40,7 +40,7 @@ services:
         condition: service_healthy
 
   openmetadata-postgresql:
-    image: docker.getcollate.io/openmetadata/postgresql:2.0.5
+    image: docker.getcollate.io/openmetadata/postgresql:2.0.7
     command: "--work_mem=10MB"
     environment:
       POSTGRES_USER: postgres
@@ -74,7 +74,7 @@ services:
       retries: 10
 
   openmetadata-migrate:
-    image: docker.getcollate.io/openmetadata/server:2.0.5
+    image: docker.getcollate.io/openmetadata/server:2.0.7
     command: "./bootstrap/openmetadata-ops.sh migrate"
     environment: *openmetadata-env
     labels:
@@ -87,7 +87,7 @@ services:
         condition: service_healthy
 
   openmetadata-server:
-    image: docker.getcollate.io/openmetadata/server:2.0.5
+    image: docker.getcollate.io/openmetadata/server:2.0.7
     restart: unless-stopped
     environment: *openmetadata-env
     labels:

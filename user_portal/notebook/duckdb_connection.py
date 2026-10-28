@@ -180,14 +180,14 @@ def drop_example_table(connection, namespace, table, example):
         "SELECT count(*) FROM information_schema.tables "
         "WHERE table_catalog = 'lakehouse' AND table_schema = ? AND table_name = ?",
         [".".join(namespace), table],
-    ).fetchone()[0]
+    ).fetchall()[0][0]
     if not exists:
         return
     reference = table_reference(namespace, table)
     owner = connection.execute(
         f"SELECT value FROM iceberg_table_properties({reference}) WHERE key = ?", [EXAMPLE_PROPERTY]
-    ).fetchone()
-    if not owner or owner[0] != example:
+    ).fetchall()
+    if owner != [(example,)]:
         raise RuntimeError(
             f"{'.'.join(namespace)}.{table} already exists and this example did not create it, "
             "so it is not replaced. Choose another NAMESPACE or TABLE in the first cell."

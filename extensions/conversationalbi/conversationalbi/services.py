@@ -230,23 +230,33 @@ class Services:
                 homes[metric.name] = None
                 homes.setdefault("_errors", []).append({"metric": metric.name, "error": str(exc)})
         errors = homes.pop("_errors", [])
+
+        def synonyms(key):
+            found = model.synonyms.get(key)
+            found = [found] if isinstance(found, str) else found if isinstance(found, list) else []
+            return [s for s in found if isinstance(s, str)]
+
+        def field(d, f):
+            kind = compiler.field_type(d, f, schemas)
+            return {"name": f.name, "description": f.description, "type": kind,
+                    "dimension": f in compiler.dimension_fields(d), "time": kind in compiler.TIME_TYPES,
+                    "synonyms": synonyms(f"{d.name}.{f.name}")}
+
         return {
             "model": ref.model_dump(), "name": model.name or ref.name, "description": model.description,
-            "instructions": model.instructions, "synonyms": model.synonyms,
+            "instructions": model.instructions, "synonyms": model.synonyms, "examples": list(model.examples),
             "database": access["database"]["name"], "environment": access["database"]["environment"],
             "shared": access["shared"], "unreadableTables": unreadable,
             "datasets": [{
                 "name": d.name, "description": d.description, "table": ".".join([*d.namespace, d.table]),
-                "primaryKey": list(d.primary_key),
-                "fields": [{"name": f.name, "description": f.description,
-                            "type": compiler.field_type(d, f, schemas), "dimension": f in compiler.dimension_fields(d)}
-                           for f in d.fields],
+                "primaryKey": list(d.primary_key), "fields": [field(d, f) for f in d.fields],
             } for d in model.datasets],
             "relationships": [{"name": r.name, "from": r.source, "to": r.target,
                                "fromColumns": list(r.source_columns), "toColumns": list(r.target_columns)}
                               for r in model.relationships],
             "metrics": [{"name": m.name, "description": m.description, "dataset": homes.get(m.name),
-                         "unit": compiler.unit(m.description)} for m in model.metrics],
+                         "unit": compiler.unit(m.description), "synonyms": synonyms(m.name)}
+                        for m in model.metrics],
             "dimensions": {home: compiler.reachable(model, home) for home in sorted({h for h in homes.values() if h})},
             "problems": errors,
         }

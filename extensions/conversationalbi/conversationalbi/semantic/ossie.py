@@ -20,6 +20,7 @@ MAX_DATASETS = 64
 MAX_FIELDS = 512
 MAX_RELATIONSHIPS = 256
 MAX_METRICS = 256
+MAX_EXAMPLES = 20
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,7 @@ class Model:
     relationships: tuple[Relationship, ...]
     metrics: tuple[Metric, ...]
     synonyms: dict = field(default_factory=dict, compare=False)
+    examples: tuple[str, ...] = ()
 
     def dataset(self, name):
         return next((d for d in self.datasets if d.name == name), None)
@@ -108,13 +110,16 @@ def expression(item, default=""):
 
 
 def instructions(context):
-    """Ossie's `ai_context` is an object such as {instructions, synonyms}, or plain text."""
+    """Ossie's `ai_context` is an object such as {instructions, synonyms, examples}, or plain text."""
     if isinstance(context, str):
-        return context[:8000], {}
+        return context[:8000], {}, ()
     if not isinstance(context, dict):
-        return "", {}
+        return "", {}, ()
     synonyms = context.get("synonyms") if isinstance(context.get("synonyms"), dict) else {}
-    return text(context.get("instructions"), 8000), dict(synonyms)
+    found = context.get("examples")
+    examples = tuple(e.strip()[:300] for e in found if isinstance(e, str) and e.strip())[:MAX_EXAMPLES] \
+        if isinstance(found, list) else ()
+    return text(context.get("instructions"), 8000), dict(synonyms), examples
 
 
 def entity_synonyms(item):
@@ -216,7 +221,7 @@ def parse(loaded, namespace):
         if not r.source_columns or len(r.source_columns) != len(r.target_columns):
             raise CbiError(422, f"Relationship {r.name!r} needs matching from_columns and to_columns.",
                            "invalid_model")
-    text_instructions, synonyms = instructions(model.get("ai_context"))
+    text_instructions, synonyms, examples = instructions(model.get("ai_context"))
     # Per-entity synonyms join the model-level map, keyed as agents name them: DATASET.field or metric.
     entities = [(f"{text(d.get('name'))}.{text(f.get('name'))}", f)
                 for d in dicts(model.get("datasets")) for f in dicts(d.get("fields"))]
@@ -225,4 +230,4 @@ def parse(loaded, namespace):
             synonyms.setdefault(key, found)
     return Model(name=text(model.get("name"), 200), description=text(model.get("description"), 4000),
                  instructions=text_instructions, datasets=tuple(datasets), relationships=relationships,
-                 metrics=metrics, synonyms=synonyms)
+                 metrics=metrics, synonyms=synonyms, examples=examples)

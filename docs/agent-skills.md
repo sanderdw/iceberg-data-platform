@@ -7,7 +7,7 @@ The installation folder contains six skills for coding agents in `.agents/skills
 
 The skills that use the platform's MCP server explain how to connect each agent. The same steps are in [AI agents](ai-agents.md) and the [administration guide](admin-guide.md#connect-an-mcp-client).
 
-- [`quick-share`](https://github.com/sanderdw/iceberg-data-platform/blob/main/.agents/skills/quick-share/SKILL.md) makes the portals reachable from anywhere for a temporary session, such as a class with `demo-company`. It starts two free Cloudflare quick tunnels with public `trycloudflare.com` addresses and trusted certificates, so nobody installs an app or imports a certificate. It is for the Compose installation; the [Kubernetes chart](install-kubernetes.md) has HTTPS hosts of its own.
+- [`quick-share`](https://github.com/sanderdw/iceberg-data-platform/blob/main/.agents/skills/quick-share/SKILL.md) makes the portals reachable from anywhere for a short demo. It puts your Compose installation on the internet at public addresses without access control; for a class, [install on Kubernetes](run-a-class.md) instead. It starts two free Cloudflare quick tunnels with public `trycloudflare.com` addresses and trusted certificates, so nobody installs an app or imports a certificate. It is for the Compose installation; the [Kubernetes chart](install-kubernetes.md) has HTTPS hosts of its own.
     - Participants use only the user portal address. It also carries the Iceberg catalog and S3 API, so DuckDB and PyIceberg on their own laptops work too.
     - The other address serves the administration portal and sign-in.
     - With Conversational BI installed, a third address serves the chat, linked from the user portal. The dbt and Ingestion extensions are not shared this way.

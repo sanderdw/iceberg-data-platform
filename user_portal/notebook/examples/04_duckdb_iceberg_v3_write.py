@@ -42,7 +42,7 @@ def _():
 def _(mo):
     mo.md("""
     # Write Iceberg v3 with DuckDB
-    **Example 4 of 10**
+    **Example 4 of 11**
 
     DuckDB creates and writes an Iceberg **format-version 3** table through Polaris,
     using your own permissions. The table uses what v3 adds: a `VARIANT` column for
@@ -140,7 +140,7 @@ def _(NAMESPACE, TABLE, events, lakehouse, mo, refresh_table_credentials, select
         SELECT event_id, device_id, site, location_wkt::GEOMETRY, measured_at,
                payload::JSON::VARIANT, synthetic
         FROM events
-    """).fetchone()[0]
+    """).fetchall()[0][0]
     mo.md(f"Inserted **{inserted_rows}** events into `{selected_table}`.")
     return (inserted_rows,)
 
@@ -183,10 +183,10 @@ def _(default_added, lakehouse, mo, selected_table):
     assert default_added
     updated_rows = lakehouse.execute(
         f"UPDATE {selected_table} SET firmware = 'v2.0' WHERE device_id = 'SENSOR-001'"
-    ).fetchone()[0]
+    ).fetchall()[0][0]
     deleted_rows = lakehouse.execute(
         f"DELETE FROM {selected_table} WHERE payload.kind::VARCHAR = 'fault'"
-    ).fetchone()[0]
+    ).fetchall()[0][0]
     mo.md(f"Updated **{updated_rows}** events of `SENSOR-001` and deleted **{deleted_rows}** fault events.")
     return deleted_rows, updated_rows
 

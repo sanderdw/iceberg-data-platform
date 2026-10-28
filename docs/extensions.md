@@ -25,12 +25,12 @@ $env:ICEBERG_EXTENSIONS = 'conversationalbi,dbt,ingestion'
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-`ICEBERG_EXTENSIONS=none` skips the questions. Rerunning the installer keeps the extensions you added, with their data. Each extension page describes its own options. The installer doesn't add OpenMetadata: it needs your OpenMetadata server and a bot token, so it has [its own installer](openmetadata.md#install).
+`ICEBERG_EXTENSIONS=none` skips the questions. Add `pgadmin` to the list for [pgAdmin](admin-guide.md#pgadmin), which shows the Polaris metadata database. Rerunning the installer keeps the extensions you added, with their data. Each extension page describes its own options. The installer doesn't add OpenMetadata: it needs your OpenMetadata server and a bot token, so it has [its own installer](openmetadata.md#install).
 
 On Kubernetes, extensions have their own Helm charts; see [Install on Kubernetes](install-kubernetes.md#add-extensions). OpenMetadata has no chart yet and runs with Compose only.
 
 ## Service accounts
 
-An extension acts for a team through a service account (an automation principal) for one environment. Only a team administrator enables it, in the extension. The account can write to the team's databases in that environment, and reads the data shares the team received there. Platform administrators see every service account on the administration portal's Teams page and can revoke it; see the [administration guide](admin-guide.md#teams-databases-and-users). The [security model](security.md) has the details.
+An extension acts for a team through a service account (an automation principal) for one environment. Only a team administrator enables it, in the extension. The account can write to the team's databases in that environment, and reads the data shares the team received there. Platform administrators see every service account on the administration portal's Teams page and can revoke it; see the [administration guide](admin-guide.md#extension-service-accounts). The [security model](security.md) has the details.
 
 How extensions connect to the core is described in the [Extension Bridge](develop/extension-bridge.md).

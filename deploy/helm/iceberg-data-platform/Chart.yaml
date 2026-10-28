@@ -2,8 +2,8 @@ apiVersion: v2
 name: iceberg-data-platform
 description: Iceberg Data Platform on Kubernetes - Apache Polaris, RustFS, Keycloak and the admin and user portals.
 type: application
-version: 0.9.9
-appVersion: "0.9.9"
+version: 0.9.10
+appVersion: "0.9.10"
 kubeVersion: ">=1.32.0-0"
 home: https://sanderdw.github.io/iceberg-data-platform/
 sources:

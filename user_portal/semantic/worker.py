@@ -35,7 +35,9 @@ def identifier(value):
 def connect(threads=2, memory="1GB"):
     import duckdb
 
-    settings = {"threads": threads, "memory_limit": memory, "autoinstall_known_extensions": False,
+    # Async I/O threads default to four per available core; RLIMIT_AS below would not fit them on a large host.
+    settings = {"threads": threads, "async_threads": 4 * threads, "memory_limit": memory,
+                "autoinstall_known_extensions": False,
                 "autoload_known_extensions": False, "allow_community_extensions": False}
     if directory := os.environ.get("DUCKDB_EXTENSION_DIRECTORY"):
         settings["extension_directory"] = directory

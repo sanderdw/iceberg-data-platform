@@ -7,7 +7,7 @@ How the [Conversational BI](../conversational-bi.md) extension is built. Its sou
 | Chat | CopilotKit v2 generative UI, Chart.js, Nothing design |
 | Agent | Pydantic AI, defined in YAML ([`analyst.yaml`](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/conversationalbi/conversationalbi/agent/analyst.yaml)), served over AG-UI |
 | API | [OpenAPI contract](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/conversationalbi/contracts/conversationalbi-api/v1/openapi.yaml) |
-| Engine | DuckDB 1.5.5 with `iceberg_scan`, in a disposable, locked-down process per query |
+| Engine | DuckDB 2.0.0 with `iceberg_scan`, in a disposable, locked-down process per query |
 | Bridge | contract `>=0.1,<0.2`; shared models need capability `shared-data` |
 
 ## Architecture

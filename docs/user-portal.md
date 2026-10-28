@@ -2,7 +2,7 @@
 
 The user portal runs at http://localhost:3002, or on Kubernetes at `https://users.<domain>`. Team members sign in with Keycloak, pick a team and environment, and work with their databases in shared [marimo](https://marimo.io/) notebooks.
 
-To open the portals of a Compose installation from a phone or another computer for a class or demo, use the [`quick-share` agent skill](agent-skills.md); a [Kubernetes installation](install-kubernetes.md) is reachable that way already. Sign-in needs HTTPS off `localhost`, so a plain port binding such as `compose.users.lan.yaml` is not enough on its own.
+A [Kubernetes installation](install-kubernetes.md) is reachable from any phone or computer; for a class, see [run a class](run-a-class.md). For a short demo of a Compose installation, the [`quick-share` agent skill](agent-skills.md) opens the portals through Cloudflare quick tunnels. Sign-in needs HTTPS off `localhost`, so a plain port binding such as `compose.users.lan.yaml` is not enough on its own.
 
 ## Using the portal
 

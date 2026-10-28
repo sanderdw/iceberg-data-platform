@@ -1,8 +1,10 @@
-"""Image build step: copy the DuckDB extensions from their pinned PyPI wheels; the worker never downloads."""
+"""Image build step: install the DuckDB extensions from DuckDB's signed repository; the worker never downloads.
 
-import importlib
+uv.lock pins the duckdb package, but extensions are fetched when the image is built, so two builds
+can differ. VERSIONS in the extension directory records exactly which builds an image got.
+"""
+
 import os
-import shutil
 from pathlib import Path
 
 import duckdb
@@ -11,19 +13,22 @@ EXTENSIONS = ("iceberg", "httpfs", "avro")
 
 
 def main():
-    platform = duckdb.execute("PRAGMA platform").fetchone()[0]
-    version = "v" + duckdb.__version__
-    target = Path(os.environ["DUCKDB_EXTENSION_DIRECTORY"]) / version / platform
-    target.mkdir(parents=True, exist_ok=True)
-    for name in EXTENSIONS:
-        package = importlib.import_module(f"duckdb_extension_{name}")
-        source = Path(package.__file__).parent / "extensions" / version / f"{name}.duckdb_extension"
-        shutil.copyfile(source, target / source.name)
-    connection = duckdb.connect(config={"extension_directory": os.environ["DUCKDB_EXTENSION_DIRECTORY"],
-                                        "autoinstall_known_extensions": False})
+    directory = os.environ["DUCKDB_EXTENSION_DIRECTORY"]
+    connection = duckdb.connect(config={"extension_directory": directory})
+    connection.execute("; ".join(f"INSTALL {name}" for name in EXTENSIONS))
+    connection.close()
+    # Load as the worker does: from the directory only, with automatic installs off.
+    connection = duckdb.connect(config={"extension_directory": directory, "autoinstall_known_extensions": False})
     connection.execute("LOAD httpfs; LOAD avro; LOAD iceberg")
-    print(connection.execute("SELECT extension_name, extension_version FROM duckdb_extensions() WHERE loaded "
-                             "ORDER BY 1").fetchall())
+    extensions = connection.execute("""
+        SELECT extension_name, extension_version, installed_from
+        FROM duckdb_extensions()
+        WHERE loaded AND install_mode <> 'STATICALLY_LINKED'
+        ORDER BY extension_name
+    """).fetchall()
+    record = [f"duckdb {duckdb.__version__}"] + [f"{n} {v} (from {s})" for n, v, s in extensions]
+    Path(directory, "VERSIONS").write_text("\n".join(record) + "\n")
+    print("DuckDB extensions installed:", *record, sep="\n  ")
 
 
 if __name__ == "__main__":

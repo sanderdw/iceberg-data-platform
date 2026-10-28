@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 - 2026-10-27
+
+- DuckDB 2.0, the same version as the platform.
+- certifi 2026.10.23 removes the distrusted eMudhra emSign roots from the Python HTTP clients.
+- Updated dependencies.
+
 ## 0.1.1 - 2026-10-17
 
 - **Runs on Kubernetes.** The chart `deploy/helm/iceberg-dbt` installs dbt next to the platform's chart.

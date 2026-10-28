@@ -11,11 +11,13 @@ docker compose -f compose.users.yaml --profile images build
 docker compose -f compose.users.yaml up -d --wait users
 ```
 
+pgAdmin starts only with `COMPOSE_PROFILES=pgadmin` in `.env`; see [pgAdmin](../admin-guide.md#pgadmin).
+
 Rerun the three Docker commands after source changes. Save your notebook work first: recreating the user portal stops running notebooks.
 
 For changes to the user portal only, run `docker compose -f compose.users.yaml up -d --build --wait users`. This skips rebuilding the notebook image.
 
-The services and their addresses are listed in the [first steps](../first-steps.md#services). The platform also serves the **Extension Bridge** at `http://localhost:3005/bridge/v1`, which accepts only tokens of registered extensions; see the [Extension Bridge](extension-bridge.md).
+The services and their addresses are listed in [services](../reference/services.md). The platform also serves the **Extension Bridge** at `http://localhost:3005/bridge/v1`, which accepts only tokens of registered extensions; see the [Extension Bridge](extension-bridge.md).
 
 Each extension is built and started from its own folder; see [Conversational BI](conversational-bi.md#install-from-source), [dbt](dbt.md#install-from-source) and [Ingestion](ingestion.md#install-from-source).
 

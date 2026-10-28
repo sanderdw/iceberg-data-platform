@@ -134,6 +134,7 @@ class Workspace:
                     "title": "10 · Read an AI-ready grid forecast with Polars",
                     "url": self.url + "?file=10_polars_grid_forecast_read.py",
                 },
+                {"title": "11 · How Apache Iceberg works", "url": self.url + "?file=11_duckdb_iceberg_explained.py"},
             ],
         }
 

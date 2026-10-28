@@ -21,30 +21,34 @@ extra_javascript = ["javascripts/deck-redirect.js"]
 nav = [
   { "Guide" = [
     "index.md",
-    { "Get started" = ["install.md", "install-kubernetes.md", "first-steps.md", "agent-skills.md"] },
-    { "Use the platform" = [
-      "user-portal.md", "notebooks.md", "semantic-models.md", "data-shares.md",
-      "connect.md", "ai-agents.md", "mcp.md",
+    { "Tutorials" = ["first-steps.md", "run-a-class.md"] },
+    { "How-to guides" = [
+      "install.md", "install-kubernetes.md", "admin-guide.md", "connect.md", "ai-agents.md",
+      "agent-skills.md", "build-a-semantic-model.md", "data-shares.md",
     ] },
-    { "Administer" = ["admin-guide.md", "configuration.md", "security.md", "security-review.md"] },
+    { "Reference" = [
+      "reference/services.md", "configuration.md", "reference/roles.md", "user-portal.md",
+      "notebooks.md", "mcp.md",
+    ] },
+    { "Concepts" = [
+      "teams-and-environments.md", "semantic-models.md", "mcp-design.md", "security.md",
+      "security-review.md",
+    ] },
     { "Extensions" = ["extensions.md", "conversational-bi.md", "dbt.md", "ingestion.md", "openmetadata.md"] },
   ] },
   { "FAQ" = "faq.md" },
   { "Develop" = [
     "develop/index.md",
-    "develop/run-from-source.md",
-    "develop/contributing.md",
-    "develop/architecture.md",
-    "develop/kubernetes.md",
-    "develop/resource-model.md",
-    "develop/keycloak.md",
-    "develop/form-validation.md",
-    "develop/extension-bridge.md",
+    { "How-to guides" = [
+      "develop/run-from-source.md", "develop/contributing.md", "develop/kubernetes.md", "develop/releasing.md",
+    ] },
+    { "Reference" = ["develop/resource-model.md", "develop/form-validation.md", "develop/extension-bridge.md"] },
+    { "Concepts" = ["develop/architecture.md", "develop/keycloak.md"] },
     { "Extension internals" = ["develop/conversational-bi.md", "develop/dbt.md", "develop/ingestion.md", "develop/openmetadata.md"] },
-    "develop/releasing.md",
   ] },
   { "Releases" = [
     "changelog.md",
+    "releases/0.9.10.md",
     "releases/0.9.9.md",
     "releases/0.9.2.md",
     "releases/0.9.1.md",

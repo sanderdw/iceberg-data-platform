@@ -28,20 +28,6 @@ A team administrator enables dbt once per environment, through an agent (`enable
 
 On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 
-## How it works
-
-- **Projects** belong to a team and are Git repositories kept by the extension. A new project is empty apart from `dbt_project.yml`, a README and the namespace macro. `main` is protected: writers commit to branches, and team administrators merge.
-- **The viewer** shows each pipeline per environment and branch (`main` unless you pick another), follows running builds live, filters and focuses the graph (`+name+`), previews a model's rows and builds a node with its upstream or downstream. **Files** edits any project file on a branch, **Schedules** manages schedules and **Settings** enables environments and deletes branches. Writers create projects there. Team administrators delete them under **Settings**: the project, its history and the dbt properties on its tables go, the tables stay. Writers can edit a node's file from its panel, save it to a branch and build that branch in development. Team administrators can merge it to `main`.
-- **Runs** execute as the team's service account for one environment, with a short-lived catalog token: `write` for `build`, `run` and `seed`, `read` for everything else. Two builds of the same project and environment never overlap.
-- **Promotion.** Development builds any branch. Acceptance and production build only revisions that were the head of `main`: a merge always adds a merge commit, so a commit from inside a merged branch never reaches them. Their schedules need a team administrator.
-- **Pipelines** are drawn from dbt's information schema, with each node's latest status and test results. After a build, each table gets the platform's producer, lineage and quality properties and its column docs, so the catalog shows where it comes from under **Produced by**.
-
-| Role in the team | Can |
-| --- | --- |
-| reader | View projects, files, runs, schedules and pipelines; compile, preview and test |
-| writer | Also create projects and branches, commit to branches, build in development, schedule development |
-| admin | Also merge to main, enable environments, schedule acceptance and production |
-
 ## Connect an AI agent
 
 Register both the user portal MCP and the dbt MCP. The agent uses the user portal tools to find the team's databases and tables, and the dbt tools to build and manage pipelines.
@@ -71,6 +57,35 @@ For GitHub Copilot in VS Code, add both servers to `.vscode/mcp.json`:
 ```
 
 On first use, each server opens its Keycloak sign-in flow. Both act with the signed-in user's permissions. The `dbt-platform` [agent skill](agent-skills.md) in the installation folder teaches an agent the platform's conventions.
+
+### MCP tools
+
+What each role may do is in [roles and permissions](reference/roles.md#extensions).
+
+| Tool | What it does |
+| --- | --- |
+| `whoami` | Your teams with your role in each, their databases per environment, where dbt is enabled, and this extension. |
+| `list_environments` | Where dbt is enabled for a team, and the databases of each environment. |
+| `enable_environment` / `disable_environment` | Lets dbt build in a team environment as the team's service account, or revokes it (team administrators). Disabling stops its runs and schedules. |
+| `list_projects` | dbt projects of your teams, with your role in each. |
+| `create_project` | Creates an empty project on `main`: `dbt_project.yml`, a README and the namespace macro (writers). |
+| `get_project` | A project with its branches, environments, latest run per environment and schedules. |
+| `delete_project` | Forgets a project: its Git history, runs, schedules and the dbt properties on the tables it built (team administrators). The tables, their data and docs stay. `confirm_name` must equal its name. |
+| `list_files` / `read_file` | All files of a project, or one file's content, at a branch or revision. |
+| `write_files` | Commits file changes to a branch in one commit (writers). `main` is never written directly. `expected_revision` refuses to overwrite a newer commit. |
+| `list_branches` / `create_branch` / `delete_branch` | Branches with their latest commit; create one from `main` or another branch, or delete one (writers). `main` cannot be deleted. |
+| `get_history` | Recent commits of a branch. |
+| `diff` | Changed files and the patch between two branches or revisions. |
+| `merge_to_main` | Merges a branch into `main` (team administrators). With `revision`, the merge is refused if the branch moved after you reviewed it. |
+| `compile` | Compiles selected models, or inline SQL, with a read-only token, and returns the compiled SQL. |
+| `preview_model` | Runs one model's query without writing and returns up to 100 rows. |
+| `run` | Runs `build`, `run`, `seed`, `test`, `compile`, `parse` or `docs` as the team's service account. `build`, `run` and `seed` write tables (writers). Waits up to 600 seconds. |
+| `list_runs` / `get_run` / `get_run_logs` | Recent runs; one run with its per-node results; the last lines of its dbt log. |
+| `cancel_run` | Stops a running run (writers). |
+| `list_schedules` / `set_schedule` / `delete_schedule` | A project's schedules; create, change or delete one, with cron in UTC. Development needs writers, other environments team administrators. |
+| `get_pipeline` | The pipeline graph: nodes with type, table, latest status and test counts, and edges. |
+| `get_model` | One node: description, columns with docs, SQL and compiled SQL, tests and latest result. |
+| `get_lineage` | Upstream and downstream nodes of a node, up to `depth` steps. |
 
 ## Use dbt from your terminal
 
@@ -115,6 +130,16 @@ The [dbt MCP server](https://docs.getdbt.com/docs/dbt-ai/about-mcp?version=2#loc
 ```
 
 Not available on the platform: `show --inline`, `list`, `debug`, `deps` and `clean`.
+
+## How it works
+
+- **Projects** belong to a team and are Git repositories kept by the extension. A new project is empty apart from `dbt_project.yml`, a README and the namespace macro. `main` is protected: writers commit to branches, and team administrators merge.
+- **The viewer** shows each pipeline per environment and branch (`main` unless you pick another), follows running builds live, filters and focuses the graph (`+name+`), previews a model's rows and builds a node with its upstream or downstream. **Files** edits any project file on a branch, **Schedules** manages schedules and **Settings** enables environments and deletes branches. Writers create projects there. Team administrators delete them under **Settings**: the project, its history and the dbt properties on its tables go, the tables stay. Writers can edit a node's file from its panel, save it to a branch and build that branch in development. Team administrators can merge it to `main`.
+- **Runs** execute as the team's service account for one environment, with a short-lived catalog token: `write` for `build`, `run` and `seed`, `read` for everything else. Two builds of the same project and environment never overlap.
+- **Promotion.** Development builds any branch. Acceptance and production build only revisions that were the head of `main`: a merge always adds a merge commit, so a commit from inside a merged branch never reaches them. Their schedules need a team administrator.
+- **Pipelines** are drawn from dbt's information schema, with each node's latest status and test results. After a build, each table gets the platform's producer, lineage and quality properties and its column docs, so the catalog shows where it comes from under **Produced by**.
+
+What each team role may do in the viewer, API and MCP server is listed in [roles and permissions](reference/roles.md#extensions).
 
 ## Project conventions
 

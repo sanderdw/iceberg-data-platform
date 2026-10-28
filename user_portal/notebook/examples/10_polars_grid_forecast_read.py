@@ -49,7 +49,7 @@ def _():
 def _(mo):
     mo.md("""
     # Find and explain congestion in an AI-ready grid forecast
-    **Example 10 of 10 · Semantic model and Iceberg tables from Polaris, read with Polars**
+    **Example 10 of 11 · Semantic model and Iceberg tables from Polaris, read with Polars**
 
     Run **09 · Write an AI-ready grid forecast with Polars** first in the same database.
     This notebook needs no local files: everything comes from Polaris, with your own permissions.

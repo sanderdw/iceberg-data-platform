@@ -17,7 +17,7 @@ from scripts.setup import read
 ROOT = Path(__file__).resolve().parent.parent
 PLATFORM_SETUP = ROOT.parent.parent / "scripts" / "setup.py"
 PORTAL = "ghcr.io/sanderdw/iceberg-data-platform-portal:0.9.1"
-TAG = "openmetadata-v0.1.1"
+TAG = "openmetadata-v0.1.2"
 # `docker run` of the platform image: run the script with the mounts mapped to the host and only the
 # variables the installer names with -e, as Docker would. The local OpenMetadata's token is faked.
 FAKE_RUN = '''import os, subprocess, sys
@@ -66,11 +66,11 @@ def installer(tmp_path):
         pytest.skip("The installer is a POSIX shell script")
     release = tmp_path / "release"
     release.mkdir()
-    archive = release / "iceberg-openmetadata-0.1.1-install.tar.gz"
+    archive = release / "iceberg-openmetadata-0.1.2-install.tar.gz"
     with tarfile.open(archive, "w:gz") as tar:
         for name in ("compose.yaml", "compose.openmetadata.yaml", "scripts/setup.py", "scripts/om_token.py"):
             data = (ROOT / name).read_bytes()
-            info = tarfile.TarInfo("iceberg-openmetadata-0.1.1-install/" + name)
+            info = tarfile.TarInfo("iceberg-openmetadata-0.1.2-install/" + name)
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
     (release / "SHA256SUMS").write_text(f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n")
@@ -128,7 +128,7 @@ def test_installs_registers_and_starts_with_settings_from_the_environment(instal
                                                    ".env.bridge"}
     downloads = Path(env["TEST_DOWNLOAD_LOG"]).read_text().splitlines()
     base = f"https://github.com/sanderdw/iceberg-data-platform/releases/download/{TAG}/"
-    assert downloads == [base + "SHA256SUMS", base + "iceberg-openmetadata-0.1.1-install.tar.gz"]
+    assert downloads == [base + "SHA256SUMS", base + "iceberg-openmetadata-0.1.2-install.tar.gz"]
     platform_env = read(platform / ".env")
     assert platform_env["PLATFORM_EXTENSIONS"] == "dbt=http://localhost:3004,openmetadata=http://localhost:3011"
     assert platform_env["PLATFORM_LISTING_EXTENSIONS"] == "openmetadata"
@@ -145,7 +145,7 @@ def test_installs_registers_and_starts_with_settings_from_the_environment(instal
         "compose.yaml", "compose.users.yaml"]
     assert ups[2]["cwd"] == str(om_dir) and ups[2]["args"] == ["compose", "up", "-d", "--wait"]
     assert len(ups) == 3
-    assert "The OpenMetadata extension 0.1.1 is running." in result.stdout
+    assert "The OpenMetadata extension 0.1.2 is running." in result.stdout
     assert "Catalog  https://om.example.com\n" in result.stdout
     assert "Status   http://localhost:3011/api/status\n" in result.stdout
     assert "eyJ.bot" not in result.stdout + result.stderr
