@@ -10,6 +10,12 @@ x-polaris-env: &polaris-env
   POLARIS_REALM_CONTEXT_REALMS: POLARIS
   QUARKUS_OTEL_SDK_DISABLED: "true"
 
+# OpenTelemetry export of logs and traces; off while OTEL_EXPORTER_OTLP_ENDPOINT is empty. See docs/observability.md.
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -117,6 +123,13 @@ services:
       QUARKUS_OIDC_ROLES_ROLE_CLAIM_PATH: polaris/roles
       POLARIS_OIDC_PRINCIPAL_MAPPER_ID_CLAIM_PATH: polaris/principal_id
       POLARIS_OIDC_PRINCIPAL_MAPPER_NAME_CLAIM_PATH: polaris/principal_name
+      # Polaris's own traces join the portals' traces with POLARIS_OTEL_DISABLED=false.
+      QUARKUS_OTEL_SDK_DISABLED: ${POLARIS_OTEL_DISABLED:-true}
+      QUARKUS_OTEL_SERVICE_NAME: iceberg-polaris
+      QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4318}
+      QUARKUS_OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      QUARKUS_OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      QUARKUS_OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
     ports:
       - "127.0.0.1:8181:8181"
     depends_on:
@@ -137,6 +150,7 @@ services:
   portal:
     build: .
     environment:
+      <<: *otel-env
       OIDC_ISSUER: ${OIDC_ISSUER:?Run scripts.setup first}
       OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/iceberg
       OIDC_CLIENT_ID: iceberg-admin
@@ -187,6 +201,7 @@ services:
         aliases:
         - bridge
     environment:
+      <<: *otel-env
       OIDC_ISSUER: ${OIDC_ISSUER:?Run scripts.setup first}
       OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/iceberg
       POLARIS_URL: http://polaris:8181
@@ -224,6 +239,7 @@ services:
     user: "0:0"
     command: ["/app/.venv/bin/uvicorn", "server.entrypoints:monitor", "--factory", "--host", "0.0.0.0", "--port", "3003"]
     environment:
+      <<: *otel-env
       PORTAL_PASSWORD: ${PORTAL_PASSWORD}
       POLARIS_URL: http://polaris:8181
       POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}

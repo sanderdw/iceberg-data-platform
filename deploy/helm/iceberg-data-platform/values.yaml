@@ -145,6 +145,16 @@ notebooks:
 monitor:
   enabled: true
 
+# OpenTelemetry: the portals, the Bridge and the monitor send their logs, and traces, over OTLP/HTTP
+# when an endpoint is set (docs/observability.md).
+otel:
+  endpoint: ""  # e.g. http://otel-collector.observability:4318
+  # A Secret in this namespace with the key OTEL_EXPORTER_OTLP_HEADERS, for a backend that needs an API key.
+  headersSecret: ""
+  resourceAttributes: ""  # e.g. deployment.environment.name=production
+  # Polaris's own traces too, joined to the portals' traces.
+  polaris: true
+
 networkPolicy:
   enabled: true
   # Notebooks may reach the internet (package installs) except these ranges.

@@ -1,11 +1,18 @@
 name: iceberg-workspaces
 
+# OpenTelemetry export of logs and traces; off while OTEL_EXPORTER_OTLP_ENDPOINT is empty. See docs/observability.md.
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
+
 services:
   users:
     build:
       context: .
       dockerfile: user_portal/Dockerfile
     environment:
+      <<: *otel-env
       OIDC_ISSUER: ${OIDC_ISSUER:?Run scripts.setup first}
       OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/iceberg
       OIDC_CLIENT_ID: iceberg-users

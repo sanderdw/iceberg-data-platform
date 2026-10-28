@@ -65,6 +65,7 @@ spec:
           envFrom:
             - secretRef: {name: {{ .Values.bridgeSecret }}}
           env:
+            {{- include "dbt.otelEnv" . | nindent 12 }}
             - {name: LAUNCHER_URL, value: "http://localhost:3006"}
             - name: LAUNCHER_TOKEN
               valueFrom: {secretKeyRef: {name: iceberg-dbt, key: LAUNCHER_TOKEN}}

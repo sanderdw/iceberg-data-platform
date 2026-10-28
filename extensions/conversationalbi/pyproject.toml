@@ -18,7 +18,15 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.1.1", "ruff>=0.17.3"]
+# OpenTelemetry export, used only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+otel = [
+  "opentelemetry-sdk>=1.45.1",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+  "opentelemetry-instrumentation-fastapi>=0.66b1",
+  "opentelemetry-instrumentation-httpx>=0.66b1",
+  "opentelemetry-instrumentation-logging>=0.66b1",
+]
+dev = [{include-group = "otel"}, "pytest>=9.1.1", "ruff>=0.17.3"]
 
 [tool.iceberg-conversationalbi]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).

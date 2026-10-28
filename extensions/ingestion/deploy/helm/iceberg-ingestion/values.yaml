@@ -41,5 +41,13 @@ storage:
   artifacts: 10Gi
 storageClass: ""
 
+# OpenTelemetry: the extension's service sends its logs and traces over OTLP/HTTP when an endpoint is
+# set, as the platform's chart does (otel.* there).
+otel:
+  endpoint: ""  # e.g. http://otel-collector.observability:4318
+  # A Secret in this namespace with the key OTEL_EXPORTER_OTLP_HEADERS, for a backend that needs an API key.
+  headersSecret: ""
+  resourceAttributes: ""
+
 networkPolicy:
   enabled: true

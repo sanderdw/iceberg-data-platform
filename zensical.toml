@@ -24,7 +24,7 @@ nav = [
     { "Tutorials" = ["first-steps.md", "run-a-class.md"] },
     { "How-to guides" = [
       "install.md", "install-kubernetes.md", "admin-guide.md", "connect.md", "ai-agents.md",
-      "agent-skills.md", "build-a-semantic-model.md", "data-shares.md",
+      "agent-skills.md", "build-a-semantic-model.md", "data-shares.md", "observability.md",
     ] },
     { "Reference" = [
       "reference/services.md", "configuration.md", "reference/roles.md", "user-portal.md",

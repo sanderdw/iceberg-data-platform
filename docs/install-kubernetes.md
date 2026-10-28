@@ -287,6 +287,9 @@ The workloads are the Deployments `portal`, `users`, `bridge`, `keycloak`, `moni
 and the StatefulSets `postgres` and `rustfs`; each extension adds its own (`dbt`, `ingestion`,
 `cbi-gateway`, `cbi-runtime`).
 
+To collect the logs and traces in your own backend, set `otel.endpoint`; see
+[Send logs and traces to OpenTelemetry](observability.md#kubernetes).
+
 ## Check the installation
 
 ```bash

@@ -13,7 +13,16 @@ dependencies = [
 ]
 
 [dependency-groups]
+# OpenTelemetry export, used only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+otel = [
+  "opentelemetry-sdk>=1.45.1",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+  "opentelemetry-instrumentation-fastapi>=0.66b1",
+  "opentelemetry-instrumentation-httpx>=0.66b1",
+  "opentelemetry-instrumentation-logging>=0.66b1",
+]
 dev = [
+  {include-group = "otel"},
   "pytest>=9.1.1",
   "ruff>=0.17.3",
 ]

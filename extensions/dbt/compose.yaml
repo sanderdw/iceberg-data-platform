@@ -10,6 +10,12 @@ x-hardened: &hardened
   security_opt: [no-new-privileges:true]
   restart: unless-stopped
 
+# OpenTelemetry export of logs and traces; off while OTEL_EXPORTER_OTLP_ENDPOINT is empty.
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
+
 services:
   dbt-portal:
     build: .
@@ -19,6 +25,7 @@ services:
       io.iceberg-platform.extension: dbt
     env_file: [.env.bridge]
     environment:
+      <<: *otel-env
       LAUNCHER_URL: http://dbt-launcher:3006
       LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
       MAX_CONCURRENT_RUNS: ${MAX_CONCURRENT_RUNS:-4}

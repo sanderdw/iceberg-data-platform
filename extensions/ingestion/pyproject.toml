@@ -17,6 +17,14 @@ dependencies = [
 ]
 
 [dependency-groups]
+# OpenTelemetry export, used only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+otel = [
+  "opentelemetry-sdk>=1.45.1",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+  "opentelemetry-instrumentation-fastapi>=0.66b1",
+  "opentelemetry-instrumentation-httpx>=0.66b1",
+  "opentelemetry-instrumentation-logging>=0.66b1",
+]
 # The launcher is the only component with the Docker socket.
 launcher = ["docker==7.2.0"]
 # The isolated run image: dlt with its Iceberg destination and the three declarative sources.
@@ -29,6 +37,7 @@ runner = [
   "s3fs>=2025.9.0",
 ]
 dev = [
+  {include-group = "otel"},
   {include-group = "launcher"},
   {include-group = "runner"},
   "pytest>=9.1.1",

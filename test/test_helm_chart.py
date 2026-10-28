@@ -97,3 +97,24 @@ def test_external_polaris_keeps_the_bridge_names_and_writes_the_official_values(
     database = next(d for d in docs if d["kind"] == "Secret" and d["metadata"]["name"] == "iceberg-polaris-db")
     assert database["stringData"]["jdbcUrl"].startswith("jdbc:postgresql://postgres:5432/polaris?")
     assert database["stringData"]["password"]
+
+
+def test_opentelemetry_is_off_until_an_endpoint_is_set():
+    docs = render()
+    for name in ("portal", "bridge", "users", "monitor"):
+        assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env(docs, "Deployment", name)
+    assert env(docs, "Deployment", "polaris", "polaris")["QUARKUS_OTEL_SDK_DISABLED"] == "true"
+
+    docs = render("otel.endpoint=http://collector:4318", "otel.headersSecret=otel")
+    for name in ("portal", "bridge", "users", "monitor"):
+        found = env(docs, "Deployment", name)
+        assert found["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://collector:4318"
+        assert found["OTEL_EXPORTER_OTLP_HEADERS"] == {
+            "secretKeyRef": {"name": "otel", "key": "OTEL_EXPORTER_OTLP_HEADERS"}}
+    polaris = env(docs, "Deployment", "polaris", "polaris")
+    assert polaris["QUARKUS_OTEL_SDK_DISABLED"] == "false"
+    assert polaris["QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://collector:4318"
+    # The bootstrap is a one-off command: never traced.
+    assert env(docs, "Deployment", "polaris", "bootstrap")["QUARKUS_OTEL_SDK_DISABLED"] == "true"
+    assert env(render("otel.endpoint=http://collector:4318", "otel.polaris=false"), "Deployment", "polaris",
+               "polaris")["QUARKUS_OTEL_SDK_DISABLED"] == "true"

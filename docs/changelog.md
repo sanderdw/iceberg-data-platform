@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Send logs and traces to OpenTelemetry.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` (`otel.endpoint` on Kubernetes) and the portals, the Bridge, the monitor, Polaris and the extensions send their logs and traces to your Collector, Grafana, Elastic, Logfire or any other OTLP backend. One trace follows a request from the portal into Polaris. The Bridge's audit records arrive as events with their fields as attributes. Off by default. See [Send logs and traces to OpenTelemetry](observability.md).
+
 ## 0.9.10 - 2026-10-27
 
 - **Example notebook: how Apache Iceberg works.** Notebook 11 builds a table from the Rick and Morty API with DuckDB, shows its snapshots and files, deletes a row and then removes it for good. See [notebooks](notebooks.md).

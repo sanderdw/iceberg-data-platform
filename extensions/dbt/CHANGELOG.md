@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **OpenTelemetry.** With `OTEL_EXPORTER_OTLP_ENDPOINT` in `.env` (`otel.endpoint` on Kubernetes) the service sends its logs and traces over OTLP/HTTP, as the platform does. Off by default. See [Send logs and traces to OpenTelemetry](https://sanderdw.github.io/iceberg-data-platform/observability/).
+
 ## 0.1.2 - 2026-10-27
 
 - DuckDB 2.0, the same version as the platform.

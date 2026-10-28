@@ -21,7 +21,16 @@ mcp = [
     "mcp>=2.3.0,<3",
     "sqlglot>=30.25.0",
 ]
-dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, "pytest>=9.1.1", "ruff>=0.17.3"]
+# OpenTelemetry export, used only when OTEL_EXPORTER_OTLP_ENDPOINT is set (docs/observability.md).
+otel = [
+    "opentelemetry-sdk>=1.45.1",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+    "opentelemetry-instrumentation-fastapi>=0.66b1",
+    "opentelemetry-instrumentation-httpx>=0.66b1",
+    "opentelemetry-instrumentation-logging>=0.66b1",
+]
+dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, {include-group = "otel"},
+       "pytest>=9.1.1", "ruff>=0.17.3"]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "numpy>=2.5.4"]
 # The documentation site; see docs/develop/contributing.md.
 docs = ["zensical==0.0.73"]

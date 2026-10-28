@@ -191,7 +191,7 @@ def test_bootstrap_reconciles_and_disables_extension_clients():
 
 def test_entrypoints_emit_the_audit_trail_and_keep_libraries_quiet():
     # Uvicorn configures only its own loggers; the real handler, not caplog, must show INFO records.
-    code = ("import logging; from server.entrypoints import logs; logs(); "
+    code = ("import logging; from server.entrypoints import logs; logs('iceberg-bridge'); "
             "logging.getLogger('iceberg.bridge.audit').info('token issued'); "
             "logging.getLogger('user_portal.app').info('session closed'); "
             "logging.getLogger('httpx').info('HTTP Request')")

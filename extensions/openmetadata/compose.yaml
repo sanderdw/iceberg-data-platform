@@ -11,6 +11,12 @@ x-hardened: &hardened
   security_opt: [no-new-privileges:true]
   restart: unless-stopped
 
+# OpenTelemetry export of logs and traces; off while OTEL_EXPORTER_OTLP_ENDPOINT is empty.
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
+
 services:
   om-sync:
     build: .
@@ -20,6 +26,7 @@ services:
       io.iceberg-platform.extension: openmetadata
     env_file: [.env.bridge]
     environment:
+      <<: *otel-env
       OM_URL: ${OM_URL:-}
       OM_JWT_TOKEN: ${OM_JWT_TOKEN:-}
       OM_SERVICE_PREFIX: ${OM_SERVICE_PREFIX:-iceberg}

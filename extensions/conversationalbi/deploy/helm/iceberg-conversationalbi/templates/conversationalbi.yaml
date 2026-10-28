@@ -57,6 +57,7 @@ spec:
             - secretRef: {name: {{ .Values.llm.existingSecret | default "iceberg-conversationalbi-llm" }}}
             - secretRef: {name: {{ .Values.bridgeSecret }}}
           env:
+            {{- include "cbi.otelEnv" . | nindent 12 }}
             - {name: RUNTIME_URL, value: "http://cbi-runtime:4000"}
             - name: RUNTIME_KEY
               valueFrom: {secretKeyRef: {name: iceberg-conversationalbi, key: RUNTIME_KEY}}

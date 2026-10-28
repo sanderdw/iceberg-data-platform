@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **OpenTelemetry.** With `OTEL_EXPORTER_OTLP_ENDPOINT` in `.env` (`otel.endpoint` on Kubernetes) the gateway sends its logs and traces over OTLP/HTTP, as the platform does. Every question is an agent run with its LLM calls (model, tokens, messages) and tool calls, so Logfire and other AI views show what the agent did. Off by default. See [Send logs and traces to OpenTelemetry](https://sanderdw.github.io/iceberg-data-platform/observability/).
+
 ## 0.1.4 - 2026-10-27
 
 - **Model guide.** **Guide** next to the conversation shows the selected model as its owner wrote

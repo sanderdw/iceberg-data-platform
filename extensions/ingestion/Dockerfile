@@ -5,7 +5,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1
 COPY pyproject.toml uv.lock README.md LICENSE NOTICE THIRD_PARTY_NOTICES.md ./
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --group launcher --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --group launcher --group otel --no-install-project
 COPY ingestion ./ingestion
 COPY launcher ./launcher
 COPY contracts ./contracts

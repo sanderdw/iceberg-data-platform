@@ -5,7 +5,7 @@ WORKDIR /app
 COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md ./
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --group users --group oidc --group mcp
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --group users --group oidc --group mcp --group otel
 # Table previews read Iceberg with DuckDB; they never download extensions at runtime.
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
 COPY user_portal/duckdb_extensions.py ./user_portal/

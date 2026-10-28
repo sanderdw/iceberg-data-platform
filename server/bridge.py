@@ -50,6 +50,18 @@ LOG = logging.getLogger(__name__)
 AUDIT = logging.getLogger("iceberg.bridge.audit")
 
 
+def actor(c):
+    """Who acted: the platform user's ID and sign-in name; nothing when the extension acted itself."""
+    if not c.principal:
+        return {}
+    return {"user.id": c.principal["name"], "user.name": c.principal.get("properties", {}).get("portal.name", "")}
+
+
+def audit(event, fields, message, *args):
+    """One audit record: a readable line on stderr, and an event with these attributes over OpenTelemetry."""
+    AUDIT.info(message, *args, extra={"otel.event.name": "iceberg.bridge." + event, **fields})
+
+
 class BridgeError(ServiceError):
     def __init__(self, status, message, code=None):
         super().__init__(status, message)
@@ -641,9 +653,12 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                                               {"id": user["id"], "name": user["name"]})
         async with mutations:
             item, created = await run_in_threadpool(run)
-        AUDIT.info("automation principal %s: %s extension=%s team=%s environment=%s by=%s",
-                   "created" if created else "exists", item["id"], c.extension, teamId, data.environment,
-                   c.principal["name"])
+        state = "created" if created else "exists"
+        audit("automation_principal." + state,
+              {"iceberg.automation_principal.id": item["id"], "iceberg.extension": c.extension,
+               "iceberg.team": teamId, "iceberg.environment": data.environment, **actor(c)},
+              "automation principal %s: %s extension=%s team=%s environment=%s by=%s",
+              state, item["id"], c.extension, teamId, data.environment, c.principal["name"])
         return JSONResponse(item, status_code=201 if created else 200)
 
     @app.delete("/bridge/v1/automation-principals/{id}", response_model=Revoked, responses=errors,
@@ -658,8 +673,12 @@ def create_bridge_app(provider=None, verifier=None, env=None):
             return item
         async with mutations:
             item = await run_in_threadpool(run)
-        AUDIT.info("automation principal revoked: %s extension=%s team=%s by=%s", id, c.extension,
-                   item["team"], c.principal["name"] if c.principal else "extension")
+        by = c.principal["name"] if c.principal else "extension"
+        audit("automation_principal.revoked",
+              {"iceberg.automation_principal.id": id, "iceberg.extension": c.extension,
+               "iceberg.team": item["team"], **actor(c)},
+              "automation principal revoked: %s extension=%s team=%s by=%s",
+              id, c.extension, item["team"], by)
         return {"revoked": True}
 
     @app.get("/bridge/v1/automation-principals", response_model=AutomationList, responses=errors,
@@ -696,8 +715,11 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                         raise
         async with lock:
             issued = await run_in_threadpool(issue)
-        AUDIT.info("automation token issued: %s extension=%s access=%s purpose=%r", id, c.extension,
-                   data.access, data.purpose)
+        audit("automation_token.issued",
+              {"iceberg.automation_principal.id": id, "iceberg.extension": c.extension,
+               "iceberg.access": data.access, "iceberg.purpose": data.purpose},
+              "automation token issued: %s extension=%s access=%s purpose=%r", id, c.extension, data.access,
+              data.purpose)
         return {
             "accessToken": issued["access_token"], "tokenType": "bearer",
             "expiresIn": int(issued.get("expires_in", 0)), "access": data.access, "principal": id,
@@ -716,7 +738,8 @@ def create_bridge_app(provider=None, verifier=None, env=None):
         body = await run_in_threadpool(listings.listing, provider, shareId, known)
         body = Listing.model_validate(body).model_dump(mode="json", by_alias=True)
         etag = f'"{listings.digest(body)}"'
-        AUDIT.info("listing read: %s extension=%s", shareId, c.extension)
+        audit("listing.read", {"iceberg.share.id": shareId, "iceberg.extension": c.extension},
+              "listing read: %s extension=%s", shareId, c.extension)
         if if_none_match == etag:
             return Response(status_code=304, headers={"ETag": etag})
         return JSONResponse(body, headers={"ETag": etag})
