@@ -44,4 +44,4 @@ Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Cod
 
 Every team member can browse the catalog, preview rows and answer questions from semantic models. Writers also publish and delete semantic models; team administrators also create, rename and delete databases and manage data shares. Destructive tools require the exact name. An external share's client secret is returned once, so the agent sees it; hand it only to the recipient.
 
-[MCP tools](mcp.md) describes every tool and why it works the way it does. The [agent skills](agent-skills.md) in the installation folder teach an agent common tasks, such as building a semantic model or setting up a class.
+[MCP tools](mcp.md) describes every tool, and [MCP design](mcp-design.md) why the tools work the way they do. The [agent skills](agent-skills.md) in the installation folder teach an agent common tasks, such as building a semantic model or setting up a class.

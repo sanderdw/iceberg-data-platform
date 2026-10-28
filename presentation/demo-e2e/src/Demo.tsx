@@ -103,8 +103,8 @@ const PieceView: React.FC<{ piece: Piece }> = ({ piece }) => {
   return <OffthreadVideo src={clip(piece.clip)} trimBefore={piece.startFrom} playbackRate={piece.rate} muted />;
 };
 
-/** The whole video: the pieces of src/edl.json (or edl-<voice>.json) on one timeline, with the voice-over and the music bed. */
-export const Demo: React.FC<{ voice?: Voice }> = ({ voice = "elevenlabs" }) => {
+/** The whole video: the pieces of src/edl-<voice>.json on one timeline, with the voice-over and the music bed. */
+export const Demo: React.FC<{ voice?: Voice }> = ({ voice = "gemini" }) => {
   const edl = EDLS[voice];
   return (
     <LangContext.Provider value={edl.lang ?? "nl"}>

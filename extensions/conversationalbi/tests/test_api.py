@@ -118,6 +118,9 @@ def test_describe_explains_joins(stack):
     assert {m["dataset"] for m in described["metrics"]} == {"FLIGHT"}
     dims = {d["field"]: d for d in described["dimensions"]["FLIGHT"]}
     assert dims["AIRPORT.name"]["ambiguous"] and dims["CARRIER.name"]["path"] == ["flight_carrier"]
+    fields = {f["name"]: f for d in described["datasets"] if d["name"] == "FLIGHT" for f in d["fields"]}
+    assert fields["date"]["time"] and not fields["carrier_code"]["time"]
+    assert described["examples"] == [] and described["metrics"][0]["synonyms"] == []
 
 
 @pytest.mark.parametrize(("query", "code"), [

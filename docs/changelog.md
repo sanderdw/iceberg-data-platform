@@ -6,7 +6,7 @@
 - **Documentation by purpose:** tutorials, how-to guides, reference and concepts. New are [Run a class](run-a-class.md), [Build a semantic model](build-a-semantic-model.md), [Teams, environments and roles](teams-and-environments.md), [Roles and permissions](reference/roles.md), [Services](reference/services.md) and [Why the MCP tools work this way](mcp-design.md).
 - **DuckDB 2.0** in notebooks, table previews, Conversational BI and dbt.
 - Fixed: pgAdmin lists the platform's database on Linux installations with a strict umask, and a dialog in the administration portal closes only once the page shows the change.
-- eMudhra emSign certificates are no longer trusted, after that authority's security incident. Keycloak 26.8.1 and RustFS 1.0.4.
+- certifi 2026.10.23 removes the distrusted eMudhra emSign roots from the Python HTTP clients. Keycloak 26.8.1 and RustFS 1.0.4.
 - Extensions: Conversational BI 0.1.4, dbt 0.1.2, Ingestion (dlt) 0.1.2 and OpenMetadata 0.1.2.
 
 ## 0.9.9 - 2026-10-17

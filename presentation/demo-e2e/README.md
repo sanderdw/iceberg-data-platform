@@ -16,7 +16,7 @@ Lessons learned for the next video of this kind are in `../video-lessons.md`.
 | 4. Voice, timeline, music | `npm run voice:gemini` | `public/voice/gemini/`, `tts/durations-gemini.json`, `src/edl-gemini.json`, `out/demo-e2e-4k-gemini.srt`, `public/music/music-gemini.wav` |
 | 5. Render | `npm run render:gemini` | `out/demo-e2e-4k-gemini.mp4` (3840×2160) |
 
-The compositions are 1920×1080; `--scale=2` renders them at 3840×2160, so the cards are drawn sharp and the 4K clips play at full resolution. `npm run studio` previews it, with one composition per chapter (S1…S8) of the ElevenLabs timeline. Without voice clips, `build` estimates the beats from their length, so the cut can be checked before any synthesis.
+The compositions are 1920×1080; `--scale=2` renders them at 3840×2160, so the cards are drawn sharp and the 4K clips play at full resolution. `npm run studio` previews it, with one composition per chapter (S1…S8) of the Dutch timeline. Without voice clips, `build` estimates the beats from their length, so the cut can be checked before any synthesis.
 
 How `edit/build.py` times a shot:
 
@@ -26,7 +26,7 @@ How `edit/build.py` times a shot:
 
 ## Voice
 
-`tts/gemini.py` calls `gemini-3.8-flash-tts` with the voice `Achird`, chosen from five samples, and a Dutch style prompt; the key is `GEMINI_API_KEY` in `.env`, which is git-ignored. `tts/elevenlabs.py` is the narrator's own ElevenLabs voice (`ELEVENLABS_API_KEY`), used by the first version. Every voice-dependent step takes `--voice gemini` and writes its own files next to the ElevenLabs ones (`tts/variant.py`). Clips are cached on model, voice, settings, text and neighbours, so a changed sentence re-records only itself and the two around it.
+`tts/gemini.py` calls `gemini-3.8-flash-tts` with the voice `Achird`, chosen from five samples, and a Dutch style prompt; the key is `GEMINI_API_KEY` in `.env`, which is git-ignored. Every voice-dependent step takes `--voice` (`gemini`, the default, or `gemini-en`) and writes its own files, named after the voice (`tts/variant.py`). Clips are cached on model, voice, settings, text and neighbours, so a changed sentence re-records only itself and the two around it.
 
 Each clip was checked by transcribing it back with `gemini-3.8-flash` and comparing it with the script. A word that is read wrongly gets a different wording or a `say`; "Runs draaien" came back as "Rens draaide" and became "Pipelines draaien". "Agent" came out Dutch, so every beat with it has a `say` that spells it "eedzjent" (and "agentic" as "eedzjentik"), and the style prompt asks for the American pronunciation.
 

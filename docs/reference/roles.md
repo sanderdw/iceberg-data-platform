@@ -31,6 +31,6 @@ Each extension checks the same team role. Only a team Administrator enables an e
 | Extension | reader | writer | admin |
 | --- | --- | --- | --- |
 | [Conversational BI](../conversational-bi.md) | Ask questions about the team's models and the models shared with it | as reader | Also enable the environment |
-| [dbt pipelines](../dbt.md) | View projects, files, runs, schedules and pipelines; compile, preview and test | Also create projects and branches, commit to branches, build in development, schedule development | Also merge to `main`, enable environments, schedule acceptance and production |
+| [dbt pipelines](../dbt.md) | View projects, files, runs, schedules and pipelines; compile, preview and test | Also create projects and branches, commit to and delete branches, build any branch in development and `main` in acceptance and production, stop runs, schedule development | Also merge to `main`, enable environments, schedule acceptance and production, delete projects |
 | [Ingestion (dlt)](../ingestion.md) | View pipelines, runs, logs and schedules; validate a definition | Also run pipelines and stop runs | Also create, change and delete pipelines, set secrets and schedules, enable environments |
 | [OpenMetadata](../openmetadata.md) | - | - | List the team's data shares; OpenMetadata decides who sees them |

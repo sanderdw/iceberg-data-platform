@@ -2,7 +2,7 @@
 
 ## 0.1.2 - 2026-10-27
 
-- eMudhra emSign certificates are no longer trusted, after that authority's security incident.
+- certifi 2026.10.23 removes the distrusted eMudhra emSign roots from the Python HTTP clients.
 - Updated dependencies.
 
 ## 0.1.1 - 2026-10-17

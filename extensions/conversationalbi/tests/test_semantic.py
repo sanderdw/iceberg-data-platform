@@ -220,6 +220,13 @@ def test_synonyms_of_fields_and_metrics_join_the_model_map():
         "flight": ["trip"], "FLIGHT.late": ["delayed"], "cancellation_pct": ["cancel rate"]}
 
 
+def test_example_questions_come_from_the_model_context():
+    inner = flights_with()
+    inner["ai_context"]["examples"] = ["  Which carrier is late most often? ", "", 7, "x" * 400]
+    assert ossie.parse(inner, ["ai_flights"]).examples == ("Which carrier is late most often?", "x" * 300)
+    assert flights.model().examples == ()
+
+
 def test_values_never_become_sql():
     model = flights.model()
     compiled = compile_query(model, flights.schemas(model), spec(

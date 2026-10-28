@@ -2,7 +2,7 @@ import React from "react";
 import { Composition, Sequence } from "remotion";
 import "./lib/font";
 import { Demo } from "./Demo";
-import { EDL, EDLS, FPS, TOTAL } from "./lib/edl";
+import { EDL, EDLS, FPS } from "./lib/edl";
 import { H, W } from "./lib/theme";
 
 /** One composition per chapter, cut from the whole video, for quick previews. */
@@ -14,7 +14,6 @@ const ChapterPreview: React.FC<{ from: number }> = ({ from }) => (
 
 export const Root: React.FC = () => (
   <>
-    <Composition id="Demo" component={Demo} durationInFrames={TOTAL} fps={FPS} width={W} height={H} />
     <Composition
       id="DemoGemini"
       component={Demo}

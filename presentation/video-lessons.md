@@ -57,7 +57,7 @@ What we learned making `demo-e2e/` and `iceberg-explained/` (October 2026), for 
 
 ## Voice
 
-- **Gemini TTS** (`gemini-3.8-flash-tts`) with a Dutch style prompt. Sander picked the voice `Achird` from five samples, after Charon, which was the closest in pitch to his own voice. Every video uses Achird now, so the channel has one voice. Never use his cloned ElevenLabs voice (`SgTSLbD1cct1Z3KhCdCJ`).
+- **Gemini TTS** (`gemini-3.8-flash-tts`) with a Dutch style prompt. Sander picked the voice `Achird` from five samples, after Charon, which was the closest in pitch to his own voice. Every video uses Achird now, so the channel has one voice.
 - **Record the whole voice-over in one run with one `STYLE`.** Clips recorded later or with a different prompt sound like a different day: tempo and pitch drift.
 - **Level with a fixed gain and a limiter**, not linear `loudnorm`. Linear loudnorm stops short of the target on peaky clips, up to 3 dB quieter than the rest (`tts/generate.py`).
 - **Check every clip by transcribing it back** with `gemini-3.8-flash`, and redo anything below a similarity of about 0.93. Gemini cannot judge pronunciation, though: it called a Dutch-sounding "agent" English, heard an English sentence as Dutch, and its IPA transcriptions were no better. Sander has to listen.
@@ -66,7 +66,7 @@ What we learned making `demo-e2e/` and `iceberg-explained/` (October 2026), for 
   2. Respell for the voice only: "agent" is spoken as "eedzjent" (a per-beat `say`), and "Parquet" as "Parkee" everywhere (the `SPOKEN` map in `iceberg-explained/tts/generate.py`). The subtitles keep the real word.
   3. Add a per-beat `style` hint. "Agentic" needed the stress on the second syllable; spelling it out didn't work.
 
-  What didn't work in Gemini: IPA in the text (still "parket"), and "Parqué". ElevenLabs `eleven_v4` does take IPA between slashes and a `seed`, but it is a different voice from the other videos.
+  What didn't work in Gemini: IPA in the text (still "parket"), and "Parqué". Another TTS service that takes IPA would mean a different voice from the other videos.
 - **A respelling still varies per take.** Gemini gives a different take every run, so let Sander choose: keep the takes aside as `<beat>-<take>.wav`, build one listening file with `iceberg-explained/tools/review.py` (a spoken number before each clip), and he names the numbers that are wrong. Record those again and repeat. Put the chosen take in `tts/cache` under its key.
 - Write numbers out as they are spoken.
 - **Re-recording the same text keeps the same cache key.** `generate.py` renormalises when the raw clip is newer. Delete a stale `.key` if in doubt.

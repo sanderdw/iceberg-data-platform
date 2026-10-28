@@ -2,11 +2,10 @@
 # requires-python = ">=3.12"
 # dependencies = ["httpx>=0.28"]
 # ///
-"""Voice-over clips: one per beat in edit/cut.json, in the narrator's ElevenLabs voice or in Gemini TTS.
+"""Voice-over clips in Gemini TTS: one per beat in edit/cut.json.
 
-    uv run tts/generate.py                  # every beat, ElevenLabs
+    uv run tts/generate.py                  # every beat (public/voice/gemini/, tts/durations-gemini.json)
     uv run tts/generate.py s1b2 s4b4        # only these (others must be cached already)
-    uv run tts/generate.py --voice gemini   # every beat, Gemini (public/voice/gemini/, tts/durations-gemini.json)
     uv run tts/generate.py --voice gemini-en   # the English version, from edit/cut-en.json
 
 - Each beat is synthesized once and cached on a hash of model + voice + settings + text + its
@@ -14,11 +13,10 @@
 - A beat's optional `say` is what is spoken when it differs from its `text` (the subtitle), and its optional
   `style` is added to the Gemini style prompt for that beat only, for example to fix one word's pronunciation.
 - Clips are trimmed of leading and trailing silence and normalised to -16 LUFS / -1.5 dBTP, 48 kHz
-  mono (public/voice/<beat>.wav). tts/durations.json holds their lengths for edit/build.py.
+  mono (public/voice/<voice>/<beat>.wav). tts/durations-<voice>.json holds their lengths for edit/build.py.
 """
 
 import hashlib
-import importlib
 import json
 import subprocess
 import sys
@@ -26,9 +24,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from variant import LANG, VARIANT, cut_file, voice_dir, variant_file  # noqa: E402
+import gemini as TTS  # noqa: E402
+from variant import LANG, cut_file, voice_dir, variant_file  # noqa: E402
 
-TTS = importlib.import_module("gemini" if VARIANT.startswith("gemini") else "elevenlabs")
 MODEL, SETTINGS, VOICE, synthesize = TTS.MODEL, TTS.SETTINGS, TTS.VOICE, TTS.synthesize
 if LANG == "en":
     VOICE, SETTINGS = TTS.VOICE_EN, {"style": TTS.STYLE_EN}

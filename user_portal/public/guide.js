@@ -94,7 +94,7 @@ function renderGuide() {
   const portal = [
     ['Pick your team and environment', ['Active team and Environment at the top decide which databases you see. Your role in the team decides what you can change.']],
     ['Browse the catalog', ['Open a database to see its namespaces, tables, views and semantic models: schema, snapshots, a preview of up to 100 rows and a diagram of each model.'], guideLink('Open the catalog', 'catalog')],
-    ['Open a notebook', ['Start marimo on a database with your own permissions. The example notebooks 01–08 show PyIceberg, DuckDB and dlt. Files are shared by team and environment.'], guideLink('Go to notebooks', 'notebooks')],
+    ['Open a notebook', ['Start marimo on a database with your own permissions. The example notebooks 01–11 show PyIceberg, DuckDB, Polars and dlt. Files are shared by team and environment.'], guideLink('Go to notebooks', 'notebooks')],
     ['Share data', ['Team administrators share tables, views and semantic models with another team or an external party. Data shared with your team appears in your catalog, read-only.'], guideLink('View data shares', 'shares')],
   ];
 

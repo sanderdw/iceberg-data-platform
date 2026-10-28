@@ -49,6 +49,8 @@ These rules come from building models with the [MCP tools](mcp.md); [why the too
   its own, because the portal cannot tell which dataset it counts.
 - **Fields.** Describe each field, and give it synonyms and examples in its `ai_context`. A `label`
   groups fields by what they hold across models, such as `Delay`; a data catalog shows it as a tag.
+- **Example questions.** List the questions the model answers in the model's `ai_context.examples`.
+  [Conversational BI](conversational-bi.md) offers them as starter questions.
 - **Dimensions.** Mark every field people group or filter by as a dimension, identifiers included.
   Once a dataset marks any field, only marked fields can be used.
 - **Data gaps.** Say in each metric's description which years it covers, and in the instructions what

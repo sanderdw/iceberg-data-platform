@@ -2,7 +2,7 @@
 // by step over a small local HTTP API, so the demo can follow what really happens on screen.
 //
 //   node record/director.mjs                      # listens on 127.0.0.1:7777
-//   curl -s localhost:7777/eval --data-binary @step.js
+//   curl -s localhost:7777/eval -H 'X-Director-Request: 1' --data-binary @step.js   # or record/step step.js
 //
 // A step is the body of an async function that gets `ctx`: { context, page(name, url), rec, mark, ui, sleep }.
 // rec.start(clip, pageName) streams that page into recordings/<clip>.mp4 until rec.stop(clip).
@@ -133,9 +133,12 @@ const AsyncFunction = (async () => {}).constructor;
 const ctx = {context, browser, page, pages, rec, mark, ui, sleep, state: {}};
 
 createServer(async (request, response) => {
+  const reply = (status, data) => { response.writeHead(status, {'content-type': 'application/json'}); response.end(JSON.stringify(data, null, 2)); };
+  // /eval runs any code, so only callers that can set a custom header: a web page can't, cross-origin,
+  // without a CORS preflight, and this server never answers one.
+  if (request.headers['x-director-request'] !== '1') return reply(403, {error: 'X-Director-Request: 1 is required'});
   let body = '';
   for await (const chunk of request) body += chunk;
-  const reply = (status, data) => { response.writeHead(status, {'content-type': 'application/json'}); response.end(JSON.stringify(data, null, 2)); };
   try {
     if (request.url === '/eval') return reply(200, {result: await new AsyncFunction('ctx', body)(ctx) ?? null});
     if (request.url === '/status') return reply(200, {pages: [...pages].map(([n, p]) => ({name: n, url: p.isClosed() ? null : p.url()})), clips: rec.list()});

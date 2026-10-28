@@ -56,7 +56,7 @@ def find_audio(node):
 
 
 def synthesize(text, voice=VOICE, previous_text=None, next_text=None, style=STYLE, attempts=4):
-    """WAV bytes for one text. Gemini takes no neighbouring text; the arguments keep the ElevenLabs interface."""
+    """WAV bytes for one text. Gemini takes no neighbouring text; tts/generate.py passes it for the cache key."""
     body = {
         "model": MODEL,
         "input": [{"type": "user_input", "content": [{

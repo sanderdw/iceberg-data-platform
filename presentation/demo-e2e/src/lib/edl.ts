@@ -1,4 +1,3 @@
-import elevenlabsJson from "../edl.json";
 import geminiJson from "../edl-gemini.json";
 import geminiEnJson from "../edl-gemini-en.json";
 import type { Lang } from "./i18n";
@@ -23,16 +22,15 @@ export type Edl = {
 
 /** One timeline per voice-over: the beats differ in length, so the cut does too (edit/build.py --voice gemini). */
 export const EDLS = {
-  elevenlabs: elevenlabsJson as unknown as Edl,
   gemini: geminiJson as unknown as Edl,
   "gemini-en": geminiEnJson as unknown as Edl,
 };
 export type Voice = keyof typeof EDLS;
 
 /** Where a voice's clips and music bed live in public/, as written by the Python scripts. */
-export const voiceFile = (voice: Voice) => (voice === "elevenlabs" ? "voice/voiceover.wav" : `voice/${voice}/voiceover.wav`);
-export const musicFile = (voice: Voice) => (voice === "elevenlabs" ? "music/music.wav" : `music/music-${voice}.wav`);
+export const voiceFile = (voice: Voice) => `voice/${voice}/voiceover.wav`;
+export const musicFile = (voice: Voice) => `music/music-${voice}.wav`;
 
-export const EDL = EDLS.elevenlabs;
+export const EDL = EDLS.gemini;
 export const FPS = EDL.fps;
 export const TOTAL = EDL.durationFrames;

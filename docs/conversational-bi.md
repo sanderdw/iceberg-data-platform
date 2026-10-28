@@ -29,6 +29,23 @@ A **team administrator** enables Conversational BI once per environment: the **E
 
 On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 
+## Explore a model
+
+Pick a model, then open **Guide** next to the conversation. It shows the model as its owner wrote it:
+
+- **About**: the description, the datasets and their tables, and any table you cannot read.
+- **Try asking**: the owner's example questions (`ai_context.examples`), or questions built from the
+  metrics and dimensions when there are none. The empty chat offers the same questions. Click one to ask it.
+- **Metrics**: each metric with its definition, unit and synonyms. Pick one to see the dimensions it
+  can be split by, grouped by dataset with the join path. Time dimensions can be grouped by day, week, month, quarter or year.
+  When a dataset can be reached in several ways, such as the departure or the destination airport, each
+  way gets its own **Ask** button. Datasets the metric cannot reach are named, because joining them would
+  count its rows more than once.
+- **Owner guidance** and **how the datasets join**: the instructions the agent follows, and the relationships.
+
+Questions from the guide name metrics and fields exactly as the model spells them, so the agent does not
+have to guess. On narrow screens the guide covers the chat and closes when you ask.
+
 ## Connect an AI agent
 
 ```bash

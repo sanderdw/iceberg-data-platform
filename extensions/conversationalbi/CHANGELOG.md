@@ -2,8 +2,18 @@
 
 ## 0.1.4 - 2026-10-27
 
+- **Model guide.** **Guide** next to the conversation shows the selected model as its owner wrote
+  it: the description and tables, each metric with its definition, unit and synonyms, the dimensions a
+  metric can be split by with their join paths, the owner's guidance and the relationships. Picking a
+  metric explains which datasets it cannot be split by and why. On narrow screens the guide covers the
+  chat.
+- **Starter questions.** The empty chat and the guide offer the model owner's example questions
+  (`ai_context.examples`), or questions built from the model's metrics and dimensions. They name
+  fields as the model spells them, and one click asks them.
+- `describe_model` (REST and MCP) also returns the model's example questions, which fields are dates
+  or timestamps, and the synonyms of each field and metric.
 - DuckDB 2.0, the same version as the platform.
-- eMudhra emSign certificates are no longer trusted, after that authority's security incident.
+- certifi 2026.10.23 removes the distrusted eMudhra emSign roots from the Python HTTP clients.
 - Updated dependencies.
 
 ## 0.1.3 - 2026-10-17

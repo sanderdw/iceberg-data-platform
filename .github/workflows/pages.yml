@@ -36,6 +36,9 @@ jobs:
           set -euo pipefail
           test ! -e site/presentation
           cp -R presentation site/presentation
+          # GitHub's Pages deployment fails on a broken symlink; catch it here, also on pull requests.
+          broken="$(find site -xtype l)"
+          test -z "$broken" || { echo "Broken symlinks: $broken"; exit 1; }
           touch site/.nojekyll
           test -f site/index.html && test -f site/presentation/index.html
       - name: Publish site/ to gh-pages

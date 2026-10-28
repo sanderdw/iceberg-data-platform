@@ -56,7 +56,8 @@ for attempt in range(2):  # A full rerun recreates the table with the same resul
     written['lakehouse'].close()
 read = run('05_duckdb_iceberg_v3_read.py')
 types = dict(zip(read['columns']['column_name'], read['columns']['column_type']))
-assert (types['payload'], types['measured_at'], types['location']) == ('VARIANT', 'TIMESTAMP_NS', 'GEOMETRY')
+assert (types['payload'], types['measured_at']) == ('VARIANT', 'TIMESTAMP_NS'), types
+assert types['location'] == "GEOMETRY('OGC:CRS84')", types  # DuckDB 2.0 names the CRS
 assert read['row_count'].iloc[0]['rows'] == 436
 assert set(read['kinds']['kind']) == {'temperature', 'vibration', 'door'}
 precision = read['precision'].iloc[0]
@@ -245,6 +246,71 @@ assert connect().load_table(('ai_grid_forecast', 'load_forecast')).current_snaps
 print('PASS: Polars scans the grid forecast with the semantic model from Polaris; a reader cannot publish it')
 """
 
+EXPLAINED_CODE = """
+import importlib.util
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+# The containers are offline, so a stub stands in for the Rick and Morty API.
+CHARACTERS = [
+    {'id': 1, 'name': 'Rick Sanchez', 'status': 'Alive', 'species': 'Human', 'gender': 'Male',
+     'origin': {'name': 'Earth (C-137)'}, 'location': {'name': 'Citadel of Ricks'}},
+    {'id': 2, 'name': 'Jerry Smith', 'status': 'Alive', 'species': 'Human', 'gender': 'Male',
+     'origin': {'name': 'Earth (Replacement Dimension)'}, 'location': {'name': 'Earth (Replacement Dimension)'}},
+    {'id': 3, 'name': 'Squanchy', 'status': 'Unknown', 'species': 'Alien', 'gender': 'Male',
+     'origin': {'name': 'unknown'}, 'location': {'name': 'Planet Squanch'}},
+]
+
+class Api(BaseHTTPRequestHandler):
+    def body(self):
+        if self.path == '/api/character':
+            return json.dumps({'info': {'count': len(CHARACTERS)}, 'results': CHARACTERS}).encode()
+        assert self.path == '/api/character/1,2,3', self.path
+        return json.dumps(CHARACTERS).encode()
+
+    def do_HEAD(self, send_body=False):
+        body = self.body()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        if send_body:
+            self.wfile.write(body)
+
+    def do_GET(self):
+        self.do_HEAD(send_body=True)
+
+    def log_message(self, *args):
+        pass
+
+server = ThreadingHTTPServer(('127.0.0.1', 0), Api)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+
+# marimo reads each cell's source from the notebook file, so the stubbed copy has to be a file too.
+source = Path('/app/user_portal/notebook/examples/11_duckdb_iceberg_explained.py').read_text()
+real = 'https://rickandmortyapi.com/api/character'
+assert real in source
+copy = Path('/tmp/11_duckdb_iceberg_explained.py')
+copy.write_text(source.replace(real, f'http://127.0.0.1:{server.server_port}/api/character'))
+
+for attempt in range(2):  # A full rerun replaces the table the first run created and cleaned up.
+    spec = importlib.util.spec_from_file_location('explained_notebook', copy)
+    notebook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(notebook)
+    explained = notebook.app.run()[1]
+    lakehouse = explained['lakehouse']
+    names = {row[0] for row in lakehouse.execute(f"SELECT name FROM {explained['characters']}").fetchall()}
+    assert names == {'Rick Sanchez', 'Squanchy'}, names
+    assert explained['removed'], 'Expected the old data, delete and metadata files to be removed'
+    assert explained['time_travel'] == 'no longer possible', explained['time_travel']
+    assert explained['jerry'] == 0, explained['jerry']
+    assert len(explained['table'].snapshots()) == 1
+    lakehouse.close()
+print('PASS: the Iceberg explainer creates, deletes, time travels, rewrites, expires and cleans up a table twice')
+"""
+
 
 def main(*, flights_only=False, grid_only=False):
     context = json.loads(subprocess.check_output(["docker", "context", "inspect"]))[0]
@@ -281,7 +347,8 @@ def main(*, flights_only=False, grid_only=False):
             network.connect(
                 os.environ.get("RUSTFS_CONTAINER", "iceberg-platform-rustfs-1"), aliases=["rustfs"]
             )
-            checks = [] if flights_only or grid_only else [(CODE, reader), (V3_READER_CODE, reader), (V3_CODE, writer)]
+            checks = [] if flights_only or grid_only else [
+                (CODE, reader), (V3_READER_CODE, reader), (V3_CODE, writer), (EXPLAINED_CODE, writer)]
             if not grid_only:
                 checks += [(FLIGHTS_WRITE_CODE, writer), (FLIGHTS_READ_CODE, reader), (FLIGHTS_SEMANTIC_READ_CODE, reader)]
             if not flights_only:

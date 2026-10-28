@@ -12,7 +12,6 @@
     "music": "uv run audio/make_music.py",
     "studio": "remotion studio src/index.ts",
     "still": "remotion still src/index.ts",
-    "render": "remotion render src/index.ts Demo out/demo-e2e.mp4 --codec=h264 --crf=18 --audio-bitrate=256k --concurrency=8",
     "voice:gemini": "uv run tts/generate.py --voice gemini && python3 edit/build.py --voice gemini && uv run audio/make_music.py --voice gemini",
     "render:gemini": "remotion render src/index.ts DemoGemini out/demo-e2e-4k-gemini.mp4 --scale=2 --codec=h264 --crf=18 --audio-bitrate=256k --concurrency=8",
     "voice:en": "uv run tts/generate.py --voice gemini-en && python3 edit/build.py --voice gemini-en && uv run audio/make_music.py --voice gemini-en",

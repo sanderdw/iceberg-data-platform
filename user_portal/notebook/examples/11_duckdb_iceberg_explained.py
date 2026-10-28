@@ -78,6 +78,7 @@ def _():
 def _(mo):
     mo.md("""
     # How Apache Iceberg works
+    **Example 11 of 11 · Snapshots, time travel and maintenance with DuckDB and PyIceberg**
 
     Iceberg is not a database but an open table format. The data is stored as
     Parquet files in a bucket. Next to it, metadata files record which files

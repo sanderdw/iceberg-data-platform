@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 # Sends a step (JS body, from stdin or a file) to the director.
-curl -sS --max-time 3600 http://127.0.0.1:7777/eval --data-binary @"${1:--}"
+curl -sS --max-time 3600 http://127.0.0.1:7777/eval -H 'X-Director-Request: 1' --data-binary @"${1:--}"

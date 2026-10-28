@@ -1,29 +1,28 @@
-"""Which voice-over a script works on: `--voice gemini` for the Gemini version, `--voice gemini-en` for the
-English one (edit/cut-en.json), nothing for ElevenLabs.
+"""Which voice-over a script works on: the Dutch Gemini version by default (`--voice gemini`), or the
+English one with `--voice gemini-en` (edit/cut-en.json).
 
-The ElevenLabs version keeps the plain paths; another voice gets its own copy of every voice-dependent
-file, named after it (durations-gemini.json, edl-gemini.json, public/voice/gemini/, demo-e2e-gemini.mp4).
+Each voice gets its own copy of every voice-dependent file, named after it (durations-gemini.json,
+edl-gemini.json, public/voice/gemini/).
 """
 
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-VARIANT = sys.argv[sys.argv.index("--voice") + 1] if "--voice" in sys.argv else ""
-if VARIANT not in ("", "elevenlabs", "gemini", "gemini-en"):
+VARIANT = sys.argv[sys.argv.index("--voice") + 1] if "--voice" in sys.argv else "gemini"
+if VARIANT not in ("gemini", "gemini-en"):
     raise SystemExit(f"unknown voice: {VARIANT}")
-VARIANT = "" if VARIANT == "elevenlabs" else VARIANT
 LANG = "en" if VARIANT.endswith("-en") else "nl"
 
 
 def variant_file(path):
-    """path, or path with -<variant> before its suffix."""
+    """path with -<variant> before its suffix."""
     path = Path(path)
-    return path.with_name(f"{path.stem}-{VARIANT}{path.suffix}") if VARIANT else path
+    return path.with_name(f"{path.stem}-{VARIANT}{path.suffix}")
 
 
 def voice_dir():
-    return ROOT / "public" / "voice" / VARIANT if VARIANT else ROOT / "public" / "voice"
+    return ROOT / "public" / "voice" / VARIANT
 
 
 def cut_file():

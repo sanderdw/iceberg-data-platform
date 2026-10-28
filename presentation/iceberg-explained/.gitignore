@@ -1,8 +1,9 @@
-node_modules/
+node_modules
 out/
 .env
 recordings/
 tts/cache/
+tts/samples*/
 tts/cache-takes-*/
 public/voice/
 public/music/

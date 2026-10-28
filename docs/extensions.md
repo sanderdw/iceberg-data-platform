@@ -31,6 +31,6 @@ On Kubernetes, extensions have their own Helm charts; see [Install on Kubernetes
 
 ## Service accounts
 
-An extension acts for a team through a service account (an automation principal) for one environment. Only a team administrator enables it, in the extension. The account can write to the team's databases in that environment, and reads the data shares the team received there. Platform administrators see every service account on the administration portal's Teams page and can revoke it; see the [administration guide](admin-guide.md#teams-databases-and-users). The [security model](security.md) has the details.
+An extension acts for a team through a service account (an automation principal) for one environment. Only a team administrator enables it, in the extension. The account can write to the team's databases in that environment, and reads the data shares the team received there. Platform administrators see every service account on the administration portal's Teams page and can revoke it; see the [administration guide](admin-guide.md#extension-service-accounts). The [security model](security.md) has the details.
 
 How extensions connect to the core is described in the [Extension Bridge](develop/extension-bridge.md).

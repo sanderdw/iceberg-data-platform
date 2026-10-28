@@ -4,8 +4,8 @@
 # ///
 """A quiet music bed, synthesized with code (no samples, no licences).
 
-    uv run audio/make_music.py                  # public/music/music.wav, as long as src/edl.json
-    uv run audio/make_music.py --voice gemini   # public/music/music-gemini.wav, as long as src/edl-gemini.json
+    uv run audio/make_music.py                     # public/music/music-gemini.wav, as long as src/edl-gemini.json
+    uv run audio/make_music.py --voice gemini-en   # the English version
 
 Soft pad chords that change with each chapter, a slow pulse of low notes and a long reverb tail.
 It stays in the background: the video ducks it under the voice (src/lib/audio.ts). Deterministic.

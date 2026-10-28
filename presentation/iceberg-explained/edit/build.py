@@ -1,9 +1,8 @@
-"""The edit: edit/cut.json plus the recordings and the voice clips become src/edl.json, the
+"""The edit: edit/cut.json plus the recordings and the voice clips become src/edl-<voice>.json, the
 voice-over on that timeline and the subtitles.
 
-    python3 edit/build.py                  # needs tts/durations.json; estimates beats that have no clip yet
+    python3 edit/build.py                  # src/edl-gemini.json; estimates beats that have no clip yet
     python3 edit/build.py --voice gemini-en   # the English version, from edit/cut-en.json
-    python3 edit/build.py --voice gemini   # the Gemini version: src/edl-gemini.json, out/demo-e2e-gemini.srt
 
 Rules:
 - A shot plays its source range. In a normal shot, stretches where the screen does not change for

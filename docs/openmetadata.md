@@ -8,7 +8,7 @@ Make your data products findable. Every data share that a team administrator lis
 | Status | `http://localhost:3011/api/status`: last sync, counts and the last error code |
 | Needs | An OpenMetadata 2.0 server and a bot token |
 
-OpenMetadata 2.0 has no Iceberg connector of its own: it reaches Iceberg only through a query engine such as Trino or Snowflake, and never read semantic models. This extension pushes the listings to OpenMetadata's API instead, so no catalog credential leaves the platform.
+OpenMetadata 2.0 has no Iceberg connector of its own: it reaches Iceberg only through a query engine such as Trino or Snowflake, and never reads semantic models. This extension pushes the listings to OpenMetadata's API instead, so no catalog credential leaves the platform.
 
 ## Install
 
@@ -68,7 +68,7 @@ From `~/iceberg-data-platform/extensions/openmetadata`:
     docker compose up -d --wait && docker compose -f compose.users.yaml up -d --wait users
     ```
 
-From a source checkout, follow the [extension's README](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/openmetadata#install-from-source).
+From a source checkout, see [Install from source](develop/openmetadata.md#install-from-source).
 
 ## What is published
 
