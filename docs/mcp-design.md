@@ -1,6 +1,6 @@
 # Why the MCP tools work this way
 
-The [MCP tools](mcp.md) make choices that limit what an agent can do. Each section below names a choice, the reason for it and what it costs.
+The [core MCP tools](mcp.md) make choices that limit what an agent can do. Each section below names a choice, the reason for it and what it costs.
 
 ## Agents pick names; the model holds the SQL
 

@@ -58,6 +58,35 @@ For GitHub Copilot in VS Code, add both servers to `.vscode/mcp.json`:
 
 On first use, each server opens its Keycloak sign-in flow. Both act with the signed-in user's permissions. The `dbt-platform` [agent skill](agent-skills.md) in the installation folder teaches an agent the platform's conventions.
 
+### MCP tools
+
+What each role may do is in [roles and permissions](reference/roles.md#extensions).
+
+| Tool | What it does |
+| --- | --- |
+| `whoami` | Your teams with your role in each, their databases per environment, where dbt is enabled, and this extension. |
+| `list_environments` | Where dbt is enabled for a team, and the databases of each environment. |
+| `enable_environment` / `disable_environment` | Lets dbt build in a team environment as the team's service account, or revokes it (team administrators). Disabling stops its runs and schedules. |
+| `list_projects` | dbt projects of your teams, with your role in each. |
+| `create_project` | Creates an empty project on `main`: `dbt_project.yml`, a README and the namespace macro (writers). |
+| `get_project` | A project with its branches, environments, latest run per environment and schedules. |
+| `delete_project` | Forgets a project: its Git history, runs, schedules and the dbt properties on the tables it built (team administrators). The tables, their data and docs stay. `confirm_name` must equal its name. |
+| `list_files` / `read_file` | All files of a project, or one file's content, at a branch or revision. |
+| `write_files` | Commits file changes to a branch in one commit (writers). `main` is never written directly. `expected_revision` refuses to overwrite a newer commit. |
+| `list_branches` / `create_branch` / `delete_branch` | Branches with their latest commit; create one from `main` or another branch, or delete one (writers). `main` cannot be deleted. |
+| `get_history` | Recent commits of a branch. |
+| `diff` | Changed files and the patch between two branches or revisions. |
+| `merge_to_main` | Merges a branch into `main` (team administrators). With `revision`, the merge is refused if the branch moved after you reviewed it. |
+| `compile` | Compiles selected models, or inline SQL, with a read-only token, and returns the compiled SQL. |
+| `preview_model` | Runs one model's query without writing and returns up to 100 rows. |
+| `run` | Runs `build`, `run`, `seed`, `test`, `compile`, `parse` or `docs` as the team's service account. `build`, `run` and `seed` write tables (writers). Waits up to 600 seconds. |
+| `list_runs` / `get_run` / `get_run_logs` | Recent runs; one run with its per-node results; the last lines of its dbt log. |
+| `cancel_run` | Stops a running run (writers). |
+| `list_schedules` / `set_schedule` / `delete_schedule` | A project's schedules; create, change or delete one, with cron in UTC. Development needs writers, other environments team administrators. |
+| `get_pipeline` | The pipeline graph: nodes with type, table, latest status and test counts, and edges. |
+| `get_model` | One node: description, columns with docs, SQL and compiled SQL, tests and latest result. |
+| `get_lineage` | Upstream and downstream nodes of a node, up to `depth` steps. |
+
 ## Use dbt from your terminal
 
 `iceberg_dbt.py` gives you dbt's commands in your own terminal while dbt runs on the platform, as the team's service account. Nothing runs on your computer and it needs no warehouse credentials. Download it from the viewer (**Projects › From your terminal**, or `/iceberg_dbt.py`): that copy holds this installation's addresses. It needs [uv](https://docs.astral.sh/uv/).

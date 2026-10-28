@@ -15,7 +15,7 @@ Polaris 1.8 stores a model in the namespace, next to the tables it describes. It
 Storing it beside the data, instead of in a BI tool, means every consumer reads the same definition:
 
 - **The user portal** lists models in **Catalog** after the tables and views. **Details →** shows the datasets with their AI context and fields, each with its label, description, synonyms and examples, the metrics and relationships, and the stored definition as YAML or JSON. The **Diagram** tab draws each dataset as a table and each relationship as a line between the join columns.
-- **AI agents** read it with `list_semantic_models` and `describe_semantic_model`, find exact filter values with `list_dimension_values`, and answer from the agreed metrics with `query_semantic_model`. See [MCP tools](mcp.md#semantic-models).
+- **AI agents** read it with `list_semantic_models` and `describe_semantic_model`, find exact filter values with `list_dimension_values`, and answer from the agreed metrics with `query_semantic_model`. See [core MCP tools](mcp.md#semantic-models).
 - **[Conversational BI](conversational-bi.md)** answers chat questions with the same governed queries.
 - **[Data shares](data-shares.md)** can include models. Recipients see exactly the shared models and can't list or change any others. A listed share publishes them, with their descriptions, labels and AI context, to a data catalog such as [OpenMetadata](openmetadata.md).
 - **[dbt pipelines](dbt.md)** publish the models in a project's `semantic_models/` folder after every successful build.

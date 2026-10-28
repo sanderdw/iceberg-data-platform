@@ -55,6 +55,19 @@ claude mcp add --transport http --client-id ext-conversationalbi-mcp --callback-
 
 Other agents are set up as for the [user portal](ai-agents.md), with this address and client ID.
 
+### MCP tools
+
+| Tool | What it does |
+| --- | --- |
+| `whoami` | Your teams with your role in each, their databases, the data shares they received, and this extension. |
+| `list_environments` | Where Conversational BI is enabled for a team. |
+| `enable_environment` | Lets Conversational BI read a team environment, and the shares the team received there, with a read-only service account (team administrators). |
+| `disable_environment` | Revokes that service account (team administrators). Questions in that environment stop working. |
+| `list_models` | Semantic models you can ask questions of, your own and shared ones, and the environments that still need enabling. |
+| `describe_model` | Datasets, fields, metrics and reachable dimensions of one model, with the owner's instructions. |
+| `query` | Runs a [governed query](#governed-queries): up to 5 metrics split by up to 5 dimensions (`DATASET.field`, optionally with a grain and `via`), 10 filters and a limit of up to 5000 rows. It returns at most 200 rows and a `resultId`. |
+| `get_result` | More rows of an earlier result, by `resultId`. Results are kept for 30 minutes. |
+
 ## Change the model
 
 The model and key are in `conversationalbi/llm.env` in the installation directory, readable only by you and given only to the chat's gateway container. `LLM_MODEL` is a [Pydantic AI model string](https://pydantic.dev/docs/ai/models/overview); its provider needs:

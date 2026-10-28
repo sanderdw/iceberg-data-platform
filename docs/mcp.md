@@ -1,15 +1,18 @@
-# MCP tools
+# Core MCP tools
 
 The user portal serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at
 `/mcp`, so an AI agent works with your databases, semantic models and data shares as you. This page
-describes every tool; [why the MCP tools work this way](mcp-design.md) explains the choices behind them. To register the
+describes every tool of that core endpoint; [why the MCP tools work this way](mcp-design.md) explains the choices behind them. To register the
 endpoint in a coding agent, see [AI agents](ai-agents.md).
 Platform administrators have a separate endpoint on the administration portal, described in the
-[administration guide](admin-guide.md#connect-an-mcp-client). [Extensions](extensions.md) serve their
-own: Conversational BI at `http://localhost:3007/mcp` (client `ext-conversationalbi-mcp`), dbt at
-`http://localhost:3004/mcp` (client `ext-dbt-mcp`) and Ingestion (dlt) at `http://localhost:3008/mcp`
-(client `ext-ingestion-mcp`). On Kubernetes each is `/mcp` on its own HTTPS host; see
-[addresses and sign-in](install-kubernetes.md#addresses-and-sign-in).
+[administration guide](admin-guide.md#connect-an-mcp-client).
+
+Each [extension](extensions.md) can provide its own MCP server with its own tools, described on its
+page: [Conversational BI](conversational-bi.md#mcp-tools) at `http://localhost:3007/mcp` (client
+`ext-conversationalbi-mcp`), [dbt pipelines](dbt.md#mcp-tools) at `http://localhost:3004/mcp` (client
+`ext-dbt-mcp`) and [Ingestion (dlt)](ingestion.md#mcp-tools) at `http://localhost:3008/mcp` (client
+`ext-ingestion-mcp`). They exist only when the extension is installed. On Kubernetes each is `/mcp`
+on its own HTTPS host; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in).
 
 ## How every tool works
 

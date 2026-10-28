@@ -4,11 +4,11 @@ Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) e
 
 | Server | Address | Keycloak client | For |
 | --- | --- | --- | --- |
-| User portal | `http://localhost:3002/mcp` | `iceberg-mcp` | Databases, catalog, semantic models and data shares, as you. See [MCP tools](mcp.md) |
+| User portal | `http://localhost:3002/mcp` | `iceberg-mcp` | Databases, catalog, semantic models and data shares, as you. See [core MCP tools](mcp.md) |
 | Administration portal | `http://localhost:3000/mcp` | `iceberg-mcp` | Teams, users and databases, with the `platform-admin` role. See the [administration guide](admin-guide.md#connect-an-mcp-client) |
-| Conversational BI | `http://localhost:3007/mcp` | `ext-conversationalbi-mcp` | Governed questions over semantic models. See [Conversational BI](conversational-bi.md) |
-| dbt pipelines | `http://localhost:3004/mcp` | `ext-dbt-mcp` | Building, testing and scheduling pipelines. See [dbt pipelines](dbt.md) |
-| Ingestion (dlt) | `http://localhost:3008/mcp` | `ext-ingestion-mcp` | Loading APIs, databases and files. See [Ingestion (dlt)](ingestion.md) |
+| Conversational BI | `http://localhost:3007/mcp` | `ext-conversationalbi-mcp` | Governed questions over semantic models. See [Conversational BI](conversational-bi.md#mcp-tools) |
+| dbt pipelines | `http://localhost:3004/mcp` | `ext-dbt-mcp` | Building, testing and scheduling pipelines. See [dbt pipelines](dbt.md#mcp-tools) |
+| Ingestion (dlt) | `http://localhost:3008/mcp` | `ext-ingestion-mcp` | Loading APIs, databases and files. See [Ingestion (dlt)](ingestion.md#mcp-tools) |
 
 The extension servers exist only when that [extension](extensions.md) is installed. On Kubernetes the addresses are `https://users.<domain>/mcp`, `https://admin.<domain>/mcp` and `https://<host>.<domain>/mcp` for each extension; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in). Use them in the commands below instead of the `localhost` ones.
 
@@ -44,4 +44,4 @@ Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Cod
 
 Every team member can browse the catalog, preview rows and answer questions from semantic models. Writers also publish and delete semantic models; team administrators also create, rename and delete databases and manage data shares. Destructive tools require the exact name. An external share's client secret is returned once, so the agent sees it; hand it only to the recipient.
 
-[MCP tools](mcp.md) describes every tool, and [MCP design](mcp-design.md) why the tools work the way they do. The [agent skills](agent-skills.md) in the installation folder teach an agent common tasks, such as building a semantic model or setting up a class.
+[Core MCP tools](mcp.md) describes every user portal tool and [MCP design](mcp-design.md) why the tools work the way they do. Each extension's page describes its own tools. The [agent skills](agent-skills.md) in the installation folder teach an agent common tasks, such as building a semantic model or setting up a class.

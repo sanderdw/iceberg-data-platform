@@ -41,7 +41,7 @@ An agent connected to the [user portal's MCP server](ai-agents.md) publishes a m
 
 ## Write it so agents answer well
 
-These rules come from building models with the [MCP tools](mcp.md); [why the tools work this way](mcp-design.md) gives the reasons:
+These rules come from building models with the [core MCP tools](mcp.md); [why the tools work this way](mcp-design.md) gives the reasons:
 
 - **Units.** End each metric description with `Unit: …`.
 - **Dataset names.** Write metric expressions with the dataset name, such as `sum(SALES.amount)` or

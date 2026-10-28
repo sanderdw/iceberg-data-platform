@@ -12,7 +12,19 @@ OpenMetadata 2.0 has no Iceberg connector of its own: it reaches Iceberg only th
 
 ## Install
 
-OpenMetadata runs with the Compose installation only; it has no Helm chart yet. The platform installer doesn't add this extension, because it needs your OpenMetadata server and a bot token. It has its own installer instead. On the machine where the platform is installed (in `~/iceberg-data-platform`, version 0.9.1 or later):
+OpenMetadata runs with the Compose installation only; it has no Helm chart yet. The platform installer doesn't add this extension, because it needs an OpenMetadata server and a bot token. It has its own installer instead, run on the machine where the platform is installed (in `~/iceberg-data-platform`, version 0.9.1 or later).
+
+### Try it with a local OpenMetadata
+
+No OpenMetadata yet? `--demo` also starts one next to the extension, with about 4 GB of memory:
+
+```bash
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | sh -s -- --demo
+```
+
+The first start takes a few minutes. Open `http://localhost:8585` and sign in as `admin@open-metadata.org` with password `admin`. It's for trying the extension out, not for production. To switch to your own OpenMetadata later, remove the `COMPOSE_FILE` line from `extensions/openmetadata/.env`, set `OM_URL` and `OM_JWT_TOKEN` there, and run `docker compose up -d --wait` in that folder.
+
+### Connect your own OpenMetadata
 
 ```bash
 curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | sh
@@ -31,23 +43,13 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/o
   OM_URL=https://metadata.example.com/api OM_JWT_TOKEN=eyJ... OM_UI_URL=https://metadata.example.com sh
 ```
 
-The installer:
+Either way, the installer:
 
 1. Downloads the extension's files, checks them against the release's checksums and puts them in `~/iceberg-data-platform/extensions/openmetadata`.
 2. Registers the extension with the platform as a listing extension and applies that to the platform services.
 3. Writes the settings to `extensions/openmetadata/.env` and starts the extension.
 
 Use `--dir` when the platform is installed elsewhere: `| sh -s -- --dir /opt/iceberg-data-platform`. Running the install command again, or that of a newer release, keeps `.env` and the registration.
-
-### Try it with a local OpenMetadata
-
-No OpenMetadata yet? `--demo` also starts one next to the extension, with about 4 GB of memory:
-
-```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | sh -s -- --demo
-```
-
-The first start takes a few minutes. Open `http://localhost:8585` and sign in as `admin@open-metadata.org` with password `admin`. It's for trying the extension out, not for production. To switch to your own OpenMetadata later, remove the `COMPOSE_FILE` line from `extensions/openmetadata/.env`, set `OM_URL` and `OM_JWT_TOKEN` there, and run `docker compose up -d --wait` in that folder.
 
 ### List your first data share
 
