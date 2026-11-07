@@ -32,7 +32,7 @@ users = [
 ]
 notebook = [
     "altair>=6.3.0",
-    "dlt[pyiceberg]==1.31.0",
+    "dlt[pyiceberg]==1.32.0",
     "duckdb==2.0.0",
     "marimo[sql]==0.25.2",
     "matplotlib>=3.11.2",
