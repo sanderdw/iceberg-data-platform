@@ -127,6 +127,19 @@ Every result also carries:
 
 The LLM provider receives the conversation, the agent's instructions, the selected model's names, descriptions and owner guidance, the compiled SQL, the metric definitions, and **at most 20 rows of each result** (`BI_LLM_ROWS`, capped at 8 KB). `BI_LLM_ROWS=0` sends no rows: the agent still charts results, because charts and tables load their rows from the gateway. It never receives tokens, credentials or rows beyond that sample. The owner's guidance is passed as quoted data, never as instructions, and tools can only read what the person could read anyway.
 
+## Evaluations
+
+The [Evaluations](evaluations.md) extension asks Conversational BI questions for a team, scores the answers and compares LLMs. Conversational BI answers it only where a team administrator enabled both extensions, and only through `/api/v1/evaluation/*` with Evaluations' own service account; it then reads what every member of the team can read.
+
+| Setting (in `.env`) | Default | Meaning |
+| --- | --- | --- |
+| `BI_AGENT_CALLERS` | `evaluations` | Extensions whose service account may ask for a team |
+| `BI_EVAL_MODELS` | (none) | Other `LLM_MODEL` strings an evaluation may compare; their keys go in `llm.env` |
+| `BI_EVAL_SCHEMA_ONLY` | `false` | Allows Evaluations' [control arm](evaluations.md#what-the-semantic-model-adds), where an LLM writes SQL on the tables of a model. Never used by the chat |
+| `BI_CONVERSATION_RETENTION_DAYS` | `30` | How long conversations are kept for live evaluation; `0` keeps none |
+
+For live evaluation, Conversational BI keeps the conversations of a team, in an environment where the team enabled Evaluations: the question, the answer, the tool calls with what the agent saw of their results, the LLM and token usage. A conversation counts for the team of the semantic model the agent answered from. Other teams' conversations stay in memory only, as before. The record is on the volume `cbi-state` (on Kubernetes the PVC `cbi-state`, size `conversationStorage`), and only Evaluations reads it, per team.
+
 ## Limits
 
 Conversations live in the runtime's memory and end when it restarts. Results are kept for 30 minutes. One query reads at most 5,000 rows; `BI_MAX_ROWS` can lower that.

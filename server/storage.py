@@ -15,12 +15,9 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from .models import ServiceError
 
-# The names bucket_name() makes: never a wildcard, path or ARN fragment.
-BUCKET = re.compile(r"db-[a-z0-9][a-z0-9-]{0,39}-[0-9a-f]{12}")
-
-
-def bucket_name(database):
-    return f"db-{database.replace('_', '-')[:40].rstrip('-')}-{secrets.token_hex(6)}"
+# The names the portal gives buckets: never a wildcard, path or ARN fragment.
+# A bucket is named after its catalog ID.
+BUCKET = re.compile(r"db-[0-9a-f]{32}")
 
 
 def bucket_policy(buckets):
@@ -108,7 +105,7 @@ class RustFSStorage:
         )
 
     def create_bucket(self, database, team):
-        bucket = bucket_name(database)
+        bucket = database
         try:
             self.call("head_bucket", Bucket=bucket)
         except ServiceError as exc:

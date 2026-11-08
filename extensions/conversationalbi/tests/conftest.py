@@ -4,6 +4,8 @@ Team A owns `sales` and publishes the flights model in it; the partner team shar
 model with team A. The worker fake runs the compiled SQL on the local flights data.
 """
 
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -11,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conversationalbi.app import create_app
-from conversationalbi.auth import Caller
+from conversationalbi.auth import Caller, ExtensionCaller
 from conversationalbi.config import Settings
 from conversationalbi.errors import CbiError
 from conversationalbi.semantic import worker
@@ -34,7 +36,7 @@ def settings(**overrides):
               "client_id": "ext-conversationalbi", "client_secret": "s" * 48,
               "mcp_client_id": "ext-conversationalbi-mcp", "issuer": ISSUER, "internal_issuer": ISSUER,
               "origin": "http://localhost:3007", "runtime_key": "k" * 32, "model": "test:flights",
-              "allow_test_model": True}
+              "allow_test_model": True, "state_dir": Path(tempfile.mkdtemp())}
     return Settings(**{**values, **overrides})
 
 
@@ -42,7 +44,10 @@ class FakeBridge:
     def __init__(self):
         self.roles = {"alice": {TEAM: "admin"}, "bob": {TEAM: "reader"}, "dave": {OTHER: "admin"},
                       "erin": {PARTNER: "admin"}}
-        self.capabilities_ = ["user-context", "automation-principals", "automation-tokens", "shared-data"]
+        self.capabilities_ = ["user-context", "automation-principals", "automation-tokens", "shared-data",
+                              "team-extensions"]
+        # Other extensions each team enabled, per environment (capability team-extensions).
+        self.team_extensions_ = {}
         self.automation_ = []
         self.shared_objects = [FLIGHTS, *TABLES]
         # Teams that received the partner's share, and what each one's share holds (default: shared_objects).
@@ -88,7 +93,17 @@ class FakeBridge:
         shared = [{"id": SHARED_DB, "name": "flights", "team": PARTNER, "environment": "development", "status": "ready",
                    "sharedObjects": self.objects(item["team"])}] if (
             item["team"] in self.recipients and item["environment"] == "development") else []
-        return {**item, "databases": [], "sharedDatabases": shared}
+        databases = [{"id": OWN_DB, "name": "sales", "team": TEAM, "environment": "development", "status": "ready",
+                      "storageLocation": "s3://sales"},
+                     {"id": PROD_DB, "name": "sales", "team": TEAM, "environment": "production", "status": "ready",
+                      "storageLocation": "s3://sales-prod"}]
+        own = [d for d in databases if (d["team"], d["environment"]) == (item["team"], item["environment"])]
+        return {**item, "databases": own, "sharedDatabases": shared}
+
+    async def team_extensions(self, team, environment):
+        if not any(a["team"] == team for a in self.automation_):
+            raise CbiError(403, "This extension is not enabled for this team.", "extension_not_enabled")
+        return {"conversationalbi"} | self.team_extensions_.get((team, environment), set())
 
     async def team_automation(self, token, team):
         return [a for a in self.automation_ if a["team"] == team]
@@ -120,6 +135,15 @@ class FakeBridge:
 
 
 class FakeVerifier:
+    async def verify_extension(self, token):
+        # Service accounts: `svc-evaluations` is in BI_AGENT_CALLERS by default, `svc-dbt` is not.
+        if token == "svc-evaluations":
+            return ExtensionCaller(token, "evaluations", 4102444800.0)
+        if token in ("alice", "bob", "svc-dbt"):
+            raise CbiError(403, "Only the service account of an extension in BI_AGENT_CALLERS may call this.",
+                           "forbidden_caller")
+        raise CbiError(401, "Sign in again.", "unauthorized")
+
     async def verify(self, token):
         if token not in ("alice", "bob", "dave", "erin"):
             raise CbiError(401, "Sign in again.", "unauthorized")

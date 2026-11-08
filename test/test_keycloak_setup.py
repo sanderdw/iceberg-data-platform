@@ -60,17 +60,12 @@ def test_demo_credentials_are_explicit_and_preserve_admin_password(config_root):
     assert values["DEMO_ADMIN_PASSWORD"] != password
 
 
-def test_pgadmin_is_opt_in_but_kept_for_an_older_env(config_root):
+def test_pgadmin_is_opt_in(config_root):
     setup(config_root)
     config = config_root / ".env"
     assert read_env(config)["COMPOSE_PROFILES"] == ""
     enable_profile(config_root, "pgadmin")
     enable_profile(config_root, "pgadmin")
-    assert read_env(config)["COMPOSE_PROFILES"] == "pgadmin"
-    # An .env from before pgAdmin became optional has no COMPOSE_PROFILES; it always ran pgAdmin.
-    config.write_text("".join(line for line in config.read_text().splitlines(keepends=True)
-                              if not line.startswith("COMPOSE_PROFILES=")))
-    setup(config_root)
     assert read_env(config)["COMPOSE_PROFILES"] == "pgadmin"
 
 

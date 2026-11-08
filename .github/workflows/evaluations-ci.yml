@@ -1,0 +1,113 @@
+name: Evaluations extension CI
+# The Evaluations extension (extensions/evaluations) is tested and released on its own. It runs when the
+# extension, Conversational BI (the agent it evaluates), the Bridge contract or its implementation changes.
+on:
+  push:
+    branches: [main]
+    paths: ['extensions/evaluations/**', 'extensions/conversationalbi/conversationalbi/**', 'contracts/bridge/**',
+            'server/bridge.py', 'server/polaris.py', 'scripts/flights_seed.py', '.github/workflows/evaluations-*.yml']
+  pull_request:
+    paths: ['extensions/evaluations/**', 'extensions/conversationalbi/conversationalbi/**', 'contracts/bridge/**',
+            'server/bridge.py', 'server/polaris.py', 'scripts/flights_seed.py', '.github/workflows/evaluations-*.yml']
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: evaluations-ci-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    working-directory: extensions/evaluations
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.13.7'
+          enable-cache: true
+          cache-dependency-glob: extensions/evaluations/uv.lock
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+      - run: uv sync --locked
+      - run: uv run pytest
+      - run: uv run ruff check .
+      - run: uv run python -m scripts.release
+      - run: node --check evaluations/public/app.js
+      - name: Audit Python dependencies
+        run: |
+          uv export --locked --all-groups --no-hashes --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt" > /dev/null
+          uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+
+  integration:
+    # The platform and Conversational BI from this commit, with the scripted model, and this extension end to end.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.13.7'
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+      - run: |
+          uv run python -m scripts.setup --demo --extension conversationalbi --origin http://localhost:3007 --handshake extensions/conversationalbi/.env.bridge
+          uv run python -m scripts.setup --extension evaluations --origin http://localhost:3012 --handshake extensions/evaluations/.env.bridge
+      - run: docker compose up -d --build --wait
+      - run: docker compose run --build --rm keycloak-bootstrap --demo
+      - name: Make demo-admin an administrator of demo-team (test fixture)
+        run: |
+          uv run --all-groups python - <<'PY'
+          import os
+          from dotenv import load_dotenv
+          load_dotenv(".env")
+          from server.polaris import PolarisProvider
+          from server.storage import RustFSStorage
+          provider = PolarisProvider(os.environ, RustFSStorage(os.environ))
+          team = next(t for t in provider.list_teams() if t["name"] == "demo-team")["id"]
+          admin = next(u for u in provider.list_users() if u["name"] == "demo-admin")
+          provider.update_memberships(admin["id"], {**{m["team"]: m["role"] for m in admin["memberships"]}, team: "admin"})
+          PY
+      - name: A partner team shares the flights product with demo-team, which also has its own copy
+        run: uv run --all-groups python -m scripts.flights_seed --own demo-demo
+      - name: Start Conversational BI with the scripted model
+        working-directory: extensions/conversationalbi
+        env:
+          LLM_MODEL: test:flights
+          BI_ALLOW_TEST_MODEL: '1'
+          BI_EVAL_SCHEMA_ONLY: 'true'
+        run: |
+          uv sync --locked
+          uv run python -m scripts.setup
+          docker compose up -d --build --wait
+      - name: Start the Evaluations extension
+        working-directory: extensions/evaluations
+        run: |
+          uv sync --locked
+          uv run python -m scripts.setup
+          docker compose up -d --build --wait
+      - name: End to end through the REST API
+        working-directory: extensions/evaluations
+        run: uv run python -m scripts.e2e_smoke
+      - name: Logs on failure
+        if: failure()
+        run: |
+          (cd extensions/evaluations && docker compose logs --tail 200) || true
+          (cd extensions/conversationalbi && docker compose logs --tail 200 cbi-gateway) || true
+      - name: Clean up
+        if: always()
+        run: |
+          (cd extensions/evaluations && docker compose down --remove-orphans --volumes) || true
+          (cd extensions/conversationalbi && docker compose down --remove-orphans --volumes) || true
+          docker compose down --remove-orphans --volumes || true

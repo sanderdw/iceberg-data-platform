@@ -225,7 +225,7 @@ TIME_DATATYPES = ("Date", "Time", "DateTime", "DateTimeTz")
 
 
 def dimension(field):
-    """Ossie marks a dimension with an object, `{"is_time": bool}`; older documents wrote `true`.
+    """Ossie marks a dimension with an object, `{"is_time": bool}`.
     Without `is_time`, a temporal `datatype` makes it a time dimension, as the specification says.
 
     Returns (is a dimension, is a time dimension).
@@ -234,7 +234,7 @@ def dimension(field):
     if isinstance(value, dict):
         is_time = value.get("is_time")
         return True, is_time if isinstance(is_time, bool) else field.get("datatype") in TIME_DATATYPES
-    return value is True, False
+    return False, False
 
 
 def synonyms(item):

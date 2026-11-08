@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from conversationalbi import evaluation
 from conversationalbi.api import OPERATIONS
 from conversationalbi.config import ROOT
 from conversationalbi.mcp_server import create_mcp
@@ -151,7 +152,8 @@ def test_environment_admin_rules(stack):
 def test_every_operation_is_an_mcp_tool(stack):
     schema = stack.client.get("/api/v1/openapi.json").json()
     operations = {op["operationId"] for path in schema["paths"].values() for op in path.values()}
-    assert operations == set(OPERATIONS)
+    # Except the ones only other extensions call.
+    assert operations == set(OPERATIONS) | evaluation.OPERATIONS
     mcp = create_mcp(stack.services.settings, stack.services, None)
     assert {t.name for t in asyncio.run(mcp.list_tools())} == set(OPERATIONS.values())
 

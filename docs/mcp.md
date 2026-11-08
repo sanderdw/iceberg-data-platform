@@ -10,8 +10,9 @@ Platform administrators have a separate endpoint on the administration portal, d
 Each [extension](extensions.md) can provide its own MCP server with its own tools, described on its
 page: [Conversational BI](conversational-bi.md#mcp-tools) at `http://localhost:3007/mcp` (client
 `ext-conversationalbi-mcp`), [dbt pipelines](dbt.md#mcp-tools) at `http://localhost:3004/mcp` (client
-`ext-dbt-mcp`) and [Ingestion (dlt)](ingestion.md#mcp-tools) at `http://localhost:3008/mcp` (client
-`ext-ingestion-mcp`). They exist only when the extension is installed. On Kubernetes each is `/mcp`
+`ext-dbt-mcp`), [Ingestion (dlt)](ingestion.md#mcp-tools) at `http://localhost:3008/mcp` (client
+`ext-ingestion-mcp`) and [Evaluations](evaluations.md#connect-an-ai-agent) at `http://localhost:3012/mcp`
+(client `ext-evaluations-mcp`). They exist only when the extension is installed. On Kubernetes each is `/mcp`
 on its own HTTPS host; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in).
 
 ## How every tool works

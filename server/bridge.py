@@ -39,8 +39,9 @@ from .polaris import AUTOMATION_ROLES, PolarisProvider, enc
 from .storage import RustFSStorage
 from .validation import validation_message
 
-CONTRACT_VERSION = "0.1.2"
-CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "shared-data", "listings"]
+CONTRACT_VERSION = "0.1.3"
+CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "shared-data", "listings",
+                "team-extensions"]
 BRIDGE_AUDIENCE = "iceberg-bridge"
 CONTRACT = Path(__file__).resolve().parent.parent / "contracts" / "bridge" / "v1" / "openapi.yaml"
 ADMIN_ROLES = ("admin", "bucket-admin")
@@ -190,6 +191,18 @@ class AutomationScope(AutomationPrincipal):
 
 class AutomationList(BaseModel):
     automationPrincipals: list[AutomationPrincipal]
+
+
+# Capability `team-extensions`: which extensions a team has enabled, so one extension can serve another
+# for that team only where a team administrator enabled both.
+
+class TeamExtension(BaseModel):
+    extension: str
+    environment: Environment
+
+
+class TeamExtensionList(BaseModel):
+    extensions: list[TeamExtension]
 
 
 class TokenCatalog(BaseModel):
@@ -686,6 +699,21 @@ def create_bridge_app(provider=None, verifier=None, env=None):
     async def all_automation(c: ServiceCaller):
         items = await run_in_threadpool(lambda: provider.list_automation(extension=c.extension))
         return {"automationPrincipals": items}
+
+    @app.get("/bridge/v1/teams/{teamId}/extensions", response_model=TeamExtensionList, responses=errors,
+             summary="The extensions a team has enabled, per environment (extensions of that team only)")
+    async def team_extensions(teamId: team_id, c: ServiceCaller, environment: Environment | None = None):
+        def run():
+            items = [i for i in provider.list_automation(team=teamId)
+                     if i["status"] == "active" and i["extension"] in known]
+            if not any(i["extension"] == c.extension for i in items):
+                raise BridgeError(403, "This extension is not enabled for this team.", "extension_not_enabled")
+            return sorted({(i["extension"], i["environment"]) for i in items
+                           if environment in (None, i["environment"])})
+        pairs = await run_in_threadpool(run)
+        audit("team_extensions.read", {"iceberg.team": teamId, "iceberg.extension": c.extension},
+              "team extensions read: %s extension=%s", teamId, c.extension)
+        return {"extensions": [{"extension": e, "environment": v} for e, v in pairs]}
 
     @app.get("/bridge/v1/automation-principals/{id}", response_model=AutomationScope, responses=errors,
              summary="An automation principal and the databases it can reach")

@@ -77,7 +77,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
                     provider.close()
 
     app = FastAPI(
-        title="Iceberg Workspace API", version="0.9.10", lifespan=lifespan, docs_url=None, redoc_url=None,
+        title="Iceberg Workspace API", version="0.9.11", lifespan=lifespan, docs_url=None, redoc_url=None,
         description=(
             "Sign in to the administration portal first, then open /docs to call these APIs with your session. "
             "Writes require X-Portal-Request: 1 and Content-Type: application/json. "
@@ -374,13 +374,9 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
     @app.patch("/api/users/{id}")
     def update_user(id: str, data: Memberships):
         # The MCP update_user_access tool calls this function directly; keep its signature.
-        principal = require_editable_user(id)
-        if user_management:
-            # A linked legacy account keeps the bucket administration it already holds.
-            current = provider.user(principal)["memberships"]
-            held = {m["team"] for m in current if m["role"] == "bucket-admin"}
-            if any(m.role == "bucket-admin" and m.team not in held for m in data.memberships):
-                raise ServiceError(422, "Keycloak users access storage through Polaris; direct S3 accounts are not supported.")
+        require_editable_user(id)
+        if user_management and any(m.role == "bucket-admin" for m in data.memberships):
+            raise ServiceError(422, "Keycloak users access storage through Polaris; direct S3 accounts are not supported.")
         return provider.update_memberships(id, data.roles)
 
     @app.delete("/api/users/{id}")

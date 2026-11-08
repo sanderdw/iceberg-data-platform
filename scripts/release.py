@@ -55,8 +55,10 @@ IGNORED = {"__pycache__", ".pytest_cache", ".ruff_cache", ".venv"}
 LOCAL_DIRS = ("docs/local_only/",)
 # Tracked in git but not part of the core source release: the presentation is published by the
 # GitHub Pages workflow; extensions and their workflows are versioned and released on their own; dev/ holds
-# maintainer tooling such as the Kubernetes test cluster scripts.
-TRACKED_UNRELEASED = ("presentation/", "extensions/", "dev/", ".github/workflows/conversationalbi-", ".github/workflows/dbt-",
+# maintainer tooling such as the Kubernetes test cluster scripts; the release skill is for maintainers too.
+TRACKED_UNRELEASED = ("presentation/", "extensions/", "dev/", ".claude/skills/release/",
+                      ".github/workflows/conversationalbi-", ".github/workflows/dbt-",
+                      ".github/workflows/evaluations-",
                       ".github/workflows/ingestion-", ".github/workflows/openmetadata-")
 
 
@@ -279,6 +281,28 @@ def ingestion_bundle(root=ROOT, image_tag=None):
                      f"{SKILLS_DIR}/ingestion/SKILL.md": (root / ING / ING_SKILL).read_bytes()}
 
 
+EVAL = "extensions/evaluations"
+EVAL_SKILL = "skills/agent-evaluations/SKILL.md"
+
+
+def evaluations_bundle(root=ROOT, image_tag=None):
+    """The Evaluations extension for the installer: its compose file on the published image, its setup and skill."""
+    version = tomllib.loads((root / EVAL / "pyproject.toml").read_text())["project"]["version"]
+    if image_tag is not None and not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", image_tag):
+        raise ValueError("Invalid Evaluations image tag")
+    text = (root / EVAL / "compose.yaml").read_text()
+    local = f"    image: iceberg-evaluations:{version}\n"
+    if text.count(local) != 1:
+        raise ValueError(f"{EVAL}/compose.yaml must use iceberg-evaluations:{version} once")
+    text = text.replace(local, f"    image: ghcr.io/sanderdw/iceberg-evaluations:{image_tag or version}\n")
+    text, builds = re.subn(r"(?m)^    build: \S+\n", "", text)
+    if builds != 1 or "build:" in text:
+        raise ValueError(f"Unexpected build sections in {EVAL}/compose.yaml")
+    return version, {"evaluations/compose.yaml": text.encode(),
+                     "evaluations/scripts/setup.py": (root / EVAL / "scripts/setup.py").read_bytes(),
+                     f"{SKILLS_DIR}/agent-evaluations/SKILL.md": (root / EVAL / EVAL_SKILL).read_bytes()}
+
+
 def local_secrets(paths, words=()):
     """Credential values in local env files, to make sure no released file contains them.
 
@@ -337,6 +361,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
     contents.update(conversationalbi_bundle(root, extension_image_tag)[1])
     contents.update(dbt_bundle(root, extension_image_tag)[1])
     contents.update(ingestion_bundle(root, extension_image_tag)[1])
+    contents.update(evaluations_bundle(root, extension_image_tag)[1])
     # Getting-started skills for coding agents, opened in the installation directory.
     for path in files:
         relative = path.relative_to(root).as_posix()
@@ -351,10 +376,12 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
                 f"---\n{frontmatter}---\n\nRead `{SKILLS_DIR}/{skill}/SKILL.md` and follow it. "
                 f"Paths in that skill are relative to `{SKILLS_DIR}/{skill}/`.\n"
             ).encode()
-    found = [*local_secrets(root.glob(".env*")),
-             *local_secrets([*(root / CBI).glob(".env*"), root / CBI / "llm.env"], words=("KEY", "TOKEN")),
-             *local_secrets((root / DBT).glob(".env*"), words=("TOKEN",)),
-             *local_secrets((root / ING).glob(".env*"), words=("TOKEN",))]
+    # HEADERS: OTEL_EXPORTER_OTLP_HEADERS holds an observability backend's API key.
+    found = [*local_secrets(root.glob(".env*"), words=("HEADERS",)),
+             *local_secrets([*(root / CBI).glob(".env*"), root / CBI / "llm.env"], words=("KEY", "TOKEN", "HEADERS")),
+             *local_secrets((root / DBT).glob(".env*"), words=("TOKEN", "HEADERS")),
+             *local_secrets((root / ING).glob(".env*"), words=("TOKEN", "HEADERS")),
+             *local_secrets([*(root / EVAL).glob(".env*"), root / EVAL / "llm.env"], words=("KEY", "TOKEN", "HEADERS"))]
     for filename, data in contents.items():
         if any(secret.encode() in data for secret in found):
             raise ValueError(f"Local credential found in bundled {filename}; value suppressed")

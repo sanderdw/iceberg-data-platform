@@ -19,7 +19,7 @@ OpenMetadata runs with the Compose installation only; it has no Helm chart yet. 
 No OpenMetadata yet? `--demo` also starts one next to the extension, with about 4 GB of memory:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | sh -s -- --demo
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.3/install.sh | sh -s -- --demo
 ```
 
 The first start takes a few minutes. Open `http://localhost:8585` and sign in as `admin@open-metadata.org` with password `admin`. It's for trying the extension out, not for production. To switch to your own OpenMetadata later, remove the `COMPOSE_FILE` line from `extensions/openmetadata/.env`, set `OM_URL` and `OM_JWT_TOKEN` there, and run `docker compose up -d --wait` in that folder.
@@ -27,7 +27,7 @@ The first start takes a few minutes. Open `http://localhost:8585` and sign in as
 ### Connect your own OpenMetadata
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.3/install.sh | sh
 ```
 
 It asks for:
@@ -39,7 +39,7 @@ It asks for:
 To install without questions, pass them in the environment:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.2/install.sh | \
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/openmetadata-v0.1.3/install.sh | \
   OM_URL=https://metadata.example.com/api OM_JWT_TOKEN=eyJ... OM_UI_URL=https://metadata.example.com sh
 ```
 

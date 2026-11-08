@@ -41,6 +41,8 @@ class Services:
     # Context and authorization
 
     async def me(self, caller, *, fresh=False):
+        if getattr(caller, "context", None) is not None:
+            return caller.context  # Another extension asking for a team (evaluation.py)
         return await self.bridge.me(caller.token, fresh=fresh)
 
     @staticmethod

@@ -475,17 +475,11 @@ class PolarisProvider:
 
     @staticmethod
     def memberships(properties):
-        # Principals written before per-team roles carry one role for all their teams.
-        if "portal.memberships" in properties:
-            return dict(json.loads(properties["portal.memberships"]))
-        return {team: properties["portal.role"] for team in json.loads(properties["portal.teams"])}
+        return dict(json.loads(properties["portal.memberships"]))
 
     @staticmethod
     def membership_properties(properties, roles):
-        # The legacy keys are dropped, not dual-written: an older portal would
-        # apply a stale single role to every team.
-        kept = {k: v for k, v in properties.items() if k not in ("portal.teams", "portal.role")}
-        return {**kept, "portal.memberships": json.dumps(roles)}
+        return {**properties, "portal.memberships": json.dumps(roles)}
 
     def user(self, principal):
         p = principal["properties"]
@@ -1491,9 +1485,6 @@ class PolarisProvider:
                             "portal.extension": extension,
                             "portal.created-by": created_by["id"],
                             "portal.created-by-name": created_by["name"],
-                            # An older portal lists every non-share principal as a user;
-                            # an empty membership keeps it from failing there.
-                            "portal.memberships": "{}",
                         },
                     }
                 },

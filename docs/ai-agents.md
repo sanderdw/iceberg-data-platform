@@ -9,6 +9,7 @@ Both portals serve a [Model Context Protocol](https://modelcontextprotocol.io) e
 | Conversational BI | `http://localhost:3007/mcp` | `ext-conversationalbi-mcp` | Governed questions over semantic models. See [Conversational BI](conversational-bi.md#mcp-tools) |
 | dbt pipelines | `http://localhost:3004/mcp` | `ext-dbt-mcp` | Building, testing and scheduling pipelines. See [dbt pipelines](dbt.md#mcp-tools) |
 | Ingestion (dlt) | `http://localhost:3008/mcp` | `ext-ingestion-mcp` | Loading APIs, databases and files. See [Ingestion (dlt)](ingestion.md#mcp-tools) |
+| Evaluations | `http://localhost:3012/mcp` | `ext-evaluations-mcp` | Checking Conversational BI's answers against known answers. See [Evaluations](evaluations.md#connect-an-ai-agent) |
 
 The extension servers exist only when that [extension](extensions.md) is installed. On Kubernetes the addresses are `https://users.<domain>/mcp`, `https://admin.<domain>/mcp` and `https://<host>.<domain>/mcp` for each extension; see [addresses and sign-in](install-kubernetes.md#addresses-and-sign-in). Use them in the commands below instead of the `localhost` ones.
 

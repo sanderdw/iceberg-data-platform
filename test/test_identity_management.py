@@ -258,18 +258,16 @@ def test_identity_api_is_admin_and_csrf_protected_and_disables_legacy_creation(i
         assert client.get("/api/session").json()["userManagement"] == "keycloak"
 
 
-def test_keycloak_users_cannot_gain_bucket_administration_but_keep_a_held_one(identities):
+def test_keycloak_users_cannot_gain_bucket_administration(identities):
     s = identities
     team = s.data.teams[0]
     human = s.manager.create(s.provider, s.data, "new")["user"]
-    legacy = s.provider.create_user(UserInput(name="legacy", memberships=members([team], "bucket-admin")))["user"]
     with pytest.raises(ValidationError):
         CreateIdentity(**{**s.data.model_dump(), "memberships": members([team], "bucket-admin")})
     with TestClient(create_app(s.provider, PASSWORD, user_management=s.manager)) as client:
         client.post("/api/session", json={"password": PASSWORD}, headers=HEADERS)
         body = {"memberships": members([team], "bucket-admin")}
         assert client.patch(f"/api/users/{human['id']}", json=body, headers=HEADERS).status_code == 422
-        assert client.patch(f"/api/users/{legacy['id']}", json=body, headers=HEADERS).status_code == 200
         body = {"memberships": members([team], "admin")}
         assert client.patch(f"/api/users/{human['id']}", json=body, headers=HEADERS).status_code == 200
 

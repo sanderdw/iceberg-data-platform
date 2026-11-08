@@ -1,0 +1,19 @@
+---
+# The conversation record of teams that enabled the Evaluations extension (SQLite); kept when the
+# chart is uninstalled.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cbi-state
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.conversationStorage }}

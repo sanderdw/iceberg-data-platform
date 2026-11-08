@@ -79,7 +79,7 @@ The **Infrastructure** page shows service health, per-container resources, Postg
 
 ## pgAdmin
 
-pgAdmin shows Polaris's metadata database, so you can see how the catalog stores tables and grants. The platform doesn't need it, so it's optional and runs with Compose only (the Kubernetes chart has no pgAdmin). The installer asks whether to add it, and `ICEBERG_EXTENSIONS=pgadmin` adds it without the question. It starts with the `pgadmin` Compose profile: `COMPOSE_PROFILES=pgadmin` in `.env`. An installation from before 0.9.10 keeps pgAdmin. To remove it, empty `COMPOSE_PROFILES` and run `docker compose rm -sf pgadmin`.
+pgAdmin shows Polaris's metadata database, so you can see how the catalog stores tables and grants. The platform doesn't need it, so it's optional and runs with Compose only (the Kubernetes chart has no pgAdmin). The installer asks whether to add it, and `ICEBERG_EXTENSIONS=pgadmin` adds it without the question. It starts with the `pgadmin` Compose profile: `COMPOSE_PROFILES=pgadmin` in `.env`. To remove it, empty `COMPOSE_PROFILES` and run `docker compose rm -sf pgadmin`.
 
 At http://localhost:5050, expand **Iceberg Platform → Polaris metadata** and enter `POSTGRES_PASSWORD` from `.env`. This is Polaris's metadata database. Make all changes through the portal so that grants and bucket policies stay in sync.
 

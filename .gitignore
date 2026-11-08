@@ -37,6 +37,9 @@ htmlcov/
 .idea/
 .vscode/
 .claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/release/
 
 # Personal sample data and generated user credentials
 /personal/*

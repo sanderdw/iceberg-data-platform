@@ -1,5 +1,15 @@
 # Bridge contract changelog
 
+## 0.1.3 - 2026-11-08
+
+Released with core 0.9.11. Additive: extensions built for 0.1.0 to 0.1.2 keep working.
+
+- Capability `team-extensions`: `GET /teams/{teamId}/extensions?environment=` lists the extensions
+  a team enabled (active automation principals), per environment. Only for the service account of
+  an extension that the team enabled itself; otherwise 403 `extension_not_enabled`. Every read is
+  in the audit trail as `iceberg.bridge.team_extensions.read`. With it, one extension can serve
+  another for a team only where a team administrator enabled both.
+
 ## 0.1.2 - 2026-10-17
 
 Released with core 0.9.9. Additive: extensions built for 0.1.0 and 0.1.1 keep working.

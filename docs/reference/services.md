@@ -16,6 +16,7 @@ The addresses of a [Compose installation](../install.md). Credentials are in `.e
 | Conversational BI | http://localhost:3007 | Optional [extension](../conversational-bi.md); Keycloak account |
 | dbt pipelines | http://localhost:3004 | Optional [extension](../dbt.md); Keycloak account, MCP through the `ext-dbt-mcp` client |
 | Ingestion (dlt) | http://localhost:3008 | Optional [extension](../ingestion.md); Keycloak account, MCP through the `ext-ingestion-mcp` client |
+| Evaluations | http://localhost:3012 | Optional [extension](../evaluations.md); Keycloak account, MCP through the `ext-evaluations-mcp` client |
 | OpenMetadata | http://localhost:3011 | Optional [extension](../openmetadata.md); opens your OpenMetadata server, sync status at `/api/status` |
 
 All ports bind to `127.0.0.1`, and PostgreSQL is internal only. For access beyond localhost, see [deploying beyond localhost](../security.md#deploying-beyond-localhost) or the [quick-share skill](../agent-skills.md).

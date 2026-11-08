@@ -3,7 +3,7 @@
   "info": {
     "title": "Iceberg Platform Bridge",
     "description": "The stable interface for extensions. Authenticate with a Keycloak access token for the `iceberg-bridge` audience: a user token issued to the extension's clients, or the service-account token of the extension's confidential client. See contracts/bridge for the compatibility policy.",
-    "version": "0.1.2"
+    "version": "0.1.3"
   },
   "paths": {
     "/bridge/v1": {
@@ -637,6 +637,132 @@
                 }
               }
             }
+          }
+        },
+        "security": [
+          {
+            "KeycloakBearer": []
+          }
+        ]
+      }
+    },
+    "/bridge/v1/teams/{teamId}/extensions": {
+      "get": {
+        "summary": "The extensions a team has enabled, per environment (extensions of that team only)",
+        "operationId": "team_extensions_bridge_v1_teams__teamId__extensions_get",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^team-[a-f0-9]{32}$",
+              "title": "Teamid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "development",
+                    "acceptance",
+                    "production"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Environment"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamExtensionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -2574,6 +2700,45 @@
           "pathStyle"
         ],
         "title": "StorageEndpoints"
+      },
+      "TeamExtension": {
+        "properties": {
+          "extension": {
+            "type": "string",
+            "title": "Extension"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "extension",
+          "environment"
+        ],
+        "title": "TeamExtension"
+      },
+      "TeamExtensionList": {
+        "properties": {
+          "extensions": {
+            "items": {
+              "$ref": "#/components/schemas/TeamExtension"
+            },
+            "type": "array",
+            "title": "Extensions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "extensions"
+        ],
+        "title": "TeamExtensionList"
       },
       "TokenCatalog": {
         "properties": {

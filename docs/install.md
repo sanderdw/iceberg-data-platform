@@ -32,14 +32,14 @@ The installer scripts and archives are available in the [release assets](https:/
 
 ## Add extensions
 
-The installer can also add [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md) and [Ingestion (dlt)](ingestion.md); in a terminal it asks for each one. See [extensions](extensions.md#install).
+The installer can also add [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md) and, with Conversational BI, [Evaluations](evaluations.md); in a terminal it asks for each one. See [extensions](extensions.md#install).
 
 ## Install a specific version
 
 Replace `latest/download` with `download/vX.Y.Z`. The bundle, Compose files and images are all pinned to that version:
 
 ```bash
-curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.9.10/install.sh | sh
+curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/download/v0.9.11/install.sh | sh
 ```
 
 ## Test a branch
@@ -81,6 +81,7 @@ docker compose -f compose.users.yaml up -d --wait users
 docker compose -f conversationalbi/compose.yaml up -d --wait   # with Conversational BI
 docker compose -f dbt/compose.yaml up -d --wait                # with dbt pipelines
 docker compose -f ingestion/compose.yaml up -d --wait          # with Ingestion (dlt)
+docker compose -f evaluations/compose.yaml up -d --wait        # with Evaluations
 ```
 
 ## Stop and preserve data
@@ -88,6 +89,7 @@ docker compose -f ingestion/compose.yaml up -d --wait          # with Ingestion 
 Stop the workspaces first so the user portal can close its notebooks:
 
 ```bash
+docker compose -f evaluations/compose.yaml down        # with Evaluations
 docker compose -f conversationalbi/compose.yaml down   # with Conversational BI
 docker compose -f dbt/compose.yaml down                # with dbt pipelines
 docker compose -f ingestion/compose.yaml down          # with Ingestion (dlt)

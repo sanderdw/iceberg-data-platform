@@ -33,8 +33,7 @@ def test_parses_the_stored_flights_model():
 
 @pytest.mark.parametrize(("flag", "expected"), [
     ({"is_time": True}, True), ({"is_time": False}, True), ({}, True),  # Ossie's dimension object
-    (True, True), (False, False),  # older documents
-    (None, None), ("yes", None),
+    (True, None), (False, None), (None, None), ("yes", None),  # only the object marks a dimension
 ])
 def test_dimensions_follow_the_ossie_object(flag, expected):
     assert ossie.dimension({} if flag is None else {"dimension": flag}) is expected

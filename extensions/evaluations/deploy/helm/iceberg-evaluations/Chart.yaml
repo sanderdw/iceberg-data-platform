@@ -1,0 +1,13 @@
+apiVersion: v2
+name: iceberg-evaluations
+description: Evaluations for the Iceberg Data Platform - question sets with known answers for its AI agent, scored runs, model comparisons and live checks.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.32.0-0"
+home: https://sanderdw.github.io/iceberg-data-platform/evaluations/
+sources:
+  - https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/evaluations
+annotations:
+  artifacthub.io/license: Apache-2.0
+keywords: [iceberg, evaluation, llm, polaris]

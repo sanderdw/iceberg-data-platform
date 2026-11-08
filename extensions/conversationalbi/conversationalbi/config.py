@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = "0.1.4"
+VERSION = "0.1.5"
 ENVIRONMENTS = ("development", "acceptance", "production")
 DEFAULT_MODEL = "google:gemini-3.8-flash"
 
@@ -41,6 +41,16 @@ class Settings:
     max_queries: int = 4
     mcp_callback_port: int = 3010
     contract: str = ">=0.1,<0.2"
+    # Extensions whose service account may ask questions for a team that enabled both (evaluation.py).
+    agent_callers: tuple = ("evaluations",)
+    # Other LLM_MODEL strings such a caller may ask with, to compare models; their keys live in llm.env.
+    eval_models: tuple = ()
+    eval_concurrency: int = 2
+    # The evaluation's control arm: an LLM that writes its own SQL. Never the chat; off unless set.
+    eval_schema_only: bool = False
+    # The conversation record, only for teams that enabled the Evaluations extension (conversations.py).
+    state_dir: Path = Path("/data")
+    conversation_retention_days: int = 30
 
     @classmethod
     def from_env(cls, env=None):
@@ -67,6 +77,13 @@ class Settings:
             max_queries=max(1, int(env.get("BI_MAX_QUERIES", "4"))),
             mcp_callback_port=int(env.get("MCP_CALLBACK_PORT", "3010")),
             contract=contract_range(),
+            agent_callers=tuple(i for i in env.get("BI_AGENT_CALLERS", "evaluations").replace(" ", "").split(",")
+                                if i),
+            eval_models=tuple(m for m in env.get("BI_EVAL_MODELS", "").replace(" ", "").split(",") if m),
+            eval_concurrency=max(1, int(env.get("BI_EVAL_CONCURRENCY", "2"))),
+            eval_schema_only=env.get("BI_EVAL_SCHEMA_ONLY", "false").lower() == "true",
+            state_dir=Path(env.get("BI_STATE_DIR", "/data")),
+            conversation_retention_days=max(0, min(int(env.get("BI_CONVERSATION_RETENTION_DAYS", "30")), 365)),
         )
 
     @property

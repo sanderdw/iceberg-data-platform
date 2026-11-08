@@ -19,7 +19,7 @@ x-otel-env: &otel-env
 services:
   dbt-portal:
     build: .
-    image: iceberg-dbt:0.1.2
+    image: iceberg-dbt:0.1.3
     <<: *hardened
     labels:
       io.iceberg-platform.extension: dbt
@@ -50,7 +50,7 @@ services:
   # The only container with the Docker socket. It launches the pinned runner image, with fixed
   # isolation, on a private network holding only the platform's catalog and storage.
   dbt-launcher:
-    image: iceberg-dbt:0.1.2
+    image: iceberg-dbt:0.1.3
     <<: *hardened
     command: ["/app/.venv/bin/uvicorn", "launcher.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3006", "--no-access-log"]
     user: "0:0"
@@ -58,7 +58,7 @@ services:
       io.iceberg-platform.extension: dbt
     environment:
       LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
-      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-dbt-runner:0.1.2}
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-dbt-runner:0.1.3}
       ARTIFACTS_DIR: /artifacts
       BRIDGE_EXTENSION_ID: dbt
       RUN_MEMORY: ${RUN_MEMORY:-2g}
@@ -75,7 +75,7 @@ services:
 
   # The isolated image every run uses: built or pulled with --profile images, never started here.
   runner-image:
-    image: iceberg-dbt-runner:0.1.2
+    image: iceberg-dbt-runner:0.1.3
     build:
       context: .
       dockerfile: runner/Dockerfile

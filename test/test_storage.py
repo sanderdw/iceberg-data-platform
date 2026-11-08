@@ -8,7 +8,7 @@ from botocore.stub import Stubber
 
 from server.models import ServiceError
 from server.polaris import PolarisProvider
-from server.storage import BUCKET, RustFSStorage, bucket_name, bucket_policy
+from server.storage import BUCKET, RustFSStorage, bucket_policy
 
 
 @pytest.fixture
@@ -19,20 +19,32 @@ def storage():
 
 
 def test_bucket_names_and_policy_scope():
-    for name in ("analytics_dev", "analytics-dev", "a" * 48, "abc---"):
-        assert re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", bucket_name(name))
-        assert BUCKET.fullmatch(bucket_name(name))
-    assert BUCKET.fullmatch(bucket_name(f"db-{'f' * 32}"))
-    assert bucket_name("analytics_dev") != bucket_name("analytics-dev")
-    own = bucket_name("analytics")
+    own = f"db-{'f' * 32}"
+    assert re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", own)
+    assert BUCKET.fullmatch(own)
     statement = bucket_policy([own])["Statement"][0]
     assert statement["Effect"] == "Allow"
     assert statement["Resource"] == [f"arn:aws:s3:::{own}", f"arn:aws:s3:::{own}/*"]
     assert bucket_policy([])["Statement"][0]["Effect"] == "Deny"
     # A policy never names a wildcard, path or anything but a bucket the portal created.
-    for name in ("*", "db-*", "own-bucket", f"{own}/*", "arn:aws:s3:::x"):
+    for name in ("*", "db-*", "own-bucket", f"{own}/*", "arn:aws:s3:::x", f"db-analytics-{'a' * 12}"):
         with pytest.raises(ServiceError):
             bucket_policy([own, name])
+
+
+def test_bucket_is_named_after_its_catalog_and_tagged(storage):
+    database = f"db-{'1' * 32}"
+    tags = [
+        {"Key": "managed-by", "Value": "iceberg-portal"},
+        {"Key": "database", "Value": database},
+        {"Key": "team", "Value": "team-test"},
+    ]
+    with Stubber(storage.s3) as stub:
+        stub.add_client_error("head_bucket", "404", http_status_code=404, expected_params={"Bucket": database})
+        stub.add_response("create_bucket", {}, {"Bucket": database})
+        stub.add_response("put_bucket_tagging", {}, {"Bucket": database, "Tagging": {"TagSet": tags}})
+        assert storage.create_bucket(database, "team-test") == database
+        stub.assert_no_pending_responses()
 
 
 def test_existing_bucket_is_never_adopted(storage):

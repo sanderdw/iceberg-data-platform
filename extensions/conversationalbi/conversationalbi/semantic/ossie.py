@@ -156,14 +156,11 @@ def limit(kind, items, most):
 
 
 def dimension(field):
-    """Ossie marks a dimension with an object, `{"is_time": bool}`; older documents wrote a boolean.
+    """Ossie marks a dimension with an object, `{"is_time": bool}`.
 
     None when the model says nothing about the field, so unflagged models keep every field usable.
     """
-    value = field.get("dimension")
-    if isinstance(value, dict):
-        return True
-    return value if isinstance(value, bool) else None
+    return True if isinstance(field.get("dimension"), dict) else None
 
 
 def parse(loaded, namespace):

@@ -78,6 +78,7 @@ Both portals serve a Model Context Protocol endpoint at `/mcp`, and so does each
 | `iceberg-conversationalbi` | `http://localhost:3007/mcp` | with Conversational BI installed (client id `ext-conversationalbi-mcp`) | governed questions over semantic models: `list_models`, `describe_model`, `query`, `get_result`; team admins also `enable_environment` |
 | `iceberg-dbt` | `http://localhost:3004/mcp` | with the dbt extension installed (client id `ext-dbt-mcp`) | dbt pipelines of the person's teams: `create_project`, `create_branch`, `write_files`, `compile`, `run`, `get_pipeline`, `set_schedule`, …; follow the `dbt-platform` skill. People who prefer a terminal use `iceberg_dbt.py` from the dbt viewer: dbt's commands, run on the platform |
 | `iceberg-ingestion` | `http://localhost:3008/mcp` | with the Ingestion (dlt) extension installed (client id `ext-ingestion-mcp`) | declarative dlt pipelines that load REST APIs, SQL tables and files into the person's team databases: `list_templates`, `validate_pipeline`, `create_pipeline`, `set_pipeline_secrets` (write-only), `run_pipeline`, `get_run`, `set_schedule`, …; team admins create pipelines and set secrets, writers run them |
+| `iceberg-evaluations` | `http://localhost:3012/mcp` | with the Evaluations extension installed (client id `ext-evaluations-mcp`) | question sets with known answers for Conversational BI, scored runs and comparisons: `list_agent_models`, `save_question_set`, `import_questions`, `run_evaluation`, `get_run`, `compare_runs`, `compare_models`, `set_live`, `list_reviews`, `promote_to_case`, …; writers edit and run in development, team admins schedule and switch on live evaluation |
 
 On a Kubernetes installation the addresses are HTTPS hosts instead: `https://users.<domain>/mcp`, `https://admin.<domain>/mcp`, and `https://<host>.<domain>/mcp` for each extension (`dbt`, `ingest`, `cbi` by default). Ask the person for the domain, or read it from `kubectl get ingress -A`.
 
@@ -127,6 +128,7 @@ The portal shows models under **Catalog** (with a **Diagram** of the joins), dat
 | `semantic-model` | create or improve a semantic model, with an interview and quality checks |
 | `dbt-platform` | build, test and schedule dbt pipelines on your tables (needs the dbt extension and its MCP server) |
 | `ingestion` | load data from an API, a database or files into your tables (needs the Ingestion extension and its MCP server) |
+| `agent-evaluations` | check how well the agent answers your team's questions, compare LLMs and review real conversations (needs the Evaluations extension and its MCP server) |
 | `demo-company` | fill the platform with a fictional company and accounts for a class (needs the admin MCP server) |
 | `quick-share` | make the portals of a Compose installation reachable from anywhere for a temporary session, and undo that |
 | `kubernetes-install` | install, upgrade or remove the platform on a Kubernetes cluster with its Helm charts |

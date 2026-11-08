@@ -20,7 +20,7 @@ x-otel-env: &otel-env
 services:
   om-sync:
     build: .
-    image: iceberg-openmetadata:0.1.2
+    image: iceberg-openmetadata:0.1.3
     <<: *hardened
     labels:
       io.iceberg-platform.extension: openmetadata

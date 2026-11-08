@@ -128,8 +128,8 @@ function renderPage() {
 }
 const teamName = id => state.data.teams.find(t => t.id === id)?.name || id;
 const teamOptions = selected => state.data.teams.map(t => `<option value="${esc(t.id)}" ${t.id === selected ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
-const roleOptions = (selected, held) => Object.entries(roleNames).filter(([value]) => !keycloakUsers || value !== 'bucket-admin' || held === value).map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${esc(label)}</option>`).join('');
-const membershipRows = (current = {}) => `<fieldset class="team-choices"><legend>Teams and access · select at least one</legend>${state.data.teams.map(t => `<div class="team-role"><label><input type="checkbox" name="teams" value="${esc(t.id)}" ${current[t.id] ? 'checked' : ''}>${esc(t.name)}</label><select name="role:${esc(t.id)}" aria-label="Access for ${esc(t.name)}" ${current[t.id] ? '' : 'disabled'}>${roleOptions(current[t.id] || 'reader', current[t.id])}</select></div>`).join('')}</fieldset>`;
+const roleOptions = selected => Object.entries(roleNames).filter(([value]) => !keycloakUsers || value !== 'bucket-admin').map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${esc(label)}</option>`).join('');
+const membershipRows = (current = {}) => `<fieldset class="team-choices"><legend>Teams and access · select at least one</legend>${state.data.teams.map(t => `<div class="team-role"><label><input type="checkbox" name="teams" value="${esc(t.id)}" ${current[t.id] ? 'checked' : ''}>${esc(t.name)}</label><select name="role:${esc(t.id)}" aria-label="Access for ${esc(t.name)}" ${current[t.id] ? '' : 'disabled'}>${roleOptions(current[t.id] || 'reader')}</select></div>`).join('')}</fieldset>`;
 function bindMembershipRows() { for (const box of document.querySelectorAll('#modal-form [name=teams]')) box.onchange = () => { box.closest('.team-role').querySelector('select').disabled = !box.checked; }; }
 const userRoles = user => Object.fromEntries(user.memberships.map(m => [m.team, m.role]));
 function renderTeams() {

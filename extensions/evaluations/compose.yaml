@@ -1,0 +1,55 @@
+# The Evaluations extension: a separate Compose project that uses the platform only through the
+# Extension Bridge (contracts/bridge in the platform repository) and asks Conversational BI through
+# its evaluation API, for teams that enabled both.
+name: iceberg-evaluations
+
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+# OpenTelemetry export of logs and traces; off while OTEL_EXPORTER_OTLP_ENDPOINT is empty.
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
+
+services:
+  evaluations:
+    build: .
+    image: iceberg-evaluations:0.1.0
+    <<: *hardened
+    labels:
+      io.iceberg-platform.extension: evaluations
+    # JUDGE_MODEL and its provider's key, for the LLM judge; optional. The Bridge values win.
+    env_file:
+      - path: llm.env
+        required: false
+      - .env.bridge
+    environment:
+      <<: *otel-env
+      AGENT_URL: ${AGENT_URL:-http://cbi-gateway:3007}
+      EVAL_MAX_RUNS: ${EVAL_MAX_RUNS:-2}
+      EVAL_CONCURRENCY: ${EVAL_CONCURRENCY:-2}
+      EVAL_RUN_RETENTION: ${EVAL_RUN_RETENTION:-50}
+    ports:
+      - "127.0.0.1:${EVAL_PORT:-3012}:3012"
+    volumes:
+      - eval-state:/data
+    networks: [platform]
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3012/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+networks:
+  platform:
+    external: true
+    name: ${PLATFORM_NETWORK:-iceberg-platform_default}
+
+volumes:
+  eval-state:

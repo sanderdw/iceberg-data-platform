@@ -76,13 +76,13 @@ def test_projection_accepts_one_model_a_list_or_a_whole_document(payload):
         ({"is_time": True}, (True, True)),  # Ossie: a time dimension
         ({"is_time": False}, (True, False)),
         ({}, (True, False)),  # an object without is_time is still a dimension
-        (True, (True, False)),  # older documents
+        (True, (False, False)),  # only the object marks a dimension
         (None, (False, False)),
         (False, (False, False)),
         ("yes", (False, False)),
     ],
 )
-def test_dimensions_follow_the_ossie_object_and_accept_the_old_boolean(dimension, flags):
+def test_dimensions_follow_the_ossie_object(dimension, flags):
     field = {"name": "f"} if dimension is None else {"name": "f", "dimension": dimension}
     loaded = {"document": {"semantic_model": json.dumps({"datasets": [{"name": "D", "source": "t", "fields": [field]}]})}}
     shown = semantic_model_details("m", [], loaded)["models"][0]["datasets"][0]["fields"][0]

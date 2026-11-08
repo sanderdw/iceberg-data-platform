@@ -424,22 +424,6 @@ def test_move_between_teams_with_different_roles_rebinds_and_rolls_back(portal):
     assert path + "/writer" in portal.provider.grants
 
 
-def test_legacy_single_role_principal_is_read_and_migrated(portal):
-    first, second = team(portal), team(portal, "second-team")
-    database(portal, first)
-    account = user(portal, [first, second], role="writer")
-    principal = portal.provider.resources["principals"][account["id"]]
-    del principal["properties"]["portal.memberships"]
-    principal["properties"].update({"portal.teams": f'["{first}", "{second}"]', "portal.role": "writer"})
-    assert portal.client.get("/api/users").json() == [account]
-    grants = set(portal.provider.grants)
-    assert portal.patch(f"/users/{account['id']}", {"memberships": account["memberships"]}).status_code == 200
-    assert portal.provider.grants == grants
-    properties = portal.provider.resources["principals"][account["id"]]["properties"]
-    assert "portal.teams" not in properties and "portal.role" not in properties
-    assert portal.client.get("/api/users").json() == [account]
-
-
 def test_team_delete_failure_restores_member_roles(portal):
     first, second = team(portal), team(portal, "second-team")
     account = user(portal, [first, second], role={first: "admin", second: "reader"})

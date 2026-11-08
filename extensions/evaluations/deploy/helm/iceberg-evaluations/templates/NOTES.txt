@@ -1,0 +1,5 @@
+Evaluations {{ .Chart.AppVersion }} is starting in namespace {{ .Release.Namespace }}.
+
+  Evaluations  https://{{ include "eval.host" . }}
+
+A team administrator enables it per environment, next to Conversational BI; runs ask that agent for the team.

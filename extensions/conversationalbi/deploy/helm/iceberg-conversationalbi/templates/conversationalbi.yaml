@@ -47,6 +47,9 @@ spec:
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
       {{- include "cbi.pullSecrets" . | nindent 6 }}
       containers:
         - name: gateway
@@ -66,6 +69,10 @@ spec:
             - {name: BI_MAX_ROWS, value: {{ .Values.query.maxRows | quote }}}
             - {name: BI_QUERY_TIMEOUT, value: {{ .Values.query.timeoutSeconds | quote }}}
             - {name: BI_MAX_QUERIES, value: {{ .Values.query.maxQueries | quote }}}
+            - {name: BI_AGENT_CALLERS, value: {{ .Values.evaluation.callers | quote }}}
+            - {name: BI_EVAL_MODELS, value: {{ .Values.evaluation.models | quote }}}
+            - {name: BI_EVAL_SCHEMA_ONLY, value: {{ .Values.evaluation.schemaOnly | quote }}}
+            - {name: BI_CONVERSATION_RETENTION_DAYS, value: {{ .Values.evaluation.conversationRetentionDays | quote }}}
             - {name: HOME, value: /tmp}
           ports:
             - {name: http, containerPort: 3007}
@@ -84,8 +91,11 @@ spec:
           {{- include "cbi.restricted" . | nindent 10 }}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
+            - {name: state, mountPath: /data}
       volumes:
         - {name: tmp, emptyDir: {}}
+        - name: state
+          persistentVolumeClaim: {claimName: cbi-state}
 ---
 # The CopilotKit runtime between the chat UI and the agent: no platform access, no internet, no
 # credentials beyond the key that identifies it to the agent listener.

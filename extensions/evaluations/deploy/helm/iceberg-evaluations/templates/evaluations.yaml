@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: evaluations
+  labels:
+    {{- include "eval.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "eval.selector" . | nindent 4 }}
+  ports:
+    - {name: http, port: 3012}
+---
+# The API, MCP server, page, scheduler and runs: one process, no launcher, no Kubernetes API.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evaluations
+  labels:
+    {{- include "eval.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "eval.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "eval.labels" . | nindent 8 }}
+        app.kubernetes.io/component: evaluations
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "eval.pullSecrets" . | nindent 6 }}
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: evaluations
+          image: {{ include "eval.image" (dict "root" . "name" "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The Bridge values come last and win over anything in the judge's Secret.
+          envFrom:
+            {{- with .Values.judge.existingSecret }}
+            - secretRef: {name: {{ . }}}
+            {{- end }}
+            - secretRef: {name: {{ .Values.bridgeSecret }}}
+          env:
+            {{- include "eval.otelEnv" . | nindent 12 }}
+            - name: AGENT_URL
+              value: {{ .Values.agentUrl | quote }}
+            - {name: EVAL_MAX_RUNS, value: {{ .Values.runs.maxConcurrent | quote }}}
+            - {name: EVAL_CONCURRENCY, value: {{ .Values.runs.concurrency | quote }}}
+            - {name: EVAL_RUN_RETENTION, value: {{ .Values.runs.retention | quote }}}
+            - {name: HOME, value: /tmp}
+          ports:
+            - {name: http, containerPort: 3012}
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 20
+            failureThreshold: 6
+            initialDelaySeconds: 20
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          {{- include "eval.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: state, mountPath: /data}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - name: state
+          persistentVolumeClaim: {claimName: evaluations-state}

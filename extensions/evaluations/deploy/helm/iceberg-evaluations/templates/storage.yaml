@@ -1,0 +1,18 @@
+---
+# Question sets, runs, schedules and reviews (SQLite); kept when the chart is uninstalled.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: evaluations-state
+  labels:
+    {{- include "eval.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.state }}

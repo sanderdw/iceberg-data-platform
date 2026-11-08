@@ -304,9 +304,6 @@ def setup(root=ROOT, demo=False):
             file.write("\n# Keycloak identity and access management\n")
             file.writelines(f"{key}={value}\n" for key, value in additions.items())
     config.chmod(0o600)
-    if "COMPOSE_PROFILES" not in values:
-        # An .env from before pgAdmin became optional: it keeps running.
-        set_env(config, {"COMPOSE_PROFILES": "pgadmin"}, "# Compose profiles")
     target = root / values["KEYCLOAK_IMPORT_FILE"]
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(realm(values), indent=2) + "\n")

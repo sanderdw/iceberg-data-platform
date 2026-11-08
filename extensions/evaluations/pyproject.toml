@@ -1,0 +1,52 @@
+[project]
+name = "iceberg-evaluations"
+version = "0.1.0"
+description = "Evaluations for the Iceberg Data Platform: question sets with known answers for AI agents, scored runs, model comparisons and live checks"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi==0.162.2",
+  "uvicorn[standard]>=0.53.0",
+  "httpx>=0.28.1",
+  "joserfc>=1.7.7",
+  "mcp>=2.3.0,<3",
+  "croniter>=6.2.4",
+  "pydantic-evals>=2.63.0,<3",
+  "pydantic-ai-slim[google,openai,anthropic,bedrock,openrouter]>=2.63.0,<3",
+  "pyyaml>=6.0.3",
+  "pyiceberg[pyarrow]>=0.12.0",
+]
+
+[dependency-groups]
+# OpenTelemetry export, used only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+otel = [
+  "opentelemetry-sdk>=1.45.1",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+  "opentelemetry-instrumentation-fastapi>=0.66b1",
+  "opentelemetry-instrumentation-httpx>=0.66b1",
+  "opentelemetry-instrumentation-logging>=0.66b1",
+]
+dev = [{include-group = "otel"}, "pytest>=9.1.1", "ruff>=0.17.3", "pyiceberg[sql-sqlite]>=0.12.0"]
+
+[tool.iceberg-evaluations]
+# Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
+bridge-contract = ">=0.1.3,<0.2"
+
+[tool.uv]
+package = false
+# The platform and the other extensions get python-dateutil 2.x through botocore (<3); keep the same.
+constraint-dependencies = ["python-dateutil<3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "C4", "RUF"]
+ignore = ["RUF001", "RUF002"]

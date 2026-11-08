@@ -7,7 +7,7 @@ RUN SCARF_ANALYTICS=false npm ci --ignore-scripts --no-audit --no-fund
 COPY web/ ./
 RUN mkdir -p /conversationalbi && npx vite build --outDir /conversationalbi/public
 
-FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
 FROM python:3.14.10-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
@@ -18,7 +18,7 @@ COPY conversationalbi ./conversationalbi
 RUN /app/.venv/bin/python -m conversationalbi.duckdb_extensions
 COPY contracts ./contracts
 COPY --from=web /conversationalbi/public ./conversationalbi/public
-RUN useradd --uid 10001 --no-create-home cbi
+RUN useradd --uid 10001 --no-create-home cbi && mkdir -p /data && chown 10001:10001 /data
 USER 10001:10001
 ENV PORT=3007 AGENT_PORT=3017 HOST=0.0.0.0 PYDANTIC_AI_NO_BANNER=1 DO_NOT_TRACK=1 HOME=/tmp
 EXPOSE 3007
