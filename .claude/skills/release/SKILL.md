@@ -1,6 +1,6 @@
 ---
 name: release
-description: Release a new version of the Iceberg Data Platform from start to finish on the user's behalf. Creates the X.Y.Z version branch, applies the open Dependabot updates, bumps the versions, updates the documentation with a ROT check and the Write the Docs principles, checks whether the presentation needs an update, runs the tests, merges and pushes the tags. Use when the user explicitly asks to release, cut or ship a version of the platform or its extensions.
+description: Release a new version of the Iceberg Data Platform from start to finish on the user's behalf. Creates the X.Y.Z version branch, applies the open Dependabot updates, bumps the versions, updates the documentation with a ROT check and the Write the Docs principles, checks whether the presentation needs an update, runs the tests, opens a draft pull request to main, checks its workflows and diff, asks Copilot for a Balanced review, merges and pushes the tags. Use when the user explicitly asks to release, cut or ship a version of the platform or its extensions.
 ---
 
 # Release the Iceberg Data Platform
@@ -14,7 +14,7 @@ description: Release a new version of the Iceberg Data Platform from start to fi
 - setting a newly published GHCR package to Public, which has no API. Give the [packages link](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and the package names, then rerun the failed job yourself
 - a failure whose fix would change what the product does
 
-**Never** force-push, move a published tag, use `--no-verify` or merge with red checks. If a published tag turns out wrong, fix the cause and release the next patch.
+**Never** force-push, move a published tag, use `--no-verify`, or merge with red checks or unanswered Copilot findings. If a published tag turns out wrong, fix the cause and release the next patch.
 
 Say plainly what you're doing at each step, and name every branch change before you make it.
 
@@ -106,6 +106,17 @@ Older changelog entries and release notes are history: leave them.
 | Beautiful | Renders cleanly: tables, code blocks, command output |
 | Comprehensive | Every new capability answers what it does, how to use it and where it stops |
 
+**[Diátaxis](https://diataxis.fr).** Only when the release adds a page or changes what a page is for. Give the page one main type and put it in the matching `nav` section:
+
+| The reader wants to | Type | `nav` section |
+| --- | --- | --- |
+| Learn by doing | Tutorial | Tutorials |
+| Reach a specific goal | How-to guide | How-to guides |
+| Look something up | Reference | Reference |
+| Understand how or why | Explanation | Concepts |
+
+`Extensions` and `Extension internals` group pages by component, so there the type shapes the page, not its place. If a page you touch mixes types and that gets in the reader's way, move the other part to where it belongs and link to it. Don't restructure pages this release didn't touch: name them in the final report.
+
 Then build the site, which also fails on broken links:
 
 ```bash
@@ -126,17 +137,59 @@ Commit first, with the message `X.Y.Z`, because `npm run check:release` reads th
 
 The integration job needs the development stack's ports. If a stack is running, ask once whether you may stop it, and restore it afterwards with plain `docker compose up -d --wait` for both compose files. If the answer is no, rely on the pull request's CI and report that the local run was skipped. Distrust state a clean runner lacks, such as `~/.duckdb/extensions` or cached images.
 
-Then push and open the pull request:
+## 7. Draft pull request to main
 
 ```bash
 git push -u origin X.Y.Z
-gh pr create --base main --head X.Y.Z --title X.Y.Z --body-file NOTES
+gh pr create --draft --base main --head X.Y.Z --title X.Y.Z --body-file NOTES
+```
+
+Write `NOTES` from the release notes, in the sections of `.github/pull_request_template.md`.
+
+**Check the workflows.**
+
+```bash
 gh pr checks X.Y.Z --watch
 ```
 
-Write `NOTES` from the release notes. This pull request's CI is the only place the `keycloak`, `kubernetes`, `notebook-image` and `installers` jobs run. When something goes red, fix the cause and push; rerun without a change only for a clear infrastructure failure.
+This pull request's CI is the only place the `keycloak`, `kubernetes`, `notebook-image` and `installers` jobs run. Confirm that the `<id>-ci.yml` of every bumped extension ran, because those are path-filtered. When something goes red, fix the cause and push; rerun without a change only for a clear infrastructure failure.
 
-## 7. Merge and tag
+**Verify the changes against main.** Read what will actually land, not what you remember changing:
+
+```bash
+git fetch origin main
+git diff --name-status origin/main...X.Y.Z
+git diff origin/main...X.Y.Z -- .github/workflows
+```
+
+Use git, not `gh pr diff`, which fails above 300 changed files.
+
+- Every file belongs in this release: no scratch files, `.local` content, build output or secrets. Every deletion is intended.
+- Every user-visible change is in the changelog, and every changelog line is in the diff.
+- The dependency changes match what you applied in step 2, and the version bumps are complete.
+- Changed workflows keep actions pinned to a commit SHA with a version comment, keep their `permissions` minimal, and cover any new extension in their path filters.
+
+Fix what you find and push, then wait for the checks again.
+
+**Ask Copilot for a review.** Do this last, once the checks are green and the diff is verified, so that the review covers the final state:
+
+```bash
+gh pr ready X.Y.Z
+gh pr edit X.Y.Z --add-reviewer "@copilot"
+```
+
+The review must run at the **Balanced** effort level. That is the default, and neither `gh` nor the published API has a per-request setting, so don't invent a field. The review arrives after some minutes and states its level:
+
+```bash
+gh api repos/sanderdw/iceberg-data-platform/pulls/<number>/reviews --jq '.[] | select(.user.login == "copilot-pull-request-reviewer[bot]") | .body'
+gh api repos/sanderdw/iceberg-data-platform/pulls/<number>/comments --jq '.[] | select(.user.login == "Copilot") | {path, line, body}'
+```
+
+If the body says anything other than `Review effort: Balanced`, stop and ask the user to set Copilot code review to Balanced in the repository or personal settings, then re-request it with the same `--add-reviewer` command.
+
+Check each finding against the code. Fix the real ones and wait for the checks again. Reply on the ones you reject, with the reason. Don't request another review unless the fixes were substantial.
+
+## 8. Merge and tag
 
 Name the switch to `main`, then:
 
@@ -166,7 +219,7 @@ gh run watch <id> --exit-status
 
 If a first publication fails because a package isn't public, ask the user to set it, then `gh run rerun <id> --failed`. Before tagging the core, confirm each bundled extension's tag exists for the version in its `pyproject.toml`.
 
-## 8. Finish
+## 9. Finish
 
 ```bash
 gh release view vX.Y.Z
@@ -180,4 +233,5 @@ The last line runs only if a branch preview exists. Report:
 - Dependabot updates applied, and those skipped with the reason
 - what the ROT check changed or removed
 - the presentation verdict
+- Copilot's findings: fixed, and rejected with the reason
 - anything not run or not verified
