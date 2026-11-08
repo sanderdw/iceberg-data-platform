@@ -1,6 +1,7 @@
 """Another extension asks for a team: only where the team enabled both, with the team's scope."""
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -186,6 +187,18 @@ def test_the_control_arm_sees_schemas_and_nothing_the_model_adds(stack, control)
     assert "flights(" in text and "dep_delay" in text
     for added in ("average_departure_delay", "on_time_arrival_pct", "flight_carrier", "An airline", "Ontology"):
         assert added not in text
+
+
+def test_the_control_arm_binds_a_table_once_however_many_datasets_read_it():
+    from conversationalbi.agent import control as arm
+
+    def views(*datasets):
+        model = SimpleNamespace(datasets=[SimpleNamespace(name=name, namespace=namespace, table=table)
+                                          for name, namespace, table in datasets])
+        return [t["view"] for t in arm.tables(model, {d[0]: {"id": "INTEGER"} for d in datasets})]
+
+    assert views(("origin", ["geo"], "airports"), ("destination", ["geo"], "airports")) == ["airports"]
+    assert views(("origin", ["geo"], "airports"), ("hub", ["ops"], "airports")) == ["geo_airports", "ops_airports"]
 
 
 def test_the_control_arm_has_the_same_scope_rules(stack, control):

@@ -25,10 +25,14 @@ INSTRUCTIONS = [
 
 
 def tables(model, schemas):
-    """{view, namespace, table, columns} per table the model reads: names and types, nothing the model adds."""
-    names = [d.table for d in model.datasets]
+    """{view, namespace, table, columns} per table the model reads: names and types, nothing the model adds.
+
+    Datasets can be aliases of one table, as in a self-join; the view is the table, so it appears once.
+    """
+    datasets = list({(tuple(d.namespace), d.table): d for d in model.datasets}.values())
+    names = [d.table for d in datasets]
     found = []
-    for d in model.datasets:
+    for d in datasets:
         view = d.table if names.count(d.table) == 1 else "_".join([*d.namespace, d.table])
         found.append({"view": view, "namespace": list(d.namespace), "table": d.table, "columns": schemas[d.name]})
     return found

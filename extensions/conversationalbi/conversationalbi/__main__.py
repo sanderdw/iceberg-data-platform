@@ -14,8 +14,8 @@ import uvicorn
 
 from .config import VERSION
 
-# Health checks would drown the traces.
-UNTRACED = "health$"
+# Health checks would drown the traces, and the sign-in callback's URL carries the one-use code.
+UNTRACED = "health$,/auth/callback"
 
 
 def telemetry(service):

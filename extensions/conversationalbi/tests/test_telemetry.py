@@ -45,6 +45,23 @@ def test_without_an_endpoint_nothing_is_imported():
     assert result.stdout.strip() == "False"
 
 
+def test_the_sign_in_callback_is_not_traced():
+    Collector.received.clear()
+    server = HTTPServer(("127.0.0.1", 0), Collector)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    endpoint = f"http://127.0.0.1:{server.server_port}"
+    code = ("from conversationalbi.__main__ import telemetry; telemetry('iceberg-conversationalbi'); "
+            "import fastapi; from fastapi.testclient import TestClient; app = fastapi.FastAPI(); "
+            "[app.get(path)(lambda: {}) for path in ('/auth/callback', '/other')]; client = TestClient(app); "
+            "client.get('/auth/callback?code=one-use-code&state=s'); client.get('/other')")
+    try:
+        run(code, OTEL_EXPORTER_OTLP_ENDPOINT=endpoint)
+    finally:
+        server.shutdown()
+    traces = b"".join(body for path, body in Collector.received if path == "/v1/traces")
+    assert b"/other" in traces and b"one-use-code" not in traces
+
+
 def test_logs_and_traces_reach_the_endpoint():
     server = HTTPServer(("127.0.0.1", 0), Collector)
     threading.Thread(target=server.serve_forever, daemon=True).start()
