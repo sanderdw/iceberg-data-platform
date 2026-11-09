@@ -5,7 +5,6 @@
 - **Evaluations**, a new extension: question sets with known answers for Conversational BI, scored runs, comparisons between runs and LLMs, a measurement of what a semantic model adds, schedules, and a live check of real conversations for teams that opt in. The right answer is a governed query, computed again at every run; most checks are code. Results land as Iceberg tables with a semantic model in the team's own database. See [Evaluations](evaluations.md).
 - The Extension Bridge contract is now 0.1.3, with the `team-extensions` capability: one extension serves another for a team only where a team administrator enabled both.
 - **Send logs and traces to OpenTelemetry.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` (`otel.endpoint` on Kubernetes) and the portals, the Bridge, the monitor, Polaris and the extensions send their logs and traces to your Collector, Grafana, Elastic, Logfire or any other OTLP backend. One trace follows a request from the portal into Polaris. The Bridge's audit records arrive as events with their fields as attributes. Off by default. See [Send logs and traces to OpenTelemetry](observability.md).
-- A new database's bucket has the same name as its catalog ID.
 - Updated dependencies, including dlt 1.32 in notebooks.
 - Extensions: Conversational BI 0.1.5, dbt 0.1.3, Ingestion (dlt) 0.1.3, OpenMetadata 0.1.3 and Evaluations 0.1.0.
 
