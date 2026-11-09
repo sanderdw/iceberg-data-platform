@@ -5,9 +5,21 @@ name: OpenMetadata extension CI
 on:
   push:
     branches: [main]
-    paths: ['extensions/openmetadata/**', 'contracts/bridge/**', 'server/bridge.py', 'server/listings.py', 'server/catalog_metadata.py', 'server/polaris.py', '.github/workflows/openmetadata-*.yml']
+    # The release check asserts the install URL in the README, so it stays a trigger.
+    paths: &paths
+      - 'extensions/openmetadata/**'
+      - '!extensions/openmetadata/*.md'
+      - '!extensions/openmetadata/LICENSE'
+      - '!extensions/openmetadata/NOTICE'
+      - 'extensions/openmetadata/README.md'
+      - 'contracts/bridge/**'
+      - 'server/bridge.py'
+      - 'server/listings.py'
+      - 'server/catalog_metadata.py'
+      - 'server/polaris.py'
+      - '.github/workflows/openmetadata-ci.yml'
   pull_request:
-    paths: ['extensions/openmetadata/**', 'contracts/bridge/**', 'server/bridge.py', 'server/listings.py', 'server/catalog_metadata.py', 'server/polaris.py', '.github/workflows/openmetadata-*.yml']
+    paths: *paths
   workflow_dispatch:
   workflow_call:
 permissions:

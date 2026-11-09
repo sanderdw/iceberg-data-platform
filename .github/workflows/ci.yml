@@ -2,34 +2,61 @@ name: CI
 on:
   push:
     branches: [main]
-    # Extensions have their own CI, except the extension files the installer bundles.
-    paths:
+    # Extensions have their own CI, except the extension files the installer bundles and the charts the
+    # kubernetes job lints. Pages checks the links in the root documents.
+    paths: &paths
       - '**'
       - '!presentation/**'
       - '!docs/**'
       - '!zensical.toml'
+      - '!README.md'
+      - '!CHANGELOG.md'
+      - '!CONTRIBUTING.md'
+      - '!SECURITY.md'
+      - '!THIRD_PARTY_NOTICES.md'
+      - '!LICENSE'
+      - '!NOTICE'
+      - '!.editorconfig'
+      - '!.claude/**'
+      - '!dev/kubernetes/scaleway.py'
+      - '!dev/kubernetes/LESSONS.md'
+      - '!scripts/presentation-screenshots.mjs'
+      - '!scripts/promo-render.mjs'
+      - '!scripts/promo-audio.py'
       - '!extensions/**'
       - 'extensions/conversationalbi/compose.yaml'
       - 'extensions/conversationalbi/scripts/setup.py'
       - 'extensions/conversationalbi/pyproject.toml'
+      - 'extensions/conversationalbi/deploy/helm/**'
       - 'extensions/dbt/compose.yaml'
       - 'extensions/dbt/scripts/setup.py'
       - 'extensions/dbt/pyproject.toml'
       - 'extensions/dbt/skills/**'
+      - 'extensions/dbt/deploy/helm/**'
       - 'extensions/ingestion/compose.yaml'
       - 'extensions/ingestion/scripts/setup.py'
       - 'extensions/ingestion/pyproject.toml'
       - 'extensions/ingestion/skills/**'
+      - 'extensions/ingestion/deploy/helm/**'
       - 'extensions/evaluations/compose.yaml'
       - 'extensions/evaluations/scripts/setup.py'
       - 'extensions/evaluations/pyproject.toml'
       - 'extensions/evaluations/skills/**'
+      - 'extensions/evaluations/deploy/helm/**'
+      - '!.github/ISSUE_TEMPLATE/**'
+      - '!.github/pull_request_template.md'
+      - '!.github/copilot-instructions.md'
+      - '!.github/dependabot.yml'
       - '!.github/workflows/conversationalbi-*.yml'
       - '!.github/workflows/dbt-*.yml'
       - '!.github/workflows/ingestion-*.yml'
       - '!.github/workflows/openmetadata-*.yml'
       - '!.github/workflows/evaluations-*.yml'
+      - '!.github/workflows/pages.yml'
+      - '!.github/workflows/release.yml'
+      - '!.github/workflows/release-candidate.yml'
   pull_request:
+    paths: *paths
   workflow_dispatch:
   workflow_call:
 permissions:

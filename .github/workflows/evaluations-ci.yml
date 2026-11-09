@@ -4,11 +4,19 @@ name: Evaluations extension CI
 on:
   push:
     branches: [main]
-    paths: ['extensions/evaluations/**', 'extensions/conversationalbi/conversationalbi/**', 'contracts/bridge/**',
-            'server/bridge.py', 'server/polaris.py', 'scripts/flights_seed.py', '.github/workflows/evaluations-*.yml']
+    paths: &paths
+      - 'extensions/evaluations/**'
+      - '!extensions/evaluations/*.md'
+      - '!extensions/evaluations/LICENSE'
+      - '!extensions/evaluations/NOTICE'
+      - 'extensions/conversationalbi/conversationalbi/**'
+      - 'contracts/bridge/**'
+      - 'server/bridge.py'
+      - 'server/polaris.py'
+      - 'scripts/flights_seed.py'
+      - '.github/workflows/evaluations-ci.yml'
   pull_request:
-    paths: ['extensions/evaluations/**', 'extensions/conversationalbi/conversationalbi/**', 'contracts/bridge/**',
-            'server/bridge.py', 'server/polaris.py', 'scripts/flights_seed.py', '.github/workflows/evaluations-*.yml']
+    paths: *paths
   workflow_dispatch:
   workflow_call:
 permissions:

@@ -4,11 +4,19 @@ name: Conversational BI CI
 on:
   push:
     branches: [main]
-    paths: ['extensions/conversationalbi/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py',
-            'scripts/flights_seed.py', 'user_portal/notebook/flights.py', '.github/workflows/conversationalbi-*.yml']
+    paths: &paths
+      - 'extensions/conversationalbi/**'
+      - '!extensions/conversationalbi/*.md'
+      - '!extensions/conversationalbi/LICENSE'
+      - '!extensions/conversationalbi/NOTICE'
+      - 'contracts/bridge/**'
+      - 'server/bridge.py'
+      - 'server/polaris.py'
+      - 'scripts/flights_seed.py'
+      - 'user_portal/notebook/flights.py'
+      - '.github/workflows/conversationalbi-ci.yml'
   pull_request:
-    paths: ['extensions/conversationalbi/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py',
-            'scripts/flights_seed.py', 'user_portal/notebook/flights.py', '.github/workflows/conversationalbi-*.yml']
+    paths: *paths
   workflow_dispatch:
   workflow_call:
 permissions:

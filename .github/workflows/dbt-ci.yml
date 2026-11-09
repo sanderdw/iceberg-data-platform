@@ -4,9 +4,17 @@ name: dbt extension CI
 on:
   push:
     branches: [main]
-    paths: ['extensions/dbt/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py', '.github/workflows/dbt-*.yml']
+    paths: &paths
+      - 'extensions/dbt/**'
+      - '!extensions/dbt/*.md'
+      - '!extensions/dbt/LICENSE'
+      - '!extensions/dbt/NOTICE'
+      - 'contracts/bridge/**'
+      - 'server/bridge.py'
+      - 'server/polaris.py'
+      - '.github/workflows/dbt-ci.yml'
   pull_request:
-    paths: ['extensions/dbt/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py', '.github/workflows/dbt-*.yml']
+    paths: *paths
   workflow_dispatch:
   workflow_call:
 permissions:

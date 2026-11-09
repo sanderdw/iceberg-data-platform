@@ -4,7 +4,6 @@ on:
     # Stable releases come from vX.Y.Z tags on main; a branch publishes a preview on demand
     # with "Run workflow".
     tags: ['v*']
-    paths-ignore: ['presentation/**']
   workflow_dispatch:
 permissions:
   contents: read

@@ -2,9 +2,22 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ['docs/**', 'zensical.toml', 'presentation/**', 'CHANGELOG.md', 'pyproject.toml', 'uv.lock', '.github/workflows/pages.yml']
+    # The root documents are not published, but this is the workflow that checks their links.
+    paths: &paths
+      - 'docs/**'
+      - 'zensical.toml'
+      - 'presentation/**'
+      - '!presentation/*.md'
+      - 'CHANGELOG.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/pages.yml'
   pull_request:
-    paths: ['docs/**', 'zensical.toml', 'presentation/**', 'CHANGELOG.md', 'pyproject.toml', 'uv.lock', '.github/workflows/pages.yml']
+    paths: *paths
   workflow_dispatch:
 permissions:
   contents: read

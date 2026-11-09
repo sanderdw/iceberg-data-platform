@@ -4,9 +4,17 @@ name: Ingestion extension CI
 on:
   push:
     branches: [main]
-    paths: ['extensions/ingestion/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py', '.github/workflows/ingestion-*.yml']
+    paths: &paths
+      - 'extensions/ingestion/**'
+      - '!extensions/ingestion/*.md'
+      - '!extensions/ingestion/LICENSE'
+      - '!extensions/ingestion/NOTICE'
+      - 'contracts/bridge/**'
+      - 'server/bridge.py'
+      - 'server/polaris.py'
+      - '.github/workflows/ingestion-ci.yml'
   pull_request:
-    paths: ['extensions/ingestion/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py', '.github/workflows/ingestion-*.yml']
+    paths: *paths
   workflow_dispatch:
   workflow_call:
 permissions:

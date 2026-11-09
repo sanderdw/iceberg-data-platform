@@ -1,6 +1,6 @@
 # Agent skills
 
-The installation folder contains six skills for coding agents in `.agents/skills`, in the open [Agent Skills](https://agentskills.io) format, and an `AGENTS.md` (with a `CLAUDE.md` pointer) that explains `iceberg_connect.py`, the MCP servers and semantic models to any agent started there. Start your agent in the installation folder and ask it to use a skill, for example "Set up a demo company for my class".
+The installation folder contains seven skills for coding agents in `.agents/skills`, in the open [Agent Skills](https://agentskills.io) format, and an `AGENTS.md` (with a `CLAUDE.md` pointer) that explains `iceberg_connect.py`, the MCP servers and semantic models to any agent started there. Start your agent in the installation folder and ask it to use a skill, for example "Set up a demo company for my class".
 
 - **Read `.agents/skills` by themselves:** Codex, GitHub Copilot (VS Code and CLI), Gemini CLI and Cursor.
 - **Claude Code** only reads `.claude/skills`. The installer adds a pointer there for each skill, so it finds them too.
