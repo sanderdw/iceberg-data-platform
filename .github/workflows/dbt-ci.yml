@@ -4,9 +4,17 @@ name: dbt extension CI
 on:
   push:
     branches: [main]
-    paths: ['extensions/dbt/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py', '.github/workflows/dbt-*.yml']
+    paths: &paths
+      - 'extensions/dbt/**'
+      - '!extensions/dbt/*.md'
+      - '!extensions/dbt/LICENSE'
+      - '!extensions/dbt/NOTICE'
+      - 'contracts/bridge/**'
+      - 'server/bridge.py'
+      - 'server/polaris.py'
+      - '.github/workflows/dbt-ci.yml'
   pull_request:
-    paths: ['extensions/dbt/**', 'contracts/bridge/**', 'server/bridge.py', 'server/polaris.py', '.github/workflows/dbt-*.yml']
+    paths: *paths
   workflow_dispatch:
   workflow_call:
 permissions:
@@ -25,9 +33,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.6'
+          version: '0.13.7'
           enable-cache: true
           cache-dependency-glob: extensions/dbt/uv.lock
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -69,9 +77,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.6'
+          version: '0.13.7'
           enable-cache: true
       - run: uv sync --locked --all-groups
       - run: uv run python -m scripts.setup --demo --extension dbt --origin http://localhost:3004 --handshake extensions/dbt/.env.bridge
@@ -130,10 +138,10 @@ jobs:
             if git cat-file -e "$tag:contracts/bridge/v1/openapi.yaml" 2>/dev/null; then echo "tag=$tag" >> "$GITHUB_OUTPUT"; exit 0; fi
           done
           echo "No platform release ships the Bridge yet; the integration job covers this commit." >> "$GITHUB_STEP_SUMMARY"
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         if: steps.core.outputs.tag
         with:
-          version: '0.13.6'
+          version: '0.13.7'
       - name: Start that platform release
         if: steps.core.outputs.tag
         env:

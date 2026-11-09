@@ -30,7 +30,7 @@ def create_agent(settings, path=AGENT_FILE, model=None):
                            model=model or resolve_model(settings).model, defer_model_check=True)
 
 
-def create_agent_app(settings, services, login, tickets, agent=None, model=None):
+def create_agent_app(settings, services, login, tickets, agent=None, model=None, recorder=None):
     agent = agent or create_agent(settings, model=model)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -60,6 +60,12 @@ def create_agent_app(settings, services, login, tickets, agent=None, model=None)
         except CbiError as exc:
             return refuse(exc.status, str(exc))
         deps = CbiDeps(state=CbiState(), caller=caller, services=services, me=me)
-        return await AGUIAdapter.dispatch_request(request, agent=agent, deps=deps)
+
+        async def record(result):
+            # For teams that opted in to live evaluation (conversations.py).
+            await recorder.record(caller, me, deps.state, result)
+
+        return await AGUIAdapter.dispatch_request(request, agent=agent, deps=deps,
+                                                  on_complete=record if recorder else None)
 
     return app

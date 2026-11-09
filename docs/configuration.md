@@ -26,6 +26,10 @@ On Kubernetes the same settings are chart values; the last column names them.
 | `POLARIS_PUBLIC_URL` | `http://localhost:8181` | Catalog address for `iceberg_connect.py` and external share recipients | `https://<hosts.catalog>.<baseDomain>` |
 | `S3_ENDPOINT` | `http://localhost:9000` | Storage address that Polaris hands out with each table. On restart, the administration portal moves existing databases to it. | `https://<hosts.s3>.<baseDomain>` |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Address of a reverse proxy, so sign-in limits apply per visitor | `forwardedAllowIps` (`*`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP/HTTP receiver for logs and traces; see [OpenTelemetry](observability.md) | `otel.endpoint` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | - | Headers for that receiver, such as its API key | `otel.headersSecret` |
+| `OTEL_RESOURCE_ATTRIBUTES` | - | Added to every record, such as `deployment.environment.name=production` | `otel.resourceAttributes` |
+| `POLARIS_OTEL_DISABLED` | `true` | Set to `false` to send Polaris's traces too | `otel.polaris` (`true`) |
 
 Behind a reverse proxy, enable WebSockets and preserve the Host header. See the [security model](security.md) for the isolation and trust boundaries.
 
@@ -55,6 +59,7 @@ Chart values are set with `helm upgrade ... --reset-then-reuse-values --set <val
 | `keycloak.adminOrigin` | `http://localhost:8080` | The address of the Keycloak administration console, through a port-forward |
 | `keycloak.proxyTrustedAddresses` | (all) | Addresses Keycloak takes `X-Forwarded-*` from |
 | `networkPolicy.enabled`, `networkPolicy.privateRanges` | on, private ranges | The NetworkPolicies, and the ranges notebooks may not reach |
+| `otel.endpoint`, `otel.headersSecret` | (none) | Send logs and traces to your OpenTelemetry backend; see [OpenTelemetry](observability.md#kubernetes) |
 | `extensions.<id>.host`, `.origin`, `.listing` | (none) | Registers an extension; see [add extensions](install-kubernetes.md#add-extensions) |
 | `existingSecret` | (none) | Your own platform Secret, for GitOps tools |
 | `imagePullSecrets` | (none) | For a mirror of the images in a private registry |

@@ -41,6 +41,34 @@ class Caller:
 
 
 @dataclass
+class ExtensionCaller:
+    """Another extension's service account, asking for one team and environment (evaluation.py)."""
+
+    token: str = field(repr=False)
+    extension: str
+    expires_at: float
+    team: str = ""
+    environment: str = ""
+    # The team's scope, shaped like the Bridge's /me, so every check in services.py applies unchanged.
+    context: dict | None = field(default=None, repr=False)
+
+    @property
+    def subject(self):
+        # Results are kept per caller, team and environment.
+        return f"extension:{self.extension}:{self.team}:{self.environment}"
+
+    @property
+    def name(self):
+        return self.extension
+
+    @property
+    def client(self):
+        return "ext-" + self.extension
+
+    agent = False
+
+
+@dataclass
 class Session:
     access_token: str = field(repr=False)
     refresh_token: str = field(repr=False)
@@ -60,6 +88,27 @@ class TokenVerifier:
         self.keys = KeySet.import_key_set(response.json())
 
     async def verify(self, token):
+        claims = await self.claims(token)
+        if claims["azp"] not in (self.settings.client_id, self.settings.mcp_client_id):
+            raise CbiError(401, "This token was not issued to Conversational BI.", "unauthorized")
+        name = (claims.get("polaris") or {}).get("principal_name")
+        if not isinstance(name, str) or not name.startswith("portal-"):
+            raise CbiError(403, "Your account is not linked to a platform user.", "not_linked")
+        return Caller(token, claims["sub"], claims.get("preferred_username", ""), claims["azp"], float(claims["exp"]))
+
+    async def verify_extension(self, token):
+        """The service account of an extension in BI_AGENT_CALLERS: never a person, never this extension."""
+        claims = await self.claims(token)
+        client = claims["azp"]
+        extension = client.removeprefix("ext-")
+        if (not client.startswith("ext-") or extension not in self.settings.agent_callers
+                or claims.get("preferred_username") != "service-account-" + client
+                or (claims.get("polaris") or {}).get("principal_name")):
+            raise CbiError(403, "Only the service account of an extension in BI_AGENT_CALLERS may call this.",
+                           "forbidden_caller")
+        return ExtensionCaller(token, extension, float(claims["exp"]))
+
+    async def claims(self, token):
         try:
             if self.keys is None:
                 await self.fetch_keys()
@@ -78,12 +127,7 @@ class TokenVerifier:
         except Exception as exc:  # noqa: BLE001 - Token and provider errors are never disclosed.
             LOG.info("Token rejected: %s", type(exc).__name__)
             raise CbiError(401, "Sign in again: the token is invalid or expired.", "unauthorized") from None
-        if claims["azp"] not in (self.settings.client_id, self.settings.mcp_client_id):
-            raise CbiError(401, "This token was not issued to Conversational BI.", "unauthorized")
-        name = (claims.get("polaris") or {}).get("principal_name")
-        if not isinstance(name, str) or not name.startswith("portal-"):
-            raise CbiError(403, "Your account is not linked to a platform user.", "not_linked")
-        return Caller(token, claims["sub"], claims.get("preferred_username", ""), claims["azp"], float(claims["exp"]))
+        return claims
 
 
 def pkce():

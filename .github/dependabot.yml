@@ -17,6 +17,10 @@ updates:
       - /
       - /user_portal
       - /user_portal/notebook
+    ignore:
+      # Python stays on 3.14; a new minor is a decision of its own.
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
     schedule:
       interval: weekly
   # Extensions are released on their own; their updates land before their next release.
@@ -26,12 +30,18 @@ updates:
       - /extensions/conversationalbi
       - /extensions/ingestion
       - /extensions/openmetadata
+      - /extensions/evaluations
     schedule:
       interval: weekly
   - package-ecosystem: npm
     directories:
       - /extensions/conversationalbi/web
       - /extensions/conversationalbi/runtime
+    ignore:
+      # From 1.84.2 CopilotKit's @a2ui/web_core needs zod 3: a high advisory, and the chat crashes under the zod 4
+      # override. Lift this when @a2ui/web_core moves to zod 4.
+      - dependency-name: "@copilotkit/*"
+        versions: [">=1.84.2"]
     schedule:
       interval: weekly
   - package-ecosystem: docker
@@ -43,5 +53,10 @@ updates:
       - /extensions/ingestion
       - /extensions/ingestion/runner
       - /extensions/openmetadata
+      - /extensions/evaluations
+    ignore:
+      # Python stays on 3.14; a new minor is a decision of its own.
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
     schedule:
       interval: weekly

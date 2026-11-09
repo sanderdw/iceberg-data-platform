@@ -1,6 +1,6 @@
 # Agent skills
 
-The installation folder contains six skills for coding agents in `.agents/skills`, in the open [Agent Skills](https://agentskills.io) format, and an `AGENTS.md` (with a `CLAUDE.md` pointer) that explains `iceberg_connect.py`, the MCP servers and semantic models to any agent started there. Start your agent in the installation folder and ask it to use a skill, for example "Set up a demo company for my class".
+The installation folder contains seven skills for coding agents in `.agents/skills`, in the open [Agent Skills](https://agentskills.io) format, and an `AGENTS.md` (with a `CLAUDE.md` pointer) that explains `iceberg_connect.py`, the MCP servers and semantic models to any agent started there. Start your agent in the installation folder and ask it to use a skill, for example "Set up a demo company for my class".
 
 - **Read `.agents/skills` by themselves:** Codex, GitHub Copilot (VS Code and CLI), Gemini CLI and Cursor.
 - **Claude Code** only reads `.claude/skills`. The installer adds a pointer there for each skill, so it finds them too.
@@ -18,5 +18,6 @@ The skills that use the platform's MCP server explain how to connect each agent.
 - [`kubernetes-install`](https://github.com/sanderdw/iceberg-data-platform/blob/main/.agents/skills/kubernetes-install/SKILL.md) installs the platform on a Kubernetes cluster with its [Helm charts](install-kubernetes.md), and upgrades or removes it. It first checks the cluster (ingress controller, cert-manager, storage, and that NetworkPolicies are enforced), asks for the domain, certificates, bundled or managed PostgreSQL and the extensions, installs them after you approve each command, checks every host from the outside and tells you where to sign in. It works only in the namespace you confirm. Start your agent in the installation folder or a checkout of the repository, with `kubectl` pointing at the cluster.
 - `dbt-platform` builds, tests and schedules dbt pipelines through the [dbt extension](dbt.md)'s MCP server. It finds the source tables with the user portal's MCP tools, works on a branch, and offers a semantic model for each finished mart. Without the dbt extension it tells you how to add it.
 - `ingestion` loads data from an API, a database or files through the [Ingestion extension](ingestion.md)'s MCP server. It starts from a template, keeps secrets out of the pipeline definition, runs the load and checks the result with the user portal's MCP tools. Without the extension it tells you how to add it.
+- `agent-evaluations` writes question sets with known answers for Conversational BI, runs them, explains failures and compares LLMs through the [Evaluations extension](evaluations.md)'s MCP server. It asks before runs that act for the team, and before switching live evaluation on.
 
 The skills are updated with the installer. Keep your own changes in a copy under another name.

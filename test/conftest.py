@@ -77,9 +77,9 @@ class MemoryPolaris(PolarisProvider):
         # Catalog API responses by path, such as a loadTable result; anything else lists nothing.
         self.catalog = {}
         self.storage = Mock()
-        self.storage.create_bucket.side_effect = lambda name, team: f"db-{name}-123456789abc"
+        self.storage.create_bucket.side_effect = lambda name, team: name
         # Like the bucket tags written at creation: a bucket belongs to the database it was created for.
-        self.storage.owns_bucket.side_effect = lambda bucket, database: bucket == f"db-{database}-123456789abc"
+        self.storage.owns_bucket.side_effect = lambda bucket, database: bucket == database
         self.storage.create_user.side_effect = lambda key, buckets: {
             "accessKeyId": key,
             "secretAccessKey": "s3-secret",

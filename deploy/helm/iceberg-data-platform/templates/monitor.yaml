@@ -91,6 +91,7 @@ spec:
           command: [/app/.venv/bin/uvicorn, "server.entrypoints:monitor", --factory, --host, 0.0.0.0, --port, "3003"]
           env:
             {{- include "idp.secretEnv" (list . "PORTAL_PASSWORD") | nindent 12 }}
+            {{- include "idp.otelEnv" . | nindent 12 }}
             - {name: POLARIS_URL, value: "http://polaris:8181"}
             - name: POLARIS_CLIENT_ID
               value: {{ .Values.polarisClientId | quote }}

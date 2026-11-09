@@ -28,9 +28,11 @@ CHECKS = {
     "dbt-portal": [("/api/health", (200,))],
     "ing-gateway": [("/api/health", (200,))],
     "cbi-gateway": [("/api/health", (200,))],
+    "evaluations": [("/api/health", (200,))],
 }
 NAMES = {"portal": "administration portal", "users": "user portal", "keycloak": "sign-in", "polaris": "catalog",
-         "rustfs": "S3", "dbt-portal": "dbt", "ing-gateway": "Ingestion", "cbi-gateway": "Conversational BI"}
+         "rustfs": "S3", "dbt-portal": "dbt", "ing-gateway": "Ingestion", "cbi-gateway": "Conversational BI",
+         "evaluations": "Evaluations"}
 
 
 def kubectl_json(*args):

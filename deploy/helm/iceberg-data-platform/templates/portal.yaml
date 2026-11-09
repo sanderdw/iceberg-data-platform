@@ -40,6 +40,7 @@ spec:
           command: [/app/.venv/bin/python, -m, server]
           env:
             {{- include "idp.platformEnv" . | nindent 12 }}
+            {{- include "idp.otelEnv" . | nindent 12 }}
             - {name: OIDC_CLIENT_ID, value: iceberg-admin}
             {{- include "idp.secretEnv" (list . "OIDC_CLIENT_SECRET" "OIDC_PORTAL_SECRET") | nindent 12 }}
             {{- include "idp.secretEnv" (list . "OIDC_MANAGEMENT_SECRET") | nindent 12 }}

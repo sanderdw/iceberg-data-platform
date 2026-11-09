@@ -29,6 +29,18 @@ query:
 
 memory: 3Gi
 
+# The Evaluations extension: whose service account may ask for a team that enabled both, which other
+# LLMs it may compare (keys in the LLM Secret), and how many days conversations are kept for teams
+# that enabled it (0 keeps none). The record lives on a volume of `conversationStorage`.
+evaluation:
+  callers: evaluations
+  models: ""
+  # The control arm, where an LLM writes SQL to show what a semantic model adds. Never the chat.
+  schemaOnly: false
+  conversationRetentionDays: 30
+conversationStorage: 1Gi
+storageClass: ""
+
 ingress:
   enabled: true
   host: ""
@@ -37,6 +49,14 @@ ingress:
 tls:
   clusterIssuer: ""
   secretName: iceberg-conversationalbi-tls
+
+# OpenTelemetry: the extension's service sends its logs and traces over OTLP/HTTP when an endpoint is
+# set, as the platform's chart does (otel.* there).
+otel:
+  endpoint: ""  # e.g. http://otel-collector.observability:4318
+  # A Secret in this namespace with the key OTEL_EXPORTER_OTLP_HEADERS, for a backend that needs an API key.
+  headersSecret: ""
+  resourceAttributes: ""
 
 networkPolicy:
   enabled: true

@@ -1,11 +1,11 @@
 ---
 name: kubernetes-install
-description: Install, upgrade or remove the Iceberg Data Platform on a Kubernetes cluster with its Helm charts. Checks that the cluster is ready (ingress controller, cert-manager, storage, NetworkPolicy enforcement), asks for the domain, certificates, bundled or managed PostgreSQL and the extensions (dbt, Ingestion, Conversational BI), installs them, verifies every host from the outside and reports where to sign in. Use when the user wants the platform on Kubernetes, on a cloud provider's cluster or on kind, or wants to upgrade, extend or uninstall such an installation.
+description: Install, upgrade or remove the Iceberg Data Platform on a Kubernetes cluster with its Helm charts. Checks that the cluster is ready (ingress controller, cert-manager, storage, NetworkPolicy enforcement), asks for the domain, certificates, bundled or managed PostgreSQL and the extensions (dbt, Ingestion, Conversational BI, Evaluations), installs them, verifies every host from the outside and reports where to sign in. Use when the user wants the platform on Kubernetes, on a cloud provider's cluster or on kind, or wants to upgrade, extend or uninstall such an installation.
 ---
 
 # Install the Iceberg Data Platform on Kubernetes
 
-The platform's charts are published at `oci://ghcr.io/sanderdw/charts`: `iceberg-data-platform` and one chart per extension (`iceberg-dbt`, `iceberg-ingestion`, `iceberg-conversationalbi`). The user documentation is [Install on Kubernetes](https://sanderdw.github.io/iceberg-data-platform/install-kubernetes/); this skill follows it. Commands refer to this skill's files at `.agents/skills/kubernetes-install`.
+The platform's charts are published at `oci://ghcr.io/sanderdw/charts`: `iceberg-data-platform` and one chart per extension (`iceberg-dbt`, `iceberg-ingestion`, `iceberg-conversationalbi`, `iceberg-evaluations`). The user documentation is [Install on Kubernetes](https://sanderdw.github.io/iceberg-data-platform/install-kubernetes/); this skill follows it. Commands refer to this skill's files at `.agents/skills/kubernetes-install`.
 
 You need `kubectl` and `helm` (3.15 or later) on PATH, and `python3` for the scripts. Install nothing on the user's computer without asking.
 
@@ -46,7 +46,7 @@ Ask these together, with a recommended answer for each:
 2. **Certificates.** The ClusterIssuer from step 2; staging first for a new domain.
 3. **PostgreSQL.** Bundled (one pod, fine for tests and demos) or a managed PostgreSQL 15+ such as the cloud provider's (recommended for real use: backups and high availability). Object storage stays RustFS either way: the platform needs RustFS's per-user accounts and short-lived, scoped credentials, which provider object storage does not offer. For managed Postgres see step 4.
 4. **Polaris.** The chart's own (one pod, the default) or the official Apache Polaris chart, for replicas, autoscaling and metrics. The official chart's Polaris still belongs to this platform only; see step 5b.
-5. **Extensions.** None, or any of dbt, Ingestion (dlt) and Conversational BI. Conversational BI needs an LLM: a Pydantic AI model string such as `anthropic:claude-sonnet-5-5` and its provider's key.
+5. **Extensions.** None, or any of dbt, Ingestion (dlt), Conversational BI and Evaluations. Conversational BI needs an LLM: a Pydantic AI model string such as `anthropic:claude-sonnet-5-5` and its provider's key. Evaluations checks Conversational BI's answers, so it comes only with Conversational BI; it keeps conversations of teams that switch live evaluation on.
 6. **Demo data.** Off by default. With `demo=true` the platform creates demo accounts and a demo team, for a class or a test.
 7. **Version.** The newest chart: `helm show chart oci://ghcr.io/sanderdw/charts/iceberg-data-platform | grep '^version:'`, unless the user wants a specific one.
 
@@ -75,7 +75,7 @@ Add, when chosen:
 - managed PostgreSQL: `--set postgres.external.enabled=true --set postgres.external.host=<address> --set postgres.external.existingSecret=iceberg-postgres` (and `--set postgres.external.sslmode=verify-full` if the server's certificate is publicly trusted)
 - demo data: `--set demo=true`
 - the official Polaris chart: `--set polaris.external.enabled=true`, and leave out `demo=true` until step 5b is done
-- the extensions' hosts, so one install registers them: `--set extensions.dbt.host=dbt --set extensions.ingestion.host=ingest --set extensions.conversationalbi.host=cbi`
+- the extensions' hosts, so one install registers them: `--set extensions.dbt.host=dbt --set extensions.ingestion.host=ingest --set extensions.conversationalbi.host=cbi --set extensions.evaluations.host=eval`
 
 The first install takes 5 to 10 minutes: Keycloak builds itself on the first start and the certificates are issued. If `--wait` times out, run `kubectl -n <namespace> get pods` and `kubectl -n <namespace> get certificate`, and see the documentation's "Check the installation".
 
@@ -111,6 +111,12 @@ helm upgrade --install conversationalbi oci://ghcr.io/sanderdw/charts/iceberg-co
   --set llm.existingSecret=conversationalbi-llm
 ```
 
+Evaluations, after Conversational BI. An LLM judge is optional: a Secret with `JUDGE_MODEL` and its provider's key, passed as `--set judge.existingSecret=<secret>`.
+
+```bash
+helm upgrade --install evaluations oci://ghcr.io/sanderdw/charts/iceberg-evaluations $common
+```
+
 Ingestion runs reach public sources only. For a source inside the user's network, add `--set runs.allowPrivateSources=true` to its chart, after explaining that runs can then reach private addresses.
 
 ## 7. Verify and report
@@ -125,7 +131,7 @@ Then tell the user:
 - the addresses from the JSON's `addresses`: the administration portal first, then the user portal and the extensions;
 - to sign in to the administration portal as `platform-admin` with the one-time password, which Keycloak replaces at the first sign-in. Read it once and show it once:
   `kubectl -n <namespace> get secret iceberg-platform -o jsonpath='{.data.PLATFORM_ADMIN_PASSWORD}' | base64 -d`;
-- that the Secret `iceberg-platform` holds every platform credential and must be backed up with the volumes (and the managed database, if used), together with the extensions' Secrets `iceberg-dbt`, `iceberg-ingestion` (its key decrypts stored source passwords) and `iceberg-conversationalbi`;
+- that the Secret `iceberg-platform` holds every platform credential and must be backed up with the volumes (and the managed database, if used), together with the extensions' Secrets `iceberg-dbt`, `iceberg-ingestion` (its key decrypts stored source passwords) and `iceberg-conversationalbi`, and the volumes `cbi-state` (the conversation record for live evaluation) and `evaluations-state`;
 - with staging certificates: to switch to the production issuer (`helm upgrade ... --reset-then-reuse-values --set tls.clusterIssuer=<production issuer>`, and the same for each extension) before inviting anyone;
 - the MCP addresses for AI agents: `https://users.<domain>/mcp` and `https://admin.<domain>/mcp`, plus `/mcp` on each extension's host;
 - the Keycloak administration console, which is never published: `kubectl -n <namespace> port-forward svc/keycloak 8080`, then `http://localhost:8080/admin` as `admin` with `KEYCLOAK_ADMIN_PASSWORD` from the same Secret;
@@ -146,5 +152,5 @@ Tell the user before that the portals and Keycloak restart in place and are unav
 
 Ask which of these the user means, and confirm the exact namespace names before deleting anything:
 
-- **Uninstall, keep the data:** `helm uninstall` each extension, then `helm uninstall iceberg -n <namespace>`. The Secrets `iceberg-platform`, `iceberg-dbt`, `iceberg-ingestion` and `iceberg-conversationalbi`, the volumes and the notebook files stay; installing again with the same release name and namespace finds them.
+- **Uninstall, keep the data:** `helm uninstall` each extension, then `helm uninstall iceberg -n <namespace>`. The Secrets `iceberg-platform`, `iceberg-dbt`, `iceberg-ingestion` and `iceberg-conversationalbi`, the volumes (among them `cbi-state` and `evaluations-state`) and the notebook files stay; installing again with the same release name and namespace finds them.
 - **Delete everything, including all data:** after the uninstall, `kubectl delete namespace <namespace> <namespace>-notebooks <namespace>-dbt-runs <namespace>-ingestion-runs`. This cannot be undone. A managed PostgreSQL is not part of the cluster; tell the user to delete its databases themselves if they want them gone.

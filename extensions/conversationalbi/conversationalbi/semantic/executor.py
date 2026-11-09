@@ -61,6 +61,8 @@ class Executor:
             result = json.loads(stdout or b"{}")
         except ValueError:
             result = {"error": "output"}
+        if result.get("error") == "sql":
+            raise CbiError(422, result["message"], "sql_error")
         if process.returncode or "error" in result:
             if result.get("status") in (401, 403):
                 raise CbiError(403, "The platform refused to read a table of this model. It may no longer be "

@@ -41,6 +41,7 @@ spec:
           command: [/app/.venv/bin/uvicorn, "server.entrypoints:bridge", --factory, --host, 0.0.0.0, --port, "3005", --no-access-log]
           env:
             {{- include "idp.platformEnv" . | nindent 12 }}
+            {{- include "idp.otelEnv" . | nindent 12 }}
             - {name: POLARIS_URL, value: "http://polaris:8181"}
             - {name: BRIDGE_CATALOG_URI, value: "http://polaris-control-plane:8181/api/catalog"}
             - name: USER_ORIGIN

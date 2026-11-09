@@ -32,6 +32,7 @@ spec:
           args: [bootstrap, --realm=POLARIS, "--credential=POLARIS,$(POLARIS_CLIENT_ID),$(POLARIS_CLIENT_SECRET)"]
           env:
             {{- include "idp.polarisEnv" . | nindent 12 }}
+            - {name: QUARKUS_OTEL_SDK_DISABLED, value: "true"}
             - name: POLARIS_CLIENT_ID
               value: {{ .Values.polarisClientId | quote }}
             {{- include "idp.secretEnv" (list . "POLARIS_CLIENT_SECRET") | nindent 12 }}
@@ -108,8 +109,8 @@ data:
       quarkus.oidc.token.audience: polaris
       quarkus.oidc.jwks-path: http://keycloak:8080/realms/iceberg/protocol/openid-connect/certs
       quarkus.oidc.discovery-enabled: false
-      quarkus.otel.sdk.disabled: true
     extraEnv:
       - name: AWS_REGION
         value: {{ .Values.awsRegion | quote }}
+      {{- include "idp.polarisOtelEnv" . | nindent 6 }}
 {{- end }}

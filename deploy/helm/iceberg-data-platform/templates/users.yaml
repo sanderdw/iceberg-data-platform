@@ -88,6 +88,7 @@ spec:
           command: [/app/.venv/bin/python, -m, user_portal]
           env:
             {{- include "idp.platformEnv" . | nindent 12 }}
+            {{- include "idp.otelEnv" . | nindent 12 }}
             - {name: OIDC_CLIENT_ID, value: iceberg-users}
             {{- include "idp.secretEnv" (list . "OIDC_CLIENT_SECRET" "OIDC_USERS_SECRET") | nindent 12 }}
             - name: OIDC_ORIGIN

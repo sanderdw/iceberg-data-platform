@@ -1,13 +1,13 @@
 [project]
 name = "iceberg-dbt"
-version = "0.1.2"
+version = "0.1.3"
 description = "dbt v2 pipelines for the Iceberg Data Platform: an API and MCP server for agents, and pipeline visualization"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.162.0",
+  "fastapi==0.162.2",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
   "joserfc>=1.7.7",
@@ -17,17 +17,26 @@ dependencies = [
 ]
 
 [dependency-groups]
+# OpenTelemetry export, used only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+otel = [
+  "opentelemetry-sdk>=1.45.1",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+  "opentelemetry-instrumentation-fastapi>=0.66b1",
+  "opentelemetry-instrumentation-httpx>=0.66b1",
+  "opentelemetry-instrumentation-logging>=0.66b1",
+]
 # The launcher is the only component with the Docker socket.
 launcher = ["docker==7.2.0"]
 # The isolated run image: dbt v2 OSS with its DuckDB driver and extensions, PyIceberg for metadata and
 # PyYAML for the project's semantic models.
 runner = [
-  "dbt-oss==2.0.8",
+  "dbt-oss==2.0.11",
   "duckdb==2.0.0",
   "pyiceberg>=0.12.0",
   "pyyaml>=6.0.2",
 ]
-dev = [{include-group = "launcher"}, "pytest>=9.1.1", "ruff>=0.17.3", "pyiceberg>=0.12.0", "pyyaml>=6.0.2"]
+dev = [{include-group = "otel"}, {include-group = "launcher"}, "pytest>=9.1.1", "ruff>=0.17.3", "pyiceberg>=0.12.0",
+       "pyyaml>=6.0.2"]
 
 [tool.iceberg-dbt]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).

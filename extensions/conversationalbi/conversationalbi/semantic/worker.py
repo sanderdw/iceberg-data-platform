@@ -8,7 +8,9 @@ talks to the catalog, so a share recipient that cannot list namespaces still rea
 and each answer names the snapshots it read.
 
 Then DuckDB is locked: no local files, no extension loading, no setting changes. Errors never
-leave the process with details: provider messages can contain tokens, SQL or row values.
+leave the process with details: provider messages can contain tokens, SQL or row values. The one
+exception is `explainSqlErrors`, for the Evaluations control arm: an LLM that wrote the SQL itself gets
+binder, catalog and parser errors, which name tables and columns but no values, so it can correct them.
 """
 
 import datetime
@@ -142,11 +144,18 @@ def execute(connection, sql, params, limit):
 
 
 def run(job):
+    import duckdb
+
     connection = connect()
     try:
         snapshots = bind(connection, job, load_tables(job))
         lock(connection)
-        return {**execute(connection, job["sql"], job["params"], job["limit"]), "snapshots": snapshots}
+        try:
+            return {**execute(connection, job["sql"], job["params"], job["limit"]), "snapshots": snapshots}
+        except (duckdb.BinderException, duckdb.CatalogException, duckdb.ParserException) as exc:
+            if not job.get("explainSqlErrors"):
+                raise
+            return {"error": "sql", "message": str(exc)[:500]}
     finally:
         connection.close()
 

@@ -102,6 +102,45 @@ imagePullSecrets:
   value: {{ include "idp.listingExtensions" . | quote }}
 {{- end -}}
 
+{{/* OpenTelemetry export of the platform's own services (server/entrypoints.py); none without an endpoint. */}}
+{{- define "idp.otelEnv" -}}
+{{- if .Values.otel.endpoint -}}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ .Values.otel.endpoint | quote }}
+{{- if .Values.otel.headersSecret }}
+- name: OTEL_EXPORTER_OTLP_HEADERS
+  valueFrom:
+    secretKeyRef: {name: {{ .Values.otel.headersSecret }}, key: OTEL_EXPORTER_OTLP_HEADERS}
+{{- end }}
+{{- if .Values.otel.resourceAttributes }}
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: {{ .Values.otel.resourceAttributes | quote }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/* The same for Polaris, through Quarkus's own settings. */}}
+{{- define "idp.polarisOtelEnv" -}}
+{{- if and .Values.otel.endpoint .Values.otel.polaris -}}
+- {name: QUARKUS_OTEL_SDK_DISABLED, value: "false"}
+- {name: QUARKUS_OTEL_SERVICE_NAME, value: iceberg-polaris}
+- name: QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ .Values.otel.endpoint | quote }}
+- {name: QUARKUS_OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf}
+{{- if .Values.otel.headersSecret }}
+- name: QUARKUS_OTEL_EXPORTER_OTLP_HEADERS
+  valueFrom:
+    secretKeyRef: {name: {{ .Values.otel.headersSecret }}, key: OTEL_EXPORTER_OTLP_HEADERS}
+{{- end }}
+{{- if .Values.otel.resourceAttributes }}
+- name: QUARKUS_OTEL_RESOURCE_ATTRIBUTES
+  value: {{ .Values.otel.resourceAttributes | quote }}
+{{- end }}
+{{- else -}}
+- {name: QUARKUS_OTEL_SDK_DISABLED, value: "true"}
+{{- end }}
+{{- end -}}
+
 {{- define "idp.rustfsAdminEnv" -}}
 - name: S3_ADMIN_ENDPOINT
   value: http://rustfs:9000

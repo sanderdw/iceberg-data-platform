@@ -11,7 +11,8 @@
   is stale: regenerate it with `uv run python -m scripts.api_contract`.
 - Authorization lives in `Services` and is re-checked on every call from the Bridge's `/me`. Data
   is only read with read tokens; never ask the Bridge for `write`.
-- The LLM never writes SQL and never supplies numbers to the UI. Query shapes are `QuerySpec`
+- In the chat the LLM never writes SQL and never supplies numbers to the UI (the only SQL an LLM writes is the
+  Evaluations control arm, `agent/control.py`, behind `BI_EVAL_SCHEMA_ONLY` and `semantic/sql_guard.py`). Query shapes are `QuerySpec`
   (`semantic/compiler.py`); expressions from a model pass `semantic/expressions.py`.
 - The agent is `conversationalbi/agent/analyst.yaml`. Keep dynamic context in the capability's
   instructions, never in the YAML, and pass model owner text as quoted data.

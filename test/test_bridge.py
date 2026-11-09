@@ -84,9 +84,9 @@ def bridge():
 
 def test_discovery_is_public_and_complete(bridge):
     body = bridge.call("GET", "").json()
-    assert body["contractVersion"] == "0.1.2"
+    assert body["contractVersion"] == "0.1.3"
     assert body["capabilities"] == ["user-context", "automation-principals", "automation-tokens", "shared-data",
-                                    "listings"]
+                                    "listings", "team-extensions"]
     assert body["oidc"] == {"issuer": ISSUER, "internalIssuer": ISSUER, "bridgeAudience": "iceberg-bridge"}
     assert body["catalog"]["internalUri"] == "http://polaris-control-plane:8181/api/catalog"
     assert body["network"]["name"] == "iceberg-platform_default"
@@ -215,6 +215,31 @@ def test_scope_lists_received_shares_of_the_environment(bridge):
     assert f"/principal-roles/{id}-read/catalog-roles/{bridge.foreign}/{share['id']}" in bridge.provider.grants
     bridge.provider.delete_share(share["id"])
     assert bridge.call("GET", f"/automation-principals/{id}", "service").json()["sharedDatabases"] == []
+
+
+def test_an_extension_sees_which_extensions_its_teams_enabled(bridge, caplog):
+    path = f"/teams/{bridge.team}/extensions"
+    # Not enabled for the team itself: nothing to learn about it.
+    response = bridge.call("GET", path, "service")
+    assert (response.status_code, response.json()["code"]) == (403, "extension_not_enabled")
+    bridge.call("POST", f"/teams/{bridge.team}/automation-principals", "alice", json={"environment": "development"})
+    bridge.verifier.tokens["alice-other"] = {**bridge.verifier.tokens["alice"], "azp": "ext-other-mcp"}
+    for environment in ("development", "production"):
+        bridge.call("POST", f"/teams/{bridge.team}/automation-principals", "alice-other",
+                    json={"environment": environment})
+    with caplog.at_level("INFO", logger="iceberg.bridge.audit"):
+        body = bridge.call("GET", path, "service").json()
+    assert body["extensions"] == [{"extension": "dbt", "environment": "development"},
+                                  {"extension": "other", "environment": "development"},
+                                  {"extension": "other", "environment": "production"}]
+    assert any(r.__dict__.get("otel.event.name") == "iceberg.bridge.team_extensions.read" for r in caplog.records)
+    assert bridge.call("GET", path + "?environment=production", "service").json()["extensions"] == [
+        {"extension": "other", "environment": "production"}]
+    assert bridge.call("GET", path + "?environment=staging", "service").status_code == 422
+    # Users don't use it, and another team stays closed.
+    assert bridge.call("GET", path, "alice").json()["code"] == "service_required"
+    response = bridge.call("GET", f"/teams/{bridge.other}/extensions", "service")
+    assert (response.status_code, response.json()["code"]) == (403, "extension_not_enabled")
 
 
 def test_revocation(bridge):

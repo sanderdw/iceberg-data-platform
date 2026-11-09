@@ -28,7 +28,7 @@ Plain HTTP sign-in only works on `localhost`, so a cluster needs HTTPS. Each por
 ## Install
 
 ```bash
-helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 \
+helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 \
   --namespace iceberg --create-namespace \
   --set baseDomain=data.example.com \
   --set ingress.className=traefik \
@@ -129,7 +129,7 @@ needs no public endpoint.
 3. Install with the database's private address:
 
     ```bash
-    helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 -n iceberg \
+    helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 -n iceberg \
       --set baseDomain=data.example.com --set tls.clusterIssuer=letsencrypt-prod \
       --set postgres.external.enabled=true --set postgres.external.host=<private address> \
       --set postgres.external.existingSecret=iceberg-postgres --wait --timeout 15m
@@ -162,14 +162,14 @@ Install in this order, because the official chart's values come from the platfor
 needs a running Polaris:
 
 ```bash
-helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 -n iceberg \
+helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 -n iceberg \
   --create-namespace --set baseDomain=data.example.com --set tls.clusterIssuer=letsencrypt-prod \
   --set polaris.external.enabled=true --wait --timeout 15m
 kubectl -n iceberg get configmap iceberg-polaris-values -o jsonpath='{.data.values\.yaml}' > polaris-values.yaml
 helm install catalog polaris --repo https://downloads.apache.org/polaris/helm-chart --version 1.8.0 \
   -n iceberg -f polaris-values.yaml --wait --timeout 10m
 # Optional, now that Polaris runs: demo accounts and data.
-helm upgrade iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 -n iceberg \
+helm upgrade iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 -n iceberg \
   --reset-then-reuse-values --set demo=true --wait
 ```
 
@@ -197,18 +197,20 @@ extension gets the host `<host>.<domain>` and its own certificate.
 ```bash
 chart=oci://ghcr.io/sanderdw/charts
 # 1. Register the extensions you want, with their hosts.
-helm upgrade iceberg $chart/iceberg-data-platform --version 0.9.10 -n iceberg --reset-then-reuse-values \
+helm upgrade iceberg $chart/iceberg-data-platform --version 0.9.11 -n iceberg --reset-then-reuse-values \
   --set extensions.dbt.host=dbt --set extensions.ingestion.host=ingest \
-  --set extensions.conversationalbi.host=cbi --wait
+  --set extensions.conversationalbi.host=cbi --set extensions.evaluations.host=eval --wait
 # 2. Install their charts, with the same ingress settings as the platform.
 common="-n iceberg --set ingress.className=traefik --set tls.clusterIssuer=letsencrypt-prod --wait"
-helm install dbt $chart/iceberg-dbt --version 0.1.2 $common
-helm install ingestion $chart/iceberg-ingestion --version 0.1.2 $common
+helm install dbt $chart/iceberg-dbt --version 0.1.3 $common
+helm install ingestion $chart/iceberg-ingestion --version 0.1.3 $common
 # Conversational BI reads its LLM from a Secret, so the key stays out of Helm's values.
 kubectl -n iceberg create secret generic conversationalbi-llm \
   --from-literal=LLM_MODEL=anthropic:claude-sonnet-5-5 --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
-helm install conversationalbi $chart/iceberg-conversationalbi --version 0.1.4 $common \
+helm install conversationalbi $chart/iceberg-conversationalbi --version 0.1.5 $common \
   --set llm.existingSecret=conversationalbi-llm
+# Evaluations, after Conversational BI; an LLM judge is optional (judge.existingSecret).
+helm install evaluations $chart/iceberg-evaluations --version 0.1.0 $common
 ```
 
 - **dbt and Ingestion** run every build or load as a Kubernetes Job in a namespace of their own
@@ -249,7 +251,7 @@ addresses:
 
 ```bash
 kind create cluster
-helm pull oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.10 --untar
+helm pull oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 --untar
 helm install iceberg ./iceberg-data-platform -n iceberg --create-namespace \
   -f iceberg-data-platform/values-localhost.yaml --wait --timeout 15m
 for forward in portal:3000 users:3002 keycloak:8080 polaris:8181 rustfs:9000; do
@@ -286,6 +288,9 @@ kubectl -n iceberg logs deploy/keycloak
 The workloads are the Deployments `portal`, `users`, `bridge`, `keycloak`, `monitor` and `polaris`,
 and the StatefulSets `postgres` and `rustfs`; each extension adds its own (`dbt`, `ingestion`,
 `cbi-gateway`, `cbi-runtime`).
+
+To collect the logs and traces in your own backend, set `otel.endpoint`; see
+[Send logs and traces to OpenTelemetry](observability.md#kubernetes).
 
 ## Check the installation
 

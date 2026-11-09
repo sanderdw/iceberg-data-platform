@@ -40,3 +40,20 @@ securityContext:
   seccompProfile:
     type: RuntimeDefault
 {{- end -}}
+
+{{/* OpenTelemetry export (__main__.py); none without an endpoint. */}}
+{{- define "cbi.otelEnv" -}}
+{{- if .Values.otel.endpoint -}}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ .Values.otel.endpoint | quote }}
+{{- if .Values.otel.headersSecret }}
+- name: OTEL_EXPORTER_OTLP_HEADERS
+  valueFrom:
+    secretKeyRef: {name: {{ .Values.otel.headersSecret }}, key: OTEL_EXPORTER_OTLP_HEADERS}
+{{- end }}
+{{- if .Values.otel.resourceAttributes }}
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: {{ .Values.otel.resourceAttributes | quote }}
+{{- end }}
+{{- end }}
+{{- end -}}

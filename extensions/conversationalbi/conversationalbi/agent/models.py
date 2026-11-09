@@ -28,6 +28,10 @@ QUERY = {"metrics": ["average_departure_delay"], "dimensions": [{"field": "CARRI
          "order_by": [{"name": "average_departure_delay", "desc": True}], "limit": 20}
 
 
+CONTROL_SQL = ("SELECT c.name, avg(f.dep_delay) AS delay FROM flights f JOIN carriers c ON f.carrier_code = c.code "
+               "GROUP BY 1 ORDER BY 2 DESC")
+
+
 def content(part):
     value = part.content
     if isinstance(value, str):
@@ -48,6 +52,13 @@ def scripted(messages, info: AgentInfo):
 
     def call(name, args):
         return ModelResponse(parts=[ToolCallPart(name, args, tool_call_id=f"call-{name}-{len(messages)}")])
+
+    if "run_sql" in tools:  # The evaluation's control arm.
+        if "run_sql" not in done:
+            return call("run_sql", {"sql": CONTROL_SQL})
+        rows = done["run_sql"].get("rows") or [["nobody", 0.0]]
+        return ModelResponse(parts=[TextPart(f"{rows[0][0]} has the highest average departure delay, "
+                                             f"{rows[0][1]:.1f} minutes.")])
 
     if "query" not in done:
         if not selected and "select_model" not in done:

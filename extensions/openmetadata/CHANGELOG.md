@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 - 2026-11-09
+
+- **OpenTelemetry.** With `OTEL_EXPORTER_OTLP_ENDPOINT` in `.env` the service sends its logs and traces over OTLP/HTTP, as the platform does. Off by default. See [Send logs and traces to OpenTelemetry](https://sanderdw.github.io/iceberg-data-platform/observability/).
+- Updated dependencies.
+
 ## 0.1.2 - 2026-10-27
 
 - Works with OpenMetadata 2.0.7.

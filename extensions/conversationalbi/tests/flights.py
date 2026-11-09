@@ -24,7 +24,8 @@ def schemas(parsed=None):
 def local(bindings=None):
     """DuckDB with one view per dataset over the fixture Parquet, named like the dataset."""
     connection = duckdb.connect()
-    for d in model().datasets:
-        if bindings is None or d.name in {b["view"] for b in bindings}:
-            connection.execute(f"CREATE VIEW \"{d.name}\" AS SELECT * FROM '{FIXTURES / (d.table + '.parquet')}'")
+    views = ({d.name: d.table for d in model().datasets} if bindings is None
+             else {b["view"]: b["table"] for b in bindings})
+    for view, table in views.items():
+        connection.execute(f"CREATE VIEW \"{view}\" AS SELECT * FROM '{FIXTURES / (table + '.parquet')}'")
     return connection

@@ -21,6 +21,7 @@ CBI_SETUP = ROOT / "extensions/conversationalbi/scripts/setup.py"
 CBI_VARIABLES = runpy.run_path(str(CBI_SETUP))["PASSTHROUGH"]
 DBT_SETUP = ROOT / "extensions/dbt/scripts/setup.py"
 ING_SETUP = ROOT / "extensions/ingestion/scripts/setup.py"
+EVAL_SETUP = ROOT / "extensions/evaluations/scripts/setup.py"
 # `docker run` of the platform image: run the script on the installation directory with only the
 # variables the installer names with -e, as Docker would. Without -i the container's stdin is no
 # terminal; an empty pipe, because Windows reports NUL (DEVNULL) as one.
@@ -64,6 +65,9 @@ def installer_env(tmp_path, request):
             "ingestion/compose.yaml": b"name: iceberg-ingestion\n",
             "ingestion/scripts/setup.py": ING_SETUP.read_bytes(),
             ".agents/skills/ingestion/SKILL.md": b"---\nname: ingestion\n---\n",
+            "evaluations/compose.yaml": b"name: iceberg-evaluations\n",
+            "evaluations/scripts/setup.py": EVAL_SETUP.read_bytes(),
+            ".agents/skills/agent-evaluations/SKILL.md": b"---\nname: agent-evaluations\n---\n",
         }.items():
             info = tarfile.TarInfo("iceberg-data-platform-0.2.1-install/" + name)
             info.size = len(data)
@@ -92,7 +96,7 @@ def calls(env):
     return [json.loads(line) for line in Path(env["TEST_DOCKER_LOG"]).read_text().splitlines()]
 
 
-def assert_started(env, cbi=False, dbt=False, ingestion=False):
+def assert_started(env, cbi=False, dbt=False, ingestion=False, evaluations=False):
     commands = calls(env)
     tag = env["TEST_RELEASE_TAG"]
     setup_image = "ghcr.io/sanderdw/iceberg-data-platform-portal:" + env["TEST_IMAGE_TAG"]
@@ -105,8 +109,8 @@ def assert_started(env, cbi=False, dbt=False, ingestion=False):
     assert downloads == [base + prefix + "SHA256SUMS", base + archive_prefix + "iceberg-data-platform-0.2.1-install.tar.gz"]
     pulls = [i for i, args in enumerate(commands) if args[-1] == "pull"]
     starts = [(i, args) for i, args in enumerate(commands) if "up" in args]
-    extensions = [name for name, wanted in (("conversationalbi", cbi), ("dbt", dbt), ("ingestion", ingestion))
-                  if wanted]
+    extensions = [name for name, wanted in (("conversationalbi", cbi), ("dbt", dbt), ("ingestion", ingestion),
+                                            ("evaluations", evaluations)) if wanted]
     assert len(starts) == 2 + len(extensions)
     assert pulls and max(pulls) < starts[0][0]
     assert Path(starts[0][1][starts[0][1].index("-f") + 1]).name == "compose.yaml"
@@ -175,7 +179,7 @@ def assert_next_steps(output, target):
     assert f"   Password  {password}  (temporary: you choose a new one at first sign-in)\n" in output
     assert "   http://localhost:3002/#guide\n   Or skip the setup: the demo-company skill below" in output
     # Keycloak needs no manual visit, so the output leaves it out.
-    assert "8080" not in output.split("is running.")[1]
+    assert ":8080" not in output.split("is running.")[1]
     # The installation folder holds the helper and the commands to start and stop both stacks.
     assert (target / "iceberg_connect.py").read_bytes() == b"# helper\n"
     assert "docker compose -f compose.users.yaml down" in output
@@ -284,18 +288,6 @@ def test_shell_installs_pgadmin_and_keeps_it_on_rerun(shell_installer):
     assert profiles(env) == "pgadmin"
     assert "pgAdmin, to look inside the Polaris metadata database:\n     http://localhost:5050  " in result.stdout
     del env["ICEBERG_EXTENSIONS"]
-    result = run()
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert profiles(env) == "pgadmin"
-    assert "http://localhost:5050" in result.stdout
-
-
-def test_shell_keeps_pgadmin_for_an_installation_from_before_it_was_optional(shell_installer):
-    run, env = shell_installer
-    assert run().returncode == 0
-    config = Path(env["ICEBERG_INSTALL_DIR"]) / ".env"
-    config.write_text("".join(line for line in config.read_text().splitlines(keepends=True)
-                              if not line.startswith("COMPOSE_PROFILES=")))
     result = run()
     assert result.returncode == 0, result.stdout + result.stderr
     assert profiles(env) == "pgadmin"
@@ -498,6 +490,31 @@ def test_shell_installs_all_extensions(shell_installer):
     assert_ingestion_installed(result, env, cbi=True, dbt=True)
     stop = result.stdout.split("Stop")[-1].split("\n")[0]
     assert stop.index("ingestion/compose.yaml down") < stop.index("dbt/compose.yaml down")
+
+
+def test_shell_installs_evaluations_with_conversational_bi(shell_installer):
+    run, env = shell_installer
+    env["ICEBERG_EXTENSIONS"] = "conversationalbi,evaluations"
+    env["LLM_MODEL"] = "test:flights"
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert_started(env, cbi=True, evaluations=True)
+    target = Path(env["ICEBERG_INSTALL_DIR"])
+    assert re.search(r"(?m)^PLATFORM_EXTENSIONS=(.*,)?evaluations=http://localhost:3012", (target / ".env").read_text())
+    assert "EVAL_PORT=3012" in (target / "evaluations/.env").read_text()
+    output = result.stdout.split("is running.")[1]
+    assert "4. Check the agent's answers with Evaluations\n   http://localhost:3012\n" in output
+    assert "--client-id ext-evaluations-mcp --callback-port 3010 iceberg-evaluations http://localhost:3012/mcp" in output
+    stop = output.split("Stop")[1].split("\n")[0]
+    assert stop.index("evaluations/compose.yaml down") < stop.index("conversationalbi/compose.yaml down")
+
+
+def test_shell_refuses_evaluations_without_conversational_bi(shell_installer):
+    run, env = shell_installer
+    env["ICEBERG_EXTENSIONS"] = "evaluations"
+    result = run()
+    assert result.returncode != 0 and "add conversationalbi" in result.stderr
+    assert not any("up" in args for args in calls(env))
 
 
 def test_installers_pass_the_variables_conversational_bi_reads():

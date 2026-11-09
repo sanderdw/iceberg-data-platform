@@ -31,6 +31,9 @@
     function Invoke-IngestionCompose {
         Invoke-Docker compose --env-file "$InstallDir/ingestion/.env" -f "$InstallDir/ingestion/compose.yaml" @args
     }
+    function Invoke-EvaluationsCompose {
+        Invoke-Docker compose --env-file "$InstallDir/evaluations/.env" -f "$InstallDir/evaluations/compose.yaml" @args
+    }
     function Get-FileValue($Path, $Key) {
         (Get-Content $Path | Where-Object { $_.StartsWith("$Key=") } | Select-Object -Last 1) -replace '^[^=]*=', ''
     }
@@ -70,11 +73,21 @@
         $Answer = Read-Host "Add Ingestion (dlt), which loads REST APIs, databases and files into your tables? Its launcher`nuses the Docker socket to start each run in an isolated container. [y/N]"
         $Ingestion = $Answer -match '^[Yy]'
     }
-    # pgAdmin only shows the Polaris metadata database, to learn from; installations from before
-    # it became optional have no COMPOSE_PROFILES and keep it.
+    # And the Evaluations extension, which checks Conversational BI's answers: only with it.
+    $Evaluations = @($env:ICEBERG_EXTENSIONS -split ',' | ForEach-Object { $_.Trim() }) -contains 'evaluations'
+    $EvaluationsRegistered = (Test-Path "$InstallDir/evaluations/.env.bridge") -and (Test-Path "$InstallDir/.env") -and
+        [bool](Select-String -Path "$InstallDir/.env" -Pattern '^PLATFORM_EXTENSIONS=(.*,)?evaluations=' -Quiet)
+    if ($EvaluationsRegistered) { $Evaluations = $true }
+    if (-not $Evaluations -and $Cbi -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
+        $Answer = Read-Host "Add Evaluations, which checks Conversational BI's answers against questions with known answers? [y/N]"
+        $Evaluations = $Answer -match '^[Yy]'
+    }
+    if ($Evaluations -and -not $Cbi) {
+        throw 'Evaluations checks Conversational BI: add conversationalbi to ICEBERG_EXTENSIONS as well.'
+    }
+    # pgAdmin only shows the Polaris metadata database, to learn from.
     $PgAdmin = @($env:ICEBERG_EXTENSIONS -split ',' | ForEach-Object { $_.Trim() }) -contains 'pgadmin'
-    if ((Test-Path "$InstallDir/.env") -and (-not (Select-String -Path "$InstallDir/.env" -Pattern '^COMPOSE_PROFILES=' -Quiet) -or
-            (Select-String -Path "$InstallDir/.env" -Pattern '^COMPOSE_PROFILES=(.*,)?pgadmin(,|$)' -Quiet))) { $PgAdmin = $true }
+    if ((Test-Path "$InstallDir/.env") -and (Select-String -Path "$InstallDir/.env" -Pattern '^COMPOSE_PROFILES=(.*,)?pgadmin(,|$)' -Quiet)) { $PgAdmin = $true }
     if (-not $PgAdmin -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
         $Answer = Read-Host "Add pgAdmin, to look inside the Polaris metadata database and learn how the catalog`nstores tables? Not needed to use the platform. [y/N]"
         $PgAdmin = $Answer -match '^[Yy]'
@@ -109,14 +122,15 @@
         if ($LASTEXITCODE -ne 0) { throw 'Could not extract the installation bundle.' }
         foreach ($File in @('compose.yaml', 'compose.users.yaml', '.env.example', 'scripts/setup.py', 'pgadmin/servers.json',
                 'conversationalbi/compose.yaml', 'conversationalbi/scripts/setup.py', 'dbt/compose.yaml', 'dbt/scripts/setup.py',
-                'dbt/iceberg_dbt.py', 'ingestion/compose.yaml', 'ingestion/scripts/setup.py')) {
+                'dbt/iceberg_dbt.py', 'ingestion/compose.yaml', 'ingestion/scripts/setup.py',
+                'evaluations/compose.yaml', 'evaluations/scripts/setup.py')) {
             if (!(Test-Path "$BundleDir/$File" -PathType Leaf)) { throw "Installation bundle is missing $File" }
         }
 
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
         $InstallDir = (Resolve-Path $InstallDir).Path
         foreach ($File in @('compose.yaml', 'compose.users.yaml', 'compose.lan.yaml', 'compose.users.lan.yaml', 'conversationalbi/compose.yaml',
-                'dbt/compose.yaml', 'ingestion/compose.yaml')) {
+                'dbt/compose.yaml', 'ingestion/compose.yaml', 'evaluations/compose.yaml')) {
             if (Test-Path "$InstallDir/$File") { Copy-Item "$InstallDir/$File" "$InstallDir/$File.bak" -Force }
         }
         Get-ChildItem -Force $BundleDir | Copy-Item -Destination $InstallDir -Recurse -Force
@@ -162,6 +176,16 @@
             Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
                 /install/ingestion/scripts/setup.py | Out-Null
         }
+        if ($Evaluations) {
+            if (-not $EvaluationsRegistered) {
+                Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
+                    /install/scripts/setup.py --extension evaluations --origin http://localhost:3012 `
+                    --handshake /install/evaluations/.env.bridge | Out-Null
+            }
+            Write-Host "Preparing Evaluations in $InstallDir/evaluations..."
+            Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
+                /install/evaluations/scripts/setup.py | Out-Null
+        }
 
         Write-Host 'Pulling images (the notebook image may take a few minutes)...'
         Invoke-AdminCompose pull
@@ -170,6 +194,7 @@
         # The images profile adds the runner image, which the launcher starts for every run.
         if ($Dbt) { Invoke-DbtCompose --profile images pull }
         if ($Ingestion) { Invoke-IngestionCompose --profile images pull }
+        if ($Evaluations) { Invoke-EvaluationsCompose pull }
         Write-Host 'Starting administration and data services...'
         Invoke-AdminCompose up -d --no-build --wait --wait-timeout 300
         Write-Host 'Starting the user portal...'
@@ -185,6 +210,10 @@
         if ($Ingestion) {
             Write-Host 'Starting Ingestion (dlt)...'
             Invoke-IngestionCompose up -d --no-build --wait --wait-timeout 300
+        }
+        if ($Evaluations) {
+            Write-Host 'Starting Evaluations...'
+            Invoke-EvaluationsCompose up -d --no-build --wait --wait-timeout 300
         }
         $ShownDir = $InstallDir
         foreach ($Separator in @('/', '\')) {
@@ -243,6 +272,17 @@
             Write-Host '   Skill    ingestion: ask your agent, for example "Load the orders table from our PostgreSQL"'
             $Stop = "docker compose -f ingestion/compose.yaml down; $Stop"
             $Start = "$Start; docker compose -f ingestion/compose.yaml up -d --wait"
+            $Step++
+        }
+        if ($Evaluations) {
+            $EvaluationsOrigin = (Get-FileValue "$InstallDir/evaluations/.env.bridge" EXTENSION_ORIGIN).TrimEnd('/')
+            Write-Host "`n$Step. Check the agent's answers with Evaluations"
+            Write-Host "   $EvaluationsOrigin"
+            Write-Host '   A team administrator enables it once per environment, next to Conversational BI'
+            Write-Host "   Agent    claude mcp add --transport http --client-id ext-evaluations-mcp --callback-port 3010 iceberg-evaluations $EvaluationsOrigin/mcp"
+            Write-Host '   Skill    agent-evaluations: ask your agent, for example "Check how well the agent answers our flight questions"'
+            $Stop = "docker compose -f evaluations/compose.yaml down; $Stop"
+            $Start = "$Start; docker compose -f evaluations/compose.yaml up -d --wait"
         }
         Write-Host "`nInstalled in $ShownDir"
         Write-Host "   Stop     Set-Location $LocationDir; $($Stop)docker compose -f compose.users.yaml down; docker compose down"

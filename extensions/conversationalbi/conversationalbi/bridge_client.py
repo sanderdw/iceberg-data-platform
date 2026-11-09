@@ -47,6 +47,7 @@ class BridgeClient:
         self._me = {}
         self._automation = None
         self._scopes = {}
+        self._teams = {}
         self._lock = asyncio.Lock()
 
     async def close(self):
@@ -161,6 +162,18 @@ class BridgeClient:
             cached = (now + 15, await self.request("GET", f"/automation-principals/{id}", await self.service_token()))
             self._scopes = {k: v for k, v in self._scopes.items() if v[0] > now}
             self._scopes[id] = cached
+        return cached[1]
+
+    async def team_extensions(self, team, environment):
+        """Capability team-extensions: the extensions a team enabled in an environment; cached for 15 seconds."""
+        now = time.monotonic()
+        key = (team, environment)
+        cached = self._teams.get(key)
+        if cached is None or cached[0] <= now:
+            found = await self.request("GET", f"/teams/{team}/extensions", await self.service_token(),
+                                       params={"environment": environment})
+            self._teams = {k: v for k, v in self._teams.items() if v[0] > now}
+            cached = self._teams[key] = (now + 15, {e["extension"] for e in found["extensions"]})
         return cached[1]
 
     async def catalog_token(self, id, access, purpose):

@@ -1,11 +1,11 @@
-FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
 FROM python:3.14.10-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md ./
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --group oidc --group mcp
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --group oidc --group mcp --group otel
 COPY server ./server
 COPY scripts/setup.py ./scripts/setup.py
 COPY public ./public

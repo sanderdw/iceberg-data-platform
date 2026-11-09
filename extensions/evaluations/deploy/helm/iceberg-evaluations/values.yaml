@@ -1,0 +1,50 @@
+# The Evaluations extension, installed in the platform's namespace after the platform chart registered
+# it, next to Conversational BI:
+#   helm upgrade iceberg <platform chart> --reuse-values --set extensions.evaluations.host=eval
+#   helm install evaluations <this chart> -n <platform namespace>
+image:
+  registry: ghcr.io/sanderdw
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+images:
+  portal: iceberg-evaluations
+
+# The handshake Secret the platform chart writes for this extension.
+bridgeSecret: iceberg-bridge-evaluations
+# Conversational BI's gateway, the agent under evaluation.
+agentUrl: http://cbi-gateway:3007
+
+ingress:
+  enabled: true
+  # The platform's ingress settings; the host comes from EXTENSION_ORIGIN in the handshake.
+  host: ""
+  className: ""
+  annotations: {}
+tls:
+  clusterIssuer: ""
+  secretName: iceberg-evaluations-tls
+
+runs:
+  maxConcurrent: 2
+  # Questions of one run asked at once.
+  concurrency: 2
+  # Finished runs per question set kept here; the Iceberg tables keep all.
+  retention: 50
+
+# An optional LLM judge: a Secret with JUDGE_MODEL and its provider's key (such as GOOGLE_API_KEY).
+judge:
+  existingSecret: ""
+
+storage:
+  state: 1Gi
+storageClass: ""
+
+# OpenTelemetry: the extension's service sends its logs and traces over OTLP/HTTP when an endpoint is
+# set, as the platform's chart does (otel.* there).
+otel:
+  endpoint: ""  # e.g. http://otel-collector.observability:4318
+  # A Secret in this namespace with the key OTEL_EXPORTER_OTLP_HEADERS, for a backend that needs an API key.
+  headersSecret: ""
+  resourceAttributes: ""

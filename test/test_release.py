@@ -50,7 +50,22 @@ def release_tree(tmp_path):
         target = root / "extensions/ingestion" / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / "extensions/ingestion" / name, target)
+    # And the Evaluations extension's compose file, setup and agent skill.
+    for name in ("pyproject.toml", "compose.yaml", "scripts/setup.py", "skills/agent-evaluations/SKILL.md"):
+        target = root / "extensions/evaluations" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "extensions/evaluations" / name, target)
     return root
+
+
+def test_evaluations_bundle_uses_its_published_image(release_tree):
+    from scripts.release import evaluations_bundle
+
+    version, files = evaluations_bundle(release_tree)
+    compose = files["evaluations/compose.yaml"].decode()
+    assert f"image: ghcr.io/sanderdw/iceberg-evaluations:{version}\n" in compose and "build:" not in compose
+    assert ".agents/skills/agent-evaluations/SKILL.md" in files
+    assert "preview-1" in evaluations_bundle(release_tree, "preview-1")[1]["evaluations/compose.yaml"].decode()
 
 
 def test_conversationalbi_bundle_uses_its_published_images(release_tree):

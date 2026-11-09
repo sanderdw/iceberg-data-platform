@@ -39,8 +39,9 @@ from .polaris import AUTOMATION_ROLES, PolarisProvider, enc
 from .storage import RustFSStorage
 from .validation import validation_message
 
-CONTRACT_VERSION = "0.1.2"
-CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "shared-data", "listings"]
+CONTRACT_VERSION = "0.1.3"
+CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "shared-data", "listings",
+                "team-extensions"]
 BRIDGE_AUDIENCE = "iceberg-bridge"
 CONTRACT = Path(__file__).resolve().parent.parent / "contracts" / "bridge" / "v1" / "openapi.yaml"
 ADMIN_ROLES = ("admin", "bucket-admin")
@@ -48,6 +49,18 @@ CODES = {400: "invalid_request", 401: "unauthorized", 403: "forbidden", 404: "no
          409: "conflict", 422: "invalid_request", 502: "provider_error", 503: "unavailable"}
 LOG = logging.getLogger(__name__)
 AUDIT = logging.getLogger("iceberg.bridge.audit")
+
+
+def actor(c):
+    """Who acted: the platform user's ID and sign-in name; nothing when the extension acted itself."""
+    if not c.principal:
+        return {}
+    return {"user.id": c.principal["name"], "user.name": c.principal.get("properties", {}).get("portal.name", "")}
+
+
+def audit(event, fields, message, *args):
+    """One audit record: a readable line on stderr, and an event with these attributes over OpenTelemetry."""
+    AUDIT.info(message, *args, extra={"otel.event.name": "iceberg.bridge." + event, **fields})
 
 
 class BridgeError(ServiceError):
@@ -178,6 +191,18 @@ class AutomationScope(AutomationPrincipal):
 
 class AutomationList(BaseModel):
     automationPrincipals: list[AutomationPrincipal]
+
+
+# Capability `team-extensions`: which extensions a team has enabled, so one extension can serve another
+# for that team only where a team administrator enabled both.
+
+class TeamExtension(BaseModel):
+    extension: str
+    environment: Environment
+
+
+class TeamExtensionList(BaseModel):
+    extensions: list[TeamExtension]
 
 
 class TokenCatalog(BaseModel):
@@ -641,9 +666,12 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                                               {"id": user["id"], "name": user["name"]})
         async with mutations:
             item, created = await run_in_threadpool(run)
-        AUDIT.info("automation principal %s: %s extension=%s team=%s environment=%s by=%s",
-                   "created" if created else "exists", item["id"], c.extension, teamId, data.environment,
-                   c.principal["name"])
+        state = "created" if created else "exists"
+        audit("automation_principal." + state,
+              {"iceberg.automation_principal.id": item["id"], "iceberg.extension": c.extension,
+               "iceberg.team": teamId, "iceberg.environment": data.environment, **actor(c)},
+              "automation principal %s: %s extension=%s team=%s environment=%s by=%s",
+              state, item["id"], c.extension, teamId, data.environment, c.principal["name"])
         return JSONResponse(item, status_code=201 if created else 200)
 
     @app.delete("/bridge/v1/automation-principals/{id}", response_model=Revoked, responses=errors,
@@ -658,8 +686,12 @@ def create_bridge_app(provider=None, verifier=None, env=None):
             return item
         async with mutations:
             item = await run_in_threadpool(run)
-        AUDIT.info("automation principal revoked: %s extension=%s team=%s by=%s", id, c.extension,
-                   item["team"], c.principal["name"] if c.principal else "extension")
+        by = c.principal["name"] if c.principal else "extension"
+        audit("automation_principal.revoked",
+              {"iceberg.automation_principal.id": id, "iceberg.extension": c.extension,
+               "iceberg.team": item["team"], **actor(c)},
+              "automation principal revoked: %s extension=%s team=%s by=%s",
+              id, c.extension, item["team"], by)
         return {"revoked": True}
 
     @app.get("/bridge/v1/automation-principals", response_model=AutomationList, responses=errors,
@@ -667,6 +699,21 @@ def create_bridge_app(provider=None, verifier=None, env=None):
     async def all_automation(c: ServiceCaller):
         items = await run_in_threadpool(lambda: provider.list_automation(extension=c.extension))
         return {"automationPrincipals": items}
+
+    @app.get("/bridge/v1/teams/{teamId}/extensions", response_model=TeamExtensionList, responses=errors,
+             summary="The extensions a team has enabled, per environment (extensions of that team only)")
+    async def team_extensions(teamId: team_id, c: ServiceCaller, environment: Environment | None = None):
+        def run():
+            items = [i for i in provider.list_automation(team=teamId)
+                     if i["status"] == "active" and i["extension"] in known]
+            if not any(i["extension"] == c.extension for i in items):
+                raise BridgeError(403, "This extension is not enabled for this team.", "extension_not_enabled")
+            return sorted({(i["extension"], i["environment"]) for i in items
+                           if environment in (None, i["environment"])})
+        pairs = await run_in_threadpool(run)
+        audit("team_extensions.read", {"iceberg.team": teamId, "iceberg.extension": c.extension},
+              "team extensions read: %s extension=%s", teamId, c.extension)
+        return {"extensions": [{"extension": e, "environment": v} for e, v in pairs]}
 
     @app.get("/bridge/v1/automation-principals/{id}", response_model=AutomationScope, responses=errors,
              summary="An automation principal and the databases it can reach")
@@ -696,8 +743,11 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                         raise
         async with lock:
             issued = await run_in_threadpool(issue)
-        AUDIT.info("automation token issued: %s extension=%s access=%s purpose=%r", id, c.extension,
-                   data.access, data.purpose)
+        audit("automation_token.issued",
+              {"iceberg.automation_principal.id": id, "iceberg.extension": c.extension,
+               "iceberg.access": data.access, "iceberg.purpose": data.purpose},
+              "automation token issued: %s extension=%s access=%s purpose=%r", id, c.extension, data.access,
+              data.purpose)
         return {
             "accessToken": issued["access_token"], "tokenType": "bearer",
             "expiresIn": int(issued.get("expires_in", 0)), "access": data.access, "principal": id,
@@ -716,7 +766,8 @@ def create_bridge_app(provider=None, verifier=None, env=None):
         body = await run_in_threadpool(listings.listing, provider, shareId, known)
         body = Listing.model_validate(body).model_dump(mode="json", by_alias=True)
         etag = f'"{listings.digest(body)}"'
-        AUDIT.info("listing read: %s extension=%s", shareId, c.extension)
+        audit("listing.read", {"iceberg.share.id": shareId, "iceberg.extension": c.extension},
+              "listing read: %s extension=%s", shareId, c.extension)
         if if_none_match == etag:
             return Response(status_code=304, headers={"ETag": etag})
         return JSONResponse(body, headers={"ETag": etag})

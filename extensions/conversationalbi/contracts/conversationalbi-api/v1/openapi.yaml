@@ -3,7 +3,7 @@
   "info": {
     "title": "Conversational BI \u00b7 Iceberg Data Platform",
     "description": "Governed questions over the semantic models of your teams and of the data shares they received. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-conversationalbi-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
-    "version": "0.1.4"
+    "version": "0.1.5"
   },
   "paths": {
     "/api/v1/me": {
@@ -338,10 +338,248 @@
           }
         }
       }
+    },
+    "/api/v1/evaluation/models": {
+      "post": {
+        "tags": [
+          "evaluation"
+        ],
+        "summary": "The semantic models a team can ask about, and the LLMs an evaluation may choose",
+        "operationId": "evaluationModels",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Scope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/ask": {
+      "post": {
+        "tags": [
+          "evaluation"
+        ],
+        "summary": "The chat agent answers one question for a team (service accounts in BI_AGENT_CALLERS)",
+        "operationId": "evaluationAsk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Ask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/ask-schema-only": {
+      "post": {
+        "tags": [
+          "evaluation"
+        ],
+        "summary": "The control arm: the same LLM with only the table schemas (with BI_EVAL_SCHEMA_ONLY)",
+        "operationId": "evaluationAskSchemaOnly",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchemaOnlyAsk"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/query": {
+      "post": {
+        "tags": [
+          "evaluation"
+        ],
+        "summary": "A governed query for a team: the ground truth to score an answer against",
+        "operationId": "evaluationQuery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroundTruth"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/conversations": {
+      "post": {
+        "tags": [
+          "evaluation"
+        ],
+        "summary": "The team's recorded chat runs, oldest first: for teams that enabled Evaluations only",
+        "operationId": "evaluationConversations",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Since"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Ask": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "pattern": "^team-[a-f0-9]{32}$",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environment",
+          "question"
+        ],
+        "title": "Ask"
+      },
       "Dimension": {
         "properties": {
           "field": {
@@ -489,6 +727,38 @@
         ],
         "title": "Filter"
       },
+      "GroundTruth": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "pattern": "^team-[a-f0-9]{32}$",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelRef"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/QuerySpec"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environment",
+          "model",
+          "spec"
+        ],
+        "title": "GroundTruth"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -616,6 +886,169 @@
           "model"
         ],
         "title": "QueryInput"
+      },
+      "QuerySpec": {
+        "properties": {
+          "metrics": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Metrics"
+          },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/Dimension"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Dimensions",
+            "default": []
+          },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/Filter"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Filters",
+            "default": []
+          },
+          "order_by": {
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Order By",
+            "default": []
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 100
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "metrics"
+        ],
+        "title": "QuerySpec"
+      },
+      "SchemaOnlyAsk": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "pattern": "^team-[a-f0-9]{32}$",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelRef"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "llm": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environment",
+          "model",
+          "question"
+        ],
+        "title": "SchemaOnlyAsk"
+      },
+      "Scope": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "pattern": "^team-[a-f0-9]{32}$",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environment"
+        ],
+        "title": "Scope"
+      },
+      "Since": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "pattern": "^team-[a-f0-9]{32}$",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "since": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Since",
+            "description": "Unix time; conversations after it, oldest first.",
+            "default": 0
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 100
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environment"
+        ],
+        "title": "Since"
       },
       "ValidationError": {
         "properties": {

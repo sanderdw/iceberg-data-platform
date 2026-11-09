@@ -52,6 +52,7 @@ EXTENSION_IMAGES = {
         ("iceberg-conversationalbi", "extensions/conversationalbi/Dockerfile", "extensions/conversationalbi"),
         ("iceberg-conversationalbi-runtime", "extensions/conversationalbi/runtime/Dockerfile",
          "extensions/conversationalbi/runtime")],
+    "evaluations": [("iceberg-evaluations", "extensions/evaluations/Dockerfile", "extensions/evaluations")],
 }
 
 
@@ -268,7 +269,7 @@ def deploy(args):
 
 def extension(args):
     """Register the extension in the platform release, then install its chart next to it."""
-    hosts = {"dbt": "dbt", "ingestion": "ingest", "conversationalbi": "cbi"}
+    hosts = {"dbt": "dbt", "ingestion": "ingest", "conversationalbi": "cbi", "evaluations": "eval"}
     args.set = [*(args.set or []), f"extensions.{args.id}.host={hosts[args.id]}"]
     args.image_tag = args.image_tag or "dev"
     deploy(args)
@@ -413,7 +414,11 @@ def down(args):
             detach_ip(ip)
         print(f"Deleting cluster {found['id']} with its load balancers and volumes")
         scw("k8s", "cluster", "delete", found["id"], f"region={region()}", "with-additional-resources=true")
-        run("scw", "k8s", "cluster", "wait", found["id"], f"region={region()}", "timeout=20m", check=False)
+        # The wait ends with "not found" once the cluster is gone: that is the success case.
+        wait = subprocess.run(["scw", "k8s", "cluster", "wait", found["id"], f"region={region()}", "timeout=20m"],
+                              text=True, capture_output=True, check=False)
+        if wait.returncode and "not found" not in (wait.stderr + wait.stdout):
+            print((wait.stderr or wait.stdout).strip(), file=sys.stderr)
     kept = flexible_ip()
     if kept and release:
         scw("lb", "ip", "delete", kept["id"], f"zone={zone()}")

@@ -65,6 +65,7 @@ spec:
           envFrom:
             - secretRef: {name: {{ .Values.bridgeSecret }}}
           env:
+            {{- include "ing.otelEnv" . | nindent 12 }}
             - {name: LAUNCHER_URL, value: "http://localhost:3018"}
             - name: LAUNCHER_TOKEN
               valueFrom: {secretKeyRef: {name: iceberg-ingestion, key: LAUNCHER_TOKEN}}

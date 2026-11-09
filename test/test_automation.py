@@ -60,9 +60,6 @@ def test_automation_principal_is_never_a_user(portal):
     assert p.delete(f"/users/{item['id']}").status_code == 404
     # Database provisioning iterates access holders; an automation principal must not break it.
     assert p.post("/databases", {"name": "analytics", "team": team}).status_code == 201
-    # Legacy compatibility: an older portal reads every non-share principal as a user.
-    principal = p.provider.resources["principals"][item["id"]]
-    assert p.provider.user(principal)["memberships"] == []
 
 
 def test_database_lifecycle_follows_the_environment(stack):

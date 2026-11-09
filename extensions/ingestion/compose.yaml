@@ -10,15 +10,22 @@ x-hardened: &hardened
   security_opt: [no-new-privileges:true]
   restart: unless-stopped
 
+# OpenTelemetry export of logs and traces; off while OTEL_EXPORTER_OTLP_ENDPOINT is empty.
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
+
 services:
   ing-gateway:
     build: .
-    image: iceberg-ingestion:0.1.2
+    image: iceberg-ingestion:0.1.3
     <<: *hardened
     labels:
       io.iceberg-platform.extension: ingestion
     env_file: [.env.bridge]
     environment:
+      <<: *otel-env
       LAUNCHER_URL: http://ing-launcher:3018
       LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
       ING_SECRET_KEY: ${ING_SECRET_KEY:?Run uv run python -m scripts.setup first}
@@ -46,7 +53,7 @@ services:
   # isolation: a private network holding only the platform's catalog and storage, and a separate
   # network to reach the sources.
   ing-launcher:
-    image: iceberg-ingestion:0.1.2
+    image: iceberg-ingestion:0.1.3
     <<: *hardened
     command: ["/app/.venv/bin/uvicorn", "launcher.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3018", "--no-access-log"]
     user: "0:0"
@@ -54,7 +61,7 @@ services:
       io.iceberg-platform.extension: ingestion
     environment:
       LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
-      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-ingestion-runner:0.1.2}
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-ingestion-runner:0.1.3}
       ARTIFACTS_DIR: /artifacts
       BRIDGE_EXTENSION_ID: ingestion
       RUN_MEMORY: ${RUN_MEMORY:-2g}
@@ -72,7 +79,7 @@ services:
 
   # The isolated image every run uses: built or pulled with --profile images, never started here.
   runner-image:
-    image: iceberg-ingestion-runner:0.1.2
+    image: iceberg-ingestion-runner:0.1.3
     build:
       context: .
       dockerfile: runner/Dockerfile

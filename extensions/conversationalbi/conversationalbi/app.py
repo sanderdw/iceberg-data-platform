@@ -17,13 +17,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 
-from . import api
-from .agent.agui import create_agent_app
+from . import api, evaluation
+from .agent.agui import create_agent, create_agent_app
 from .agent.models import resolve_model
 from .auth import COOKIE, BrowserLogin, TokenVerifier
 from .bridge_client import BridgeClient
 from .catalog import Catalog
 from .config import VERSION, Settings
+from .conversations import ConversationLog, Recorder
 from .errors import CbiError
 from .mcp_server import create_mcp, mount
 from .results import ResultStore
@@ -97,7 +98,11 @@ def create_app(settings=None, *, bridge=None, verifier=None, catalog=None, execu
                               "(client ext-conversationalbi-mcp), or sign in with the browser. Every operation is "
                               "also an MCP tool at /mcp.")
     app.state.services, app.state.login, app.state.tickets = services, login, tickets
-    app.state.agent_app = create_agent_app(settings, services, login, tickets, agent, llm and llm.model)
+    agent = agent or create_agent(settings, model=llm and llm.model)
+    log = ConversationLog(settings.state_dir / "conversations.sqlite3", settings.conversation_retention_days)
+    app.state.conversations = log
+    app.state.agent_app = create_agent_app(settings, services, login, tickets, agent,
+                                           recorder=Recorder(log, services))
     mcp_running = mount(app, mcp, settings)
 
     @app.exception_handler(CbiError)
@@ -130,6 +135,8 @@ def create_app(settings=None, *, bridge=None, verifier=None, catalog=None, execu
         return await login.caller(request.cookies.get(COOKIE))
 
     app.include_router(api.router(services, caller))
+    app.state.evaluation = evaluation.Evaluation(settings, services, verifier, agent, llm, log)
+    app.include_router(evaluation.router(app.state.evaluation))
 
     @app.get("/api/health", include_in_schema=False)
     def health():

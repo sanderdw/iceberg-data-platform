@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.5 - 2026-11-09
+
+- **Evaluation API** for the Evaluations extension: `/api/v1/evaluation/{models,ask,query,conversations}`
+  answer another extension's service account (`BI_AGENT_CALLERS`, default `evaluations`) for a team,
+  only where a team administrator enabled both extensions (Bridge capability `team-extensions`,
+  platform contract 0.1.3). The agent answers in text with its tool calls, queries and token usage.
+  `BI_EVAL_MODELS` lists other LLMs an evaluation may compare.
+- **Control arm for evaluations**, off by default (`BI_EVAL_SCHEMA_ONLY`): `/api/v1/evaluation/ask-schema-only` lets the
+  same LLM answer with only the table schemas, writing SQL that an allowlist checks. The chat never does this.
+- **Conversation record for live evaluation**, only for teams that enabled Evaluations: the question,
+  answer, tool calls and token usage of each chat turn, kept `BI_CONVERSATION_RETENTION_DAYS` (30) on
+  a new volume (`cbi-state`; on Kubernetes the PVC `cbi-state`, `conversationStorage`).
+- **OpenTelemetry.** With `OTEL_EXPORTER_OTLP_ENDPOINT` in `.env` (`otel.endpoint` on Kubernetes) the gateway sends its logs and traces over OTLP/HTTP, as the platform does. Every question is an agent run with its LLM calls (model, tokens, messages) and tool calls, so Logfire and other AI views show what the agent did. Off by default. See [Send logs and traces to OpenTelemetry](https://sanderdw.github.io/iceberg-data-platform/observability/).
+- `graphql-scalars` 2.0.1, `@hono/node-server` 2.1.6 and `undici` 6.29.1 in the chat runtime close known security advisories.
+- Updated dependencies, including CopilotKit 1.84 and Pydantic AI 2.66.
+
 ## 0.1.4 - 2026-10-27
 
 - **Model guide.** **Guide** next to the conversation shows the selected model as its owner wrote
