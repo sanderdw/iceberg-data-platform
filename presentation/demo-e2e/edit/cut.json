@@ -1,0 +1,777 @@
+{
+ "slug": "demo-e2e-4k",
+ "title": "Van API tot antwoord",
+ "chapters": [
+  {
+   "id": "s0",
+   "card": "title",
+   "shots": [
+    {
+     "id": "s0a",
+     "card": "title",
+     "beats": [
+      {
+       "id": "s0b1",
+       "text": "Welkom bij een gebruikersdemo van het Iceberg Data Platform. Ik laat je zien hoe je het platform op je eigen laptop installeert, en hoe je end-to-end een pipeline bouwt, er een semantisch model van maakt en er vragen over stelt."
+      },
+      {
+       "id": "s0b2",
+       "text": "Daarna publiceer ik dat dataproduct in een datacatalogus. Ik gebruik daarvoor OpenMetadata, maar dat is een voorbeeld, want dit kan met elke datacatalogus. En alles gaat headless en agent-gedreven.",
+       "say": "Daarna publiceer ik dat dataproduct in een datacatalogus. Ik gebruik daarvoor OpenMetadata, maar dat is een voorbeeld, want dit kan met elke datacatalogus. En alles gaat headless en eedzjent-gedreven."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s1",
+   "number": "01",
+   "title": "Installatie",
+   "shots": [
+    {
+     "id": "s1a",
+     "clip": "h1-install",
+     "from": 0.5,
+     "to": 10.5,
+     "beats": [
+      {
+       "id": "s1b1",
+       "text": "Het begint met één commando. Het script haalt de laatste release op en installeert die."
+      }
+     ]
+    },
+    {
+     "id": "s1b",
+     "clip": "h1-install",
+     "from": 10.5,
+     "to": 166.0,
+     "beats": [
+      {
+       "id": "s1b2",
+       "text": "Dan vraagt het welke extensies ik wil. Ik kies ze alle drie: Conversational BI, dbt en Ingestion met dlt. Voor de chat kies ik even Gemini, maar je bent hier flexibel in."
+      }
+     ]
+    },
+    {
+     "id": "s1c",
+     "clip": "h1-install",
+     "from": 166.0,
+     "to": 300.0,
+     "mode": "fast",
+     "rate": 16,
+     "beats": [
+      {
+       "id": "s1b3",
+       "text": "Daarna haalt het de images op en start het platform: de catalogus, Keycloak, de portals en de extensies. Dat duurt een paar minuten."
+      }
+     ]
+    },
+    {
+     "id": "s1d",
+     "clip": "h1-install",
+     "from": 300.0,
+     "to": 313.0
+    },
+    {
+     "id": "s1e",
+     "clip": "h1-summary",
+     "from": 1.0,
+     "to": 11.0,
+     "beats": [
+      {
+       "id": "s1b4",
+       "text": "Aan het eind staat precies wat ik nu moet doen: inloggen als platformbeheerder, met een tijdelijk wachtwoord."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "number": "02",
+   "title": "Eerste stappen",
+   "shots": [
+    {
+     "id": "s2a",
+     "clip": "h2-admin",
+     "from": 0.3,
+     "to": 24.6,
+     "beats": [
+      {
+       "id": "s2b1",
+       "text": "Als platformbeheerder log ik in, en ik kies meteen een eigen wachtwoord."
+      }
+     ]
+    },
+    {
+     "id": "s2b",
+     "clip": "h2-admin",
+     "from": 24.6,
+     "to": 50.0,
+     "beats": [
+      {
+       "id": "s2b2",
+       "text": "Ik maak één team als voorbeeld aan: analytics."
+      }
+     ]
+    },
+    {
+     "id": "s2c",
+     "clip": "h2-admin",
+     "from": 50.0,
+     "to": 88.5,
+     "beats": [
+      {
+       "id": "s2b3",
+       "text": "En één account: mijzelf, als Administrator van dat team. Het tijdelijke wachtwoord zie je maar één keer."
+      }
+     ]
+    },
+    {
+     "id": "s2d",
+     "clip": "h2-admin",
+     "from": 88.5,
+     "to": 129.4,
+     "beats": [
+      {
+       "id": "s2b4",
+       "text": "Daarmee is de platformbeheerder klaar. Nu switch ik naar de gebruikersrol."
+      }
+     ]
+    },
+    {
+     "id": "s2e",
+     "clip": "h2-user",
+     "from": 0.3,
+     "to": 25.6,
+     "beats": [
+      {
+       "id": "s2b5",
+       "text": "Ik log in op de user portal, nu als team admin van analytics."
+      }
+     ]
+    },
+    {
+     "id": "s2f",
+     "clip": "h2-user",
+     "from": 25.6,
+     "to": 91.3,
+     "beats": [
+      {
+       "id": "s2b6",
+       "text": "En ik maak de database multiverse aan. Dat is een eigen Iceberg-catalogus met een eigen bucket."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "number": "03",
+   "title": "Agent koppelen",
+   "shots": [
+    {
+     "id": "s3a",
+     "clip": "h3-connect",
+     "from": 0.5,
+     "to": 37.5,
+     "mode": "fast",
+     "rate": 3,
+     "beats": [
+      {
+       "id": "s3b1",
+       "text": "Nu de agent. Ik werk met Claude Code in de installatiemap, want daar staan de skills al klaar. GitHub Copilot, Codex of een andere agent met MCP werkt net zo goed. Ik voeg drie MCP-servers toe: de user portal, Ingestion en dbt.",
+       "say": "Nu de eedzjent. Ik werk met Claude Code in de installatiemap, want daar staan de skills al klaar. GitHub Copilot, Codex of een andere eedzjent met MCP werkt net zo goed. Ik voeg drie MCP-servers toe: de user portal, Ingestion en dbt."
+      }
+     ]
+    },
+    {
+     "id": "s3b",
+     "clip": "h3-connect",
+     "from": 37.5,
+     "to": 66.0,
+     "max": 2.0,
+     "beats": [
+      {
+       "id": "s3b2",
+       "text": "Elke MCP-server logt in onder mijn naam. Ik ben in de browser al ingelogd, dus dat gaat eenvoudig zonder wachtwoord."
+      }
+     ]
+    },
+    {
+     "id": "s3c",
+     "clip": "h3-auth-iceberg-user",
+     "from": 0.2,
+     "to": 3.1
+    },
+    {
+     "id": "s3d",
+     "clip": "h3-connect",
+     "from": 66.0,
+     "to": 95.0,
+     "mode": "fast",
+     "rate": 8,
+     "beats": [
+      {
+       "id": "s3b3",
+       "text": "Conversational BI heeft ook een MCP-server. Daarmee stelt je agent zelf vragen aan je semantische modellen, met dezelfde governed queries, bijvoorbeeld voor een rapport of een notebook.",
+       "say": "Conversational BI heeft ook een MCP-server. Daarmee stelt je eedzjent zelf vragen aan je semantische modellen, met dezelfde governed queries, bijvoorbeeld voor een rapport of een notebook."
+      }
+     ]
+    },
+    {
+     "id": "s3e",
+     "clip": "h3-connect",
+     "from": 95.0,
+     "to": 109.7,
+     "beats": [
+      {
+       "id": "s3b4",
+       "text": "Vandaag laat ik dat alleen even kort in de browser zien. En de agent kan alleen wat ik zelf mag.",
+       "say": "Vandaag laat ik dat alleen even kort in de browser zien. En de eedzjent kan alleen wat ik zelf mag."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "number": "04",
+   "title": "Data laden",
+   "shots": [
+    {
+     "id": "s4a",
+     "clip": "h4-ingest",
+     "from": 0.5,
+     "to": 17.5,
+     "beats": [
+      {
+       "id": "s4b1",
+       "text": "Ik vraag het gewoon in het Nederlands: laad de Rick and Morty API in mijn database multiverse, en daarna elk uur opnieuw. Die API is een bekend voorbeeldproject. Net zo goed laad je een tabel uit bijvoorbeeld PostgreSQL of andere API's."
+      }
+     ]
+    },
+    {
+     "id": "s4b",
+     "clip": "h4-ingest",
+     "from": 17.5,
+     "to": 56.0,
+     "mode": "fast",
+     "rate": 5,
+     "beats": [
+      {
+       "id": "s4b2",
+       "text": "De agent pakt de ingestion-skill, stelt een pipeline samen en valideert hem. Dan ziet hij dat Ingestion nog niet aanstaat, en dat activeren we even eerst.",
+       "say": "De eedzjent pakt de ingestion-skill, stelt een pipeline samen en valideert hem. Dan ziet hij dat Ingestion nog niet aanstaat, en dat activeren we even eerst."
+      }
+     ]
+    },
+    {
+     "id": "s4c",
+     "clip": "h4-ingest",
+     "from": 56.0,
+     "to": 70.0,
+     "beats": [
+      {
+       "id": "s4b3",
+       "text": "Pipelines draaien namens het hele team. Ik accepteer de activatie."
+      }
+     ]
+    },
+    {
+     "id": "s4d",
+     "clip": "h4-ingest",
+     "from": 70.0,
+     "to": 115.2,
+     "mode": "fast",
+     "rate": 8,
+     "beats": [
+      {
+       "id": "s4b4",
+       "text": "Hij zet Ingestion aan, draait de pipeline en stelt de schedule in: voor dit project elk uur."
+      }
+     ]
+    },
+    {
+     "id": "s4e",
+     "clip": "h4-ingest",
+     "from": 115.2,
+     "to": 129.0,
+     "beats": [
+      {
+       "id": "s4b5",
+       "text": "Na iets meer dan een minuut staan er zes tabellen, terwijl de bron-API maar drie soorten entiteiten heeft: personages, locaties en afleveringen. dlt maakt nu ook gelijk de benodigde relatietabellen, zoals de afleveringen van een personage."
+      }
+     ]
+    },
+    {
+     "id": "s4f",
+     "clip": "h4-web",
+     "from": 0.3,
+     "to": 42.4,
+     "beats": [
+      {
+       "id": "s4b6",
+       "text": "In de Ingestion-extensie zie ik nu de pipeline die de agent heeft aangemaakt. Hier zie ik wanneer hij gedraaid heeft, en wat de schedule is: elk uur, op het hele uur.",
+       "say": "In de Ingestion-extensie zie ik nu de pipeline die de eedzjent heeft aangemaakt. Hier zie ik wanneer hij gedraaid heeft, en wat de schedule is: elk uur, op het hele uur."
+      }
+     ]
+    },
+    {
+     "id": "s4g",
+     "clip": "h4-cat",
+     "from": 0.3,
+     "to": 45.1,
+     "beats": [
+      {
+       "id": "s4b7",
+       "text": "In de catalogus staan de zes tabellen, elk met een verwijzing terug naar de pipeline die ze gemaakt heeft."
+      }
+     ]
+    },
+    {
+     "id": "s4h",
+     "clip": "h4-rows",
+     "from": 0.3,
+     "to": 9.9,
+     "beats": [
+      {
+       "id": "s4b8",
+       "text": "Een relatietabel verwijst met een sleutel naar zijn parent, dus alles blijft te koppelen."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s5",
+   "number": "05",
+   "title": "Stermodel met dbt",
+   "shots": [
+    {
+     "id": "s5a",
+     "clip": "h5-dbt",
+     "from": 0.5,
+     "to": 17.0,
+     "beats": [
+      {
+       "id": "s5b1",
+       "text": "Nu maak ik er een stermodel van, met dbt: een feitentabel met welk personage in welke aflevering speelt, en dimensies voor personage, aflevering en locatie."
+      }
+     ]
+    },
+    {
+     "id": "s5b",
+     "clip": "h5-dbt",
+     "from": 17.0,
+     "to": 124.5,
+     "mode": "fast",
+     "rate": 10,
+     "beats": [
+      {
+       "id": "s5b2",
+       "text": "De agent pakt de dbt-skill en schrijft de bronnen, de stagingmodellen en het stermodel.",
+       "say": "De eedzjent pakt de dbt-skill en schrijft de bronnen, de stagingmodellen en het stermodel."
+      }
+     ]
+    },
+    {
+     "id": "s5c",
+     "clip": "h5-dbt",
+     "from": 124.5,
+     "to": 140.0,
+     "beats": [
+      {
+       "id": "s5b3",
+       "text": "Ook dbt staat nog uit, dus dat activeren we weer."
+      }
+     ]
+    },
+    {
+     "id": "s5d",
+     "clip": "h5-dbt",
+     "from": 140.0,
+     "to": 190.5,
+     "mode": "fast",
+     "rate": 4,
+     "beats": [
+      {
+       "id": "s5b4",
+       "text": "Bij elk model schrijft hij ook tests: unieke en gevulde sleutels, koppelingen van de feitentabel naar elke dimensie, en geldige waarden voor bijvoorbeeld status en geslacht. Die leidt hij af uit de data, en dbt draait ze bij elke build."
+      }
+     ]
+    },
+    {
+     "id": "s5e",
+     "clip": "h5-dbt",
+     "from": 190.5,
+     "to": 206.4
+    },
+    {
+     "id": "s5f",
+     "clip": "h5-web",
+     "from": 0.3,
+     "to": 29.7,
+     "beats": [
+      {
+       "id": "s5b5",
+       "text": "In de pipeline-viewer zie je de lineage, van ruwe tabel tot feitentabel."
+      }
+     ]
+    },
+    {
+     "id": "s5g",
+     "clip": "h5-web",
+     "from": 29.7,
+     "to": 68.8,
+     "beats": [
+      {
+       "id": "s5b6",
+       "text": "En per model welke tests er draaien. Groen betekent: de data voldoet aan wat we ervan verwachten."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s6",
+   "number": "06",
+   "title": "Semantisch model",
+   "shots": [
+    {
+     "id": "s6a",
+     "clip": "h6-semantic",
+     "from": 0.5,
+     "to": 13.0,
+     "beats": [
+      {
+       "id": "s6b1",
+       "text": "Dan de volgende stap: een semantisch model. Daarmee koppel ik definities aan de data: wat een metric betekent, en hoe de tabellen samenhangen."
+      }
+     ]
+    },
+    {
+     "id": "s6b",
+     "clip": "h6-semantic",
+     "from": 13.0,
+     "to": 51.5,
+     "mode": "fast",
+     "rate": 6
+    },
+    {
+     "id": "s6c",
+     "clip": "h6-semantic",
+     "from": 51.5,
+     "to": 127.0,
+     "beats": [
+      {
+       "id": "s6b2",
+       "text": "De skill begint met een interview. Dat helpt me nadenken over wat een gebruiker straks zou kunnen vragen, zodat de juiste definities worden vastgelegd."
+      },
+      {
+       "id": "s6b3",
+       "text": "Ideaal is dat de producent van de data dit zoveel mogelijk al meegeeft. Maar nu stelt de agent zelf vragen en definities voor.",
+       "say": "Ideaal is dat de producent van de data dit zoveel mogelijk al meegeeft. Maar nu stelt de eedzjent zelf vragen en definities voor."
+      }
+     ]
+    },
+    {
+     "id": "s6d",
+     "clip": "h6-semantic",
+     "from": 127.0,
+     "to": 147.5,
+     "beats": [
+      {
+       "id": "s6b4",
+       "text": "Om de data te kunnen bekijken, heeft hij mijn eigen aanmelding nodig. Die keur ik goed in de browser."
+      }
+     ]
+    },
+    {
+     "id": "s6e",
+     "clip": "h6-device",
+     "from": 0.3,
+     "to": 11.0
+    },
+    {
+     "id": "s6f",
+     "clip": "h6-semantic",
+     "from": 147.5,
+     "to": 167.0,
+     "mode": "fast",
+     "rate": 4
+    },
+    {
+     "id": "s6g",
+     "clip": "h6-semantic",
+     "from": 167.0,
+     "to": 210.0,
+     "beats": [
+      {
+       "id": "s6b5",
+       "text": "Het model komt in het dbt-project, en het stermodel wordt voortaan elk uur gebouwd."
+      }
+     ]
+    },
+    {
+     "id": "s6h",
+     "clip": "h6-semantic",
+     "from": 210.0,
+     "to": 364.0,
+     "mode": "fast",
+     "rate": 10,
+     "beats": [
+      {
+       "id": "s6b6",
+       "text": "Dan bekijkt hij de data en schrijft hij het model. Daarna toetst hij elke vraag uit het interview tegen de echte data. Zo weet hij zeker dat het model die vragen kan beantwoorden."
+      }
+     ]
+    },
+    {
+     "id": "s6i",
+     "clip": "h6-semantic",
+     "from": 364.0,
+     "to": 384.0,
+     "beats": [
+      {
+       "id": "s6b7",
+       "text": "Pas dan vraagt hij of hij mag publiceren, met de antwoorden erbij, zodat ik kan zien of ze kloppen."
+      }
+     ]
+    },
+    {
+     "id": "s6j",
+     "clip": "h6-semantic",
+     "from": 384.0,
+     "to": 506.0,
+     "mode": "fast",
+     "rate": 12,
+     "beats": [
+      {
+       "id": "s6b8",
+       "text": "Na het publiceren stelt hij alle vragen nog een keer als laatste test."
+      }
+     ]
+    },
+    {
+     "id": "s6k",
+     "clip": "h6-semantic",
+     "from": 506.0,
+     "to": 536.0,
+     "mode": "fast",
+     "rate": 6
+    },
+    {
+     "id": "s6l",
+     "clip": "h6-web",
+     "from": 0.3,
+     "to": 33.5,
+     "beats": [
+      {
+       "id": "s6b9",
+       "text": "In de catalogus staat nu het model, met zijn beschrijving en instructies voor AI."
+      }
+     ]
+    },
+    {
+     "id": "s6m",
+     "clip": "h6-web",
+     "from": 33.5,
+     "to": 71.5,
+     "beats": [
+      {
+       "id": "s6b10",
+       "text": "In het diagram zie je de optredens in het midden, met personage, aflevering en locatie eromheen."
+      }
+     ]
+    },
+    {
+     "id": "s6n",
+     "clip": "h6-web",
+     "from": 71.5,
+     "to": 95.3,
+     "beats": [
+      {
+       "id": "s6b11",
+       "text": "En de metrics, elk met een definitie. Daarmee kan een vraag straks beter gestuurd worden."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s7",
+   "number": "07",
+   "title": "Conversational BI",
+   "shots": [
+    {
+     "id": "s7a",
+     "clip": "h7-click",
+     "from": 0.2,
+     "to": 2.2
+    },
+    {
+     "id": "s7b",
+     "clip": "h7-ask",
+     "from": 0.3,
+     "to": 20.0,
+     "beats": [
+      {
+       "id": "s7b1",
+       "text": "Vanuit het model ga ik naar Conversational BI, zodat ik kan laten zien hoe een gebruiker ermee zou kunnen werken."
+      }
+     ]
+    },
+    {
+     "id": "s7c",
+     "clip": "h7-ask",
+     "from": 20.0,
+     "to": 38.0,
+     "mode": "fast",
+     "rate": 3
+    },
+    {
+     "id": "s7d",
+     "clip": "h7-ask",
+     "from": 47.6,
+     "to": 66.5,
+     "beats": [
+      {
+       "id": "s7b2",
+       "text": "De grafiek is Generative UI. Het taalmodel kiest alleen welk onderdeel het laat zien, zoals een grafiek, een tabel of een KPI, en met welke kolommen. De extensie haalt de getallen zelf op uit het resultaat. Ze komen dus nooit uit het taalmodel."
+      }
+     ]
+    },
+    {
+     "id": "s7e",
+     "clip": "h7-ask",
+     "from": 66.5,
+     "to": 82.0,
+     "beats": [
+      {
+       "id": "s7b3",
+       "text": "En ik zie precies welke query er draaide. Het taalmodel schrijft geen vrije SQL. Het vraagt het model om een metric, en het platform bouwt de query."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s8",
+   "number": "08",
+   "title": "Datacatalogus",
+   "shots": [
+    {
+     "id": "s8a",
+     "clip": "h8-publish",
+     "from": 0.5,
+     "to": 9.5,
+     "beats": [
+      {
+       "id": "s8b1",
+       "text": "Tot slot maak ik het dataproduct vindbaar. Ik vraag de agent om het te publiceren in de datacatalogus.",
+       "say": "Tot slot maak ik het dataproduct vindbaar. Ik vraag de eedzjent om het te publiceren in de datacatalogus."
+      }
+     ]
+    },
+    {
+     "id": "s8b",
+     "clip": "h8-publish",
+     "from": 9.5,
+     "to": 140.5,
+     "mode": "fast",
+     "rate": 12,
+     "beats": [
+      {
+       "id": "s8b2",
+       "text": "Dat doet hij met een data share die alleen metadata publiceert, dus geen data. Wie de data wil gebruiken, vraagt het team om toegang."
+      }
+     ]
+    },
+    {
+     "id": "s8c",
+     "clip": "h8-publish",
+     "from": 140.5,
+     "to": 154.3
+    },
+    {
+     "id": "s8d",
+     "clip": "h8-om",
+     "from": 0.3,
+     "to": 11.1,
+     "beats": [
+      {
+       "id": "s8b3",
+       "text": "Binnen een minuut staat het in OpenMetadata, als dataproduct van team analytics."
+      }
+     ]
+    },
+    {
+     "id": "s8e",
+     "clip": "h8-om",
+     "from": 11.1,
+     "to": 27.8,
+     "beats": [
+      {
+       "id": "s8b4",
+       "text": "Met alle metadata: de beschrijving, het semantisch model met zijn instructies, en de metrics met hun definitie."
+      }
+     ]
+    },
+    {
+     "id": "s8f",
+     "clip": "h8-om",
+     "from": 27.8,
+     "to": 54.0,
+     "beats": [
+      {
+       "id": "s8b5",
+       "text": "En een ER-diagram van de tabellen en hun sleutels."
+      }
+     ]
+    },
+    {
+     "id": "s8g",
+     "clip": "h8-om",
+     "from": 54.0,
+     "to": 103.6,
+     "beats": [
+      {
+       "id": "s8b6",
+       "text": "De tabellen en de metrics zijn de assets van het dataproduct, maar definities verschillen per datacatalogus."
+      }
+     ]
+    },
+    {
+     "id": "s8h",
+     "clip": "h8-om",
+     "from": 103.6,
+     "to": 122.8,
+     "beats": [
+      {
+       "id": "s8b7",
+       "text": "Per tabel zie je de kolommen met hun beschrijving. OpenMetadata zit niet standaard in de installer. Hoe je die extensie installeert, staat in de documentatie."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s9",
+   "card": "end",
+   "shots": [
+    {
+     "id": "s9a",
+     "card": "end",
+     "beats": [
+      {
+       "id": "s9b1",
+       "text": "Ik hoop dat je geïnspireerd bent geraakt door hoe een agentic dataplatform end-to-end kan werken. Probeer het nu zelf, met één installatiecommando.",
+       "style": "Het woord agentic spreek je uit als in het Amerikaans-Engels: ay-JEN-tik, met de klemtoon op de tweede lettergreep."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

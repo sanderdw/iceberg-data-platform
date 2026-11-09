@@ -1,0 +1,9 @@
+node_modules
+out/
+.env
+recordings/
+tts/cache/
+tts/samples*/
+public/voice/
+public/music/
+public/clips

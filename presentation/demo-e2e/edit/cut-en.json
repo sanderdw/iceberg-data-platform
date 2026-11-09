@@ -1,0 +1,780 @@
+{
+ "slug": "demo-e2e-4k-en",
+ "title": "From API to answer",
+ "chapters": [
+  {
+   "id": "s0",
+   "card": "title",
+   "shots": [
+    {
+     "id": "s0a",
+     "card": "title",
+     "beats": [
+      {
+       "id": "s0b1",
+       "text": "Welcome to a user demo of the Iceberg Data Platform. I'll show you how to install the platform on your own laptop, and how to build a pipeline end to end, turn it into a semantic model, and ask questions about it."
+      },
+      {
+       "id": "s0b2",
+       "text": "Then I publish that data product in a data catalog. I use OpenMetadata for that, but it's just an example: this works with other data catalogs too. And everything is headless and agent-driven."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s1",
+   "number": "01",
+   "title": "Installation",
+   "shots": [
+    {
+     "id": "s1a",
+     "clip": "h1-install",
+     "from": 0.5,
+     "to": 10.5,
+     "beats": [
+      {
+       "id": "s1b1",
+       "text": "It starts with one command. The script fetches the latest release and installs it."
+      }
+     ]
+    },
+    {
+     "id": "s1b",
+     "clip": "h1-install",
+     "from": 10.5,
+     "to": 166.0,
+     "beats": [
+      {
+       "id": "s1b2",
+       "text": "Then it asks which extensions I want. I pick all three: Conversational BI, dbt, and Ingestion with dlt. For the chat I pick Gemini for now, but you're flexible here."
+      }
+     ]
+    },
+    {
+     "id": "s1c",
+     "clip": "h1-install",
+     "from": 166.0,
+     "to": 300.0,
+     "mode": "fast",
+     "rate": 16,
+     "beats": [
+      {
+       "id": "s1b3",
+       "text": "Then it pulls the images and starts the platform: the catalog, Keycloak, the portals and the extensions. That takes a few minutes."
+      }
+     ]
+    },
+    {
+     "id": "s1d",
+     "clip": "h1-install",
+     "from": 300.0,
+     "to": 313.0
+    },
+    {
+     "id": "s1e",
+     "clip": "h1-summary",
+     "from": 1.0,
+     "to": 11.0,
+     "beats": [
+      {
+       "id": "s1b4",
+       "text": "At the end it shows exactly what to do next: sign in as platform administrator, with a temporary password."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "number": "02",
+   "title": "First steps",
+   "shots": [
+    {
+     "id": "s2a",
+     "clip": "h2-admin",
+     "from": 0.3,
+     "to": 24.6,
+     "beats": [
+      {
+       "id": "s2b1",
+       "text": "I sign in as platform administrator, and I choose my own password right away."
+      }
+     ]
+    },
+    {
+     "id": "s2b",
+     "clip": "h2-admin",
+     "from": 24.6,
+     "to": 50.0,
+     "beats": [
+      {
+       "id": "s2b2",
+       "text": "I create one team as an example: analytics."
+      }
+     ]
+    },
+    {
+     "id": "s2c",
+     "clip": "h2-admin",
+     "from": 50.0,
+     "to": 88.5,
+     "beats": [
+      {
+       "id": "s2b3",
+       "text": "And one account: myself, as Administrator of that team. You see the temporary password only once."
+      }
+     ]
+    },
+    {
+     "id": "s2d",
+     "clip": "h2-admin",
+     "from": 88.5,
+     "to": 129.4,
+     "beats": [
+      {
+       "id": "s2b4",
+       "text": "That's it for the platform administrator. Now I switch to the user role."
+      }
+     ]
+    },
+    {
+     "id": "s2e",
+     "clip": "h2-user",
+     "from": 0.3,
+     "to": 25.6,
+     "beats": [
+      {
+       "id": "s2b5",
+       "text": "I sign in to the user portal, now as team admin of analytics."
+      }
+     ]
+    },
+    {
+     "id": "s2f",
+     "clip": "h2-user",
+     "from": 25.6,
+     "to": 91.3,
+     "beats": [
+      {
+       "id": "s2b6",
+       "text": "And I create the database multiverse. That is its own Iceberg catalog, with its own bucket."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "number": "03",
+   "title": "Connecting the agent",
+   "shots": [
+    {
+     "id": "s3a",
+     "clip": "h3-connect",
+     "from": 0.5,
+     "to": 37.5,
+     "mode": "fast",
+     "rate": 3,
+     "beats": [
+      {
+       "id": "s3b1",
+       "text": "Now the agent. I work with Claude Code in the install folder, because the skills are already there. GitHub Copilot, Codex, or any other agent with MCP works just as well. I add three MCP servers: the user portal, Ingestion and dbt."
+      }
+     ]
+    },
+    {
+     "id": "s3b",
+     "clip": "h3-connect",
+     "from": 37.5,
+     "to": 66.0,
+     "max": 2.0,
+     "beats": [
+      {
+       "id": "s3b2",
+       "text": "Each MCP server signs in under my name. I'm already signed in in the browser, so that's easy, without a password."
+      }
+     ]
+    },
+    {
+     "id": "s3c",
+     "clip": "h3-auth-iceberg-user",
+     "from": 0.2,
+     "to": 3.1
+    },
+    {
+     "id": "s3d",
+     "clip": "h3-connect",
+     "from": 66.0,
+     "to": 95.0,
+     "mode": "fast",
+     "rate": 8,
+     "beats": [
+      {
+       "id": "s3b3",
+       "text": "Conversational BI has an MCP server too. With it, your agent asks your semantic models questions itself, with the same governed queries, for example for a report or a notebook."
+      }
+     ]
+    },
+    {
+     "id": "s3e",
+     "clip": "h3-connect",
+     "from": 95.0,
+     "to": 109.7,
+     "beats": [
+      {
+       "id": "s3b4",
+       "text": "Today I only show it briefly in the browser. And the agent can only do what I'm allowed to do myself."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "number": "04",
+   "title": "Loading data",
+   "shots": [
+    {
+     "id": "s4a",
+     "clip": "h4-ingest-en",
+     "from": 0.5,
+     "to": 16.5,
+     "beats": [
+      {
+       "id": "s4b1",
+       "text": "I just ask in plain English: load the Rick and Morty API into my database multiverse, and reload it every hour. That API is a well-known sample project. You can just as well load a table from PostgreSQL, for example, or other APIs."
+      }
+     ]
+    },
+    {
+     "id": "s4b",
+     "clip": "h4-ingest-en",
+     "from": 16.5,
+     "to": 44.0,
+     "mode": "fast",
+     "rate": 5,
+     "beats": [
+      {
+       "id": "s4b2",
+       "text": "The agent picks up the ingestion skill, puts a pipeline together and validates it. Then it sees that Ingestion isn't enabled yet, so we turn that on first."
+      }
+     ]
+    },
+    {
+     "id": "s4c",
+     "clip": "h4-ingest-en",
+     "from": 44.0,
+     "to": 58.0,
+     "beats": [
+      {
+       "id": "s4b3",
+       "text": "Pipelines run on behalf of the whole team. I accept."
+      }
+     ]
+    },
+    {
+     "id": "s4d",
+     "clip": "h4-ingest-en",
+     "from": 58.0,
+     "to": 119.0,
+     "mode": "fast",
+     "rate": 8,
+     "beats": [
+      {
+       "id": "s4b4",
+       "text": "It enables Ingestion, runs the pipeline and sets the schedule: for this project, every hour."
+      }
+     ]
+    },
+    {
+     "id": "s4e",
+     "clip": "h4-ingest-en",
+     "from": 119.0,
+     "to": 133.4,
+     "beats": [
+      {
+       "id": "s4b5",
+       "text": "In about a minute and a half there are six tables, while the source API has only three kinds of entities: characters, locations and episodes. dlt also creates the link tables it needs right away, such as the episodes of a character."
+      }
+     ]
+    },
+    {
+     "id": "s4f",
+     "clip": "h4-web-en",
+     "from": 0.3,
+     "to": 25.5,
+     "beats": [
+      {
+       "id": "s4b6",
+       "text": "In the Ingestion extension I now see the pipeline the agent created. Here I see when it ran, and what the schedule is: every hour, on the hour."
+      }
+     ]
+    },
+    {
+     "id": "s4g",
+     "clip": "h4-cat-en",
+     "from": 0.3,
+     "to": 23.5,
+     "beats": [
+      {
+       "id": "s4b7",
+       "text": "The catalog has the six tables, each with a link back to the pipeline that created it."
+      }
+     ]
+    },
+    {
+     "id": "s4h",
+     "clip": "h4-cat-en",
+     "from": 23.5,
+     "to": 35.6,
+     "beats": [
+      {
+       "id": "s4b8",
+       "text": "A link table points to its parent with a key, so everything can still be joined."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s5",
+   "number": "05",
+   "title": "A star model with dbt",
+   "shots": [
+    {
+     "id": "s5a",
+     "clip": "h5-dbt-en",
+     "from": 0.5,
+     "to": 15.6,
+     "beats": [
+      {
+       "id": "s5b1",
+       "text": "Now I turn it into a star model, with dbt: a fact table with which character appears in which episode, and dimensions for character, episode and location."
+      }
+     ]
+    },
+    {
+     "id": "s5b",
+     "clip": "h5-dbt-en",
+     "from": 15.6,
+     "to": 48.0,
+     "mode": "fast",
+     "rate": 6,
+     "beats": [
+      {
+       "id": "s5b2",
+       "text": "The agent picks up the dbt skill and looks at the raw tables first."
+      }
+     ]
+    },
+    {
+     "id": "s5c",
+     "clip": "h5-dbt-en",
+     "from": 48.0,
+     "to": 62.0,
+     "beats": [
+      {
+       "id": "s5b3",
+       "text": "dbt isn't enabled yet either, so we enable it again."
+      }
+     ]
+    },
+    {
+     "id": "s5d",
+     "clip": "h5-dbt-en",
+     "from": 62.0,
+     "to": 188.0,
+     "mode": "fast",
+     "rate": 10,
+     "beats": [
+      {
+       "id": "s5b4",
+       "text": "It writes the sources, the staging models and the star model, and builds them."
+      }
+     ]
+    },
+    {
+     "id": "s5e",
+     "clip": "h5-dbt-en",
+     "from": 188.0,
+     "to": 236.7,
+     "max": 2.0,
+     "beats": [
+      {
+       "id": "s5b5",
+       "text": "With every model it also writes tests: unique and non-empty keys, links from the fact table to each dimension, and valid values for status and gender, for example. It derives them from the data, and dbt runs them on every build."
+      }
+     ]
+    },
+    {
+     "id": "s5f",
+     "clip": "h5-web-en",
+     "from": 0.3,
+     "to": 14.8,
+     "beats": [
+      {
+       "id": "s5b6",
+       "text": "In the pipeline viewer you see the lineage, from raw table to fact table."
+      }
+     ]
+    },
+    {
+     "id": "s5g",
+     "clip": "h5-web-en",
+     "from": 14.8,
+     "to": 28.5,
+     "beats": [
+      {
+       "id": "s5b7",
+       "text": "And for each model, which tests run. Green means the data meets what we expect of it."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s6",
+   "number": "06",
+   "title": "Semantic model",
+   "shots": [
+    {
+     "id": "s6a",
+     "clip": "h6-semantic-en",
+     "from": 0.5,
+     "to": 10.2,
+     "beats": [
+      {
+       "id": "s6b1",
+       "text": "Then the next step: a semantic model. With it I tie definitions to the data: what a metric means, and how the tables relate."
+      }
+     ]
+    },
+    {
+     "id": "s6b",
+     "clip": "h6-semantic-en",
+     "from": 10.2,
+     "to": 53.0,
+     "mode": "fast",
+     "rate": 6
+    },
+    {
+     "id": "s6c",
+     "clip": "h6-semantic-en",
+     "from": 53.0,
+     "to": 124.0,
+     "beats": [
+      {
+       "id": "s6b2",
+       "text": "The skill starts with an interview. That helps me think about what a user might ask later, so the right definitions get recorded."
+      },
+      {
+       "id": "s6b3",
+       "text": "Ideally the producer of the data provides as much of this as possible. Here the agent suggests the questions and definitions itself."
+      }
+     ]
+    },
+    {
+     "id": "s6d",
+     "clip": "h6-semantic-en",
+     "from": 124.0,
+     "to": 238.0,
+     "mode": "fast",
+     "rate": 10,
+     "beats": [
+      {
+       "id": "s6b4",
+       "text": "It drafts the model, and turns the questions from the interview into tests."
+      }
+     ]
+    },
+    {
+     "id": "s6e",
+     "clip": "h6-semantic-en",
+     "from": 238.0,
+     "to": 262.0,
+     "beats": [
+      {
+       "id": "s6b5",
+       "text": "To check them against the real data, it needs my own sign-in. I approve that in the browser."
+      }
+     ]
+    },
+    {
+     "id": "s6f",
+     "clip": "h6-device-en",
+     "from": 0.3,
+     "to": 6.0
+    },
+    {
+     "id": "s6g",
+     "clip": "h6-device-en",
+     "from": 45.0,
+     "to": 50.5
+    },
+    {
+     "id": "s6h",
+     "clip": "h6-semantic-en",
+     "from": 313.0,
+     "to": 352.0,
+     "mode": "fast",
+     "rate": 4,
+     "beats": [
+      {
+       "id": "s6b6",
+       "text": "Then it runs every question from the interview against the real data. That way it knows for sure that the model can answer them."
+      }
+     ]
+    },
+    {
+     "id": "s6i",
+     "clip": "h6-semantic-en",
+     "from": 352.0,
+     "to": 373.0,
+     "beats": [
+      {
+       "id": "s6b7",
+       "text": "Only then does it ask whether it may publish, with the answers alongside, so I can see whether they're right."
+      }
+     ]
+    },
+    {
+     "id": "s6j",
+     "clip": "h6-semantic-en",
+     "from": 373.0,
+     "to": 511.0,
+     "mode": "fast",
+     "rate": 12,
+     "beats": [
+      {
+       "id": "s6b8",
+       "text": "It stores the model in the dbt project, so every build publishes it again. After publishing, it asks all the questions once more as a final test."
+      }
+     ]
+    },
+    {
+     "id": "s6k",
+     "clip": "h6-semantic-en",
+     "from": 511.0,
+     "to": 554.5,
+     "mode": "fast",
+     "rate": 3,
+     "beats": [
+      {
+       "id": "s6b9",
+       "text": "The raw data reloads every hour, so I let it build the star model every hour too, at a quarter past."
+      }
+     ]
+    },
+    {
+     "id": "s6l",
+     "clip": "h6-web-en",
+     "from": 0.3,
+     "to": 22.0,
+     "beats": [
+      {
+       "id": "s6b10",
+       "text": "In the catalog there's now the model, with its description and instructions for AI."
+      }
+     ]
+    },
+    {
+     "id": "s6m",
+     "clip": "h6-web-en",
+     "from": 22.0,
+     "to": 37.4,
+     "beats": [
+      {
+       "id": "s6b11",
+       "text": "In the diagram you see the appearances on the left, joined to character, episode and location."
+      }
+     ]
+    },
+    {
+     "id": "s6n",
+     "clip": "h6-web-en",
+     "from": 37.4,
+     "to": 87.1,
+     "beats": [
+      {
+       "id": "s6b12",
+       "text": "And the metrics, each with a definition. That lets a question be steered better later on."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s7",
+   "number": "07",
+   "title": "Conversational BI",
+   "shots": [
+    {
+     "id": "s7a",
+     "clip": "h7-click-en",
+     "from": 0.2,
+     "to": 2.3
+    },
+    {
+     "id": "s7b",
+     "clip": "h7-ask-en",
+     "from": 0.3,
+     "to": 22.7,
+     "beats": [
+      {
+       "id": "s7b1",
+       "text": "From the model I go to Conversational BI, to show how a user could work with it."
+      }
+     ]
+    },
+    {
+     "id": "s7c",
+     "clip": "h7-ask-en",
+     "from": 22.7,
+     "to": 76.0,
+     "mode": "fast",
+     "rate": 4
+    },
+    {
+     "id": "s7d",
+     "clip": "h7-ask-en",
+     "from": 76.0,
+     "to": 86.0,
+     "beats": [
+      {
+       "id": "s7b2",
+       "text": "The chart is Generative UI. The language model only chooses which component to show, such as a chart, a table or a KPI, and with which columns. The extension fetches the numbers from the result itself. So they never come from the language model."
+      }
+     ]
+    },
+    {
+     "id": "s7e",
+     "clip": "h7-sql-en",
+     "from": 0.3,
+     "to": 12.4,
+     "beats": [
+      {
+       "id": "s7b3",
+       "text": "And I see exactly which query ran. The language model doesn't write free SQL. It asks the model for a metric, and the platform builds the query."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s8",
+   "number": "08",
+   "title": "Data catalog",
+   "shots": [
+    {
+     "id": "s8a",
+     "clip": "h8-publish-en",
+     "from": 0.5,
+     "to": 11.4,
+     "beats": [
+      {
+       "id": "s8b1",
+       "text": "Finally I make the data product findable. I ask the agent to publish it in the data catalog."
+      }
+     ]
+    },
+    {
+     "id": "s8b",
+     "clip": "h8-publish-en",
+     "from": 11.4,
+     "to": 117.0,
+     "mode": "fast",
+     "rate": 12,
+     "beats": [
+      {
+       "id": "s8b2",
+       "text": "It does that with a data share that publishes only metadata, so no data. Anyone who wants to use the data asks the team for access."
+      }
+     ]
+    },
+    {
+     "id": "s8c",
+     "clip": "h8-publish-en",
+     "from": 117.0,
+     "to": 129.2
+    },
+    {
+     "id": "s8d",
+     "clip": "h8-om-en",
+     "from": 0.3,
+     "to": 7.7,
+     "beats": [
+      {
+       "id": "s8b3",
+       "text": "Within a minute it's in OpenMetadata, as a data product of team analytics."
+      }
+     ]
+    },
+    {
+     "id": "s8e",
+     "clip": "h8-om-en",
+     "from": 7.7,
+     "to": 26.0,
+     "beats": [
+      {
+       "id": "s8b4",
+       "text": "With all the metadata: the description, the semantic model with its instructions, and the metrics with their definitions."
+      }
+     ]
+    },
+    {
+     "id": "s8f",
+     "clip": "h8-om-en",
+     "from": 26.0,
+     "to": 39.8,
+     "beats": [
+      {
+       "id": "s8b5",
+       "text": "And an ER diagram of the tables and their keys."
+      }
+     ]
+    },
+    {
+     "id": "s8g",
+     "clip": "h8-om-en",
+     "from": 39.8,
+     "to": 53.3,
+     "beats": [
+      {
+       "id": "s8b6",
+       "text": "The tables and the metrics are the assets of the data product, but definitions differ per data catalog."
+      }
+     ]
+    },
+    {
+     "id": "s8h",
+     "clip": "h8-om-en",
+     "from": 53.3,
+     "to": 63.3,
+     "beats": [
+      {
+       "id": "s8b7",
+       "text": "For each table you see the columns with their description. OpenMetadata isn't part of the installer. How to install that extension is in the documentation."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s9",
+   "card": "end",
+   "shots": [
+    {
+     "id": "s9a",
+     "card": "end",
+     "beats": [
+      {
+       "id": "s9b1",
+       "text": "I hope this shows you how an agentic data platform can work end to end. Try it yourself, with one install command."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
