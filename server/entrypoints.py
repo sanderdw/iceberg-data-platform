@@ -8,6 +8,11 @@ from pathlib import Path
 # Health checks and proxied notebook traffic would drown the traces.
 # The sign-in callback carries its one-time code in the URL.
 UNTRACED = "health$,/auth/callback,//[^/]+/workspaces/"
+
+
+def untraced(variable):
+    """UNTRACED plus what the variable adds: an operator can extend the list, never open up what it protects."""
+    return ",".join(filter(None, (UNTRACED, os.environ.get(variable))))
 tracing = False
 
 
@@ -56,7 +61,7 @@ def otel(service, traces=True):
         tracer.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
         trace.set_tracer_provider(tracer)
         # The proxy's calls to notebooks too; the instrumentation reads this variable only.
-        os.environ.setdefault("OTEL_PYTHON_HTTPX_EXCLUDED_URLS", UNTRACED)
+        os.environ["OTEL_PYTHON_HTTPX_EXCLUDED_URLS"] = untraced("OTEL_PYTHON_HTTPX_EXCLUDED_URLS")
         HTTPXClientInstrumentor().instrument()
         tracing = True
 
@@ -65,7 +70,7 @@ def traced(app):
     if tracing:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-        excluded = os.environ.get("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS", UNTRACED)
+        excluded = untraced("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS")
         FastAPIInstrumentor.instrument_app(app, excluded_urls=excluded, exclude_spans=["receive", "send"])
         app.add_middleware(QuietNotebooks)
     return app

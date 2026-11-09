@@ -50,7 +50,7 @@ def telemetry(service):
     trace.set_tracer_provider(tracer)
     HTTPXClientInstrumentor().instrument()
     # Every FastAPI app created from now on.
-    excluded = os.environ.get("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS", UNTRACED)
+    excluded = ",".join(filter(None, (UNTRACED, os.environ.get("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS"))))
     FastAPIInstrumentor().instrument(excluded_urls=excluded, exclude_spans=["receive", "send"])
     # The agent's model calls (tokens, timing) and tool calls, with their content: prompts, SQL and results.
     from pydantic_ai import Agent

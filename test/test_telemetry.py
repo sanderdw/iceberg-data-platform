@@ -56,7 +56,25 @@ def test_without_an_endpoint_nothing_is_imported_or_sent():
     assert result.stdout.split() == ["['StreamHandler']", "False"]
 
 
+def test_an_added_exclusion_keeps_the_sign_in_callback_out_of_traces():
+    Collector.received.clear()
+    server = HTTPServer(("127.0.0.1", 0), Collector)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    endpoint = f"http://127.0.0.1:{server.server_port}"
+    code = ("from fastapi import FastAPI; from fastapi.testclient import TestClient; "
+            "from server.entrypoints import logs, traced; logs('iceberg-users'); app = FastAPI(); "
+            "[app.get(path)(lambda: {}) for path in ('/auth/callback', '/other')]; client = TestClient(traced(app)); "
+            "client.get('/auth/callback?code=one-use-code&state=s'); client.get('/other')")
+    try:
+        run(code, OTEL_EXPORTER_OTLP_ENDPOINT=endpoint, OTEL_PYTHON_FASTAPI_EXCLUDED_URLS="/metrics")
+    finally:
+        server.shutdown()
+    traces = b"".join(body for path, _, body in Collector.received if path == "/v1/traces")
+    assert b"/other" in traces and b"one-use-code" not in traces
+
+
 def test_otlp_export_carries_the_audit_fields_and_traces():
+    Collector.received.clear()
     server = HTTPServer(("127.0.0.1", 0), Collector)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     endpoint = f"http://127.0.0.1:{server.server_port}"

@@ -23,6 +23,26 @@ def refuse(message):
     return CbiError(422, message, "unsafe_sql")
 
 
+def cte_names(table):
+    """The CTE names this table reference can resolve to, in lower case.
+
+    Any other name goes to DuckDB's replacement scans, which read a quoted path as a file. So a CTE counts only in
+    the query that declares it and for the CTEs after it, never for itself or the ones before it: that also refuses
+    WITH RECURSIVE, where the same self-reference without a UNION reads the file.
+    """
+    names = set()
+    child, node = table, table.parent
+    while node is not None:
+        declared = node.args.get("with_")
+        if isinstance(node, exp.With):
+            position = next(i for i, cte in enumerate(node.expressions) if cte is child)
+            names |= {cte.alias.lower() for cte in node.expressions[:position]}
+        elif declared is not None and declared is not child:
+            names |= {cte.alias.lower() for cte in declared.expressions}
+        child, node = node, node.parent
+    return names
+
+
 def check(sql, views):
     """The query to run, regenerated from its checked syntax tree, or CbiError `unsafe_sql` saying why not."""
     if not sql or len(sql) > MAX_SQL:
@@ -34,10 +54,11 @@ def check(sql, views):
     if len(statements) != 1 or not isinstance(statements[0], exp.Select | exp.SetOperation):
         raise refuse("Run exactly one SELECT statement.")
     tree = statements[0]
-    known = {v.lower() for v in views} | {c.alias.lower() for c in tree.find_all(exp.CTE)}
+    bound = {v.lower() for v in views}
     for node in tree.walk():
         if isinstance(node, exp.Table):
-            if not isinstance(node.this, exp.Identifier) or node.db or node.catalog or node.name.lower() not in known:
+            if (not isinstance(node.this, exp.Identifier) or node.db or node.catalog
+                    or node.name.lower() not in bound | cte_names(node)):
                 raise refuse(f"Only these tables can be read: {', '.join(sorted(views))}.")
         elif not isinstance(node, ALLOWED + QUERY) or isinstance(node, exp.Anonymous):
             raise refuse(f"{type(node).__name__} is not allowed here. Use standard SQL on the listed tables.")

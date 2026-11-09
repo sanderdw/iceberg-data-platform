@@ -35,6 +35,11 @@ VIEWS = {"flights", "carriers"}
     "WITH t AS (SELECT * FROM read_csv('/etc/passwd')) SELECT * FROM t",
     "SELECT (SELECT getenv('PATH')) FROM flights",
     "SELECT * FROM flights WHERE id IN (SELECT id FROM other)",
+    'WITH unused AS (WITH "https://x/d.parquet" AS (SELECT 1) SELECT 1) SELECT * FROM "https://x/d.parquet"',
+    'WITH "https://x/d.parquet" AS (SELECT * FROM "https://x/d.parquet") SELECT * FROM "https://x/d.parquet"',
+    'WITH a AS (SELECT * FROM "https://x/d.parquet"), "https://x/d.parquet" AS (SELECT 1) SELECT * FROM a',
+    'WITH RECURSIVE "https://x/d.parquet" AS (SELECT * FROM "https://x/d.parquet") SELECT * FROM "https://x/d.parquet"',
+    'SELECT * FROM (WITH "https://x/d.parquet" AS (SELECT 1) SELECT * FROM "https://x/d.parquet") s, "https://x/d.parquet"',
     "",
     "not sql at all (",
 ])
@@ -48,6 +53,10 @@ def test_refused(sql):
     "SELECT c.name, avg(f.dep_delay) AS d FROM flights f JOIN carriers c ON f.carrier_code = c.code GROUP BY 1 "
     "ORDER BY 2 DESC LIMIT 5",
     "WITH t AS (SELECT * FROM flights WHERE NOT cancelled) SELECT count(*) FROM t",
+    "WITH a AS (SELECT * FROM flights), b AS (SELECT * FROM a) SELECT count(*) FROM b",
+    "WITH a AS (SELECT * FROM flights) SELECT count(*) FROM (SELECT * FROM A) s",
+    "WITH a AS (SELECT name FROM carriers) SELECT name FROM a UNION ALL SELECT name FROM a",
+    "WITH a AS (SELECT id FROM flights) SELECT 1 WHERE 1 IN (WITH b AS (SELECT id FROM a) SELECT id FROM b)",
     "SELECT 100.0 * count(*) FILTER (WHERE arr_delay < 15) / nullif(count(*), 0) FROM FLIGHTS",
     "SELECT date_trunc('week', date), avg(dep_delay) FROM flights GROUP BY 1",
     "SELECT name, row_number() OVER (ORDER BY name) FROM carriers",

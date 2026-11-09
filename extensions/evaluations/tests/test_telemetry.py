@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import ClassVar
 
+import pytest
 from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,7 +45,8 @@ def test_without_an_endpoint_nothing_is_imported():
     assert result.stdout.strip() == "False"
 
 
-def test_the_sign_in_callback_is_not_traced():
+@pytest.mark.parametrize("configured", [{}, {"OTEL_PYTHON_FASTAPI_EXCLUDED_URLS": "/metrics"}])
+def test_the_sign_in_callback_is_not_traced(configured):
     Collector.received.clear()
     server = HTTPServer(("127.0.0.1", 0), Collector)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -54,7 +56,7 @@ def test_the_sign_in_callback_is_not_traced():
             "[app.get(path)(lambda: {}) for path in ('/auth/callback', '/other')]; client = TestClient(app); "
             "client.get('/auth/callback?code=one-use-code&state=s'); client.get('/other')")
     try:
-        run(code, OTEL_EXPORTER_OTLP_ENDPOINT=endpoint)
+        run(code, OTEL_EXPORTER_OTLP_ENDPOINT=endpoint, **configured)
     finally:
         server.shutdown()
     traces = b"".join(body for path, body in Collector.received if path == "/v1/traces")

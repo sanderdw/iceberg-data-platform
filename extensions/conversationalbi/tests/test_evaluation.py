@@ -199,6 +199,8 @@ def test_the_control_arm_binds_a_table_once_however_many_datasets_read_it():
 
     assert views(("origin", ["geo"], "airports"), ("destination", ["geo"], "airports")) == ["airports"]
     assert views(("origin", ["geo"], "airports"), ("hub", ["ops"], "airports")) == ["geo_airports", "ops_airports"]
+    assert views(("bare", [], "geo_airports"), ("origin", ["geo"], "airports"), ("hub", ["ops"], "airports")) == [
+        "geo_airports", "geo_airports_2", "ops_airports"]
 
 
 def test_the_control_arm_has_the_same_scope_rules(stack, control):

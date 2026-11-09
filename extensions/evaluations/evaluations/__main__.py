@@ -43,7 +43,7 @@ def telemetry(service):
     logging.getLogger("evaluations.scores").addHandler(LoggingHandler(logger_provider=provider))
     HTTPXClientInstrumentor().instrument()
     # Every FastAPI app created from now on.
-    excluded = os.environ.get("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS", UNTRACED)
+    excluded = ",".join(filter(None, (UNTRACED, os.environ.get("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS"))))
     FastAPIInstrumentor().instrument(excluded_urls=excluded, exclude_spans=["receive", "send"])
     # The LLM judge's calls.
     from pydantic_ai import Agent

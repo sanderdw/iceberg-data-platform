@@ -31,9 +31,14 @@ def tables(model, schemas):
     """
     datasets = list({(tuple(d.namespace), d.table): d for d in model.datasets}.values())
     names = [d.table for d in datasets]
-    found = []
+    found, taken = [], set()
     for d in datasets:
-        view = d.table if names.count(d.table) == 1 else "_".join([*d.namespace, d.table])
+        base = view = d.table if names.count(d.table) == 1 else "_".join([*d.namespace, d.table])
+        suffix = 1
+        while view.lower() in taken:  # DuckDB's view names ignore case.
+            suffix += 1
+            view = f"{base}_{suffix}"
+        taken.add(view.lower())
         found.append({"view": view, "namespace": list(d.namespace), "table": d.table, "columns": schemas[d.name]})
     return found
 
