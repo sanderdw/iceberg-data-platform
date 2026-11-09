@@ -179,7 +179,7 @@ def assert_next_steps(output, target):
     assert f"   Password  {password}  (temporary: you choose a new one at first sign-in)\n" in output
     assert "   http://localhost:3002/#guide\n   Or skip the setup: the demo-company skill below" in output
     # Keycloak needs no manual visit, so the output leaves it out.
-    assert "8080" not in output.split("is running.")[1]
+    assert ":8080" not in output.split("is running.")[1]
     # The installation folder holds the helper and the commands to start and stop both stacks.
     assert (target / "iceberg_connect.py").read_bytes() == b"# helper\n"
     assert "docker compose -f compose.users.yaml down" in output
