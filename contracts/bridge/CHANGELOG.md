@@ -1,6 +1,6 @@
 # Bridge contract changelog
 
-## 0.1.3 - 2026-11-08
+## 0.1.3 - 2026-11-09
 
 Released with core 0.9.11. Additive: extensions built for 0.1.0 to 0.1.2 keep working.
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.11 - 2026-11-08
+## 0.9.11 - 2026-11-09
 
 - **Evaluations**, a new extension: question sets with known answers for Conversational BI, scored runs, comparisons between runs and LLMs, a measurement of what a semantic model adds, schedules, and a live check of real conversations for teams that opt in. The right answer is a governed query, computed again at every run; most checks are code. Results land as Iceberg tables with a semantic model in the team's own database. See [Evaluations](evaluations.md).
 - The Extension Bridge contract is now 0.1.3, with the `team-extensions` capability: one extension serves another for a team only where a team administrator enabled both.

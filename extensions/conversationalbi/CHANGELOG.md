@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.5 - 2026-11-08
+## 0.1.5 - 2026-11-09
 
 - **Evaluation API** for the Evaluations extension: `/api/v1/evaluation/{models,ask,query,conversations}`
   answer another extension's service account (`BI_AGENT_CALLERS`, default `evaluations`) for a team,

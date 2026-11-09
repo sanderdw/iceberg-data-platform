@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - 2026-11-08
+## 0.1.0 - 2026-11-09
 
 - **Question sets with known answers** for Conversational BI, as pydantic-evals YAML with a version
   history, written in the page or through MCP, or imported from the semantic-model skill's
