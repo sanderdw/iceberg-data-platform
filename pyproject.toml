@@ -33,7 +33,7 @@ dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mc
        "pytest>=9.1.1", "ruff>=0.17.3"]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "numpy>=2.5.4"]
 # The documentation site; see docs/develop/contributing.md.
-docs = ["zensical==0.1.0"]
+docs = ["zensical==0.1.1"]
 users = [
     "docker==7.2.0",
     "duckdb==2.0.0",
