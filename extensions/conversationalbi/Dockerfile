@@ -7,7 +7,7 @@ RUN SCARF_ANALYTICS=false npm ci --ignore-scripts --no-audit --no-fund
 COPY web/ ./
 RUN mkdir -p /conversationalbi && npx vite build --outDir /conversationalbi/public
 
-FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.8 AS uv
 FROM python:3.14.10-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
