@@ -1,0 +1,16 @@
+**
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!NOTICE
+!THIRD_PARTY_NOTICES.md
+!maintenance/
+!maintenance/**
+!launcher/
+!launcher/**
+!contracts/
+!contracts/**
+**/__pycache__/
+**/.venv/
+**/.env*

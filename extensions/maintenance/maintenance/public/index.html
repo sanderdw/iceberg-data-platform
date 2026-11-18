@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#000000">
+<link rel="preload" href="/fonts/doto.ttf" as="font" type="font/ttf" crossorigin>
+<title>Maintenance · Iceberg Data Platform</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="site">
+  <a class="brand" href="#/"><img src="/favicon.svg" alt="">iceberg<span>/ maintenance</span></a>
+  <nav id="crumbs" aria-label="Location"></nav>
+  <div class="header-actions">
+    <a id="portal-link" class="quiet-link" target="_blank" rel="noopener" hidden>User portal <span aria-hidden="true">↗</span></a>
+    <button id="theme" class="ghost" type="button">Light / ○</button>
+    <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
+  </div>
+</header>
+
+<main id="loading" class="initial"><p class="eyebrow" role="status">[ LOADING ]</p></main>
+
+<main id="signin" hidden>
+  <section class="login">
+    <div class="eyebrow">YOUR TABLES. KEPT TIDY. <span class="beta">beta</span></div>
+    <h1>Maintenance<span class="dot-accent">.</span></h1>
+    <p>Expire old snapshots, compact small files, clean up delete files and manifests, and remove orphan files in your team's Iceberg databases, on a schedule your team administrator sets.</p>
+    <a class="button wide" id="signin-link" href="/auth/login">Sign in with Keycloak <span aria-hidden="true">↗</span></a>
+    <p class="hint">Use your linked Keycloak account.</p>
+  </section>
+  <aside class="intro">
+    <div class="eyebrow">DAY-2 FOR ICEBERG</div>
+    <h2>Policies, never scripts.</h2>
+    <p>A policy says how long history stays and how big files should be. Runs apply it as your team's service account, one environment at a time.</p>
+    <ol>
+      <li><span>[ 01 ]</span>Enable it for an environment</li>
+      <li><span>[ 02 ]</span>Set a policy per database</li>
+      <li><span>[ 03 ]</span>Dry-run it, then let it run</li>
+    </ol>
+  </aside>
+</main>
+
+<main id="page" hidden>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div id="content"></div>
+</main>
+
+<dialog id="dialog" class="card" aria-labelledby="dialog-title"></dialog>
+</body>
+</html>

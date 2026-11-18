@@ -29,6 +29,7 @@ updates:
       - /extensions/dbt
       - /extensions/conversationalbi
       - /extensions/ingestion
+      - /extensions/maintenance
       - /extensions/openmetadata
       - /extensions/evaluations
     schedule:
@@ -52,11 +53,21 @@ updates:
       - /extensions/conversationalbi/runtime
       - /extensions/ingestion
       - /extensions/ingestion/runner
+      - /extensions/maintenance
+      - /extensions/maintenance/runner
       - /extensions/openmetadata
       - /extensions/evaluations
     ignore:
       # Python stays on 3.14; a new minor is a decision of its own.
       - dependency-name: python
         update-types: [version-update:semver-major, version-update:semver-minor]
+    schedule:
+      interval: weekly
+  # The Maintenance runner pins iceberg-go to a main commit on purpose (extensions/maintenance/DECISIONS.md):
+  # Dependabot keeps its other Go modules current.
+  - package-ecosystem: gomod
+    directory: /extensions/maintenance/runner
+    ignore:
+      - dependency-name: github.com/apache/iceberg-go
     schedule:
       interval: weekly

@@ -22,6 +22,7 @@ from scripts.release import (
     dbt_bundle,
     ingestion_bundle,
     installer_source,
+    maintenance_bundle,
     release_channel,
     release_files,
 )
@@ -50,6 +51,11 @@ def release_tree(tmp_path):
         target = root / "extensions/ingestion" / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / "extensions/ingestion" / name, target)
+    # And the Maintenance extension's compose file, setup and agent skill.
+    for name in ("pyproject.toml", "compose.yaml", "scripts/setup.py", "skills/maintenance/SKILL.md"):
+        target = root / "extensions/maintenance" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "extensions/maintenance" / name, target)
     # And the Evaluations extension's compose file, setup and agent skill.
     for name in ("pyproject.toml", "compose.yaml", "scripts/setup.py", "skills/agent-evaluations/SKILL.md"):
         target = root / "extensions/evaluations" / name
@@ -180,6 +186,46 @@ def test_ingestion_credentials_never_reach_the_bundle(release_tree, env_file, ke
         build_install(release_tree)
 
 
+def test_maintenance_bundle_uses_its_published_images(release_tree):
+    version, files = maintenance_bundle(release_tree)
+    compose = files["maintenance/compose.yaml"].decode()
+    assert compose.count(f"image: ghcr.io/sanderdw/iceberg-maintenance:{version}\n") == 2
+    assert f"image: ghcr.io/sanderdw/iceberg-maintenance-runner:{version}\n" in compose
+    assert f"RUNNER_IMAGE: ${{RUNNER_IMAGE:-ghcr.io/sanderdw/iceberg-maintenance-runner:{version}}}" in compose
+    # Its runner builds from its own directory (build: context: runner): gone like any other build section.
+    assert "build:" not in compose and "context:" not in compose
+    assert files["maintenance/scripts/setup.py"] == (
+        release_tree / "extensions/maintenance/scripts/setup.py").read_bytes()
+    assert files[".agents/skills/maintenance/SKILL.md"] == (
+        release_tree / "extensions/maintenance/skills/maintenance/SKILL.md").read_bytes()
+
+
+def test_a_preview_bundle_uses_the_maintenance_images_of_its_build(release_tree):
+    compose = maintenance_bundle(release_tree, "branch-12-1")[1]["maintenance/compose.yaml"].decode()
+    version = maintenance_bundle(release_tree)[0]
+    assert compose.count(":branch-12-1") == 4 and f":{version}" not in compose
+    with pytest.raises(ValueError, match="Invalid maintenance image tag"):
+        maintenance_bundle(release_tree, "x;rm -rf /")
+
+
+def test_maintenance_bundle_needs_the_versioned_images(release_tree):
+    compose = release_tree / "extensions/maintenance/compose.yaml"
+    compose.write_text(compose.read_text().replace("iceberg-maintenance-runner:0", "iceberg-maintenance-runner:9", 1))
+    with pytest.raises(ValueError, match="must use"):
+        maintenance_bundle(release_tree)
+
+
+@pytest.mark.parametrize("env_file", [".env", ".env.bridge"])
+@pytest.mark.parametrize("key", ["LAUNCHER_TOKEN", "BRIDGE_CLIENT_SECRET"])
+def test_maintenance_credentials_never_reach_the_bundle(release_tree, env_file, key):
+    secret = secrets.token_hex(24)
+    (release_tree / "extensions/maintenance" / env_file).write_text(f"{key}={secret}\n")
+    setup = release_tree / "extensions/maintenance/scripts/setup.py"
+    setup.write_text(setup.read_text() + f"# {secret}\n")
+    with pytest.raises(ValueError, match="bundled maintenance/scripts/setup.py"):
+        build_install(release_tree)
+
+
 def test_source_archive_is_reproducible_and_excludes_local_state(release_tree):
     (release_tree / ".env").write_text("LOCAL_PASSWORD=" + secrets.token_hex(24))
     (release_tree / ".venv").mkdir()
@@ -252,6 +298,8 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
     assert b"Read `.agents/skills/dbt-platform/SKILL.md`" in files[".claude/skills/dbt-platform/SKILL.md"]
     assert {"ingestion/compose.yaml", "ingestion/scripts/setup.py", ".agents/skills/ingestion/SKILL.md"} <= set(files)
     assert b"Read `.agents/skills/ingestion/SKILL.md`" in files[".claude/skills/ingestion/SKILL.md"]
+    assert {"maintenance/compose.yaml", "maintenance/scripts/setup.py", ".agents/skills/maintenance/SKILL.md"} <= set(files)
+    assert b"Read `.agents/skills/maintenance/SKILL.md`" in files[".claude/skills/maintenance/SKILL.md"]
     assert "pgadmin/servers.json" in files
     assert files["iceberg_connect.py"] == (release_tree / "user_portal/client/iceberg_connect.py").read_bytes()
     assert files["AGENTS.md"] == (release_tree / "user_portal/client/AGENTS.md").read_bytes()
@@ -362,6 +410,19 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
         ing["services"]["ing-launcher"]["environment"]["LAUNCHER_TOKEN"])
     assert ing["services"]["ing-gateway"]["environment"]["ING_SECRET_KEY"]
     assert ing["networks"]["platform"]["name"] == platform_model["networks"]["default"]["name"]
+    # And Maintenance.
+    subprocess.run([sys.executable, str(installed / "scripts/setup.py"), "--extension", "maintenance",
+                    "--origin", "http://localhost:3013", "--handshake", str(installed / "maintenance/.env.bridge")],
+                   check=True, capture_output=True)
+    subprocess.run([sys.executable, str(installed / "maintenance/scripts/setup.py")], check=True, capture_output=True)
+    mnt = json.loads(subprocess.check_output(["docker", "compose", "-f", "maintenance/compose.yaml", "--profile",
+                                              "images", "config", "--format", "json"], cwd=installed))
+    assert mnt["services"]["mnt-gateway"]["image"].startswith("ghcr.io/sanderdw/iceberg-maintenance:")
+    assert mnt["services"]["runner-image"]["image"] == mnt["services"]["mnt-launcher"]["environment"]["RUNNER_IMAGE"]
+    assert mnt["services"]["mnt-gateway"]["environment"]["LAUNCHER_TOKEN"] == (
+        mnt["services"]["mnt-launcher"]["environment"]["LAUNCHER_TOKEN"])
+    assert mnt["services"]["mnt-gateway"]["ports"][0]["published"] == "3013"
+    assert mnt["networks"]["platform"]["name"] == platform_model["networks"]["default"]["name"]
     assert workspace_model["services"]["users"]["environment"]["NOTEBOOK_IMAGE"] == (
         f"ghcr.io/sanderdw/iceberg-data-platform-notebook:{image_tag}"
     )

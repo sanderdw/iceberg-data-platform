@@ -53,6 +53,9 @@ EXTENSION_IMAGES = {
         ("iceberg-conversationalbi-runtime", "extensions/conversationalbi/runtime/Dockerfile",
          "extensions/conversationalbi/runtime")],
     "evaluations": [("iceberg-evaluations", "extensions/evaluations/Dockerfile", "extensions/evaluations")],
+    "maintenance": [("iceberg-maintenance", "extensions/maintenance/Dockerfile", "extensions/maintenance"),
+                    ("iceberg-maintenance-runner", "extensions/maintenance/runner/Dockerfile",
+                     "extensions/maintenance/runner")],
 }
 
 
@@ -269,7 +272,8 @@ def deploy(args):
 
 def extension(args):
     """Register the extension in the platform release, then install its chart next to it."""
-    hosts = {"dbt": "dbt", "ingestion": "ingest", "conversationalbi": "cbi", "evaluations": "eval"}
+    hosts = {"dbt": "dbt", "ingestion": "ingest", "conversationalbi": "cbi", "evaluations": "eval",
+             "maintenance": "maintain"}
     args.set = [*(args.set or []), f"extensions.{args.id}.host={hosts[args.id]}"]
     args.image_tag = args.image_tag or "dev"
     deploy(args)

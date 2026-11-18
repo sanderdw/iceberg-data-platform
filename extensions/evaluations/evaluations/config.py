@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 ENVIRONMENTS = ("development", "acceptance", "production")
 # The agent under evaluation; another extension of the platform that answers questions for a team.
 AGENT = "conversationalbi"

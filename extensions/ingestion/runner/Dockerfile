@@ -1,6 +1,6 @@
 # The isolated run image. Built with context extensions/ingestion. Each run reaches only the
 # platform's catalog and storage on an internal network, and its source through an egress network.
-FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.8 AS uv
 FROM python:3.14.10-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /opt/runner

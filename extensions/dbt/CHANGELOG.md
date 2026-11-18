@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 - 2026-11-18
+
+- Updated dependencies, including FastAPI 0.162.4, croniter 7.0.0 and uv 0.13.8.
+
 ## 0.1.3 - 2026-11-09
 
 - **OpenTelemetry.** With `OTEL_EXPORTER_OTLP_ENDPOINT` in `.env` (`otel.endpoint` on Kubernetes) the service sends its logs and traces over OTLP/HTTP, as the platform does. Off by default. See [Send logs and traces to OpenTelemetry](https://sanderdw.github.io/iceberg-data-platform/observability/).

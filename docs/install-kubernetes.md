@@ -28,7 +28,7 @@ Plain HTTP sign-in only works on `localhost`, so a cluster needs HTTPS. Each por
 ## Install
 
 ```bash
-helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 \
+helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.12 \
   --namespace iceberg --create-namespace \
   --set baseDomain=data.example.com \
   --set ingress.className=traefik \
@@ -61,7 +61,7 @@ catalog and S3 addresses of your cluster.
 | Administration MCP server | `https://admin.<domain>/mcp` | Keycloak sign-in, `platform-admin` role |
 | Iceberg REST catalog | `https://catalog.<domain>/api/catalog` | Keycloak token ([connect from your computer](connect.md)) |
 | S3 | `https://s3.<domain>` | Credentials the catalog hands out |
-| Extensions | `https://dbt.<domain>`, `https://ingest.<domain>`, `https://cbi.<domain>`, each with `/mcp` | Keycloak account |
+| Extensions | `https://dbt.<domain>`, `https://ingest.<domain>`, `https://maintain.<domain>`, `https://cbi.<domain>`, each with `/mcp` | Keycloak account |
 | Keycloak administration console | `http://localhost:8080/admin` after `kubectl -n iceberg port-forward svc/keycloak 8080` | `admin` with `KEYCLOAK_ADMIN_PASSWORD` from the platform Secret |
 
 MCP clients still listen on `localhost` for their sign-in callback (`mcpCallbackPort`, 3010), as on
@@ -93,9 +93,10 @@ platform:
 - Postgres (the bundled volume `data-postgres-0`, or your managed database) and the RustFS volume
   `data-rustfs-0`;
 - the Secret `iceberg-platform`, and the extensions' Secrets `iceberg-dbt`, `iceberg-ingestion` (its
-  `ING_SECRET_KEY` encrypts the stored source passwords) and `iceberg-conversationalbi`;
+  `ING_SECRET_KEY` encrypts the stored source passwords), `iceberg-maintenance` and `iceberg-conversationalbi`;
 - the extensions' volumes `dbt-state` (projects and their Git repositories), `dbt-artifacts`,
-  `ing-state` and `ing-artifacts`, and the notebook volumes in `iceberg-notebooks`.
+  `ing-state`, `ing-artifacts`, `mnt-state` (policies and table health) and `mnt-artifacts`, and the
+  notebook volumes in `iceberg-notebooks`.
 
 ### Use a managed PostgreSQL
 
@@ -129,7 +130,7 @@ needs no public endpoint.
 3. Install with the database's private address:
 
     ```bash
-    helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 -n iceberg \
+    helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.12 -n iceberg \
       --set baseDomain=data.example.com --set tls.clusterIssuer=letsencrypt-prod \
       --set postgres.external.enabled=true --set postgres.external.host=<private address> \
       --set postgres.external.existingSecret=iceberg-postgres --wait --timeout 15m
@@ -162,14 +163,14 @@ Install in this order, because the official chart's values come from the platfor
 needs a running Polaris:
 
 ```bash
-helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 -n iceberg \
+helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.12 -n iceberg \
   --create-namespace --set baseDomain=data.example.com --set tls.clusterIssuer=letsencrypt-prod \
   --set polaris.external.enabled=true --wait --timeout 15m
 kubectl -n iceberg get configmap iceberg-polaris-values -o jsonpath='{.data.values\.yaml}' > polaris-values.yaml
 helm install catalog polaris --repo https://downloads.apache.org/polaris/helm-chart --version 1.8.0 \
   -n iceberg -f polaris-values.yaml --wait --timeout 10m
 # Optional, now that Polaris runs: demo accounts and data.
-helm upgrade iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 -n iceberg \
+helm upgrade iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.12 -n iceberg \
   --reset-then-reuse-values --set demo=true --wait
 ```
 
@@ -197,25 +198,30 @@ extension gets the host `<host>.<domain>` and its own certificate.
 ```bash
 chart=oci://ghcr.io/sanderdw/charts
 # 1. Register the extensions you want, with their hosts.
-helm upgrade iceberg $chart/iceberg-data-platform --version 0.9.11 -n iceberg --reset-then-reuse-values \
-  --set extensions.dbt.host=dbt --set extensions.ingestion.host=ingest \
+helm upgrade iceberg $chart/iceberg-data-platform --version 0.9.12 -n iceberg --reset-then-reuse-values \
+  --set extensions.dbt.host=dbt --set extensions.ingestion.host=ingest --set extensions.maintenance.host=maintain \
   --set extensions.conversationalbi.host=cbi --set extensions.evaluations.host=eval --wait
 # 2. Install their charts, with the same ingress settings as the platform.
 common="-n iceberg --set ingress.className=traefik --set tls.clusterIssuer=letsencrypt-prod --wait"
-helm install dbt $chart/iceberg-dbt --version 0.1.3 $common
-helm install ingestion $chart/iceberg-ingestion --version 0.1.3 $common
+helm install dbt $chart/iceberg-dbt --version 0.1.4 $common
+helm install ingestion $chart/iceberg-ingestion --version 0.1.4 $common
+# Maintenance (beta): snapshot expiry, compaction and orphan cleanup for the teams' tables.
+helm install maintenance $chart/iceberg-maintenance --version 0.0.1 $common
 # Conversational BI reads its LLM from a Secret, so the key stays out of Helm's values.
 kubectl -n iceberg create secret generic conversationalbi-llm \
   --from-literal=LLM_MODEL=anthropic:claude-sonnet-5-5 --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
-helm install conversationalbi $chart/iceberg-conversationalbi --version 0.1.5 $common \
+helm install conversationalbi $chart/iceberg-conversationalbi --version 0.1.6 $common \
   --set llm.existingSecret=conversationalbi-llm
 # Evaluations, after Conversational BI; an LLM judge is optional (judge.existingSecret).
-helm install evaluations $chart/iceberg-evaluations --version 0.1.0 $common
+helm install evaluations $chart/iceberg-evaluations --version 0.1.1 $common
 ```
 
 - **dbt and Ingestion** run every build or load as a Kubernetes Job in a namespace of their own
   (`iceberg-dbt-runs`, `iceberg-ingestion-runs`), with the same isolation as on Docker. Ingestion runs
   reach public sources only; `--set runs.allowPrivateSources=true` also allows sources in your own network.
+- **Maintenance** (beta) runs every health check, dry run and maintenance run as a Job in
+  `iceberg-maintenance-runs`, with the same isolation as on Docker. Its runs have no internet: they
+  reach only the catalog, storage and the launcher.
 - **Conversational BI** needs an LLM: `LLM_MODEL` is a Pydantic AI model string, next to its
   provider's variables, as in [change the model](conversational-bi.md#change-the-model). To change the
   model, replace the Secret and restart the gateway: `kubectl -n iceberg rollout restart deploy/cbi-gateway`.
@@ -251,7 +257,7 @@ addresses:
 
 ```bash
 kind create cluster
-helm pull oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.11 --untar
+helm pull oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.12 --untar
 helm install iceberg ./iceberg-data-platform -n iceberg --create-namespace \
   -f iceberg-data-platform/values-localhost.yaml --wait --timeout 15m
 for forward in portal:3000 users:3002 keycloak:8080 polaris:8181 rustfs:9000; do
@@ -310,12 +316,12 @@ kubectl -n iceberg logs job/keycloak-bootstrap
 ## Uninstall
 
 ```bash
-helm uninstall conversationalbi dbt ingestion -n iceberg   # the extensions you installed
+helm uninstall conversationalbi dbt ingestion maintenance -n iceberg   # the extensions you installed
 helm uninstall iceberg -n iceberg
 ```
 
 This removes the platform and the extensions, but keeps their Secrets (`iceberg-platform`,
-`iceberg-dbt`, `iceberg-ingestion`, `iceberg-conversationalbi`), the volumes with your data and the
+`iceberg-dbt`, `iceberg-ingestion`, `iceberg-maintenance`, `iceberg-conversationalbi`), the volumes with your data and the
 notebooks namespace `iceberg-notebooks` with the notebook files. Installing again with the same
 names finds them. To remove everything, delete the namespaces `iceberg` and `iceberg-notebooks`;
 this cannot be undone. A managed PostgreSQL is not part of the cluster: delete its databases yourself.

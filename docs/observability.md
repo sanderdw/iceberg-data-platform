@@ -59,7 +59,7 @@ The extension charts have the same `otel.endpoint`, `otel.headersSecret` and `ot
 | `iceberg-monitor` | Collection failures | None: it polls every service, and those polls would be most of the traces |
 | `iceberg-polaris` | None | Catalog requests, joined to the trace of the portal or extension that made them |
 | `iceberg-conversationalbi` | The extension's records | Its API and MCP requests, and each question as an agent run: every LLM call with its model, tokens and messages, and every tool call with its arguments and result |
-| `iceberg-dbt`, `iceberg-ingestion`, `iceberg-openmetadata` | The extension's records | Its API and MCP requests and its outgoing HTTP calls, such as to the Bridge |
+| `iceberg-dbt`, `iceberg-ingestion`, `iceberg-maintenance`, `iceberg-openmetadata` | The extension's records | Its API and MCP requests and its outgoing HTTP calls, such as to the Bridge |
 | `iceberg-evaluations` | The extension's records, and every score as a `gen_ai.evaluation.result` event | A span per evaluation run and per question, with Conversational BI's agent run nested under it |
 
 Health checks are not traced. The records are the same as on stderr: our own loggers from INFO, libraries from WARNING. A trace links a request in the portal to the Polaris calls it made and to the records logged along the way.

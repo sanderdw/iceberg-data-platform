@@ -118,3 +118,19 @@ def test_opentelemetry_is_off_until_an_endpoint_is_set():
     assert env(docs, "Deployment", "polaris", "bootstrap")["QUARKUS_OTEL_SDK_DISABLED"] == "true"
     assert env(render("otel.endpoint=http://collector:4318", "otel.polaris=false"), "Deployment", "polaris",
                "polaris")["QUARKUS_OTEL_SDK_DISABLED"] == "true"
+
+
+def test_each_extension_chart_finds_its_handshake():
+    # The hosts the documentation registers; an extension chart reads iceberg-bridge-<id> (its bridgeSecret).
+    hosts = {"dbt": "dbt", "ingestion": "ingest", "conversationalbi": "cbi", "evaluations": "eval",
+             "maintenance": "maintain"}
+    charts = sorted((ROOT / "extensions").glob("*/deploy/helm/iceberg-*/values.yaml"))
+    assert {path.parents[3].name for path in charts} == set(hosts)
+    docs = render(*(f"extensions.{id}.host={host}" for id, host in hosts.items()))
+    for path in charts:
+        id = path.parents[3].name
+        secret = next(d for d in docs if d["kind"] == "Secret"
+                      and d["metadata"]["name"] == yaml.safe_load(path.read_text())["bridgeSecret"])
+        assert secret["stringData"]["BRIDGE_EXTENSION_ID"] == id
+        assert secret["stringData"]["EXTENSION_ORIGIN"] == f"https://{hosts[id]}.example.com"
+    assert "maintenance=https://maintain.example.com" in env(docs, "Deployment", "portal")["PLATFORM_EXTENSIONS"]

@@ -76,6 +76,7 @@ The third party never signs in to a portal. A team administrator hands over the 
 | `extensions/conversationalbi/compose.yaml` | `iceberg-conversationalbi` | Optional Conversational BI extension, released separately (see [extensions](../extensions.md)) |
 | `extensions/dbt/compose.yaml` | `iceberg-dbt` | Optional dbt extension: API, MCP and viewer, and the launcher of isolated run containers, released separately |
 | `extensions/ingestion/compose.yaml` | `iceberg-ingestion` | Optional Ingestion (dlt) extension: page, API and MCP, and the launcher of isolated run containers, released separately |
+| `extensions/maintenance/compose.yaml` | `iceberg-maintenance` | Optional Maintenance extension (beta): page, API and MCP, and the launcher of isolated run containers with the Go runner, released separately |
 | `extensions/openmetadata/compose.yaml` | `iceberg-openmetadata` | Optional OpenMetadata sync of listed data shares, with its own installer and release |
 
 - **Keycloak** signs in people and MCP clients. **Polaris** holds all application metadata (teams, users, databases, shares) and enforces data permissions; see the [resource model](resource-model.md). There is no separate application database. Polaris also stores the Apache Ossie semantic models of each namespace (beta in Polaris 1.8, see [semantic models](../semantic-models.md)).

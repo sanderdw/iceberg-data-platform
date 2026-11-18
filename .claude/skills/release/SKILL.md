@@ -58,7 +58,7 @@ Read the `ignore` rules in `.github/dependabot.yml`, then apply the updates on t
 
 ## 3. Versions
 
-Bump the core as `releasing.md` lists it. For each extension (`conversationalbi`, `dbt`, `ingestion`, `evaluations`, `openmetadata`), read the version in its `pyproject.toml` and look for changes since its tag:
+Bump the core as `releasing.md` lists it. For each extension (`conversationalbi`, `dbt`, `ingestion`, `maintenance`, `evaluations`, `openmetadata`), read the version in its `pyproject.toml` and look for changes since its tag:
 
 ```bash
 git diff --stat <id>-v<version> -- extensions/<id>
@@ -205,8 +205,9 @@ Wait for CI on `main`. Then tag in this order, only the extensions with a new ve
 2. `evaluations-vX.Y.Z`
 3. `dbt-vX.Y.Z`
 4. `ingestion-vX.Y.Z`
-5. `openmetadata-vX.Y.Z`
-6. `vX.Y.Z`
+5. `maintenance-vX.Y.Z`
+6. `openmetadata-vX.Y.Z`
+7. `vX.Y.Z`
 
 Use the annotated tag messages from `releasing.md`, and **one `git push` per tag**: GitHub fires no events when more than three tags arrive at once, so no workflow starts. Watch each workflow to green before the next tag:
 

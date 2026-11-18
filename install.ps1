@@ -31,6 +31,9 @@
     function Invoke-IngestionCompose {
         Invoke-Docker compose --env-file "$InstallDir/ingestion/.env" -f "$InstallDir/ingestion/compose.yaml" @args
     }
+    function Invoke-MaintenanceCompose {
+        Invoke-Docker compose --env-file "$InstallDir/maintenance/.env" -f "$InstallDir/maintenance/compose.yaml" @args
+    }
     function Invoke-EvaluationsCompose {
         Invoke-Docker compose --env-file "$InstallDir/evaluations/.env" -f "$InstallDir/evaluations/compose.yaml" @args
     }
@@ -72,6 +75,15 @@
     if (-not $Ingestion -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
         $Answer = Read-Host "Add Ingestion (dlt), which loads REST APIs, databases and files into your tables? Its launcher`nuses the Docker socket to start each run in an isolated container. [y/N]"
         $Ingestion = $Answer -match '^[Yy]'
+    }
+    # And the Maintenance extension (beta).
+    $Maintenance = @($env:ICEBERG_EXTENSIONS -split ',' | ForEach-Object { $_.Trim() }) -contains 'maintenance'
+    $MaintenanceRegistered = (Test-Path "$InstallDir/maintenance/.env.bridge") -and (Test-Path "$InstallDir/.env") -and
+        [bool](Select-String -Path "$InstallDir/.env" -Pattern '^PLATFORM_EXTENSIONS=(.*,)?maintenance=' -Quiet)
+    if ($MaintenanceRegistered) { $Maintenance = $true }
+    if (-not $Maintenance -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
+        $Answer = Read-Host "Add Maintenance (beta), which expires old snapshots, compacts small files and removes orphan files`nin your tables? Its launcher uses the Docker socket to start each run in an isolated container. [y/N]"
+        $Maintenance = $Answer -match '^[Yy]'
     }
     # And the Evaluations extension, which checks Conversational BI's answers: only with it.
     $Evaluations = @($env:ICEBERG_EXTENSIONS -split ',' | ForEach-Object { $_.Trim() }) -contains 'evaluations'
@@ -123,6 +135,7 @@
         foreach ($File in @('compose.yaml', 'compose.users.yaml', '.env.example', 'scripts/setup.py', 'pgadmin/servers.json',
                 'conversationalbi/compose.yaml', 'conversationalbi/scripts/setup.py', 'dbt/compose.yaml', 'dbt/scripts/setup.py',
                 'dbt/iceberg_dbt.py', 'ingestion/compose.yaml', 'ingestion/scripts/setup.py',
+                'maintenance/compose.yaml', 'maintenance/scripts/setup.py',
                 'evaluations/compose.yaml', 'evaluations/scripts/setup.py')) {
             if (!(Test-Path "$BundleDir/$File" -PathType Leaf)) { throw "Installation bundle is missing $File" }
         }
@@ -130,7 +143,7 @@
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
         $InstallDir = (Resolve-Path $InstallDir).Path
         foreach ($File in @('compose.yaml', 'compose.users.yaml', 'compose.lan.yaml', 'compose.users.lan.yaml', 'conversationalbi/compose.yaml',
-                'dbt/compose.yaml', 'ingestion/compose.yaml', 'evaluations/compose.yaml')) {
+                'dbt/compose.yaml', 'ingestion/compose.yaml', 'maintenance/compose.yaml', 'evaluations/compose.yaml')) {
             if (Test-Path "$InstallDir/$File") { Copy-Item "$InstallDir/$File" "$InstallDir/$File.bak" -Force }
         }
         Get-ChildItem -Force $BundleDir | Copy-Item -Destination $InstallDir -Recurse -Force
@@ -176,6 +189,16 @@
             Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
                 /install/ingestion/scripts/setup.py | Out-Null
         }
+        if ($Maintenance) {
+            if (-not $MaintenanceRegistered) {
+                Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
+                    /install/scripts/setup.py --extension maintenance --origin http://localhost:3013 `
+                    --handshake /install/maintenance/.env.bridge | Out-Null
+            }
+            Write-Host "Preparing Maintenance in $InstallDir/maintenance..."
+            Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
+                /install/maintenance/scripts/setup.py | Out-Null
+        }
         if ($Evaluations) {
             if (-not $EvaluationsRegistered) {
                 Invoke-Docker run --rm --mount "type=bind,src=$InstallDir,dst=/install" --entrypoint python $SetupImage `
@@ -194,6 +217,7 @@
         # The images profile adds the runner image, which the launcher starts for every run.
         if ($Dbt) { Invoke-DbtCompose --profile images pull }
         if ($Ingestion) { Invoke-IngestionCompose --profile images pull }
+        if ($Maintenance) { Invoke-MaintenanceCompose --profile images pull }
         if ($Evaluations) { Invoke-EvaluationsCompose pull }
         Write-Host 'Starting administration and data services...'
         Invoke-AdminCompose up -d --no-build --wait --wait-timeout 300
@@ -210,6 +234,10 @@
         if ($Ingestion) {
             Write-Host 'Starting Ingestion (dlt)...'
             Invoke-IngestionCompose up -d --no-build --wait --wait-timeout 300
+        }
+        if ($Maintenance) {
+            Write-Host 'Starting Maintenance...'
+            Invoke-MaintenanceCompose up -d --no-build --wait --wait-timeout 300
         }
         if ($Evaluations) {
             Write-Host 'Starting Evaluations...'
@@ -272,6 +300,17 @@
             Write-Host '   Skill    ingestion: ask your agent, for example "Load the orders table from our PostgreSQL"'
             $Stop = "docker compose -f ingestion/compose.yaml down; $Stop"
             $Start = "$Start; docker compose -f ingestion/compose.yaml up -d --wait"
+            $Step++
+        }
+        if ($Maintenance) {
+            $MaintenanceOrigin = (Get-FileValue "$InstallDir/maintenance/.env.bridge" EXTENSION_ORIGIN).TrimEnd('/')
+            Write-Host "`n$Step. Keep tables healthy with Maintenance (beta)"
+            Write-Host "   $MaintenanceOrigin"
+            Write-Host '   A team administrator enables it once per environment: Enable, on the page'
+            Write-Host "   Agent    claude mcp add --transport http --client-id ext-maintenance-mcp --callback-port 3010 iceberg-maintenance $MaintenanceOrigin/mcp"
+            Write-Host '   Skill    maintenance: ask your agent, for example "Which of our tables need maintenance?"'
+            $Stop = "docker compose -f maintenance/compose.yaml down; $Stop"
+            $Start = "$Start; docker compose -f maintenance/compose.yaml up -d --wait"
             $Step++
         }
         if ($Evaluations) {

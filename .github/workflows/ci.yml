@@ -38,6 +38,11 @@ on:
       - 'extensions/ingestion/pyproject.toml'
       - 'extensions/ingestion/skills/**'
       - 'extensions/ingestion/deploy/helm/**'
+      - 'extensions/maintenance/compose.yaml'
+      - 'extensions/maintenance/scripts/setup.py'
+      - 'extensions/maintenance/pyproject.toml'
+      - 'extensions/maintenance/skills/**'
+      - 'extensions/maintenance/deploy/helm/**'
       - 'extensions/evaluations/compose.yaml'
       - 'extensions/evaluations/scripts/setup.py'
       - 'extensions/evaluations/pyproject.toml'
@@ -50,6 +55,7 @@ on:
       - '!.github/workflows/conversationalbi-*.yml'
       - '!.github/workflows/dbt-*.yml'
       - '!.github/workflows/ingestion-*.yml'
+      - '!.github/workflows/maintenance-*.yml'
       - '!.github/workflows/openmetadata-*.yml'
       - '!.github/workflows/evaluations-*.yml'
       - '!.github/workflows/pages.yml'
@@ -74,7 +80,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.7'
+          version: '0.13.8'
           enable-cache: true
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -108,7 +114,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.7'
+          version: '0.13.8'
           enable-cache: true
           # Parallel with source, which saves the identical --all-groups cache.
           save-cache: false
@@ -185,7 +191,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.7'
+          version: '0.13.8'
           enable-cache: true
           # Parallel with source, which saves the identical --all-groups cache.
           save-cache: false
@@ -229,7 +235,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.7'
+          version: '0.13.8'
           enable-cache: true
           save-cache: false
       - run: uv sync --locked --all-groups
@@ -244,7 +250,7 @@ jobs:
           helm template iceberg "$chart" -n iceberg --set baseDomain=example.com --set tls.clusterIssuer=letsencrypt \
             --set extensions.dbt.host=dbt --set demo=true \
             | kubeconform -strict -summary -kubernetes-version 1.37.1 -ignore-missing-schemas
-          for extension in dbt ingestion conversationalbi evaluations; do
+          for extension in dbt ingestion conversationalbi evaluations maintenance; do
             extension_chart="extensions/$extension/deploy/helm/iceberg-$extension"
             helm lint "$extension_chart" --set ingress.host=x.example.com --set llm.model=test
             helm template "$extension" "$extension_chart" -n iceberg --set ingress.host=x.example.com --set llm.model=test \
@@ -277,7 +283,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.7'
+          version: '0.13.8'
           python-version: '3.14.10'
       - name: Test native installers without starting Docker
         run: uv run --no-project --with pytest==9.1.1 python -m pytest --noconftest test/test_installer.py
