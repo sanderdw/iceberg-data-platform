@@ -59,7 +59,8 @@ LOCAL_DIRS = ("docs/local_only/",)
 TRACKED_UNRELEASED = ("presentation/", "extensions/", "dev/", ".claude/skills/release/",
                       ".github/workflows/conversationalbi-", ".github/workflows/dbt-",
                       ".github/workflows/evaluations-",
-                      ".github/workflows/ingestion-", ".github/workflows/openmetadata-")
+                      ".github/workflows/ingestion-", ".github/workflows/maintenance-",
+                      ".github/workflows/openmetadata-")
 
 
 def release_files(root=ROOT):
@@ -234,6 +235,8 @@ DBT = "extensions/dbt"
 DBT_SKILL = "skills/dbt-platform/SKILL.md"
 ING = "extensions/ingestion"
 ING_SKILL = "skills/ingestion/SKILL.md"
+MNT = "extensions/maintenance"
+MNT_SKILL = "skills/maintenance/SKILL.md"
 
 
 def launcher_compose(root, directory, image, image_tag=None):
@@ -241,6 +244,7 @@ def launcher_compose(root, directory, image, image_tag=None):
 
     The gateway and launcher share one image; the launcher starts runs from the runner image, which
     the installer pulls through the `images` profile. Like Conversational BI, a strict text rewrite.
+    The runner's build section is either a context with a dockerfile path or its own directory.
     """
     version = tomllib.loads((root / directory / "pyproject.toml").read_text())["project"]["version"]
     if image_tag is not None and not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", image_tag):
@@ -279,6 +283,14 @@ def ingestion_bundle(root=ROOT, image_tag=None):
     return version, {"ingestion/compose.yaml": compose,
                      "ingestion/scripts/setup.py": (root / ING / "scripts/setup.py").read_bytes(),
                      f"{SKILLS_DIR}/ingestion/SKILL.md": (root / ING / ING_SKILL).read_bytes()}
+
+
+def maintenance_bundle(root=ROOT, image_tag=None):
+    """The Maintenance extension (beta) for the installer: its compose file on the published images, its setup and skill."""
+    version, compose = launcher_compose(root, MNT, "iceberg-maintenance", image_tag)
+    return version, {"maintenance/compose.yaml": compose,
+                     "maintenance/scripts/setup.py": (root / MNT / "scripts/setup.py").read_bytes(),
+                     f"{SKILLS_DIR}/maintenance/SKILL.md": (root / MNT / MNT_SKILL).read_bytes()}
 
 
 EVAL = "extensions/evaluations"
@@ -361,6 +373,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
     contents.update(conversationalbi_bundle(root, extension_image_tag)[1])
     contents.update(dbt_bundle(root, extension_image_tag)[1])
     contents.update(ingestion_bundle(root, extension_image_tag)[1])
+    contents.update(maintenance_bundle(root, extension_image_tag)[1])
     contents.update(evaluations_bundle(root, extension_image_tag)[1])
     # Getting-started skills for coding agents, opened in the installation directory.
     for path in files:
@@ -381,6 +394,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
              *local_secrets([*(root / CBI).glob(".env*"), root / CBI / "llm.env"], words=("KEY", "TOKEN", "HEADERS")),
              *local_secrets((root / DBT).glob(".env*"), words=("TOKEN", "HEADERS")),
              *local_secrets((root / ING).glob(".env*"), words=("TOKEN", "HEADERS")),
+             *local_secrets((root / MNT).glob(".env*"), words=("TOKEN", "HEADERS")),
              *local_secrets([*(root / EVAL).glob(".env*"), root / EVAL / "llm.env"], words=("KEY", "TOKEN", "HEADERS"))]
     for filename, data in contents.items():
         if any(secret.encode() in data for secret in found):

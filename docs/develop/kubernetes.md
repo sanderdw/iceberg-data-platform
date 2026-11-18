@@ -32,11 +32,12 @@ Every Docker-specific part has a switch whose default is Docker, so Compose beha
   the token endpoint's address check.
 - **Monitor**: `MONITOR_BACKEND=kubernetes` lists the pods of `MONITOR_NAMESPACES` and their
   `metrics.k8s.io` usage. It runs next to RustFS, which lets it mount the RustFS volume read-only.
-- **dbt and Ingestion launchers**: `LAUNCHER_BACKEND=kubernetes` runs one Job per run in
-  `RUNS_NAMESPACE`. The runner (`runner/remote.py`) fetches its staged `/work` from
-  `GET /jobs/{id}/input` and returns `out/` with `PUT /jobs/{id}/output`, using a ticket that is valid
-  for one run (see the dbt extension's `DECISIONS.md`). The launcher is a second container in the portal
-  pod, so both share the artifacts volume. Only that container gets a service account token.
+- **dbt, Ingestion and Maintenance launchers**: `LAUNCHER_BACKEND=kubernetes` runs one Job per run in
+  `RUNS_NAMESPACE`. The runner fetches its staged `/work` from `GET /jobs/{id}/input` and returns `out/`
+  with `PUT /jobs/{id}/output`, using a ticket that is valid for one run (see the dbt extension's
+  `DECISIONS.md`). dbt and Ingestion do this in `runner/remote.py`; Maintenance's Go runner does it in
+  `runner/remote.go` when `RUN_URL` is set. The launcher is a second container in the gateway's pod, so
+  both share the artifacts volume. Only that container gets a service account token.
 
 `server/kube.py` is the small API client the core uses. The extensions have their own copy in
 `launcher/kube.py`, because they never import platform code.
@@ -59,7 +60,9 @@ helm install iceberg deploy/helm/iceberg-data-platform -n iceberg --create-names
 
 Port-forward the Services to the Compose ports, write `.env` with
 `python3 dev/kubernetes/local_env.py iceberg > .env`, and the smoke tests run unchanged.
-`dev/kubernetes/notebook_check.py` checks what a notebook pod can and cannot reach.
+`dev/kubernetes/notebook_check.py` checks what a notebook pod can and cannot reach;
+`dev/kubernetes/notebook_check.py iceberg maintenance` checks that Maintenance runs reach only the catalog,
+storage and the launcher.
 
 ## Test on a cloud cluster
 

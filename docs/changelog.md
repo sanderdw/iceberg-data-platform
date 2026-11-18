@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.12 - 2026-11-18
+
+- **Maintenance**, a new extension (beta): table health per database (snapshots, small files with a size histogram, delete files, manifests) and a policy per database that expires old snapshots, compacts small files and applies their deletes, removes dangling delete files, merges manifests and removes orphan files, on a schedule or on demand. Branch and tag heads, each ref's own retention and the table properties `history.expire.*` always win; expired snapshots' files go with orphan cleanup in a later run; dry runs change nothing. Health checks and dry runs use a read-only token. Its runner is a Go binary on Apache iceberg-go. The installer adds it (`ICEBERG_EXTENSIONS=maintenance`), and on Kubernetes it has its own chart. See [Maintenance](maintenance.md).
+- The user portal links Maintenance by name.
+- Updated dependencies, including FastAPI 0.162.4, boto3 1.44, sqlglot 30.33 and uv 0.13.8.
+- Extensions: Conversational BI 0.1.6, dbt 0.1.4, Ingestion (dlt) 0.1.4, Maintenance 0.0.1, OpenMetadata 0.1.4 and Evaluations 0.1.1.
+
 ## 0.9.11 - 2026-11-09
 
 - **Evaluations**, a new extension: question sets with known answers for Conversational BI, scored runs, comparisons between runs and LLMs, a measurement of what a semantic model adds, schedules, and a live check of real conversations for teams that opt in. The right answer is a governed query, computed again at every run; most checks are code. Results land as Iceberg tables with a semantic model in the team's own database. See [Evaluations](evaluations.md).

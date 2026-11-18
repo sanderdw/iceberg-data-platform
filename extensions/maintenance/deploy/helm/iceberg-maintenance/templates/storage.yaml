@@ -1,0 +1,21 @@
+{{- range $name, $size := dict "mnt-state" .Values.storage.state "mnt-artifacts" .Values.storage.artifacts }}
+---
+# Policies, schedules, table health and run history (SQLite), and the runs' results and logs; kept
+# when the chart is uninstalled.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "mnt.labels" $ | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with $.Values.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $size }}
+{{- end }}

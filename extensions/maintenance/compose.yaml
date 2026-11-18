@@ -1,0 +1,91 @@
+# The Maintenance extension (beta): a separate Compose project that uses the platform only through the
+# Extension Bridge (contracts/bridge in the platform repository), Iceberg REST and S3.
+name: iceberg-maintenance
+
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+# OpenTelemetry export of logs and traces; off while OTEL_EXPORTER_OTLP_ENDPOINT is empty.
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
+
+services:
+  mnt-gateway:
+    build: .
+    image: iceberg-maintenance:0.0.1
+    <<: *hardened
+    labels:
+      io.iceberg-platform.extension: maintenance
+    env_file: [.env.bridge]
+    environment:
+      <<: *otel-env
+      LAUNCHER_URL: http://mnt-launcher:3019
+      LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
+      MNT_MAX_CONCURRENT_RUNS: ${MNT_MAX_CONCURRENT_RUNS:-2}
+      MNT_RUN_RETENTION: ${MNT_RUN_RETENTION:-30}
+      MNT_RUN_TIMEOUT_SECONDS: ${MNT_RUN_TIMEOUT_SECONDS:-43200}
+    ports:
+      - "127.0.0.1:${MNT_PORT:-3013}:3013"
+    volumes:
+      - mnt-state:/data
+      - mnt-artifacts:/data/artifacts:ro
+    networks: [platform, launch]
+    depends_on:
+      mnt-launcher:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3013/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # The only container with the Docker socket. It launches the pinned runner image, with fixed
+  # isolation: a private network holding only the platform's catalog and storage, nothing else.
+  mnt-launcher:
+    image: iceberg-maintenance:0.0.1
+    <<: *hardened
+    command: ["/app/.venv/bin/uvicorn", "launcher.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3019", "--no-access-log"]
+    user: "0:0"
+    labels:
+      io.iceberg-platform.extension: maintenance
+    environment:
+      LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-maintenance-runner:0.0.1}
+      ARTIFACTS_DIR: /artifacts
+      BRIDGE_EXTENSION_ID: maintenance
+      RUN_MEMORY: ${RUN_MEMORY:-2g}
+      RUN_CPUS: ${RUN_CPUS:-2}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - mnt-artifacts:/artifacts
+    networks: [launch]
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3019/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # The isolated image every run uses: built or pulled with --profile images, never started here.
+  runner-image:
+    image: iceberg-maintenance-runner:0.0.1
+    build:
+      context: runner
+    profiles: [images]
+
+networks:
+  platform:
+    external: true
+    name: ${PLATFORM_NETWORK:-iceberg-platform_default}
+  launch:
+    internal: true
+
+volumes:
+  mnt-state:
+  mnt-artifacts:

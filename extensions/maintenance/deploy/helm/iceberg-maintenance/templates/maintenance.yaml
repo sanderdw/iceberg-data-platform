@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mnt-launcher
+  labels:
+    {{- include "mnt.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mnt-gateway
+  labels:
+    {{- include "mnt.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "mnt.selector" . | nindent 4 }}
+  ports:
+    - {name: http, port: 3013}
+---
+# Runs reach the launcher here for their input and output, with their own one-run ticket.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mnt-launcher
+  labels:
+    {{- include "mnt.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "mnt.selector" . | nindent 4 }}
+  ports:
+    - {name: launcher, port: 3019}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maintenance
+  labels:
+    {{- include "mnt.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # One gateway with SQLite state and the schedules, and one launcher that owns its runs.
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "mnt.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mnt.labels" . | nindent 8 }}
+        app.kubernetes.io/component: maintenance
+    spec:
+      serviceAccountName: mnt-launcher
+      # Only the launcher container gets the API token, through its own projected volume.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "mnt.pullSecrets" . | nindent 6 }}
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: portal
+          image: {{ include "mnt.image" (dict "root" . "name" "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: {name: {{ .Values.bridgeSecret }}}
+          env:
+            {{- include "mnt.otelEnv" . | nindent 12 }}
+            - {name: LAUNCHER_URL, value: "http://localhost:3019"}
+            - name: LAUNCHER_TOKEN
+              valueFrom: {secretKeyRef: {name: iceberg-maintenance, key: LAUNCHER_TOKEN}}
+            - {name: MNT_MAX_CONCURRENT_RUNS, value: {{ .Values.runs.maxConcurrent | quote }}}
+            - {name: MNT_RUN_RETENTION, value: {{ .Values.runs.retention | quote }}}
+            - {name: MNT_RUN_TIMEOUT_SECONDS, value: {{ .Values.runs.timeoutSeconds | quote }}}
+            - {name: HOME, value: /tmp}
+          ports:
+            - {name: http, containerPort: 3013}
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 20
+            failureThreshold: 6
+            initialDelaySeconds: 20
+          resources:
+            requests: {cpu: 50m, memory: 192Mi}
+            limits: {memory: 1Gi}
+          {{- include "mnt.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: state, mountPath: /data}
+            - {name: artifacts, mountPath: /data/artifacts, readOnly: true}
+        - name: launcher
+          image: {{ include "mnt.image" (dict "root" . "name" "portal") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [/app/.venv/bin/uvicorn, "launcher.app:create_app", --factory, --host, 0.0.0.0, --port, "3019", --no-access-log]
+          env:
+            - name: LAUNCHER_TOKEN
+              valueFrom: {secretKeyRef: {name: iceberg-maintenance, key: LAUNCHER_TOKEN}}
+            - {name: LAUNCHER_BACKEND, value: kubernetes}
+            - name: RUNS_NAMESPACE
+              value: {{ include "mnt.runsNamespace" . | quote }}
+            - {name: RUN_URL, value: "http://mnt-launcher:3019"}
+            - name: RUNNER_IMAGE
+              value: {{ include "mnt.image" (dict "root" . "name" "runner") | quote }}
+            - name: RUNNER_PULL_POLICY
+              value: {{ .Values.image.pullPolicy | quote }}
+            - name: RUNNER_PULL_SECRETS
+              value: {{ $names := list }}{{ range .Values.imagePullSecrets }}{{ $names = append $names .name }}{{ end }}{{ join "," $names | quote }}
+            - {name: ARTIFACTS_DIR, value: /artifacts}
+            - {name: BRIDGE_EXTENSION_ID, value: maintenance}
+            - {name: RUN_MEMORY, value: {{ .Values.runs.memory | quote }}}
+            - {name: RUN_CPUS, value: {{ .Values.runs.cpus | quote }}}
+            - {name: RUN_WORK_SIZE, value: {{ .Values.runs.workSize | quote }}}
+          ports:
+            - {name: launcher, containerPort: 3019}
+          readinessProbe:
+            httpGet: {path: /health, port: launcher}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 20m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          {{- include "mnt.restricted" . | nindent 10 }}
+          volumeMounts:
+            - {name: tmp-launcher, mountPath: /tmp}
+            - {name: artifacts, mountPath: /artifacts}
+            - {name: api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - {name: tmp-launcher, emptyDir: {}}
+        - name: state
+          persistentVolumeClaim: {claimName: mnt-state}
+        - name: artifacts
+          persistentVolumeClaim: {claimName: mnt-artifacts}
+        - name: api
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 3600}
+              - configMap:
+                  name: kube-root-ca.crt
+                  items: [{key: ca.crt, path: ca.crt}]
+              - downwardAPI:
+                  items: [{path: namespace, fieldRef: {fieldPath: metadata.namespace}}]

@@ -1,8 +1,9 @@
-"""Check what a notebook pod, or a dbt or Ingestion run, can reach and what it may not.
+"""Check what a notebook pod, or a dbt, Ingestion or Maintenance run, can reach and what it may not.
 
     python3 dev/kubernetes/notebook_check.py iceberg              # the notebooks namespace
     python3 dev/kubernetes/notebook_check.py iceberg dbt          # dbt runs
     python3 dev/kubernetes/notebook_check.py iceberg ingestion    # Ingestion runs
+    python3 dev/kubernetes/notebook_check.py iceberg maintenance  # Maintenance runs
 
 Starts a short-lived pod with the notebook or runner image under the same restrictions as the real
 pods, and tries each address from inside it. Exits non-zero when a check fails.
@@ -29,8 +30,12 @@ if target == "notebooks":
 else:
     pods, deployment, variable = f"{namespace}-{target}-runs", target, "RUNNER_IMAGE"
     python = "/opt/runner/.venv/bin/python"
-    launcher = {"dbt": ("dbt-launcher", 3006), "ingestion": ("ing-launcher", 3018)}[target]
-    # dbt runs have no internet; Ingestion runs reach public sources.
+    if target == "maintenance":
+        # The Go runner image has no Python: probe with the gateway's image, under the same NetworkPolicy.
+        variable, python = None, "/app/.venv/bin/python"
+    launcher = {"dbt": ("dbt-launcher", 3006), "ingestion": ("ing-launcher", 3018),
+                "maintenance": ("mnt-launcher", 3019)}[target]
+    # dbt and Maintenance runs have no internet; Ingestion runs reach public sources.
     CHECKS = [("polaris-control-plane", 8181, True), ("rustfs", 9000, True), (*launcher, True),
               (*INTERNET, target == "ingestion"), *PLATFORM]
 notebooks = pods
@@ -56,7 +61,9 @@ def setting(name):
                    f"jsonpath={{.spec.template.spec.containers[*].env[?(@.name=='{name}')].value}}").stdout.split()[0]
 
 
-image = setting(variable)
+image = setting(variable) if variable else kubectl(
+    "-n", namespace, "get", "deploy", deployment, "-o",
+    "jsonpath={.spec.template.spec.containers[?(@.name=='portal')].image}").stdout.strip()
 policy = setting("NOTEBOOK_PULL_POLICY" if target == "notebooks" else "RUNNER_PULL_POLICY")
 secrets = kubectl("-n", pods, "get", "secret", "-o", "jsonpath={.items[*].metadata.name}").stdout.split()
 overrides = {"spec": {

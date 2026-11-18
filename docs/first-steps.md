@@ -78,5 +78,5 @@ Every address, with its sign-in, is listed in the [services reference](reference
 - [Connect your own tools](connect.md), such as Python, the DuckDB CLI or DBeaver.
 - [Build a semantic model](build-a-semantic-model.md), so agents answer from agreed metrics.
 - [Run a class](run-a-class.md) on a Kubernetes installation.
-- Add [extensions](extensions.md): Conversational BI, dbt pipelines, Ingestion (dlt) and OpenMetadata.
+- Add [extensions](extensions.md): Conversational BI, dbt pipelines, Ingestion (dlt), Maintenance, Evaluations and OpenMetadata.
 - Stuck on something? Check the [FAQ](faq.md).

@@ -1,0 +1,56 @@
+[project]
+name = "iceberg-maintenance"
+version = "0.0.1"
+description = "Maintenance for the Iceberg Data Platform (beta): snapshot expiry, compaction, dangling deletes, manifests and orphan files for a team's Iceberg tables, with a UI, API and MCP server"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi==0.162.4",
+  "uvicorn[standard]>=0.53.0",
+  "httpx>=0.28.1",
+  "joserfc>=1.7.7",
+  "mcp>=2.3.0,<3",
+  "croniter>=6.2.4",
+]
+
+[dependency-groups]
+# OpenTelemetry export, used only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+otel = [
+  "opentelemetry-sdk>=1.45.1",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+  "opentelemetry-instrumentation-fastapi>=0.66b1",
+  "opentelemetry-instrumentation-httpx>=0.66b1",
+  "opentelemetry-instrumentation-logging>=0.66b1",
+]
+# The launcher is the only component with the Docker socket.
+launcher = ["docker==7.2.0"]
+dev = [
+  {include-group = "otel"},
+  {include-group = "launcher"},
+  # scripts/e2e_smoke.py writes and reads a table as the team's automation principal.
+  "pyiceberg[pyarrow]>=0.12.0",
+  "pytest>=9.1.1",
+  "ruff>=0.17.3",
+]
+
+[tool.iceberg-maintenance]
+# Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
+bridge-contract = ">=0.1,<0.2"
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+extend-exclude = ["runner"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "C4", "RUF"]
+ignore = ["RUF001", "RUF002"]

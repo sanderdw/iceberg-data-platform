@@ -20,7 +20,7 @@ x-otel-env: &otel-env
 services:
   evaluations:
     build: .
-    image: iceberg-evaluations:0.1.0
+    image: iceberg-evaluations:0.1.1
     <<: *hardened
     labels:
       io.iceberg-platform.extension: evaluations

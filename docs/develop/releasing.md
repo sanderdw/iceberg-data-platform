@@ -15,7 +15,7 @@ A branch publishes on demand, either through **Actions → Release → Run workf
 
 The workflow runs the full CI suite and builds AMD64 and ARM64 images. Only then does it publish the exact prerelease and update the `SLUG-preview` installers. A failed run leaves the previous preview in place.
 
-A preview also builds the Conversational BI, dbt, Ingestion (dlt) and Evaluations images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add all four extensions without their own releases. The platform installer doesn't add OpenMetadata, so a core preview doesn't build its image; an [OpenMetadata preview](#release-an-extension) publishes its own installer.
+A preview also builds the Conversational BI, dbt, Ingestion (dlt), Maintenance and Evaluations images from the same commit, tagged `:SLUG-RUN_ID-ATTEMPT`, so its installer can add all five extensions without their own releases. The platform installer doesn't add OpenMetadata, so a core preview doesn't build its image; an [OpenMetadata preview](#release-an-extension) publishes its own installer.
 
 `SLUG` is the branch name in lowercase, with characters other than letters, digits, `.`, `_` and `-` replaced by `-`, up to 60 characters. Branch names that start with `v` plus a digit are rejected. The workflow keeps the five newest builds per branch. Delete the `SLUG-preview` release after merging.
 
@@ -40,6 +40,7 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
    - Conversational BI: `conversationalbi-v<version>`, with `compose.yaml` and `scripts/setup.py` in `extensions/conversationalbi`.
    - dbt: `dbt-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/dbt`.
    - Ingestion (dlt): `ingestion-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/ingestion`.
+   - Maintenance: `maintenance-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/maintenance`.
    - Evaluations: `evaluations-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/evaluations`. It needs a platform with Bridge contract 0.1.3 and Conversational BI with the evaluation API: release that Conversational BI first.
 
    A branch preview skips this check, because it builds the extension images itself. OpenMetadata isn't in the installation bundle; it has its own installer, so this check doesn't cover it. Release it before the core when its version changed, so the core's release notes can point to it.
@@ -103,6 +104,18 @@ The Ingestion extension works the same way:
 
 The **Ingestion release** workflow runs its CI, builds `ghcr.io/sanderdw/iceberg-ingestion` and `iceberg-ingestion-runner` for AMD64 and ARM64, checks that both are public and publishes the release with its source archive and its Helm chart, which it also pushes to `oci://ghcr.io/sanderdw/charts/iceberg-ingestion`. On the first publication, set both packages to **Public** and rerun the failed job. Its branch previews are named `ingestion-SLUG-RUN_ID-ATTEMPT`.
 
+The Maintenance extension works the same way, with a Go runner:
+
+1. In `extensions/maintenance`, update the version in `pyproject.toml`, `uv.lock` (`uv lock`), `maintenance/config.py`, `Version` in `runner/main.go`, the image tags in `compose.yaml` (both `iceberg-maintenance` lines, the runner image and the `RUNNER_IMAGE` default) and the API contract (`uv run python -m scripts.api_contract`), and `version` and `appVersion` in `deploy/helm/iceberg-maintenance/Chart.yaml`. Date its `CHANGELOG.md` section. `uv run python -m scripts.release` rejects a mismatch.
+2. After the merge into `main`, tag that commit:
+
+   ```bash
+   git tag -a maintenance-vX.Y.Z -m "Maintenance X.Y.Z"
+   git push origin maintenance-vX.Y.Z
+   ```
+
+The **Maintenance extension release** workflow runs its CI, including the Go tests, builds `ghcr.io/sanderdw/iceberg-maintenance` and `iceberg-maintenance-runner` for AMD64 and ARM64, checks that both are public and publishes the release, marked as a prerelease while the extension is a beta, with its source archive and its Helm chart, which it also pushes to `oci://ghcr.io/sanderdw/charts/iceberg-maintenance`. On the first publication, set both packages and the chart to **Public** and rerun the failed job. Its branch previews are named `maintenance-SLUG-RUN_ID-ATTEMPT`.
+
 The Evaluations extension works the same way, with one image: update the version in `pyproject.toml`, `uv.lock`, `evaluations/config.py`, the image tag in `compose.yaml`, the API contract (`uv run python -m scripts.api_contract`) and `deploy/helm/iceberg-evaluations/Chart.yaml`, date its `CHANGELOG.md` section, then tag `evaluations-vX.Y.Z`. The **Evaluations release** workflow builds and publishes `ghcr.io/sanderdw/iceberg-evaluations` and the chart `oci://ghcr.io/sanderdw/charts/iceberg-evaluations`; on the first publication, set both to **Public** and rerun the failed job.
 
 The OpenMetadata extension works the same way, with one image and no API contract:
@@ -119,4 +132,4 @@ The **OpenMetadata extension release** workflow runs its CI, including the end-t
 
 ## Package visibility
 
-On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**, including `iceberg-conversationalbi`, `iceberg-conversationalbi-runtime`, `iceberg-dbt`, `iceberg-dbt-runner`, `iceberg-ingestion`, `iceberg-ingestion-runner`, `iceberg-openmetadata` and `iceberg-evaluations`, and the charts `charts/iceberg-data-platform`, `charts/iceberg-conversationalbi`, `charts/iceberg-dbt`, `charts/iceberg-ingestion` and `charts/iceberg-evaluations`. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.
+On the first publication, open each package in [GitHub Packages](https://github.com/users/sanderdw/packages?repo_name=iceberg-data-platform) and set it to **Public**, including `iceberg-conversationalbi`, `iceberg-conversationalbi-runtime`, `iceberg-dbt`, `iceberg-dbt-runner`, `iceberg-ingestion`, `iceberg-ingestion-runner`, `iceberg-maintenance`, `iceberg-maintenance-runner`, `iceberg-openmetadata` and `iceberg-evaluations`, and the charts `charts/iceberg-data-platform`, `charts/iceberg-conversationalbi`, `charts/iceberg-dbt`, `charts/iceberg-ingestion`, `charts/iceberg-maintenance` and `charts/iceberg-evaluations`. The workflow checks for anonymous pull access before publishing a preview. Publishing uses the workflow's `GITHUB_TOKEN`, so no registry secret is needed.

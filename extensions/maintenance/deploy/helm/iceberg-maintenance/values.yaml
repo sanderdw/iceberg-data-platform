@@ -1,0 +1,54 @@
+# The Maintenance extension (beta), installed in the platform's namespace after the platform chart registered it:
+#   helm upgrade iceberg <platform chart> --reuse-values --set extensions.maintenance.host=maintain
+#   helm install maintenance <this chart> -n <platform namespace>
+image:
+  registry: ghcr.io/sanderdw
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+images:
+  portal: iceberg-maintenance
+  runner: iceberg-maintenance-runner
+
+# The handshake Secret the platform chart writes for this extension.
+bridgeSecret: iceberg-bridge-maintenance
+clusterDomain: cluster.local
+
+ingress:
+  enabled: true
+  # The platform's ingress settings; the host comes from EXTENSION_ORIGIN in the handshake.
+  host: ""
+  className: ""
+  annotations: {}
+tls:
+  clusterIssuer: ""
+  secretName: iceberg-maintenance-tls
+
+runs:
+  # Runs at once, across all teams; one database never has two.
+  maxConcurrent: 2
+  # Finished runs per database that keep their log and results.
+  retention: 30
+  # A run also ends 15 minutes before its catalog token expires (the platform's POLARIS_TOKEN_LIFETIME).
+  timeoutSeconds: 43200
+  # Compaction holds about one file group in memory; raise it with larger target file sizes.
+  memory: 2g
+  cpus: "2"
+  workSize: 1Gi
+
+storage:
+  state: 2Gi
+  artifacts: 5Gi
+storageClass: ""
+
+# OpenTelemetry: the extension's service sends its logs and traces over OTLP/HTTP when an endpoint is
+# set, as the platform's chart does (otel.* there).
+otel:
+  endpoint: ""  # e.g. http://otel-collector.observability:4318
+  # A Secret in this namespace with the key OTEL_EXPORTER_OTLP_HEADERS, for a backend that needs an API key.
+  headersSecret: ""
+  resourceAttributes: ""
+
+networkPolicy:
+  enabled: true

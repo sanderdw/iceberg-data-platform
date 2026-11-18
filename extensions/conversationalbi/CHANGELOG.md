@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6 - 2026-11-18
+
+- Updated dependencies, including FastAPI 0.162.4, sqlglot 30.33, Vite 8.3.8 and uv 0.13.8.
+
 ## 0.1.5 - 2026-11-09
 
 - **Evaluation API** for the Evaluations extension: `/api/v1/evaluation/{models,ask,query,conversations}`

@@ -1,0 +1,3 @@
+Maintenance {{ .Chart.AppVersion }} (beta) is starting in namespace {{ .Release.Namespace }}; runs go to {{ include "mnt.runsNamespace" . }}.
+
+  Maintenance  https://{{ include "mnt.host" . }}

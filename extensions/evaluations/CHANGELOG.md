@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 - 2026-11-18
+
+- Updated dependencies, including FastAPI 0.162.4, croniter 7.0.0 and uv 0.13.8.
+
 ## 0.1.0 - 2026-11-09
 
 - **Question sets with known answers** for Conversational BI, as pydantic-evals YAML with a version

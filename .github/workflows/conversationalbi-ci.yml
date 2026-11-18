@@ -37,7 +37,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.7'
+          version: '0.13.8'
           enable-cache: true
           cache-dependency-glob: extensions/conversationalbi/uv.lock
       - run: uv sync --locked
@@ -118,7 +118,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.7'
+          version: '0.13.8'
           enable-cache: true
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -207,7 +207,7 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         if: steps.core.outputs.tag
         with:
-          version: '0.13.7'
+          version: '0.13.8'
       - name: Start that platform release with the flights product
         if: steps.core.outputs.tag
         env:
