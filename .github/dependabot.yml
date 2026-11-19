@@ -29,6 +29,7 @@ updates:
       - /extensions/dbt
       - /extensions/conversationalbi
       - /extensions/ingestion
+      - /extensions/replication
       - /extensions/maintenance
       - /extensions/openmetadata
       - /extensions/evaluations
@@ -53,6 +54,9 @@ updates:
       - /extensions/conversationalbi/runtime
       - /extensions/ingestion
       - /extensions/ingestion/runner
+      - /extensions/replication
+      # Built on olakego/source-postgres: Dependabot proposes OLake's updates here.
+      - /extensions/replication/runner
       - /extensions/maintenance
       - /extensions/maintenance/runner
       - /extensions/openmetadata

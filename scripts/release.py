@@ -60,7 +60,7 @@ TRACKED_UNRELEASED = ("presentation/", "extensions/", "dev/", ".claude/skills/re
                       ".github/workflows/conversationalbi-", ".github/workflows/dbt-",
                       ".github/workflows/evaluations-",
                       ".github/workflows/ingestion-", ".github/workflows/maintenance-",
-                      ".github/workflows/openmetadata-")
+                      ".github/workflows/openmetadata-", ".github/workflows/replication-")
 
 
 def release_files(root=ROOT):
@@ -237,6 +237,8 @@ ING = "extensions/ingestion"
 ING_SKILL = "skills/ingestion/SKILL.md"
 MNT = "extensions/maintenance"
 MNT_SKILL = "skills/maintenance/SKILL.md"
+REP = "extensions/replication"
+REP_SKILL = "skills/replication/SKILL.md"
 
 
 def launcher_compose(root, directory, image, image_tag=None):
@@ -283,6 +285,14 @@ def ingestion_bundle(root=ROOT, image_tag=None):
     return version, {"ingestion/compose.yaml": compose,
                      "ingestion/scripts/setup.py": (root / ING / "scripts/setup.py").read_bytes(),
                      f"{SKILLS_DIR}/ingestion/SKILL.md": (root / ING / ING_SKILL).read_bytes()}
+
+
+def replication_bundle(root=ROOT, image_tag=None):
+    """The Replication (OLake) extension (beta) for the installer: its compose file on the published images, its setup and skill."""
+    version, compose = launcher_compose(root, REP, "iceberg-replication", image_tag)
+    return version, {"replication/compose.yaml": compose,
+                     "replication/scripts/setup.py": (root / REP / "scripts/setup.py").read_bytes(),
+                     f"{SKILLS_DIR}/replication/SKILL.md": (root / REP / REP_SKILL).read_bytes()}
 
 
 def maintenance_bundle(root=ROOT, image_tag=None):
@@ -373,6 +383,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
     contents.update(conversationalbi_bundle(root, extension_image_tag)[1])
     contents.update(dbt_bundle(root, extension_image_tag)[1])
     contents.update(ingestion_bundle(root, extension_image_tag)[1])
+    contents.update(replication_bundle(root, extension_image_tag)[1])
     contents.update(maintenance_bundle(root, extension_image_tag)[1])
     contents.update(evaluations_bundle(root, extension_image_tag)[1])
     # Getting-started skills for coding agents, opened in the installation directory.

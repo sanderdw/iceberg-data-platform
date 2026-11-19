@@ -76,6 +76,7 @@ The third party never signs in to a portal. A team administrator hands over the 
 | `extensions/conversationalbi/compose.yaml` | `iceberg-conversationalbi` | Optional Conversational BI extension, released separately (see [extensions](../extensions.md)) |
 | `extensions/dbt/compose.yaml` | `iceberg-dbt` | Optional dbt extension: API, MCP and viewer, and the launcher of isolated run containers, released separately |
 | `extensions/ingestion/compose.yaml` | `iceberg-ingestion` | Optional Ingestion (dlt) extension: page, API and MCP, and the launcher of isolated run containers, released separately |
+| `extensions/replication/compose.yaml` | `iceberg-replication` | Optional Replication (OLake) extension (beta): page, API and MCP, and the launcher of isolated OLake run containers, released separately |
 | `extensions/maintenance/compose.yaml` | `iceberg-maintenance` | Optional Maintenance extension (beta): page, API and MCP, and the launcher of isolated run containers with the Go runner, released separately |
 | `extensions/openmetadata/compose.yaml` | `iceberg-openmetadata` | Optional OpenMetadata sync of listed data shares, with its own installer and release |
 
@@ -114,5 +115,5 @@ The [Helm chart](kubernetes.md) runs the same services on Kubernetes, with noteb
 | `test/` | Unit and authorization tests |
 | `docs/` | Documentation site, built with Zensical (`zensical.toml`): installer users at the top level, `docs/develop/` for building and internals |
 | `contracts/bridge/` | Extension Bridge contract: OpenAPI, table-property, network and handshake conventions |
-| `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi`, `extensions/dbt`, `extensions/ingestion` and `extensions/openmetadata`; each but OpenMetadata has a chart in `deploy/helm/` |
+| `extensions/` | Extensions with their own versions and releases: `extensions/conversationalbi`, `extensions/dbt`, `extensions/ingestion`, `extensions/replication` and `extensions/openmetadata`; each but OpenMetadata has a chart in `deploy/helm/` |
 | `presentation/` | reveal.js deck, published under `/presentation/` of the documentation site and excluded from source releases |

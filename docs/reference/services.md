@@ -16,6 +16,7 @@ The addresses of a [Compose installation](../install.md). Credentials are in `.e
 | Conversational BI | http://localhost:3007 | Optional [extension](../conversational-bi.md); Keycloak account |
 | dbt pipelines | http://localhost:3004 | Optional [extension](../dbt.md); Keycloak account, MCP through the `ext-dbt-mcp` client |
 | Ingestion (dlt) | http://localhost:3008 | Optional [extension](../ingestion.md); Keycloak account, MCP through the `ext-ingestion-mcp` client |
+| Replication (OLake, beta) | http://localhost:3014 | Optional [extension](../replication.md); Keycloak account, MCP through the `ext-replication-mcp` client |
 | Maintenance (beta) | http://localhost:3013 | Optional [extension](../maintenance.md); Keycloak account, MCP through the `ext-maintenance-mcp` client |
 | Evaluations | http://localhost:3012 | Optional [extension](../evaluations.md); Keycloak account, MCP through the `ext-evaluations-mcp` client |
 | OpenMetadata | http://localhost:3011 | Optional [extension](../openmetadata.md); opens your OpenMetadata server, sync status at `/api/status` |

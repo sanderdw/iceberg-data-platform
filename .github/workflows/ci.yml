@@ -38,6 +38,11 @@ on:
       - 'extensions/ingestion/pyproject.toml'
       - 'extensions/ingestion/skills/**'
       - 'extensions/ingestion/deploy/helm/**'
+      - 'extensions/replication/compose.yaml'
+      - 'extensions/replication/scripts/setup.py'
+      - 'extensions/replication/pyproject.toml'
+      - 'extensions/replication/skills/**'
+      - 'extensions/replication/deploy/helm/**'
       - 'extensions/maintenance/compose.yaml'
       - 'extensions/maintenance/scripts/setup.py'
       - 'extensions/maintenance/pyproject.toml'
@@ -55,6 +60,7 @@ on:
       - '!.github/workflows/conversationalbi-*.yml'
       - '!.github/workflows/dbt-*.yml'
       - '!.github/workflows/ingestion-*.yml'
+      - '!.github/workflows/replication-*.yml'
       - '!.github/workflows/maintenance-*.yml'
       - '!.github/workflows/openmetadata-*.yml'
       - '!.github/workflows/evaluations-*.yml'
@@ -250,7 +256,7 @@ jobs:
           helm template iceberg "$chart" -n iceberg --set baseDomain=example.com --set tls.clusterIssuer=letsencrypt \
             --set extensions.dbt.host=dbt --set demo=true \
             | kubeconform -strict -summary -kubernetes-version 1.37.1 -ignore-missing-schemas
-          for extension in dbt ingestion conversationalbi evaluations maintenance; do
+          for extension in dbt ingestion replication conversationalbi evaluations maintenance; do
             extension_chart="extensions/$extension/deploy/helm/iceberg-$extension"
             helm lint "$extension_chart" --set ingress.host=x.example.com --set llm.model=test
             helm template "$extension" "$extension_chart" -n iceberg --set ingress.host=x.example.com --set llm.model=test \

@@ -69,7 +69,7 @@ npm run test:mcp-admin
 npm run test:connect
 ```
 
-`scripts.bridge_smoke` checks the Extension Bridge with a registered extension; see its docstring. Each extension in `extensions/` has its own tests and CI; see [Conversational BI](conversational-bi.md#development), [dbt](dbt.md#development) and [Ingestion](ingestion.md#development).
+`scripts.bridge_smoke` checks the Extension Bridge with a registered extension; see its docstring. Each extension in `extensions/` has its own tests and CI; see [Conversational BI](conversational-bi.md#development), [dbt](dbt.md#development), [Ingestion](ingestion.md#development) and [Replication](replication.md#development).
 
 ## Documentation
 

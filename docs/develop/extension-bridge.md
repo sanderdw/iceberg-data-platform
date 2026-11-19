@@ -45,4 +45,5 @@ On Kubernetes, the platform chart's `extensions` value registers an extension: `
 | Conversational BI | [`extensions/conversationalbi`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/conversationalbi) | [Conversational BI](conversational-bi.md) |
 | dbt pipelines | [`extensions/dbt`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/dbt) | [dbt pipelines](dbt.md) |
 | Ingestion (dlt) | [`extensions/ingestion`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/ingestion) | [Ingestion (dlt)](ingestion.md) |
+| Replication (OLake) | [`extensions/replication`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/replication) | [Replication (OLake)](replication.md) |
 | OpenMetadata | [`extensions/openmetadata`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/openmetadata) | [OpenMetadata](openmetadata.md) |

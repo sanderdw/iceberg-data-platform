@@ -64,7 +64,7 @@ Tables can be excluded: maintenance reads their health but never changes them.
 - Delete an orphan file younger than a day, so writes in progress are safe.
 - Change a row. Compaction and manifest rewrites commit `replace` snapshots; compaction stamps them with the run in `iceberg-data-platform.maintenance.run-id`.
 
-A table whose commit conflicts with a writer, such as an [Ingestion](ingestion.md) or [dbt](dbt.md) run, fails on its own; the others continue and the next run tries again.
+A table whose commit conflicts with a writer, such as an [Ingestion](ingestion.md), [Replication](replication.md) or [dbt](dbt.md) run, fails on its own; the others continue and the next run tries again.
 
 ## Connect an AI agent
 

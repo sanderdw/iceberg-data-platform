@@ -2,6 +2,11 @@
 
 Get data in: declarative [dlt](https://dlthub.com/docs) pipelines that load REST APIs, PostgreSQL and MySQL/MariaDB tables, and CSV, JSONL or Parquet files into a team's Apache Iceberg databases, on demand or on a schedule. People use the pipelines page; AI agents and scripts use the same capabilities through MCP and a REST API.
 
+| Use | When |
+| --- | --- |
+| **Ingestion (dlt)** | REST APIs; CSV, JSONL or Parquet files; a one-time or occasional load of a database table |
+| [Replication (OLake)](replication.md) | Keeping an operational database in step: updates and deletes as they happen, large tables, runs every few minutes |
+
 | | |
 | --- | --- |
 | Sources | `rest_api`, `sql_database` (PostgreSQL, MySQL, MariaDB), `filesystem` (HTTPS, S3) |
@@ -64,7 +69,7 @@ A pipeline belongs to one team and environment, and loads into one of the team's
 | Source type | What it reads |
 | --- | --- |
 | `rest_api` | dlt's declarative REST source: `base_url`, sign-in (bearer, API key, basic), a paginator, endpoints with `data_selector`, parameters, nested endpoints and an incremental parameter |
-| `sql_database` | Tables of a PostgreSQL (pg8000) or MySQL/MariaDB (PyMySQL) database: host, port, database, user, a secret password, TLS (`verify-full`, `require` or `disable`), optionally an incremental cursor column per table |
+| `sql_database` | Tables of a PostgreSQL (pg8000) or MySQL/MariaDB (PyMySQL) database: host, port, database, user, a secret password, TLS (`verify-full`, `require` or `disable`), optionally an incremental cursor column per table. For a one-time or occasional load: a cursor misses deleted rows. To keep a database in step, use [Replication](replication.md) |
 | `filesystem` | One CSV, JSONL or Parquet file over HTTPS, or files matching a pattern in S3-compatible storage, optionally only those changed since the last run |
 
 Per resource (endpoint, table or file), `writeDisposition` is `append`, `replace` or `merge` (upsert on `primaryKey`), and `partition` lists identity partition columns. Replace and merge keep the table and its identity, so data shares and descriptions stay.
@@ -84,6 +89,6 @@ What each team role may do is listed in [roles and permissions](reference/roles.
 - A run ends 15 minutes before its catalog token expires: 45 minutes with the platform's default `POLARIS_TOKEN_LIFETIME` of one hour. Raise that in `.env`, for example to 7200, for longer loads (on Kubernetes `polaris.tokenLifetime`); see [configuration](configuration.md).
 - At most 4 runs at once, 2 per team, and one per pipeline. A schedule skips its time while the pipeline is still running.
 
-Ingestion is batch only, with the three declarative sources. Custom Python pipelines, dlt's verified sources and change data capture are not included.
+Ingestion is batch only, with the three declarative sources. Custom Python pipelines and dlt's verified sources are not included; for change data capture, use [Replication (OLake)](replication.md).
 
 How it is built: [Ingestion internals](develop/ingestion.md).
