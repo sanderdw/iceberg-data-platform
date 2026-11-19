@@ -441,6 +441,18 @@ def test_ca_certificates_are_checked(stack):
     assert check(caCertificate=pem, tls="disable")["detail"]["field"] == "source.caCertificate"
 
 
+def test_an_append_only_table_needs_replica_identity_full_everywhere():
+    tables = {"public.orders": {"mode": "cdc"}, "public.audit_log": {"mode": "cdc"}}
+    # Keyed tables only: unchanged large values are read back, so no table needs it.
+    assert "REPLICA IDENTITY FULL;" not in templates.setup_sql("postgres", SOURCE, tables)
+    assert templates.warnings(tables) == []
+    # One keyless table (from the last source check) turns that off for the whole replication.
+    sql = templates.setup_sql("postgres", SOURCE, tables, keyless={"public.audit_log"})
+    assert 'ALTER TABLE "public"."orders" REPLICA IDENTITY FULL;' in sql
+    assert 'ALTER TABLE "public"."audit_log" REPLICA IDENTITY FULL;' in sql
+    assert "__olake_unavailable_value__" in templates.warnings(tables, {"public.audit_log"})[0]
+
+
 def test_the_setup_sql_grants_every_schema():
     sql = templates.setup_sql("postgres", SOURCE, {"crm.orders": {"mode": "cdc"}, "public.customers": {"mode": "cdc"}})
     assert 'GRANT USAGE ON SCHEMA "crm" TO "olake_reader";' in sql

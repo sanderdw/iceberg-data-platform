@@ -41,7 +41,7 @@ def quote(name):
     return '"' + name.replace('"', '""') + '"'
 
 
-def setup_sql(source_type, source, tables=()):
+def setup_sql(source_type, source, tables=(), keyless=()):
     """What the database owner runs once so the replication can follow changes. Never contains a secret."""
     if source_type != "postgres":
         return ""
@@ -59,22 +59,44 @@ def setup_sql(source_type, source, tables=()):
         lines.append(f"CREATE PUBLICATION {quote(source['publication'])} FOR TABLE {listed};")
     if source.get("slot"):
         lines.append(f"SELECT pg_create_logical_replication_slot('{source['slot']}', 'pgoutput');")
-    # A delete carries only the key unless the table's replica identity is FULL: a partitioned table then gets its
-    # delete in the wrong partition, and a table without a key cannot be matched at all (DECISIONS.md).
-    full = [name for name, spec in sorted((tables or {}).items())
-            if isinstance(spec, dict) and spec.get("mode") == "cdc"
-            and (spec.get("partition") or spec.get("appendOnly"))]
-    for name in full:
+    for name in replica_identity_full(tables, keyless):
         lines.append(f"ALTER TABLE {'.'.join(quote(part) for part in name.split('.', 1))} REPLICA IDENTITY FULL;")
-    lines.append("-- Tables without a primary key also need REPLICA IDENTITY FULL.")
+    lines.append("-- Tables without a primary key need REPLICA IDENTITY FULL, and then so do the others.")
     return "\n".join(lines)
 
 
-def warnings(tables):
+def cdc_tables(tables):
+    return {name: spec for name, spec in (tables or {}).items() if isinstance(spec, dict) and spec.get("mode") == "cdc"}
+
+
+def appended(tables, keyless=()):
+    """Change-capture tables OLake appends to: no primary key (from the last source check), or appendOnly."""
+    return sorted(name for name, spec in cdc_tables(tables).items() if spec.get("appendOnly") or name in keyless)
+
+
+def replica_identity_full(tables, keyless=()):
+    """Tables whose source needs REPLICA IDENTITY FULL (DECISIONS.md).
+
+    A delete carries only the key otherwise: a partitioned table gets its delete in the wrong partition. And an
+    update leaves unchanged large (TOAST) values out: the run reads them back from the table, but OLake can only do
+    that when it appends to none of the replication's tables, so with one append-only table every table needs it.
+    """
+    cdc = cdc_tables(tables)
+    if appended(tables, keyless):
+        return sorted(cdc)
+    return sorted(name for name, spec in cdc.items() if spec.get("partition"))
+
+
+def warnings(tables, keyless=()):
     """What the database owner must do for the chosen tables beyond the setup SQL's basics."""
     found = []
-    for name, spec in sorted((tables or {}).items()):
-        if spec.get("mode") == "cdc" and spec.get("partition"):
+    for name, spec in sorted(cdc_tables(tables).items()):
+        if spec.get("partition"):
             found.append(f"{name} is partitioned: its source table needs REPLICA IDENTITY FULL, or deleted rows stay "
                          "visible in DuckDB.")
+    extra = appended(tables, keyless)
+    if extra:
+        found.append(f"{', '.join(extra)} {'is' if len(extra) == 1 else 'are'} appended to (no primary key or "
+                     "appendOnly): every change-capture table of this replication needs REPLICA IDENTITY FULL, or "
+                     "large values an update leaves unchanged arrive as __olake_unavailable_value__.")
     return found

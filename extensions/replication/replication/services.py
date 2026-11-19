@@ -92,6 +92,9 @@ class Services:
         stored = set(replication["secrets"])
         schedule = self.store.schedule(replication["id"])
         check = self.store.last_check(replication["id"])
+        # Tables without a primary key, as the last source check found them.
+        found = ((check or {}).get("summary") or {}).get("streams") or []
+        keyless = {s["name"] for s in found if not s.get("primaryKey")}
         return {
             "id": replication["id"], "name": replication["name"], "description": replication["description"],
             "team": replication["team"], "environment": replication["environment"],
@@ -106,8 +109,8 @@ class Services:
             "schedule": self.public_schedule(schedule), "lastRun": self.public_run(last_run) if last_run else None,
             "lastCheck": self.public_check(check) if check else None,
             "setupSql": templates.setup_sql(replication["source_type"], replication["source"],
-                                            replication["tables"]),
-            "warnings": templates.warnings(replication["tables"]),
+                                            replication["tables"], keyless),
+            "warnings": templates.warnings(replication["tables"], keyless),
         }
 
     @staticmethod

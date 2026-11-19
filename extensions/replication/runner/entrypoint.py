@@ -166,7 +166,19 @@ def sync(job, secrets, token, log, out):
     try:
         write(destination, olake.destination_config(job, token, catalog_url, JAR))
         streams = discover(log, config)
-        write(selected, olake.selected_streams(job, streams))
+        chosen = olake.selected_streams(job, streams)
+        appended = olake.append_only(chosen)
+        if "update_method" in json.loads(config.read_text()):
+            if appended:
+                log.line(f"[replication] {', '.join(appended)} are appended to (no primary key or appendOnly), so "
+                         "large values an update leaves unchanged are not read back from the table: give the "
+                         "replication's change-capture tables REPLICA IDENTITY FULL at the source.")
+            else:
+                # Read unchanged large values back from the table; OLake then allows only upserts, so it lists the
+                # tables again with that setting.
+                write(config, olake.source_config(job, secrets, preserve_toast=True))
+                streams = discover(log, config)
+        write(selected, chosen)
         previous = WORK / "state" / "state.json"
         if previous.exists() and not job.get("fullRefresh"):
             shutil.copyfile(previous, state_file)

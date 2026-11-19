@@ -48,7 +48,7 @@ The database owner prepares PostgreSQL once:
 1. Set `wal_level = logical` (a server restart; on Amazon RDS and Aurora the parameter `rds.logical_replication = 1`).
 2. Give the replication's user the `REPLICATION` attribute (`rds_replication` on RDS), `USAGE` on the tables' schemas and `SELECT` on the tables.
 3. Create a publication for the tables and a logical replication slot with the `pgoutput` plugin.
-4. Give a table without a primary key, and every table you partition, `REPLICA IDENTITY FULL`. Otherwise a delete carries only the key, and a deleted row stays visible in DuckDB. Other tables don't need it: when an update leaves a large text or JSON value unchanged, the run reads that value back from the Iceberg table.
+4. Give a table without a primary key, and every table you partition, `REPLICA IDENTITY FULL`. Otherwise a delete carries only the key, and a deleted row stays visible in DuckDB. Other tables don't need it: when an update leaves a large text or JSON value unchanged, the run reads that value back from the Iceberg table. That works only while the replication has no table without a primary key. With one, give all its change-capture tables `REPLICA IDENTITY FULL`; the setup SQL and the page say so.
 
 The replication's page shows this as SQL for the tables you choose (**Set up the source**), and **Check source** tells what is missing.
 

@@ -40,6 +40,7 @@ FAKE = textwrap.dedent(f"""\
         pathlib.Path(os.environ["SEEN"]).write_text(json.dumps({{
             "selected": selected, "state": state.read_text(), "telemetry": os.environ.get("TELEMETRY_DISABLED"),
             "token": json.loads(pathlib.Path(args[args.index("--destination") + 1]).read_text())["writer"]["token"],
+            "preserve": source.get("update_method", {{}}).get("preserve_toast_values"),
             "env": sorted(k for k in os.environ if k.startswith("REP_"))}}))
         if mode == "slow":
             def stop(*_):
@@ -76,7 +77,8 @@ def test_olake_configuration():
     source = olake.source_config(job(), {"password": PASSWORD})
     assert source["password"] == PASSWORD and source["ssl"]["mode"] == "verify-full"
     assert source["update_method"] == {"replication_slot": "s", "publication": "p", "initial_wait_time": 120,
-                                       "preserve_toast_values": True}
+                                       "preserve_toast_values": False}
+    assert olake.source_config(job(), {}, preserve_toast=True)["update_method"]["preserve_toast_values"] is True
     no_cdc = job(source={**job()["source"], "slot": None, "publication": None})
     assert "update_method" not in olake.source_config(no_cdc, {"password": PASSWORD})
     writer = olake.destination_config(job(), TOKEN, "http://127.0.0.1:18181/api/catalog")["writer"]
@@ -91,8 +93,11 @@ def test_tls_and_large_values():
                                     "server_ca_path": "/etc/ssl/certs/ca-certificates.crt"}
     assert olake.ssl_config({"tls": "verify-ca", "caCertificate": pem}) == {"mode": "verify-ca", "server_ca": pem}
     assert olake.ssl_config({"tls": "require", "caCertificate": pem}) == {"mode": "require"}
-    # Unchanged large values are read back from the table instead of landing as __olake_unavailable_value__.
-    assert olake.source_config(job(), {"password": PASSWORD})["update_method"]["preserve_toast_values"] is True
+    # Unchanged large values are read back from the table, only when OLake appends to no table.
+    streams = olake.available_from(STREAMS)
+    assert olake.append_only(olake.selected_streams(job(), streams)) == ["public.audit_log"]
+    keyed = job(tables={"public.orders": {"mode": "cdc", "table": "orders"}})
+    assert olake.append_only(olake.selected_streams(keyed, streams)) == []
 
 
 def test_selected_streams():
@@ -191,6 +196,16 @@ def test_a_sync_saves_state_and_never_leaks_secrets(work):
     assert PASSWORD not in log and TOKEN not in log
     for name in ("source.json", "destination.json"):
         assert not (folder / "olake" / name).exists()
+
+
+def test_large_values_are_preserved_only_without_append_only_tables(work):
+    folder, seen, _ = work
+    # audit_log has no primary key, so OLake appends to it and cannot read large values back.
+    _, result, log = run(folder)
+    assert result["status"] == "success" and json.loads(seen.read_text())["preserve"] is False
+    assert "public.audit_log are appended to" in log and "REPLICA IDENTITY FULL" in log
+    run(folder, tables={"public.orders": {"mode": "cdc", "table": "orders", "appendOnly": False}})
+    assert json.loads(seen.read_text())["preserve"] is True
 
 
 def test_a_full_refresh_starts_without_state(work):

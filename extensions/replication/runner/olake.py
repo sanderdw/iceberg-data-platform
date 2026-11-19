@@ -29,7 +29,7 @@ def ssl_config(source, system_ca=SYSTEM_CA):
     return ssl
 
 
-def source_config(job, secrets):
+def source_config(job, secrets, preserve_toast=False):
     source = job["source"]
     config = {
         "host": source["host"], "port": source["port"], "database": source["database"],
@@ -37,10 +37,11 @@ def source_config(job, secrets):
         "ssl": ssl_config(source), "max_threads": source.get("maxThreads", 4), "retry_count": 2,
     }
     if source.get("slot") and source.get("publication"):
-        # Without REPLICA IDENTITY FULL, an update leaves unchanged large (TOAST) values out of the change; OLake
-        # then reads them back from the table (positional deletes and deletion vectors, our only modes).
+        # Without REPLICA IDENTITY FULL, an update leaves unchanged large (TOAST) values out of the change; with
+        # preserve_toast_values OLake reads them back from the row an upsert replaces. It then allows only upserts,
+        # so the sync turns it on only when no chosen table is append-only (see append_only).
         config["update_method"] = {"replication_slot": source["slot"], "publication": source["publication"],
-                                   "initial_wait_time": INITIAL_WAIT, "preserve_toast_values": True}
+                                   "initial_wait_time": INITIAL_WAIT, "preserve_toast_values": preserve_toast}
     return config
 
 
@@ -105,6 +106,12 @@ def selected_streams(job, streams):
             entry["cursor_field"] = spec["cursor"]
         selected.setdefault(schema, []).append(entry)
     return {"selected_streams": selected}
+
+
+def append_only(selected):
+    """The chosen tables OLake appends to: those without a primary key, or marked appendOnly."""
+    return sorted(f"{schema}.{entry['stream_name']}" for schema, entries in selected["selected_streams"].items()
+                  for entry in entries if entry["append_mode"])
 
 
 def messages(text, key):
