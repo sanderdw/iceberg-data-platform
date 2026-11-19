@@ -393,3 +393,56 @@ def test_other_team_cannot_create_in_a_foreign_team(stack):
     assert stack.call("POST", "/replications", "dave", json={
         "team": OTHER, "name": "x", "database": "sales", "namespace": "raw", "sourceType": "postgres",
         "source": SOURCE}).json()["code"] == "unknown_database"
+
+
+def test_a_sign_in_belongs_to_the_browser_that_started_it(tmp_path):
+    """A callback URL sent to another browser signs nobody in (login CSRF)."""
+    import httpx
+
+    from replication.auth import BrowserLogin
+    from tests.conftest import FakeVerifier, settings
+
+    token = httpx.MockTransport(lambda request: httpx.Response(200, json={"access_token": "alice",
+                                                                          "refresh_token": "r"}))
+    login = BrowserLogin(settings(tmp_path), FakeVerifier(), httpx.AsyncClient(transport=token))
+    url, binding = login.start("/#/replications")
+    state = dict(part.split("=", 1) for part in url.split("?", 1)[1].split("&"))["state"]
+    with pytest.raises(ReplicationError):
+        asyncio.run(login.finish(state, "code", "someone-elses-binding"))
+    # The failed attempt used up the state.
+    with pytest.raises(ReplicationError):
+        asyncio.run(login.finish(state, "code", binding))
+    url, binding = login.start("/#/replications")
+    state = dict(part.split("=", 1) for part in url.split("?", 1)[1].split("&"))["state"]
+    session, target = asyncio.run(login.finish(state, "code", binding))
+    assert session in login.sessions and target == "/#/replications"
+
+
+def test_the_login_route_sets_the_binding_cookie(stack):
+    response = stack.client.get("/auth/login", follow_redirects=False)
+    assert response.status_code == 303
+    cookie = response.headers["set-cookie"]
+    assert "iceberg_replication_login=" in cookie and "HttpOnly" in cookie and "Path=/auth/callback" in cookie
+    state = response.headers["location"].split("state=", 1)[1].split("&", 1)[0]
+    stack.client.cookies.clear()
+    failed = stack.client.get(f"/auth/callback?state={state}&code=x", follow_redirects=False)
+    assert failed.headers["location"] == "/?signin=failed"
+
+
+def test_ca_certificates_are_checked(stack):
+    pem = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIU\n-----END CERTIFICATE-----"
+    def check(**change):
+        return stack.call("POST", "/replications/validate", json={"sourceType": "postgres",
+                                                                  "source": {**SOURCE, **change}}).json()
+    assert check(caCertificate=pem)["source"]["caCertificate"] == pem
+    assert check(caCertificate="not a certificate")["detail"]["field"] == "source.caCertificate"
+    assert check(caCertificate="-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----")["detail"]["field"] \
+        == "source.caCertificate"
+    assert check(caCertificate=pem, tls="disable")["detail"]["field"] == "source.caCertificate"
+
+
+def test_the_setup_sql_grants_every_schema():
+    sql = templates.setup_sql("postgres", SOURCE, {"crm.orders": {"mode": "cdc"}, "public.customers": {"mode": "cdc"}})
+    assert 'GRANT USAGE ON SCHEMA "crm" TO "olake_reader";' in sql
+    assert 'GRANT USAGE ON SCHEMA "public" TO "olake_reader";' in sql
+    assert sql.index("GRANT USAGE") < sql.index("GRANT SELECT")

@@ -47,10 +47,12 @@ def setup_sql(source_type, source, tables=()):
         return ""
     user = quote(source.get("username") or "olake_reader")
     names = sorted(tables) or ["public.my_table"]
+    schemas = sorted({name.split(".", 1)[0] for name in names})
     listed = ", ".join(".".join(quote(part) for part in name.split(".", 1)) for name in names)
     lines = [
         "-- Once per server (needs a restart): ALTER SYSTEM SET wal_level = logical;",
         f"ALTER ROLE {user} WITH REPLICATION;",
+        *(f"GRANT USAGE ON SCHEMA {quote(schema)} TO {user};" for schema in schemas),
         f"GRANT SELECT ON {listed} TO {user};",
     ]
     if source.get("publication"):

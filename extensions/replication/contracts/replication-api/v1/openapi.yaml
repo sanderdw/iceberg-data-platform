@@ -901,7 +901,7 @@
               }
             ],
             "title": "Source",
-            "description": "The source connection for the source type, as list_templates shows it: host, port, database, username, password, tls, and slot and publication for change data capture. Secret values never go here: refer to them as \"$secret:<name>\" and set them with set_replication_secrets."
+            "description": "The source connection for the source type, as list_templates shows it: host, port, database, username, password, tls (verify-full, verify-ca, require, disable), optional caCertificate (PEM, for a source whose certificate no public CA signed), and slot and publication for change data capture. Secret values never go here: refer to them as \"$secret:<name>\" and set them with set_replication_secrets."
           },
           "tables": {
             "anyOf": [
@@ -1005,7 +1005,7 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Source",
-            "description": "The source connection for the source type, as list_templates shows it: host, port, database, username, password, tls, and slot and publication for change data capture. Secret values never go here: refer to them as \"$secret:<name>\" and set them with set_replication_secrets."
+            "description": "The source connection for the source type, as list_templates shows it: host, port, database, username, password, tls (verify-full, verify-ca, require, disable), optional caCertificate (PEM, for a source whose certificate no public CA signed), and slot and publication for change data capture. Secret values never go here: refer to them as \"$secret:<name>\" and set them with set_replication_secrets."
           },
           "tables": {
             "anyOf": [
@@ -1177,7 +1177,7 @@
               }
             ],
             "title": "Source",
-            "description": "The source connection for the source type, as list_templates shows it: host, port, database, username, password, tls, and slot and publication for change data capture. Secret values never go here: refer to them as \"$secret:<name>\" and set them with set_replication_secrets."
+            "description": "The source connection for the source type, as list_templates shows it: host, port, database, username, password, tls (verify-full, verify-ca, require, disable), optional caCertificate (PEM, for a source whose certificate no public CA signed), and slot and publication for change data capture. Secret values never go here: refer to them as \"$secret:<name>\" and set them with set_replication_secrets."
           },
           "tables": {
             "anyOf": [

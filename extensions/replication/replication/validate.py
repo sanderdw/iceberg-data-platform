@@ -40,6 +40,9 @@ PARTITION = re.compile(r"^(/\{[A-Za-z_][A-Za-z0-9_]{0,127},(identity|year|month|
 USERNAME = re.compile(r"^[A-Za-z0-9_.@-]{1,128}$")
 HOST = re.compile(r"^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,62})(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}))*\.?$")
 TLS = ("disable", "require", "verify-ca", "verify-full")
+# A CA certificate (or chain) in PEM, for sources whose certificate a public CA did not sign, such as Amazon RDS.
+PEM_CERTIFICATES = re.compile(r"^(\s*-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\s]+?-----END CERTIFICATE-----\s*)+$")
+MAX_CA = 32 * 1024
 MAX_SOURCE = 64 * 1024
 MAX_SECRET = 16 * 1024
 MAX_TABLES = 200
@@ -182,8 +185,8 @@ def pin(host, allowed=(), allow_private=False):
 # Source types
 
 def postgres(source, allowed, allow_private):
-    allowed_keys(source, {"host", "port", "database", "username", "password", "tls", "slot", "publication",
-                          "maxThreads"}, "source")
+    allowed_keys(source, {"host", "port", "database", "username", "password", "tls", "caCertificate", "slot",
+                          "publication", "maxThreads"}, "source")
     check_host(source.get("host"), "source.host", allowed, allow_private)
     source["port"] = integer(source.get("port"), "source.port", 1, 65535, 5432)
     text(source.get("database"), "source.database", limit=63, pattern=IDENTIFIER)
@@ -192,6 +195,15 @@ def postgres(source, allowed, allow_private):
     source["tls"] = source.get("tls") or "verify-full"
     if source["tls"] not in TLS:
         fail(f"source.tls must be one of {', '.join(TLS)}.", "source.tls")
+    if source.get("caCertificate"):
+        text(source["caCertificate"], "source.caCertificate", limit=MAX_CA)
+        if not PEM_CERTIFICATES.match(source["caCertificate"]):
+            fail("source.caCertificate must be one or more PEM certificates (-----BEGIN CERTIFICATE-----).",
+                 "source.caCertificate")
+        if source["tls"] not in ("verify-ca", "verify-full"):
+            fail("source.caCertificate is for tls verify-ca or verify-full.", "source.caCertificate")
+    else:
+        source.pop("caCertificate", None)
     for key in ("slot", "publication"):
         if source.get(key) is not None:
             text(source[key], f"source.{key}", limit=63, pattern=re.compile(r"^[a-z_][a-z0-9_]{0,62}$"))

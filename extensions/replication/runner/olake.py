@@ -13,6 +13,20 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 TLS = {"disable": "disable", "require": "require", "verify-ca": "verify-ca", "verify-full": "verify-full"}
 # How long OLake waits for the first change before it ends a change data capture run, in seconds.
 INITIAL_WAIT = 120
+# Verified TLS without a CA certificate of the source's own trusts the public certificate authorities.
+SYSTEM_CA = "/etc/ssl/certs/ca-certificates.crt"
+
+
+def ssl_config(source, system_ca=SYSTEM_CA):
+    """OLake needs a CA for verify-ca and verify-full: the source's own, or the public authorities."""
+    mode = TLS[source.get("tls", "verify-full")]
+    ssl = {"mode": mode}
+    if mode in ("verify-ca", "verify-full"):
+        if source.get("caCertificate"):
+            ssl["server_ca"] = source["caCertificate"]
+        else:
+            ssl.update(cert_source="path", server_ca_path=system_ca)
+    return ssl
 
 
 def source_config(job, secrets):
@@ -20,12 +34,13 @@ def source_config(job, secrets):
     config = {
         "host": source["host"], "port": source["port"], "database": source["database"],
         "username": source["username"], "password": secrets.get(source["password"].removeprefix("$secret:"), ""),
-        "ssl": {"mode": TLS[source.get("tls", "verify-full")]},
-        "max_threads": source.get("maxThreads", 4), "retry_count": 2,
+        "ssl": ssl_config(source), "max_threads": source.get("maxThreads", 4), "retry_count": 2,
     }
     if source.get("slot") and source.get("publication"):
+        # Without REPLICA IDENTITY FULL, an update leaves unchanged large (TOAST) values out of the change; OLake
+        # then reads them back from the table (positional deletes and deletion vectors, our only modes).
         config["update_method"] = {"replication_slot": source["slot"], "publication": source["publication"],
-                                   "initial_wait_time": INITIAL_WAIT}
+                                   "initial_wait_time": INITIAL_WAIT, "preserve_toast_values": True}
     return config
 
 
@@ -68,7 +83,8 @@ def selected_streams(job, streams):
     if missing:
         raise RuntimeError(f"The source has no table {', '.join(missing)}, or the account cannot read it, or it is "
                            "not in the publication.")
-    first_copy = job["options"].get("firstRun", "copy") == "copy"
+    # "Copy everything again" copies the existing rows whatever the first run did.
+    first_copy = job["options"].get("firstRun", "copy") == "copy" or bool(job.get("fullRefresh"))
     selected = {}
     for name, spec in sorted(job["tables"].items()):
         schema, table = name.split(".", 1)

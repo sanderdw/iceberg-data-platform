@@ -46,9 +46,9 @@ On Kubernetes, install its chart next to the platform's; see [Install on Kuberne
 The database owner prepares PostgreSQL once:
 
 1. Set `wal_level = logical` (a server restart; on Amazon RDS and Aurora the parameter `rds.logical_replication = 1`).
-2. Give the replication's user the `REPLICATION` attribute (`rds_replication` on RDS) and `SELECT` on the tables.
+2. Give the replication's user the `REPLICATION` attribute (`rds_replication` on RDS), `USAGE` on the tables' schemas and `SELECT` on the tables.
 3. Create a publication for the tables and a logical replication slot with the `pgoutput` plugin.
-4. Give a table without a primary key, and every table you partition, `REPLICA IDENTITY FULL`. Otherwise a delete carries only the key, and a deleted row stays visible in DuckDB.
+4. Give a table without a primary key, and every table you partition, `REPLICA IDENTITY FULL`. Otherwise a delete carries only the key, and a deleted row stays visible in DuckDB. Other tables don't need it: when an update leaves a large text or JSON value unchanged, the run reads that value back from the Iceberg table.
 
 The replication's page shows this as SQL for the tables you choose (**Set up the source**), and **Check source** tells what is missing.
 
@@ -56,7 +56,7 @@ A replication slot keeps the source's change log until a run has read it. If run
 
 ## Use it
 
-1. **New replication**: the source's host, port, database, user and TLS mode, the slot and publication, and the database and namespace to write into, such as `raw_crm`.
+1. **New replication**: the source's host, port, database, user and TLS mode, the slot and publication, and the database and namespace to write into, such as `raw_crm`. TLS is `verify-full` by default, which trusts the public certificate authorities. A database whose certificate they didn't sign, such as Amazon RDS or your own CA, needs its CA certificate in PEM (**CA certificate**).
 2. Set the **password**.
 3. **Check source**: OLake's checks (logical WAL, replication privilege, slot, publication and the advised `wal_sender_timeout`) and the tables it can replicate, with their primary keys.
 4. **Choose tables**. Per table:

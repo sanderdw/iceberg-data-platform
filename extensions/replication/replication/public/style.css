@@ -307,3 +307,4 @@ form.secret-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; border: 
 form.secret-row input { flex: 1 1 200px; }
 .beta { font: .65rem var(--mono); padding: 1px 8px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent);
   text-transform: uppercase; letter-spacing: .06em; margin-left: 4px; vertical-align: middle; }
+.field textarea#f-ca { font: .75rem/1.5 var(--mono); min-height: 88px; resize: vertical; }

@@ -29,7 +29,9 @@ ReplicationId = Annotated[str, PathParam(pattern=r"^rp-[a-f0-9]{24}$")]
 RunId = Annotated[str, PathParam(pattern=r"^run-[a-f0-9]{24}$")]
 TeamId = Annotated[str, PathParam(pattern=r"^team-[a-f0-9]{32}$")]
 SOURCE_HELP = ("The source connection for the source type, as list_templates shows it: host, port, database, "
-               "username, password, tls, and slot and publication for change data capture. Secret values never go "
+               "username, password, tls (verify-full, verify-ca, require, disable), optional caCertificate (PEM, "
+               "for a source whose certificate no public CA signed), and slot and publication for change data "
+               "capture. Secret values never go "
                "here: refer to them as \"$secret:<name>\" and set them with set_replication_secrets.")
 TABLES_HELP = ("Source tables keyed by schema.table: mode cdc (change data capture), incremental (needs cursor) or "
                "full_refresh; optional table (the Iceberg table name), partition (such as \"/{created_at,month}\") and "

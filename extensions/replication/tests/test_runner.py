@@ -74,13 +74,25 @@ def job(**fields):
 
 def test_olake_configuration():
     source = olake.source_config(job(), {"password": PASSWORD})
-    assert source["password"] == PASSWORD and source["ssl"] == {"mode": "verify-full"}
-    assert source["update_method"] == {"replication_slot": "s", "publication": "p", "initial_wait_time": 120}
+    assert source["password"] == PASSWORD and source["ssl"]["mode"] == "verify-full"
+    assert source["update_method"] == {"replication_slot": "s", "publication": "p", "initial_wait_time": 120,
+                                       "preserve_toast_values": True}
     no_cdc = job(source={**job()["source"], "slot": None, "publication": None})
     assert "update_method" not in olake.source_config(no_cdc, {"password": PASSWORD})
     writer = olake.destination_config(job(), TOKEN, "http://127.0.0.1:18181/api/catalog")["writer"]
     assert writer["iceberg_s3_path"] == "db-1" and writer["iceberg_db"] == "raw_crm" and writer["token"] == TOKEN
     assert writer["rest_access_delegation"] == "vended-credentials" and writer["s3_endpoint"] == "http://rustfs:9000"
+
+
+def test_tls_and_large_values():
+    pem = "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----"
+    # verify-full is the default; OLake needs a CA for it: the public authorities, or the source's own.
+    assert olake.ssl_config({}) == {"mode": "verify-full", "cert_source": "path",
+                                    "server_ca_path": "/etc/ssl/certs/ca-certificates.crt"}
+    assert olake.ssl_config({"tls": "verify-ca", "caCertificate": pem}) == {"mode": "verify-ca", "server_ca": pem}
+    assert olake.ssl_config({"tls": "require", "caCertificate": pem}) == {"mode": "require"}
+    # Unchanged large values are read back from the table instead of landing as __olake_unavailable_value__.
+    assert olake.source_config(job(), {"password": PASSWORD})["update_method"]["preserve_toast_values"] is True
 
 
 def test_selected_streams():
@@ -95,6 +107,9 @@ def test_selected_streams():
     changes_only = olake.selected_streams(job(options={"deleteMode": "dv", "firstRun": "changes"}), streams)
     assert {s["sync_mode"] for s in changes_only["selected_streams"]["public"]} == {"strict_cdc"}
     assert {s["update_type"] for s in changes_only["selected_streams"]["public"]} == {"dv"}
+    # Copy everything again copies the existing rows, also when the first run only followed changes.
+    again = olake.selected_streams(job(options={"deleteMode": "pos", "firstRun": "changes"}, fullRefresh=True), streams)
+    assert {s["sync_mode"] for s in again["selected_streams"]["public"]} == {"cdc"}
     incremental = job(tables={"public.orders": {"mode": "incremental", "cursor": "updated_at", "table": "orders"}})
     assert olake.selected_streams(incremental, streams)["selected_streams"]["public"][0]["cursor_field"] == "updated_at"
     with pytest.raises(RuntimeError, match=r"no table public\.missing"):

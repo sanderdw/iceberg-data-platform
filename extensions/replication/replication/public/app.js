@@ -297,7 +297,9 @@ async function renderEditor(token) {
     port: input('f-port', src.port, {type: 'number', min: 1, max: 65535}),
     database: input('f-database', src.database, {maxlength: 63}),
     username: input('f-user', src.username, {maxlength: 128}),
-    tls: h('select', {id: 'f-tls'}, TLS.map(v => h('option', {value: v, text: v, selected: (src.tls || 'verify-full') === v}))),
+    tls: h('select', {id: 'f-tls', onchange: () => { caField.hidden = !f.tls.value.startsWith('verify'); }},
+      TLS.map(v => h('option', {value: v, text: v, selected: (src.tls || 'verify-full') === v}))),
+    ca: h('textarea', {id: 'f-ca', rows: 4, spellcheck: 'false', placeholder: '-----BEGIN CERTIFICATE-----'}),
     slot: input('f-slot', src.slot, {maxlength: 63, placeholder: 'iceberg_app'}),
     publication: input('f-pub', src.publication, {maxlength: 63, placeholder: 'iceberg_app'}),
     firstRun: h('select', {id: 'f-first'},
@@ -312,11 +314,16 @@ async function renderEditor(token) {
       h('small', {text: 'PyIceberg and Polars refuse tables with equality deletes, so notebooks and semantic models would fail.'}))));
   const result = h('div', {class: 'result', 'aria-live': 'polite'});
   const field = (label, control, help) => h('label', {class: 'field'}, h('span', {text: label}), control, help && h('span', {class: 'help', text: help}));
+  f.ca.value = src.caCertificate || '';
+  const caField = field('CA certificate (optional)', f.ca,
+    'For verify-full and verify-ca. Empty: the public certificate authorities. Managed databases such as Amazon RDS need their provider\'s CA certificate in PEM.');
+  caField.hidden = !(src.tls || 'verify-full').startsWith('verify');
 
   function body() {
     const deleteMode = document.querySelector('input[name="delete-mode"]:checked')?.value || 'pos';
     const sourceValue = {host: f.host.value.trim(), port: Number(f.port.value) || 5432, database: f.database.value.trim(),
       username: f.username.value.trim(), password: '$secret:password', tls: f.tls.value};
+    if (f.tls.value.startsWith('verify') && f.ca.value.trim()) sourceValue.caCertificate = f.ca.value.trim();
     if (f.slot.value.trim()) sourceValue.slot = f.slot.value.trim();
     if (f.publication.value.trim()) sourceValue.publication = f.publication.value.trim();
     return {source: sourceValue, options: {deleteMode, firstRun: f.firstRun.value}, name: f.name.value.trim(),
@@ -353,6 +360,7 @@ async function renderEditor(token) {
             field('User', f.username), field('Password', h('input', {type: 'password', disabled: true, placeholder: 'Set after saving'}),
               'Write-only. Stored encrypted; never shown again.'),
             field('TLS', f.tls)),
+          caField,
           h('h3', {text: 'Change data capture'}),
           h('div', {class: 'form-grid'}, field('Replication slot', f.slot), field('Publication', f.publication)),
           h('p', {class: 'small-print', text: 'Leave both empty for incremental and full copies only. The slot keeps change log on the source until a run has stored it; delete the slot when you delete the replication.'})),
@@ -521,7 +529,7 @@ function checkCard(p) {
 function settingsCard(p) {
   return h('section', {class: 'card'}, h('h2', {text: 'Replication'}), h('dl', {class: 'facts'},
     h('dt', {text: 'Source'}), h('dd', {text: source(p)}),
-    h('dt', {text: 'User'}), h('dd', {text: `${p.source.username} · TLS ${p.source.tls}`}),
+    h('dt', {text: 'User'}), h('dd', {text: `${p.source.username} · TLS ${p.source.tls}${p.source.tls.startsWith('verify') ? (p.source.caCertificate ? ', own CA' : ', public CAs') : ''}`}),
     h('dt', {text: 'Into'}), h('dd', {}, target(p)),
     h('dt', {text: 'Slot'}), h('dd', {text: p.source.slot || '— (no change data capture)'}),
     h('dt', {text: 'Publication'}), h('dd', {text: p.source.publication || '—'}),

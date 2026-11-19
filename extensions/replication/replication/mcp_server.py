@@ -71,7 +71,9 @@ ReplicationId = Annotated[str, Field(pattern=r"^rp-[a-f0-9]{24}$",
 RunId = Annotated[str, Field(pattern=r"^run-[a-f0-9]{24}$", description="Run id.")]
 TeamId = Annotated[str, Field(pattern=r"^team-[a-f0-9]{32}$", description="Team id from whoami.")]
 Source = Annotated[dict[str, Any], Field(description="The source definition, as list_templates shows it. Refer to "
-                                                     "secrets as \"$secret:<name>\".")]
+                                                     "secrets as \"$secret:<name>\". tls verify-full (default) "
+                                                     "trusts public CAs; give caCertificate (PEM) for others, "
+                                                     "such as Amazon RDS.")]
 Tables = Annotated[dict[str, Any], Field(description="Source tables keyed by schema.table: mode (cdc, incremental "
                                                      "or full_refresh), cursor (incremental), table (Iceberg name), "
                                                      "partition (such as \"/{created_at,month}\"), appendOnly.")]
