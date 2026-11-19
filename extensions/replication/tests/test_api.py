@@ -199,6 +199,15 @@ def test_the_source_address_is_pinned_and_checked_before_each_run(stack, monkeyp
     assert refused["code"] == "source_refused"
 
 
+def test_demo_mode_lets_the_run_resolve_the_source(tmp_path, monkeypatch):
+    # host.docker.internal resolves only inside the run, where the launcher maps it to the Docker host.
+    monkeypatch.setattr("replication.validate.resolve_addresses", lambda host: (_ for _ in ()).throw(OSError()))
+    assert validate.pin("host.docker.internal", allow_private=True) is None
+    with pytest.raises(ReplicationError) as refused:
+        validate.pin("host.docker.internal")
+    assert refused.value.code == "source_unresolved"
+
+
 def test_a_partial_first_copy_keeps_its_state(stack):
     replication = ready(stack)
     path = f"/replications/{replication['id']}/runs"

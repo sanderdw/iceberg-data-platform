@@ -24,8 +24,8 @@ from scripts.release import (
     installer_source,
     maintenance_bundle,
     release_channel,
-    replication_bundle,
     release_files,
+    replication_bundle,
 )
 
 

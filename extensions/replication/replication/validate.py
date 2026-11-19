@@ -156,8 +156,12 @@ def check_host(host, field, allowed=(), allow_private=False):
 def pin(host, allowed=(), allow_private=False):
     """The one address a run may use for the source host: resolved and checked now, then pinned in the run.
 
-    A name is resolved here, in the gateway, so the run cannot be pointed elsewhere by DNS afterwards.
+    A name is resolved here, in the gateway, so the run cannot be pointed elsewhere by DNS afterwards. With
+    REP_ALLOW_PRIVATE_SOURCES (demos) every address is allowed anyway, and names such as host.docker.internal
+    exist only in the run, so the run resolves the name itself.
     """
+    if allow_private:
+        return None
     try:
         ipaddress.ip_address(host.strip("[]"))
         return None  # an address needs no pinning
