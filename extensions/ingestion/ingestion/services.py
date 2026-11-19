@@ -27,6 +27,16 @@ DLT_TABLES = "dlt adds the columns _dlt_load_id and _dlt_id to each table, and c
              "for nested lists. Its own bookkeeping stays with the run, never in your namespace."
 
 
+
+def apps(discovery):
+    """The Apps menu's entries (Bridge capability `app-directory`); with an older core, just the user portal."""
+    pages = discovery.get("userPortalPages") or (
+        [{"id": "portal", "title": "User portal", "url": discovery["userPortalUrl"]}]
+        if discovery.get("userPortalUrl") else [])
+    return {"workspace": [{k: str(p.get(k, "")) for k in ("id", "title", "url")} for p in pages],
+            "extensions": [{k: str(e.get(k, "")) for k in ("id", "title", "purpose", "origin")}
+                           for e in discovery.get("extensions") or []]}
+
 class Services:
     def __init__(self, settings, store, bridge, runs, secrets):
         self.settings = settings
@@ -134,7 +144,7 @@ class Services:
                 "environments": list(ENVIRONMENTS), "sourceTypes": list(validate.SOURCE_TYPES),
                 "allowPrivateSources": self.settings.allow_private,
                 "enabledEnvironments": [{"team": team, "environments": envs} for team, envs in enabled.items()],
-                "userPortalUrl": discovery.get("userPortalUrl", "")}
+                "userPortalUrl": discovery.get("userPortalUrl", ""), "apps": apps(discovery)}
 
     async def environments(self, caller, team):
         me = await self.me(caller)

@@ -1,5 +1,14 @@
 # Bridge contract changelog
 
+## 0.1.4 - unreleased
+
+Released with core 1.0.0. Additive: extensions built for 0.1.0 to 0.1.3 keep working.
+
+- Capability `app-directory`: discovery gives each extension a `title` and `purpose`, and lists the
+  user portal's pages in `userPortalPages` (`id`, `title`, `url`). With them every extension shows
+  the same Apps menu as the user portal; the menu's script and stylesheet are in
+  `v1/apps-menu/`, to copy unchanged.
+
 ## 0.1.3 - 2026-11-09
 
 Released with core 0.9.11. Additive: extensions built for 0.1.0 to 0.1.2 keep working.

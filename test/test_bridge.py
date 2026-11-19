@@ -84,14 +84,21 @@ def bridge():
 
 def test_discovery_is_public_and_complete(bridge):
     body = bridge.call("GET", "").json()
-    assert body["contractVersion"] == "0.1.3"
+    assert body["contractVersion"] == "0.1.4"
     assert body["capabilities"] == ["user-context", "automation-principals", "automation-tokens", "shared-data",
-                                    "listings", "team-extensions"]
+                                    "listings", "team-extensions", "app-directory"]
+    # app-directory: the user portal's pages and each extension's name, for the shared Apps menu.
+    assert [p["id"] for p in body["userPortalPages"]] == ["catalog", "notebooks", "databases", "shares", "team"]
+    assert all(p["url"].startswith("http") and "/#" in p["url"] for p in body["userPortalPages"])
+    assert all(set(e) >= {"id", "origin", "title", "purpose"} for e in body["extensions"])
     assert body["oidc"] == {"issuer": ISSUER, "internalIssuer": ISSUER, "bridgeAudience": "iceberg-bridge"}
     assert body["catalog"]["internalUri"] == "http://polaris-control-plane:8181/api/catalog"
     assert body["network"]["name"] == "iceberg-platform_default"
-    assert body["extensions"] == [{"id": "dbt", "origin": "http://localhost:3004", "listing": False},
-                                  {"id": "other", "origin": "http://localhost:3009", "listing": True}]
+    assert body["extensions"] == [
+        {"id": "dbt", "origin": "http://localhost:3004", "listing": False, "title": "Pipelines",
+         "purpose": "Build, test and schedule dbt models"},
+        # An extension the platform doesn't name shows its id.
+        {"id": "other", "origin": "http://localhost:3009", "listing": True, "title": "other", "purpose": ""}]
     assert bridge.call("GET", "/health").json() == {"status": "ok"}
 
 
@@ -410,3 +417,19 @@ def test_committed_contract_matches_the_implementation(bridge):
         "Regenerate contracts/bridge/v1/openapi.yaml with `python -m scripts.bridge_contract` "
         "and record the change in contracts/bridge/CHANGELOG.md"
     )
+
+
+
+def test_every_extension_uses_the_reference_apps_menu():
+    """Extensions copy the Apps menu (capability `app-directory`) unchanged from contracts/bridge/v1/apps-menu."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    reference = root / "contracts/bridge/v1/apps-menu"
+    copies = [p for p in (root / "extensions").glob("*/*/public/apps-menu.*") if ".venv" not in p.parts]
+    copies += list((root / "extensions").glob("*/web/src/apps-menu.css"))
+    assert {p.parts[-4] for p in copies} >= {
+        "dbt", "ingestion", "replication", "maintenance", "evaluations"}
+    assert any("conversationalbi" in p.parts for p in copies)
+    for copy in copies:
+        assert copy.read_bytes() == (reference / copy.name).read_bytes(), f"{copy} differs from {reference / copy.name}"

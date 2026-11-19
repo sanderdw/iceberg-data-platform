@@ -8,6 +8,8 @@
 <title>Pipelines · Iceberg Data Platform</title>
 <link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/apps-menu.css">
+<script src="/apps-menu.js" defer></script>
 <script src="/graph.js" defer></script>
 <script src="/files.js" defer></script>
 <script src="/manage.js" defer></script>
@@ -18,6 +20,7 @@
   <a class="brand" href="#/"><img src="/favicon.svg" alt="">iceberg<span>/ pipelines</span></a>
   <nav id="crumbs" aria-label="Location"></nav>
   <div class="header-actions">
+    <div id="apps" hidden></div>
     <button id="theme" class="ghost" type="button">Light / ○</button>
     <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
   </div>

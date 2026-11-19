@@ -55,7 +55,28 @@ def mcp_client_id(extension):
     return f"ext-{extension}-mcp"
 
 
+# How the platform's own extensions are named in the Apps menus of the portals and of every extension (Bridge
+# capability `app-directory`). Another extension shows its id.
+DIRECTORY = {
+    "conversationalbi": ("Conversational BI", "Ask questions about your semantic models"),
+    "dbt": ("Pipelines", "Build, test and schedule dbt models"),
+    "ingestion": ("Ingestion", "Load APIs, files and one-time database copies"),
+    "replication": ("Replication", "Keep operational databases in step"),
+    "maintenance": ("Maintenance", "Keep your tables compact and tidy"),
+    "evaluations": ("Evaluations", "Check Conversational BI's answers"),
+    "openmetadata": ("OpenMetadata", "Your data products in OpenMetadata"),
+}
+# The user portal's pages, which every Apps menu links to.
+PORTAL_PAGES = [("catalog", "Catalog"), ("notebooks", "Notebooks"), ("databases", "Databases"),
+                ("shares", "Data shares"), ("team", "Team overview")]
+
+
 def public(env):
-    """What the portals may show: ids, origins and whether one publishes listings, never secrets."""
+    """What the portals may show: ids, origins, names and whether one publishes listings, never secrets."""
     listing = set(listing_extensions(env))
-    return [{"id": id, "origin": url, "listing": id in listing} for id, url in extensions(env).items()]
+    return [{"id": id, "origin": url, "listing": id in listing, "title": DIRECTORY.get(id, (id, ""))[0],
+             "purpose": DIRECTORY.get(id, (id, ""))[1]} for id, url in extensions(env).items()]
+
+
+def portal_pages(user_origin):
+    return [{"id": id, "title": title, "url": f"{user_origin.rstrip('/')}/#{id}"} for id, title in PORTAL_PAGES]

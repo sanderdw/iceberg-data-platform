@@ -141,14 +141,12 @@ const serverDown = 'The workspace server is not responding. Try again in a momen
 async function api(path, method = 'GET', body) { let response, result; try { response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); } catch { throw new Error(serverDown); } try { result = await response.json(); } catch { throw new Error(response.status >= 500 ? serverDown : `The request failed with HTTP ${response.status}.`); } if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
 // Extensions open in their own origin; the portal only links to them, from the Apps menu.
-const extensionLabels = {conversationalbi: 'Conversational BI', dbt: 'Pipelines', ingestion: 'Ingestion', replication: 'Replication', maintenance: 'Maintenance', openmetadata: 'OpenMetadata', evaluations: 'Evaluations'};
-const extensionPurposes = {conversationalbi: 'Ask questions about your semantic models', dbt: 'Build, test and schedule dbt models', ingestion: 'Load APIs, files and one-time database copies', replication: 'Keep operational databases in step', maintenance: 'Keep your tables compact and tidy', openmetadata: 'Your data products in OpenMetadata', evaluations: "Check Conversational BI's answers"};
 function renderExtensions() {
   const links = (state.extensions || []).map(extension => {
-    const label = extensionLabels[extension.id] || extension.id;
+    const label = extension.title || extension.id;
     const link = element('a', undefined, 'extension-link');
     link.href = extension.origin + '/'; link.target = '_blank'; link.rel = 'noopener'; link.dataset.extension = extension.id;
-    link.append(element('strong', label), element('span', extensionPurposes[extension.id] || 'Opens in a new tab'));
+    link.append(element('strong', label), element('span', extension.purpose || 'Opens in a new tab'));
     link.addEventListener('click', () => closeMenus());
     return link;
   });

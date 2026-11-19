@@ -49,6 +49,16 @@ def public_set(item, role=None):
     return {**item, "role": role}
 
 
+
+def apps(discovery):
+    """The Apps menu's entries (Bridge capability `app-directory`); with an older core, just the user portal."""
+    pages = discovery.get("userPortalPages") or (
+        [{"id": "portal", "title": "User portal", "url": discovery["userPortalUrl"]}]
+        if discovery.get("userPortalUrl") else [])
+    return {"workspace": [{k: str(p.get(k, "")) for k in ("id", "title", "url")} for p in pages],
+            "extensions": [{k: str(e.get(k, "")) for k in ("id", "title", "purpose", "origin")}
+                           for e in discovery.get("extensions") or []]}
+
 class Services:
     def __init__(self, settings, store, bridge, agent, runner):
         self.settings = settings
@@ -110,7 +120,7 @@ class Services:
                 "judge": bool(self.settings.judge_model),
                 "enabledEnvironments": [{"team": m["team"], "environments": await self.enabled(caller, m["team"])}
                                         for m in me["memberships"]],
-                "userPortalUrl": discovery.get("userPortalUrl", "")}
+                "userPortalUrl": discovery.get("userPortalUrl", ""), "apps": apps(discovery)}
 
     async def environments(self, caller, team):
         me = await self.me(caller)

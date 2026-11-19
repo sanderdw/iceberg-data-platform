@@ -142,7 +142,7 @@ async function render(keep = false) {
       $('#identity').hidden = false; $('#username').textContent = session.user || '';
       me = await api('/me');
       $('#identity').hidden = false; $('#username').textContent = me.user.name;
-      if (me.userPortalUrl) { $('#portal-link').href = me.userPortalUrl; $('#portal-link').hidden = false; }
+      IcebergApps.mount($('#apps'), {...me.apps, current: me.extension});
     }
     show('page');
     if (flash) { notice(...flash); flash = null; } else notice('');

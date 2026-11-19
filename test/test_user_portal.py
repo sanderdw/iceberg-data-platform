@@ -926,7 +926,8 @@ def test_a_share_is_listed_only_with_a_data_catalog_extension(users, monkeypatch
     monkeypatch.setenv("PLATFORM_EXTENSIONS", "openmetadata=http://localhost:3011")
     monkeypatch.setenv("PLATFORM_LISTING_EXTENSIONS", "openmetadata")
     assert c.get("/api/workspace").json()["extensions"] == [
-        {"id": "openmetadata", "origin": "http://localhost:3011", "listing": True}]
+        {"id": "openmetadata", "origin": "http://localhost:3011", "listing": True, "title": "OpenMetadata",
+         "purpose": "Your data products in OpenMetadata"}]
     created = c.post("/api/shares", json=body, headers=JSON)
     assert created.status_code == 201, created.text
     share = created.json()["share"]

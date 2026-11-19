@@ -1,5 +1,6 @@
 import "@copilotkit/react-core/v2/styles.css";
 import "./styles.css";
+import "./apps-menu.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";

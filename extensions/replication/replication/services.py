@@ -28,6 +28,16 @@ COLUMNS = ("OLake adds the columns _olake_id, _olake_timestamp, _op_type, _cdc_l
            "in the source stays in the table with _op_type = 'd': filter on _op_type <> 'd' for the current rows.")
 
 
+
+def apps(discovery):
+    """The Apps menu's entries (Bridge capability `app-directory`); with an older core, just the user portal."""
+    pages = discovery.get("userPortalPages") or (
+        [{"id": "portal", "title": "User portal", "url": discovery["userPortalUrl"]}]
+        if discovery.get("userPortalUrl") else [])
+    return {"workspace": [{k: str(p.get(k, "")) for k in ("id", "title", "url")} for p in pages],
+            "extensions": [{k: str(e.get(k, "")) for k in ("id", "title", "purpose", "origin")}
+                           for e in discovery.get("extensions") or []]}
+
 class Services:
     def __init__(self, settings, store, bridge, runs, secrets):
         self.settings = settings
@@ -158,7 +168,7 @@ class Services:
                 "allowPrivateSources": self.settings.allow_private,
                 "allowedSourceNetworks": [str(n) for n in self.settings.allowed_networks],
                 "enabledEnvironments": [{"team": team, "environments": envs} for team, envs in enabled.items()],
-                "userPortalUrl": discovery.get("userPortalUrl", "")}
+                "userPortalUrl": discovery.get("userPortalUrl", ""), "apps": apps(discovery)}
 
     async def environments(self, caller, team):
         me = await self.me(caller)

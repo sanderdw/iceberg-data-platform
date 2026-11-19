@@ -37,6 +37,11 @@ An extension reaches the core through four doors:
   can ask which other extensions that team enabled, per environment. One extension serves another
   for a team only where a team administrator enabled both: Conversational BI answers the
   Evaluations extension this way, with its own automation principal.
+- **App directory** (capability `app-directory`, since 0.1.4). Discovery names every registered
+  extension (`title`, `purpose`) and lists the user portal's pages (`userPortalPages`), so every
+  extension shows the same Apps menu: the portal's pages and the other extensions. The menu is a
+  small script and stylesheet in [`v1/apps-menu/`](v1/apps-menu); copy both into the extension's page
+  unchanged and call `IcebergApps.mount(element, {workspace, extensions, current})`.
 - **Discovery.** `GET /bridge/v1` returns the endpoints, environments, network aliases (and, since
   0.1.2, whether they are Docker aliases or Kubernetes Services in `network.namespace`) and
   registered extensions, so the handshake file holds only the extension's identity.
@@ -51,6 +56,7 @@ An extension reaches the core through four doors:
 | `shared-data` | 0.1 | Received team shares on the read role, `sharedDatabases` in the scope, `sharedObjects` in `/me` |
 | `listings` | 0.1.1 | `GET /listings` and `GET /listings/{shareId}` for listing extensions: listed data shares with the metadata of their objects |
 | `team-extensions` | 0.1.3 | `GET /teams/{teamId}/extensions` for an extension the team enabled: the extensions it enabled, per environment |
+| `app-directory` | 0.1.4 | Discovery: `title` and `purpose` per extension, and `userPortalPages`, for the shared Apps menu ([`v1/apps-menu/`](v1/apps-menu)) |
 
 ## Registering an extension
 

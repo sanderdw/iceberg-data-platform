@@ -39,9 +39,9 @@ from .polaris import AUTOMATION_ROLES, PolarisProvider, enc
 from .storage import RustFSStorage
 from .validation import validation_message
 
-CONTRACT_VERSION = "0.1.3"
+CONTRACT_VERSION = "0.1.4"
 CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "shared-data", "listings",
-                "team-extensions"]
+                "team-extensions", "app-directory"]
 BRIDGE_AUDIENCE = "iceberg-bridge"
 CONTRACT = Path(__file__).resolve().parent.parent / "contracts" / "bridge" / "v1" / "openapi.yaml"
 ADMIN_ROLES = ("admin", "bucket-admin")
@@ -110,6 +110,15 @@ class Extension(BaseModel):
     origin: str
     # Capability `listings`: this extension publishes listed data shares to a data catalog.
     listing: bool = False
+    # Capability `app-directory`: how the Apps menus name it, and what it is for.
+    title: str = ""
+    purpose: str = ""
+
+
+class PortalPage(BaseModel):
+    id: str
+    title: str
+    url: str
 
 
 class Discovery(BaseModel):
@@ -121,6 +130,8 @@ class Discovery(BaseModel):
     environments: list[str]
     network: Network
     userPortalUrl: str
+    # Capability `app-directory`: the user portal's pages, for the Apps menu every extension shows.
+    userPortalPages: list[PortalPage] = []
     extensions: list[Extension]
 
 
@@ -630,6 +641,7 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                 "extensionLabel": "io.iceberg-platform.extension",
             },
             "userPortalUrl": env.get("USER_ORIGIN", "http://localhost:3002"),
+            "userPortalPages": registry.portal_pages(env.get("USER_ORIGIN", "http://localhost:3002")),
             "extensions": registry.public(env),
         }
 

@@ -30,6 +30,16 @@ ADMINS = ("admin", "bucket-admin")
 SCHEMA_FETCHES = 8
 
 
+
+def apps(discovery):
+    """The Apps menu's entries (Bridge capability `app-directory`); with an older core, just the user portal."""
+    pages = discovery.get("userPortalPages") or (
+        [{"id": "portal", "title": "User portal", "url": discovery["userPortalUrl"]}]
+        if discovery.get("userPortalUrl") else [])
+    return {"workspace": [{k: str(p.get(k, "")) for k in ("id", "title", "url")} for p in pages],
+            "extensions": [{k: str(e.get(k, "")) for k in ("id", "title", "purpose", "origin")}
+                           for e in discovery.get("extensions") or []]}
+
 class Services:
     def __init__(self, settings, bridge, catalog, executor, results):
         self.settings = settings
@@ -82,6 +92,7 @@ class Services:
         discovery = await self.bridge.discovery()
         return {**me, "extension": self.settings.extension_id, "origin": self.settings.origin,
                 "environments": list(ENVIRONMENTS), "userPortalUrl": discovery.get("userPortalUrl", ""),
+                "apps": apps(discovery),
                 "sharedData": "shared-data" in discovery.get("capabilities", [])}
 
     async def environments(self, caller, team):

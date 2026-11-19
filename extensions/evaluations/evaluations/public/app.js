@@ -520,6 +520,7 @@ async function start() {
   });
   $('new-set').addEventListener('click', newSetForm);
   state.me = await api('GET', '/me');
+  IcebergApps.mount($('apps'), {...state.me.apps, current: state.me.extension});
   state.roles = Object.fromEntries(state.me.memberships.map((m) => [m.team, m.role]));
   window.addEventListener('hashchange', route);
   await route();

@@ -102,6 +102,7 @@ async function render() {
       $('#identity').hidden = false; $('#username').textContent = session.user || '';
       me = await api('/me');
       $('#identity').hidden = false; $('#username').textContent = me.user.name;
+      IcebergApps.mount($('#apps'), {...me.apps, current: me.extension});
     }
     if (!route.project) { project = null; crumbs(); return renderProjects(); }
     if (!project || project.id !== route.project) { project = await api(`/projects/${route.project}`); pipeline = null; }

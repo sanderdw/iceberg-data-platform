@@ -1,6 +1,7 @@
 import { CopilotChat, CopilotKitProvider, useAgent, useConfigureSuggestions, useCopilotKit } from "@copilotkit/react-core/v2";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { api, CSRF, describeModel, sameRef, type ModelDescription, type ModelEntry, type ModelRef, type NotEnabled } from "./api";
+import { AppsMenu, type Apps } from "./components/AppsMenu";
 import { Icon } from "./components/Icon";
 import { ModelGuide } from "./components/ModelGuide";
 import { ModelPicker } from "./components/ModelPicker";
@@ -148,7 +149,7 @@ function Workspace({ user }: { user: string }) {
   const { agent } = useAgent({ agentId: "analyst" });
   const { copilotkit } = useCopilotKit();
   const [models, setModels] = useState<Models>();
-  const [portal, setPortal] = useState<string>();
+  const [apps, setApps] = useState<{ apps?: Apps; extension: string }>();
   const [problem, setProblem] = useState<string>();
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const selected = (agent.state as { model?: ModelRef } | undefined)?.model ?? null;
@@ -268,7 +269,7 @@ function Workspace({ user }: { user: string }) {
     };
   }, []);
   useEffect(() => {
-    api<{ userPortalUrl?: string }>("/api/v1/me").then((me) => setPortal(me.userPortalUrl), () => undefined);
+    api<{ apps?: Apps; extension: string }>("/api/v1/me").then((me) => setApps(me), () => undefined);
   }, []);
 
   const signOut = async () => {
@@ -279,13 +280,13 @@ function Workspace({ user }: { user: string }) {
   const nav = (
     <nav aria-label="Conversational BI">
       <button type="button" className="nav-item" aria-current="page">Ask</button>
-      {portal && <a className="nav-item extension-link" href={portal + "/#catalog"} target="_blank" rel="noopener">Workspaces</a>}
     </nav>
   );
 
   return (
     <>
       <Header nav={nav}>
+        <AppsMenu apps={apps?.apps} current={apps?.extension ?? ""} />
         <div id="identity">
           <span id="username">{user}</span>
           <button type="button" className="quiet" onClick={signOut}>Sign out</button>

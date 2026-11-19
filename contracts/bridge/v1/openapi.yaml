@@ -3,7 +3,7 @@
   "info": {
     "title": "Iceberg Platform Bridge",
     "description": "The stable interface for extensions. Authenticate with a Keycloak access token for the `iceberg-bridge` audience: a user token issued to the extension's clients, or the service-account token of the extension's confidential client. See contracts/bridge for the compatibility policy.",
-    "version": "0.1.3"
+    "version": "0.1.4"
   },
   "paths": {
     "/bridge/v1": {
@@ -1440,6 +1440,14 @@
             "type": "string",
             "title": "Userportalurl"
           },
+          "userPortalPages": {
+            "items": {
+              "$ref": "#/components/schemas/PortalPage"
+            },
+            "type": "array",
+            "title": "Userportalpages",
+            "default": []
+          },
           "extensions": {
             "items": {
               "$ref": "#/components/schemas/Extension"
@@ -1512,6 +1520,16 @@
             "type": "boolean",
             "title": "Listing",
             "default": false
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose",
+            "default": ""
           }
         },
         "type": "object",
@@ -2277,6 +2295,29 @@
           "transform"
         ],
         "title": "PartitionField"
+      },
+      "PortalPage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "url"
+        ],
+        "title": "PortalPage"
       },
       "Producer": {
         "properties": {
