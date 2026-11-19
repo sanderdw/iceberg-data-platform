@@ -1,0 +1,171 @@
+/* The portals' design language (Nothing design): OLED black, grey text levels, no shadows or
+   gradients, Space Grotesk for text, Space Mono for labels and code, Doto for the page title.
+   The fonts are copies of public/fonts. */
+@font-face { font-family: "Space Grotesk"; src: url("../assets/fonts/space-grotesk.ttf") format("truetype"); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: "Space Mono"; src: url("../assets/fonts/space-mono.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: Doto; src: url("../assets/fonts/doto.ttf") format("truetype"); font-weight: 400 700; font-display: swap; }
+
+:root {
+  --md-text-font: "Space Grotesk";
+  --md-code-font: "Space Mono";
+  --md-shadow-z1: none;
+  --md-shadow-z2: none;
+  --md-shadow-z3: none;
+  --accent-red: #d71921;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-hue: 0;
+  --md-default-bg-color: #000;
+  --md-default-bg-color--light: #000;
+  --md-default-bg-color--lighter: #111;
+  --md-default-bg-color--lightest: #1a1a1a;
+  --md-default-fg-color: #e8e8e8;
+  --md-default-fg-color--light: #999;
+  --md-default-fg-color--lighter: #666;
+  --md-default-fg-color--lightest: #222;
+  --md-primary-fg-color: #000;
+  --md-primary-fg-color--light: #111;
+  --md-primary-fg-color--dark: #000;
+  --md-primary-bg-color: #fff;
+  --md-primary-bg-color--light: #999;
+  --md-accent-fg-color: #fff;
+  --md-accent-fg-color--transparent: #ffffff14;
+  --md-accent-bg-color: #000;
+  --md-typeset-color: #e8e8e8;
+  --md-typeset-a-color: #fff;
+  --md-typeset-table-color: #222;
+  --md-typeset-table-color--light: #111;
+  --md-code-fg-color: #e8e8e8;
+  --md-code-bg-color: #111;
+  --md-code-bg-color--light: #111;
+  --md-code-bg-color--lighter: #1a1a1a;
+  --md-code-hl-color: #fff;
+  --md-code-hl-color--light: #ffffff14;
+  --md-code-hl-keyword-color: #fff;
+  --md-code-hl-string-color: #999;
+  --md-code-hl-comment-color: #666;
+  --md-code-hl-number-color: #e8e8e8;
+  --md-code-hl-function-color: #e8e8e8;
+  --md-code-hl-constant-color: #e8e8e8;
+  --md-code-hl-name-color: #e8e8e8;
+  --md-code-hl-operator-color: #999;
+  --md-code-hl-punctuation-color: #999;
+  --md-code-hl-variable-color: #e8e8e8;
+  --md-code-hl-special-color: #fff;
+  --md-code-hl-generic-color: #999;
+  --md-admonition-fg-color: #e8e8e8;
+  --md-admonition-bg-color: #111;
+  --md-footer-bg-color: #000;
+  --md-footer-bg-color--dark: #000;
+  --md-footer-fg-color: #999;
+  --md-footer-fg-color--light: #666;
+  --md-footer-fg-color--lighter: #666;
+}
+
+[data-md-color-scheme="default"] {
+  --md-hue: 0;
+  --md-default-bg-color: #f5f5f5;
+  --md-default-bg-color--light: #f5f5f5;
+  --md-default-fg-color: #1a1a1a;
+  --md-default-fg-color--light: #666;
+  --md-default-fg-color--lighter: #999;
+  --md-default-fg-color--lightest: #e8e8e8;
+  --md-primary-fg-color: #f5f5f5;
+  --md-primary-fg-color--light: #fff;
+  --md-primary-fg-color--dark: #f5f5f5;
+  --md-primary-bg-color: #000;
+  --md-primary-bg-color--light: #666;
+  --md-accent-fg-color: #000;
+  --md-accent-fg-color--transparent: #0000000d;
+  --md-accent-bg-color: #fff;
+  --md-typeset-color: #1a1a1a;
+  --md-typeset-a-color: #000;
+  --md-code-fg-color: #1a1a1a;
+  --md-code-bg-color: #fff;
+  --md-admonition-bg-color: #fff;
+  --md-footer-bg-color: #f5f5f5;
+  --md-footer-bg-color--dark: #f5f5f5;
+  --md-footer-fg-color: #666;
+  --md-footer-fg-color--light: #999;
+  --md-footer-fg-color--lighter: #999;
+}
+
+/* Header and tabs: flat, separated by a hairline. */
+.md-header,
+.md-tabs {
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.md-header { border-bottom: 1px solid var(--md-default-fg-color--lightest); }
+.md-header__title { font-weight: 500; letter-spacing: -.03em; }
+
+/* Labels in Space Mono capitals. */
+.md-tabs__link,
+.md-nav__title,
+.md-nav--primary .md-nav__item--section > .md-nav__link,
+.md-typeset th,
+.md-footer__direction,
+.md-source__repository {
+  font-family: var(--md-code-font-family);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.md-tabs__link { font-size: .65rem; opacity: 1; color: var(--md-default-fg-color--light); }
+.md-tabs__item--active .md-tabs__link,
+.md-tabs__link:hover { color: var(--md-typeset-a-color); }
+.md-tabs__item--active .md-tabs__link::before { content: "["; }
+.md-tabs__item--active .md-tabs__link::after { content: "]"; }
+
+/* The page title is the one display moment. */
+.md-typeset h1 {
+  font-family: Doto, var(--md-code-font-family);
+  font-weight: 700;
+  letter-spacing: -.03em;
+  color: var(--md-typeset-a-color);
+}
+.md-typeset h2,
+.md-typeset h3 { font-weight: 500; letter-spacing: -.02em; }
+
+/* Links underlined in the border tone, brighter on hover. */
+.md-typeset a {
+  text-decoration: underline;
+  text-decoration-color: var(--md-default-fg-color--lighter);
+  text-underline-offset: .2em;
+}
+.md-typeset a:hover { text-decoration-color: currentColor; }
+.md-typeset .headerlink { text-decoration: none; }
+
+/* Code, tables and admonitions: surfaces, not cards. */
+.md-typeset pre > code,
+.md-typeset code { border-radius: 4px; }
+.md-typeset pre > code { border: 1px solid var(--md-default-fg-color--lightest); }
+.md-typeset table:not([class]) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.md-typeset table:not([class]) th {
+  font-size: .6rem;
+  font-weight: 400;
+  color: var(--md-default-fg-color--light);
+  background: transparent;
+  border-bottom: 1px solid var(--md-default-fg-color--lighter);
+}
+.md-typeset table:not([class]) td { border-top: 1px solid var(--md-default-fg-color--lightest); }
+.md-typeset table:not([class]) tbody tr:hover { background: var(--md-default-bg-color--lighter); box-shadow: none; }
+.md-typeset .admonition,
+.md-typeset details {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-left-width: 2px;
+  box-shadow: none;
+}
+.md-typeset :is(.admonition, details):is(.warning, .danger, .failure, .bug) { border-left-color: var(--accent-red); }
+
+/* Search and footer stay quiet. */
+.md-search__form { background: var(--md-default-bg-color--lighter); box-shadow: none; }
+.md-footer { border-top: 1px solid var(--md-default-fg-color--lightest); }
+.md-footer-meta { background: var(--md-footer-bg-color); }

@@ -1,0 +1,514 @@
+{
+  "version": "0.2.0",
+  "semantic_model": [
+    {
+      "name": "feeder_load",
+      "description": "Quarter-hour load, voltage and cable temperature of the medium-voltage feeders of the example grid, with their feeders and substations. One row in FEEDER_LOAD per feeder per quarter-hour.",
+      "ai_context": {
+        "instructions": "Time: measured_at is the UTC start of a quarter-hour interval. measured_date is its UTC date; a local (Europe/Amsterdam) day starts at 22:00 UTC the day before in summer time. Say that days are UTC days.\nGrain: one row in FEEDER_LOAD per feeder per quarter-hour, keyed by feeder_id and measured_at. One row in FEEDER per feeder, one in SUBSTATION per primary substation.\nMissing values: quality_flag MISSING marks a comms outage; its measurements are NULL. SUSPECT readings failed the SCADA plausibility check and are excluded from every load metric. ESTIMATED readings were filled in by the head-end and count as valid. cable_temp_c = -999 means the temperature sensor is broken; treat it as missing.\nOwner: grid-planning (capacity planning). Refresh: daily SCADA export at 06:00 UTC; the data covers 14 to 27 September 2026.\nClassification: internal. Feeder-level measurements, no personal data.\nDaily trends start at measured_date 2026-09-14: the UTC day 2026-09-13 holds only the first two hours of local 14 September.\n'Last week' means the last full week in the data: measured_date from 2026-09-21 up to and including 2026-09-27. 'Recent' means the same week.\nOverload means utilisation_pct above 100: a valid reading above the feeder's rated capacity. Answer overload questions with overload_hours, split by FEEDER.name, and leave out feeders with 0 hours.\nNegative load_kw is reverse power flow (solar feed-in exceeding demand). Answer with reverse_flow_hours. avg_utilisation_pct uses the absolute load, so feed-in counts as loading too.\nPer region or per substation, split by SUBSTATION.region or SUBSTATION.name; FEEDER_LOAD reaches them through FEEDER.\nState the metric definition, the exclusions (SUSPECT and MISSING readings), the unit and the UTC window with every answer.",
+        "examples": [
+          "Which feeders ran above their rating last week, and for how many hours?",
+          "How did the daily peak load per substation develop over the last two weeks?",
+          "How many hours of reverse power flow did each rural feeder have?",
+          "What is the average utilisation per region?",
+          "What share of the readings per feeder is suspect or missing?",
+          "Which cable types ran hottest?"
+        ]
+      },
+      "datasets": [
+        {
+          "name": "SUBSTATION",
+          "source": "lakehouse.grid_sensors.substation",
+          "description": "A primary substation (10 kV) of the example grid, from the asset register.",
+          "primary_key": [
+            "substation_id"
+          ],
+          "fields": [
+            {
+              "name": "substation_id",
+              "description": "Substation code, such as SS-03.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "substation_id"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "name",
+              "description": "Substation name.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "name"
+                  }
+                ]
+              },
+              "ai_context": {
+                "synonyms": [
+                  "station",
+                  "onderstation"
+                ]
+              }
+            },
+            {
+              "name": "region",
+              "description": "Planning region: Harbour, North or Polder.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "region"
+                  }
+                ]
+              },
+              "ai_context": {
+                "synonyms": [
+                  "area"
+                ]
+              }
+            },
+            {
+              "name": "voltage_kv",
+              "description": "Distribution voltage on the feeder side, kV.",
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "voltage_kv"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "transformer_mva",
+              "description": "Installed transformer capacity, MVA.",
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "transformer_mva"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "FEEDER",
+          "source": "lakehouse.grid_sensors.feeder",
+          "description": "A medium-voltage feeder leaving a substation, with its rated capacity, from the asset register.",
+          "primary_key": [
+            "feeder_id"
+          ],
+          "fields": [
+            {
+              "name": "feeder_id",
+              "description": "Feeder code, such as FD-0302: substation 03, feeder 2.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "feeder_id"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "substation_id",
+              "description": "The substation the feeder leaves from.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "substation_id"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "name",
+              "description": "Feeder name: substation, feeder number and the street it starts in.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "name"
+                  }
+                ]
+              },
+              "ai_context": {
+                "synonyms": [
+                  "cable",
+                  "circuit",
+                  "streng"
+                ]
+              }
+            },
+            {
+              "name": "customer_mix",
+              "description": "Main connected customers: residential, mixed, commercial or rural.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "customer_mix"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "rated_capacity_kw",
+              "description": "Rated capacity of the feeder cable, kW. utilisation_pct is relative to this.",
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "rated_capacity_kw"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "cable_type",
+              "description": "Cable type. GPLK is paper-insulated lead cable from before 1990; XLPE is plastic-insulated.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "cable_type"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "commissioned_year",
+              "description": "Year the cable was laid.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "commissioned_year"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "FEEDER_LOAD",
+          "source": "lakehouse.grid_sensors.feeder_load",
+          "description": "Quarter-hour feeder measurements from the SCADA head-end.",
+          "primary_key": [
+            "feeder_id",
+            "measured_at"
+          ],
+          "fields": [
+            {
+              "name": "feeder_id",
+              "description": "The measured feeder.",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "feeder_id"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "measured_at",
+              "description": "UTC start of the quarter-hour interval.",
+              "dimension": {
+                "is_time": true
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "measured_at"
+                  }
+                ]
+              },
+              "datatype": "DateTimeTz"
+            },
+            {
+              "name": "measured_date",
+              "description": "UTC date of measured_at.",
+              "dimension": {
+                "is_time": true
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "CAST(measured_at AS DATE)"
+                  }
+                ]
+              },
+              "datatype": "Date"
+            },
+            {
+              "name": "load_kw",
+              "description": "Average active power over the quarter-hour, kW. Negative is reverse power flow.",
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "load_kw"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "utilisation_pct",
+              "description": "load_kw as a percentage of the feeder's rated capacity. Above 100 is an overload.",
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "utilisation_pct"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "voltage_v",
+              "description": "Average voltage, V.",
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "voltage_v"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "cable_temp_c",
+              "description": "Cable surface temperature, °C. -999 means the sensor is broken.",
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "cable_temp_c"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "quality_flag",
+              "description": "SCADA quality code: OK, ESTIMATED (filled in by the head-end), SUSPECT (failed the plausibility check) or MISSING (comms outage).",
+              "dimension": {
+                "is_time": false
+              },
+              "expression": {
+                "dialects": [
+                  {
+                    "dialect": "ANSI_SQL",
+                    "expression": "quality_flag"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "name": "feeder",
+          "from": "FEEDER_LOAD",
+          "to": "FEEDER",
+          "from_columns": [
+            "feeder_id"
+          ],
+          "to_columns": [
+            "feeder_id"
+          ]
+        },
+        {
+          "name": "substation",
+          "from": "FEEDER",
+          "to": "SUBSTATION",
+          "from_columns": [
+            "substation_id"
+          ],
+          "to_columns": [
+            "substation_id"
+          ]
+        }
+      ],
+      "metrics": [
+        {
+          "name": "overload_hours",
+          "description": "Hours with a valid reading above the rated capacity: quarter-hours with utilisation_pct > 100, divided by 4. SUSPECT and MISSING readings excluded. Unit: hours.",
+          "datatype": "Decimal",
+          "expression": {
+            "dialects": [
+              {
+                "dialect": "ANSI_SQL",
+                "expression": "count(*) FILTER (WHERE FEEDER_LOAD.utilisation_pct > 100 AND FEEDER_LOAD.quality_flag IN ('OK', 'ESTIMATED')) / 4.0"
+              }
+            ]
+          },
+          "ai_context": {
+            "synonyms": [
+              "congestion hours",
+              "hours above rating",
+              "overbelasting"
+            ]
+          }
+        },
+        {
+          "name": "peak_load_kw",
+          "description": "Highest valid quarter-hour load. SUSPECT and MISSING readings excluded. Unit: kW.",
+          "datatype": "Decimal",
+          "expression": {
+            "dialects": [
+              {
+                "dialect": "ANSI_SQL",
+                "expression": "max(FEEDER_LOAD.load_kw) FILTER (WHERE FEEDER_LOAD.quality_flag IN ('OK', 'ESTIMATED'))"
+              }
+            ]
+          },
+          "ai_context": {
+            "synonyms": [
+              "peak",
+              "maximum load",
+              "piekbelasting"
+            ]
+          }
+        },
+        {
+          "name": "max_utilisation_pct",
+          "description": "Highest valid quarter-hour utilisation of the rated capacity. SUSPECT and MISSING readings excluded. Unit: percent.",
+          "datatype": "Decimal",
+          "expression": {
+            "dialects": [
+              {
+                "dialect": "ANSI_SQL",
+                "expression": "max(FEEDER_LOAD.utilisation_pct) FILTER (WHERE FEEDER_LOAD.quality_flag IN ('OK', 'ESTIMATED'))"
+              }
+            ]
+          },
+          "ai_context": {
+            "synonyms": [
+              "peak utilisation",
+              "maximum loading"
+            ]
+          }
+        },
+        {
+          "name": "avg_utilisation_pct",
+          "description": "Average absolute utilisation of the rated capacity over valid readings, so feed-in counts as loading. SUSPECT and MISSING readings excluded. Unit: percent.",
+          "datatype": "Decimal",
+          "expression": {
+            "dialects": [
+              {
+                "dialect": "ANSI_SQL",
+                "expression": "avg(abs(FEEDER_LOAD.utilisation_pct)) FILTER (WHERE FEEDER_LOAD.quality_flag IN ('OK', 'ESTIMATED'))"
+              }
+            ]
+          },
+          "ai_context": {
+            "synonyms": [
+              "average loading",
+              "belastinggraad"
+            ]
+          }
+        },
+        {
+          "name": "reverse_flow_hours",
+          "description": "Hours with valid negative load: quarter-hours with load_kw < 0, divided by 4. SUSPECT and MISSING readings excluded. Unit: hours.",
+          "datatype": "Decimal",
+          "expression": {
+            "dialects": [
+              {
+                "dialect": "ANSI_SQL",
+                "expression": "count(*) FILTER (WHERE FEEDER_LOAD.load_kw < 0 AND FEEDER_LOAD.quality_flag IN ('OK', 'ESTIMATED')) / 4.0"
+              }
+            ]
+          },
+          "ai_context": {
+            "synonyms": [
+              "feed-in hours",
+              "teruglevering",
+              "reverse power flow"
+            ]
+          }
+        },
+        {
+          "name": "invalid_reading_pct",
+          "description": "SUSPECT and MISSING readings divided by all readings. Unit: percent.",
+          "datatype": "Decimal",
+          "expression": {
+            "dialects": [
+              {
+                "dialect": "ANSI_SQL",
+                "expression": "100.0 * count(*) FILTER (WHERE FEEDER_LOAD.quality_flag IN ('SUSPECT', 'MISSING')) / nullif(count(*), 0)"
+              }
+            ]
+          },
+          "ai_context": {
+            "synonyms": [
+              "data quality",
+              "suspect share"
+            ]
+          }
+        },
+        {
+          "name": "max_cable_temp_c",
+          "description": "Highest measured cable temperature; -999 (broken sensor) and SUSPECT and MISSING readings excluded. Unit: °C.",
+          "datatype": "Decimal",
+          "expression": {
+            "dialects": [
+              {
+                "dialect": "ANSI_SQL",
+                "expression": "max(FEEDER_LOAD.cable_temp_c) FILTER (WHERE FEEDER_LOAD.cable_temp_c > -100 AND FEEDER_LOAD.quality_flag IN ('OK', 'ESTIMATED'))"
+              }
+            ]
+          },
+          "ai_context": {
+            "synonyms": [
+              "hottest cable",
+              "cable temperature"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
