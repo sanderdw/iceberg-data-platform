@@ -124,6 +124,9 @@ async function render(keep = false) {
     if (!me) {
       const session = await (await fetch('/api/session', {credentials: 'same-origin'})).json();
       if (!session.authenticated) return showSignin();
+      // Who is signed in, with Sign out, before /me: an account /me refuses (not linked to a portal user, or
+      // someone else's Keycloak session) must still be able to sign out and sign in as someone else.
+      $('#identity').hidden = false; $('#username').textContent = session.user || '';
       me = await api('/me');
       $('#identity').hidden = false; $('#username').textContent = me.user.name;
       if (me.userPortalUrl) { $('#portal-link').href = me.userPortalUrl; $('#portal-link').hidden = false; }
