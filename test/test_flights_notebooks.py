@@ -22,7 +22,6 @@ from user_portal.notebook.flights import (
     require_quality,
     semantic_model,
 )
-from user_portal.notebook.seed import seed_workspace
 from user_portal.notebook.semantic import SPEC_VERSION, SemanticModels, model_checks
 
 EXAMPLES = Path(__file__).parents[1] / "user_portal/notebook/examples"
@@ -34,6 +33,15 @@ def flights():
     with duckdb.connect() as connection:
         generate_flights(connection, model)
         yield connection, model, contract
+
+def copy_examples(work):
+    """What opening the examples in the portal does: each notebook with the data files beside it."""
+    import shutil
+
+    for path in EXAMPLES.iterdir():
+        if path.suffix in (".py", ".yaml", ".txt"):
+            shutil.copyfile(path, work / path.name)
+
 
 
 def test_generated_product_matches_all_mapped_fields_and_is_reproducible(flights):
@@ -71,15 +79,6 @@ def test_quality_contract_detects_broken_semantics(flights, corruption):
         require_quality(quality_report(connection, contract))
 
 
-def test_workspace_gets_semantics_and_preserves_user_edits(tmp_path):
-    seed_workspace(tmp_path)
-    for name in ("flights.yaml", "flights.product.yaml", "OSSIE-NOTICE.txt"):
-        assert (tmp_path / name).read_bytes() == (EXAMPLES / name).read_bytes()
-        (tmp_path / name).write_text("# User changes")
-    seed_workspace(tmp_path)
-    assert (tmp_path / "flights.product.yaml").read_text() == "# User changes"
-
-
 def run_notebook(path, **definitions):
     spec = importlib.util.spec_from_file_location(path.stem, path)
     notebook = importlib.util.module_from_spec(spec)
@@ -104,7 +103,7 @@ def test_both_notebooks_execute_and_explain_metrics(tmp_path, monkeypatch):
     pytest.importorskip("marimo")
     pytest.importorskip("matplotlib")
     pytest.importorskip("sqlglot")
-    seed_workspace(tmp_path)
+    copy_examples(tmp_path)
     store = polaris(monkeypatch)
     with duckdb.connect() as connection:
         # The integration smoke covers real Iceberg publication. Here run every
@@ -236,7 +235,7 @@ def test_checks_from_the_stored_model_find_broken_keys_and_joins(flights, corrup
 
 def test_reader_stops_without_a_published_model(tmp_path, monkeypatch):
     pytest.importorskip("marimo")
-    seed_workspace(tmp_path)
+    copy_examples(tmp_path)
     polaris(monkeypatch)
     with duckdb.connect() as connection, pytest.raises(RuntimeError, match="Run notebook 06 first"):
         run_notebook(tmp_path / "07_duckdb_flights_read.py", lakehouse=connection)

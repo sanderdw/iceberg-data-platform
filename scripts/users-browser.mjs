@@ -55,8 +55,13 @@ try {
   console.log('PASS: persistent dark/light themes, browser catalog, marimo WebSocket and table execution, mobile layout');
   await navigation.getByRole('button', {name: 'Notebooks', exact: true}).click();
   await page.locator('#notebooks button').first().click();
-  await page.getByRole('combobox', {name: 'Notebook', exact: true}).selectOption({label: 'Shared files'});
+  await page.getByRole('combobox', {name: 'Notebook', exact: true}).selectOption({label: 'All files'});
   await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', data.notebook.filesUrl);
+  await page.getByRole('button', {name: 'New notebook', exact: true}).click();
+  await page.locator('#new-notebook-name').fill('browser_proof');
+  await page.locator('#new-notebook-form').getByRole('button', {name: 'Create', exact: true}).click();
+  await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', `${data.notebook.filesUrl}?file=browser_proof.py`);
+  await expect(page.getByRole('combobox', {name: 'Notebook', exact: true}).locator('option', {hasText: 'browser_proof.py'})).toHaveCount(1);
   await navigation.getByRole('button', {name: 'Catalog', exact: true}).click();
   await expect(page.getByRole('combobox', {name: 'Environment', exact: true}).locator('option')).toHaveText(['Development', 'Acceptance', 'Production']);
   const switchEnvironment = async value => {
@@ -75,6 +80,6 @@ try {
   await expect(page.locator('#databases')).toContainText('no databases in this environment');
   await switchEnvironment('development');
   await expect(page.locator('#databases button small')).toHaveText('Development');
-  console.log('PASS: shared-file selector and Development / Acceptance / Production navigation');
+  console.log('PASS: notebook picker, new notebook and Development / Acceptance / Production navigation');
   await context.close();
 } catch (error) { if (page) { await page.screenshot({path: 'test-results/users-failure.png', fullPage: true}); for (const f of page.frames()) console.error((await f.locator('body').innerText()).slice(0, 7000)); } throw error; } finally { await browser.close(); }

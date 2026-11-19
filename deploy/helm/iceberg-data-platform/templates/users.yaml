@@ -105,6 +105,7 @@ spec:
             - name: USER_QUERY_WAIT_SECONDS
               value: {{ .Values.users.queries.waitSeconds | quote }}
             - {name: NOTEBOOK_BACKEND, value: {{ ternary "kubernetes" "none" .Values.notebooks.enabled }}}
+            - {name: NOTEBOOK_EXAMPLES, value: {{ .Values.notebooks.examples | quote }}}
             - name: NOTEBOOK_NAMESPACE
               value: {{ include "idp.notebooksNamespace" . | quote }}
             - name: NOTEBOOK_IMAGE

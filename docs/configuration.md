@@ -17,6 +17,7 @@ On Kubernetes the same settings are chart values; the last column names them.
 | `PORTAL_LAN_IP` | - | Extra binding with `compose.users.lan.yaml` | - |
 | `MAX_NOTEBOOKS` | `8` | Maximum simultaneous notebook containers | `notebooks.max` |
 | `NOTEBOOK_MEMORY` | `2g` | Memory limit per notebook | `notebooks.memory` |
+| `NOTEBOOK_EXAMPLES` | `true` | Offer the example notebooks in the notebook picker. Set to `false` for a platform where teams work only with their own notebooks; copies teams already made stay | `notebooks.examples` |
 | `USER_QUERY_SLOTS` | `2` | Table previews and governed queries that run at once, for all users together | `users.queries.slots` |
 | `USER_QUERY_WAIT_SECONDS` | `15` | How long an MCP preview or query waits for a free slot before it reports busy | `users.queries.waitSeconds` |
 | `POLARIS_SEMANTIC_MODELS` | `true` | Set to `false` to turn off semantic models in Polaris | `polaris.semanticModels` |
@@ -53,6 +54,7 @@ Chart values are set with `helm upgrade ... --reset-then-reuse-values --set <val
 | `polaris.tokenLifetime` | `3600` | Seconds that catalog tokens and storage credentials stay valid (`POLARIS_TOKEN_LIFETIME` on Compose) |
 | `polaris.semanticModels` | `true` | Semantic models in Polaris (`POLARIS_SEMANTIC_MODELS`) |
 | `users.queries.slots`, `users.queries.waitSeconds` | `2`, `15` | Previews and governed queries at once, and how long MCP waits for a slot (`USER_QUERY_SLOTS`, `USER_QUERY_WAIT_SECONDS`) |
+| `notebooks.examples` | `true` | The example notebooks in the notebook picker (`NOTEBOOK_EXAMPLES`) |
 | `notebooks.startSeconds` | `180` | How long a notebook may take to start; the first on a node pulls its image |
 | `mcpCallbackPort` | `3010` | The loopback port MCP clients use for their sign-in callback (`MCP_CALLBACK_PORT`) |
 | `forwardedAllowIps` | `*` | Addresses whose `X-Forwarded-For` the portals trust; see the [security model](security.md#on-kubernetes) |

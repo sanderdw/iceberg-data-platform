@@ -103,6 +103,6 @@ Published URLs are linked from the portals, the installer and the skills, so nev
 - Never include credentials, `.env` files, notebook output or screenshots that show secrets.
 - Never delete volumes wholesale on a shared development environment.
 - Update `uv.lock` or `package-lock.json` together with their manifests, and format Python with Ruff.
-- Example notebooks run from top to bottom and must never overwrite existing user notebooks.
+- Example notebooks run from top to bottom. A team gets a copy only when it picks one, and a copy never overwrites the team's files; add a new example to `EXAMPLE_TITLES` in `user_portal/notebook_files.py`.
 
 By submitting a contribution, you agree to license it under this project's Apache-2.0 license. Be respectful and keep discussions about the project.

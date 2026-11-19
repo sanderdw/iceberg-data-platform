@@ -26,7 +26,6 @@ from user_portal.notebook.grid_forecast import (
     require_quality,
     semantic_model,
 )
-from user_portal.notebook.seed import seed_workspace
 from user_portal.notebook.semantic import joins, metric_sql, model_check_queries
 
 EXAMPLES = Path(__file__).parents[1] / "user_portal/notebook/examples"
@@ -54,6 +53,15 @@ def catalog(tmp_path, monkeypatch):
     monkeypatch.delenv("ICEBERG_S3_ENDPOINT", raising=False)
     monkeypatch.setattr("user_portal.notebook.connection.connect", lambda: SqlCatalog("default", **config))
     return SqlCatalog("default", **config)
+
+def copy_examples(work):
+    """What opening the examples in the portal does: each notebook with the data files beside it."""
+    import shutil
+
+    for path in EXAMPLES.iterdir():
+        if path.suffix in (".py", ".yaml", ".txt"):
+            shutil.copyfile(path, work / path.name)
+
 
 
 def test_generated_product_follows_the_contract_and_is_reproducible(contract, product):
@@ -248,21 +256,12 @@ def test_polars_gets_only_the_storage_settings(monkeypatch):
     assert polars_storage_options(table) == {}
 
 
-def test_workspace_gets_the_contract_and_keeps_user_edits(tmp_path):
-    seed_workspace(tmp_path)
-    contract_file = tmp_path / "grid_forecast.product.yaml"
-    assert contract_file.read_bytes() == (EXAMPLES / "grid_forecast.product.yaml").read_bytes()
-    contract_file.write_text("# User changes")
-    seed_workspace(tmp_path)
-    assert contract_file.read_text() == "# User changes"
-
-
 def test_both_notebooks_execute_against_a_local_catalog(tmp_path, monkeypatch, catalog):
     pytest.importorskip("marimo")
     pytest.importorskip("matplotlib")
     workspace = tmp_path / "work"
     workspace.mkdir()
-    seed_workspace(workspace)
+    copy_examples(workspace)
     store = polaris(monkeypatch)
     written = run_notebook(workspace / "09_polars_grid_forecast_write.py")
     assert {row["dataset"]: row["rows"] for row in written["published"]} == ROWS
@@ -288,7 +287,7 @@ def test_both_notebooks_execute_against_a_local_catalog(tmp_path, monkeypatch, c
 
 def test_reader_stops_without_a_published_model(tmp_path, monkeypatch, catalog):
     pytest.importorskip("marimo")
-    seed_workspace(tmp_path)
+    copy_examples(tmp_path)
     polaris(monkeypatch)
     with pytest.raises(RuntimeError, match="Run notebook 09 first"):
         run_notebook(tmp_path / "10_polars_grid_forecast_read.py")

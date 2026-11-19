@@ -432,3 +432,11 @@ header.stacked #workspace-nav { order: 3; width: 100%; }
 .producer-inputs { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font: var(--small)/1.5 var(--mono); }
 .producer-inputs .link-button { min-height: 0; padding: 0; border: 0; background: none; color: var(--text-primary); text-decoration: underline; font: inherit; cursor: pointer; }
 .producer-card .catalog-facts { width: 100%; }
+
+/* The notebook picker with New notebook beside it, and the name form under it. */
+.notebook-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.notebook-picker label { flex: 1 1 280px; }
+.new-notebook { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-top: 12px; padding: 16px; border: 1px solid var(--border-visible); background: var(--surface); }
+.new-notebook[hidden] { display: none; }
+.new-notebook label { flex: 1 1 240px; }
+.new-notebook .hint { flex-basis: 100%; margin: 0; }

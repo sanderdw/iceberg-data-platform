@@ -36,7 +36,7 @@ The database is created for the active team and environment: `analytics`, in Dev
 ## 5. Create a table in a notebook
 
 1. Open **Notebooks**. Under **Open a database**, choose `sandbox`. The portal starts your own marimo container, which takes a moment the first time.
-2. In the **Notebook** selector, pick **01 · Neighborhood data with PyIceberg**.
+2. In the **Notebook** picker, under **Examples**, pick **01 · Neighborhood data with PyIceberg**. The portal copies it into your team's `examples/` folder and opens the copy.
 
 marimo runs the notebook from top to bottom; run a cell again with ▶. The notebook generates synthetic electricity data, writes it to the table `neighborhood_electricity` in the namespace `synthetic`, and reads it back. The last section shows the stored rows.
 

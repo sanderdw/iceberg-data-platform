@@ -136,6 +136,8 @@ users:
 
 notebooks:
   enabled: true
+  # The example notebooks teams can open (a copy in their folder). false: only their own notebooks.
+  examples: true
   max: 8
   memory: 2g
   memoryRequest: 512m

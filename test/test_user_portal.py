@@ -937,3 +937,41 @@ def test_a_share_is_listed_only_with_a_data_catalog_extension(users, monkeypatch
     # Without the extension a listing can still be edited otherwise, and revoked.
     assert c.patch(f"/api/shares/{share['id']}", json={"description": "Orders"}, headers=JSON).status_code == 200
     assert c.delete(f"/api/shares/{share['id']}", headers=JSON).status_code == 200
+
+
+def test_notebook_files_are_reached_only_through_the_sessions_own_notebook(users):
+    class Files:
+        def __init__(self):
+            self.calls = []
+
+        def files(self, workspace):
+            self.calls.append(("files", workspace.id))
+            return {"notebooks": [], "examples": [], "allFilesUrl": workspace.url}
+
+        def create(self, workspace, name):
+            self.calls.append(("create", workspace.id, name))
+            return {"path": f"{name}.py", "url": f"{workspace.url}?file={name}.py"}
+
+        def copy_example(self, workspace, example):
+            self.calls.append(("example", workspace.id, example))
+            return {"path": f"examples/{example}", "url": f"{workspace.url}?file=examples/{example}"}
+
+    files = Files()
+    with TestClient(create_app(users.directory, users.runtime, notebook_files=files)) as c:
+        login(c)
+        notebook = c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS).json()
+        base = f"/api/notebooks/{notebook['id']}"
+        assert c.get(base + "/files").json()["allFilesUrl"] == notebook["filesUrl"]
+        assert c.post(base + "/files", json={"name": "sales"}).status_code == 403  # No CSRF header.
+        assert c.post(base + "/files", json={"name": "sales"}, headers=HEADERS).status_code == 201
+        assert c.post(base + "/examples/01_pyiceberg_neighborhood.py", json={}, headers=HEADERS).status_code == 200
+        owner = c.cookies.get(COOKIE)
+        c.cookies.clear()
+        login(c)  # Another session of the same user cannot reach this notebook's files.
+        assert c.get(base + "/files").status_code == 404
+        assert c.post(base + "/files", json={"name": "x"}, headers=HEADERS).status_code == 404
+        c.cookies.clear()
+        c.cookies.set(COOKIE, owner)
+        assert c.get("/api/notebooks/unknown/files").status_code == 404
+    assert files.calls == [("files", notebook["id"]), ("create", notebook["id"], "sales"),
+                           ("example", notebook["id"], "01_pyiceberg_neighborhood.py")]

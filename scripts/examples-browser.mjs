@@ -32,7 +32,7 @@ try {
   await page.locator('#notebook-file').selectOption({label: '01 · Neighborhood data with PyIceberg'});
   // Reuse the runtime provisioned before Chromium launched, keeping Docker's
   // network topology stable while the editor's module graph loads.
-  await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', data.notebook.examples[0].url);
+  await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', `${data.notebook.filesUrl}?file=examples/01_pyiceberg_neighborhood.py`);
   let frame = await editor();
   await page.keyboard.press('Control+Shift+r');
   await frame.getByText(/(Created and populated:|Table already contains) 26,880 rows/).waitFor({timeout:60000});

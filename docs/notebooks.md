@@ -10,9 +10,21 @@ A native DuckDB attachment caches its credentials. Reconnect it, or call `refres
 
 Polars reads and writes Iceberg data files itself. Pass it the table's storage settings: `pl.scan_iceberg(table, storage_options=polars_storage_options(table))`, and the same for `sink_iceberg`, with `polars_storage_options` from `user_portal.notebook.connection`. Load the table again for fresh credentials.
 
+## Your notebooks
+
+The **Notebook** picker above the editor lists:
+
+- **Team notebooks:** every notebook in the team's folder, newest first. A new folder starts with `workspace.py`, which opens for your own databases, and `shared_workspace.py`, which opens for databases shared with your team.
+- **Examples:** the notebooks below. Picking one copies it into `examples/` in the team's folder, with the data files it reads, and opens the copy. From then on it is your team's own: picking it again opens that copy, with your changes.
+- **All files:** marimo's file browser, to rename, move, upload or delete files.
+
+**New notebook** asks for a name and creates it from the starter notebook, which connects to the open database. It never replaces an existing file.
+
+The platform administrator can hide the examples with `NOTEBOOK_EXAMPLES=false` (chart value `notebooks.examples`), for example on a platform without demo data. Copies a team already made stay in its folder.
+
 ## Examples
 
-New filespaces receive these notebooks. Existing ones receive only the files they are missing, and nothing is overwritten. Each notebook runs from top to bottom.
+Each example runs from top to bottom.
 
 | Notebook | Shows | Needs write access |
 | --- | --- | --- |

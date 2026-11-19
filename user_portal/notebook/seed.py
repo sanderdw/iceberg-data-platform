@@ -1,19 +1,18 @@
-"""Install missing starter notebooks, including in existing team workspaces."""
+"""Install the starter notebooks that are missing, including in existing team workspaces.
+
+Examples are not copied here: a team opens one from the portal, which copies it into examples/ then
+(user_portal/notebook_files.py). Files a team already has always stay as they are.
+"""
 
 from pathlib import Path
 
 
 def seed_workspace(work: Path):
-    source = Path(__file__).parent
-    starters = {"workspace.py": source / "template.py", "shared_workspace.py": source / "template.py"}
-    starters.update({
-        p.name: p for p in (source / "examples").iterdir()
-        if p.suffix in {".py", ".yaml", ".txt"}
-    })
-    for name, original in starters.items():
+    template = Path(__file__).parent / "template.py"
+    for name in ("workspace.py", "shared_workspace.py"):
         try:
             with (work / name).open("x") as target:
-                target.write(original.read_text())
+                target.write(template.read_text())
         except FileExistsError:
             # Users own their copies. Never replace edits with the bundled version.
             pass

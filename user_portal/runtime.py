@@ -88,6 +88,8 @@ class Workspace:
     token: str = field(repr=False)
     environment: str = "development"
     shared: bool = False
+    # marimo's own token for its file API, read from its page (notebook_files.py).
+    server_token: str = field(default="", repr=False)
 
     @property
     def url(self):
@@ -102,40 +104,6 @@ class Workspace:
             "filespace": self.key,
             "url": self.url + ("?file=shared_workspace.py" if self.shared else "?file=workspace.py"),
             "filesUrl": self.url,
-            "examples": [
-                {
-                    "title": "01 · Neighborhood data with PyIceberg",
-                    "url": self.url + "?file=01_pyiceberg_neighborhood.py",
-                },
-                {"title": "02 · Visualize with DuckDB", "url": self.url + "?file=02_duckdb_visualization.py"},
-                {"title": "03 · Native DuckDB on Iceberg", "url": self.url + "?file=03_duckdb_iceberg.py"},
-                {
-                    "title": "04 · Write Iceberg v3 with DuckDB",
-                    "url": self.url + "?file=04_duckdb_iceberg_v3_write.py",
-                },
-                {
-                    "title": "05 · Read Iceberg v3 with DuckDB",
-                    "url": self.url + "?file=05_duckdb_iceberg_v3_read.py",
-                },
-                {
-                    "title": "06 · Write an AI-ready flights product",
-                    "url": self.url + "?file=06_duckdb_flights_write.py",
-                },
-                {
-                    "title": "07 · Read an AI-ready flights product",
-                    "url": self.url + "?file=07_duckdb_flights_read.py",
-                },
-                {"title": "08 · Load data with dlt", "url": self.url + "?file=08_dlt_ingest.py"},
-                {
-                    "title": "09 · Write an AI-ready grid forecast with Polars",
-                    "url": self.url + "?file=09_polars_grid_forecast_write.py",
-                },
-                {
-                    "title": "10 · Read an AI-ready grid forecast with Polars",
-                    "url": self.url + "?file=10_polars_grid_forecast_read.py",
-                },
-                {"title": "11 · How Apache Iceberg works", "url": self.url + "?file=11_duckdb_iceberg_explained.py"},
-            ],
         }
 
 

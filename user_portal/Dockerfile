@@ -12,7 +12,10 @@ COPY user_portal/duckdb_extensions.py ./user_portal/
 RUN /app/.venv/bin/python user_portal/duckdb_extensions.py
 COPY server/__init__.py server/catalog_metadata.py server/models.py server/polaris.py server/storage.py server/oidc.py server/entrypoints.py server/validation.py server/mcp_auth.py server/extensions.py server/kube.py ./server/
 COPY user_portal/__init__.py user_portal/app.py user_portal/directory.py user_portal/runtime.py user_portal/runtime_kubernetes.py user_portal/__main__.py ./user_portal/
-COPY user_portal/preview.py user_portal/mcp_server.py ./user_portal/
+COPY user_portal/preview.py user_portal/mcp_server.py user_portal/notebook_files.py ./user_portal/
+# The starter template and the examples, which the gateway copies into a team's folder on request.
+COPY user_portal/notebook/template.py ./user_portal/notebook/template.py
+COPY user_portal/notebook/examples ./user_portal/notebook/examples
 COPY user_portal/semantic ./user_portal/semantic
 COPY user_portal/public ./user_portal/public
 COPY user_portal/client ./user_portal/client
