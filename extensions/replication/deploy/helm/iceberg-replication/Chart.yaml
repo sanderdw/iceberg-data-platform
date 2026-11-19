@@ -2,8 +2,8 @@ apiVersion: v2
 name: iceberg-replication
 description: Replication (OLake) for the Iceberg Data Platform - the replication gateway and its launcher, with OLake runs as Kubernetes Jobs.
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.0.1
+appVersion: "0.0.1"
 kubeVersion: ">=1.32.0-0"
 home: https://sanderdw.github.io/iceberg-data-platform/replication/
 sources:

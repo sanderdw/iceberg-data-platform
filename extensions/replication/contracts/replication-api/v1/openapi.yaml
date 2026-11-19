@@ -3,7 +3,7 @@
   "info": {
     "title": "Replication (OLake) \u00b7 Iceberg Data Platform",
     "description": "Replications that keep operational databases in step with your teams' Iceberg databases with OLake (change data capture), with source checks, runs and schedules. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-replication-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
-    "version": "0.1.0"
+    "version": "0.0.1"
   },
   "paths": {
     "/api/v1/me": {

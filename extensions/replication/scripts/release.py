@@ -1,7 +1,7 @@
 """Release checks and the source archive of the Replication extension, independent of the platform's release.
 
   uv run python -m scripts.release              # check versions, files and secrets
-  uv run python -m scripts.release --tag replication-v0.1.0 --build
+  uv run python -m scripts.release --tag replication-v0.0.1 --build
   uv run python -m scripts.release --channel refs/heads/main   # release names for a Git ref (in Actions)
 """
 

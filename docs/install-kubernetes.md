@@ -208,7 +208,7 @@ common="-n iceberg --set ingress.className=traefik --set tls.clusterIssuer=letse
 helm install dbt $chart/iceberg-dbt --version 0.1.4 $common
 helm install ingestion $chart/iceberg-ingestion --version 0.1.4 $common
 # Replication: list the networks of your operational databases.
-helm install replication $chart/iceberg-replication --version 0.1.0 $common \
+helm install replication $chart/iceberg-replication --version 0.0.1 $common \
   --set 'runs.allowedSourceNetworks={10.20.0.0/16}'
 # Maintenance (beta): snapshot expiry, compaction and orphan cleanup for the teams' tables.
 helm install maintenance $chart/iceberg-maintenance --version 0.0.1 $common

@@ -19,7 +19,7 @@ x-otel-env: &otel-env
 services:
   rep-gateway:
     build: .
-    image: iceberg-replication:0.1.0
+    image: iceberg-replication:0.0.1
     <<: *hardened
     labels:
       io.iceberg-platform.extension: replication
@@ -55,7 +55,7 @@ services:
   # isolation: a private network holding only the platform's catalog and storage, and a separate
   # network to reach the sources.
   rep-launcher:
-    image: iceberg-replication:0.1.0
+    image: iceberg-replication:0.0.1
     <<: *hardened
     command: ["/app/.venv/bin/uvicorn", "launcher.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3024", "--no-access-log"]
     user: "0:0"
@@ -63,7 +63,7 @@ services:
       io.iceberg-platform.extension: replication
     environment:
       LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
-      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-replication-runner:0.1.0}
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-replication-runner:0.0.1}
       ARTIFACTS_DIR: /artifacts
       BRIDGE_EXTENSION_ID: replication
       RUN_MEMORY: ${RUN_MEMORY:-4g}
@@ -81,7 +81,7 @@ services:
 
   # The isolated image every run uses: built or pulled with --profile images, never started here.
   runner-image:
-    image: iceberg-replication-runner:0.1.0
+    image: iceberg-replication-runner:0.0.1
     build:
       context: .
       dockerfile: runner/Dockerfile

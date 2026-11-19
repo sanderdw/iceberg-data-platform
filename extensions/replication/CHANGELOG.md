@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - unreleased
+## 0.0.1 - unreleased
 
 - First version of Replication (OLake) for the Iceberg Data Platform, on Extension Bridge contract 0.1.
 - PostgreSQL sources: change data capture through a replication slot and publication, incremental
