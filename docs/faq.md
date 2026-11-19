@@ -94,6 +94,18 @@ The core platform sends nothing to an LLM (or anything else). A coding agent you
 
 Run the installer again and answer yes, or name the extensions in `ICEBERG_EXTENSIONS`. On Kubernetes, register it in the platform chart and install its chart; see [add extensions](install-kubernetes.md#add-extensions). It keeps the extensions you already added, with their data. The installer doesn't add OpenMetadata; it has [its own installer](openmetadata.md#install). See [extensions](extensions.md#install).
 
+### Should I use Ingestion or Replication for a database?
+
+Use [Ingestion (dlt)](ingestion.md) to load a table once or now and then; it sees no deletes. Use [Replication (OLake)](replication.md) to keep an operational database in step, with its updates and deletes, every few minutes. Replication needs logical replication on the source (`wal_level = logical`, a replication slot and a publication).
+
+### Replication shows rows that were deleted in the source.
+
+A deleted row stays in the table with `_op_type = 'd'`: filter on `_op_type <> 'd'`. If DuckDB still shows a deleted row after that, its table is partitioned and the source table lacks `REPLICA IDENTITY FULL`; the replication's page shows the SQL. See [prepare the source](replication.md#prepare-the-source).
+
+### Replication refuses my database.
+
+Operational databases usually have a private address, which runs reach only inside the networks you list in `REP_ALLOWED_SOURCE_NETWORKS` in `replication/.env` (`runs.allowedSourceNetworks` on Kubernetes). Loopback and link-local addresses are always refused; for a demo against a database on your own computer, set `REP_ALLOW_PRIVATE_SOURCES=true` and use `host.docker.internal`. See [install](replication.md#install).
+
 ### Ingestion refuses my local database.
 
 Sources on loopback, private or link-local addresses are refused. For a demo against a database on your own computer, set `ING_ALLOW_PRIVATE_SOURCES=true` in `ingestion/.env` and restart the extension. The run then reaches your computer as `host.docker.internal`. On Kubernetes, install the chart with `runs.allowPrivateSources=true` to reach sources in your own network. See [isolation and limits](ingestion.md#isolation-and-limits).

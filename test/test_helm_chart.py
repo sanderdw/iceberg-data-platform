@@ -123,7 +123,7 @@ def test_opentelemetry_is_off_until_an_endpoint_is_set():
 def test_each_extension_chart_finds_its_handshake():
     # The hosts the documentation registers; an extension chart reads iceberg-bridge-<id> (its bridgeSecret).
     hosts = {"dbt": "dbt", "ingestion": "ingest", "conversationalbi": "cbi", "evaluations": "eval",
-             "maintenance": "maintain"}
+             "maintenance": "maintain", "replication": "replicate"}
     charts = sorted((ROOT / "extensions").glob("*/deploy/helm/iceberg-*/values.yaml"))
     assert {path.parents[3].name for path in charts} == set(hosts)
     docs = render(*(f"extensions.{id}.host={host}" for id, host in hosts.items()))

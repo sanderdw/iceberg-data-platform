@@ -21,6 +21,7 @@ CBI_SETUP = ROOT / "extensions/conversationalbi/scripts/setup.py"
 CBI_VARIABLES = runpy.run_path(str(CBI_SETUP))["PASSTHROUGH"]
 DBT_SETUP = ROOT / "extensions/dbt/scripts/setup.py"
 ING_SETUP = ROOT / "extensions/ingestion/scripts/setup.py"
+REP_SETUP = ROOT / "extensions/replication/scripts/setup.py"
 MNT_SETUP = ROOT / "extensions/maintenance/scripts/setup.py"
 EVAL_SETUP = ROOT / "extensions/evaluations/scripts/setup.py"
 # `docker run` of the platform image: run the script on the installation directory with only the
@@ -66,6 +67,9 @@ def installer_env(tmp_path, request):
             "ingestion/compose.yaml": b"name: iceberg-ingestion\n",
             "ingestion/scripts/setup.py": ING_SETUP.read_bytes(),
             ".agents/skills/ingestion/SKILL.md": b"---\nname: ingestion\n---\n",
+            "replication/compose.yaml": b"name: iceberg-replication\n",
+            "replication/scripts/setup.py": REP_SETUP.read_bytes(),
+            ".agents/skills/replication/SKILL.md": b"---\nname: replication\n---\n",
             "maintenance/compose.yaml": b"name: iceberg-maintenance\n",
             "maintenance/scripts/setup.py": MNT_SETUP.read_bytes(),
             ".agents/skills/maintenance/SKILL.md": b"---\nname: maintenance\n---\n",
@@ -100,7 +104,7 @@ def calls(env):
     return [json.loads(line) for line in Path(env["TEST_DOCKER_LOG"]).read_text().splitlines()]
 
 
-def assert_started(env, cbi=False, dbt=False, ingestion=False, maintenance=False, evaluations=False):
+def assert_started(env, cbi=False, dbt=False, ingestion=False, maintenance=False, evaluations=False, replication=False):
     commands = calls(env)
     tag = env["TEST_RELEASE_TAG"]
     setup_image = "ghcr.io/sanderdw/iceberg-data-platform-portal:" + env["TEST_IMAGE_TAG"]
@@ -114,7 +118,8 @@ def assert_started(env, cbi=False, dbt=False, ingestion=False, maintenance=False
     pulls = [i for i, args in enumerate(commands) if args[-1] == "pull"]
     starts = [(i, args) for i, args in enumerate(commands) if "up" in args]
     extensions = [name for name, wanted in (("conversationalbi", cbi), ("dbt", dbt), ("ingestion", ingestion),
-                                            ("maintenance", maintenance), ("evaluations", evaluations)) if wanted]
+                                            ("replication", replication), ("maintenance", maintenance),
+                                            ("evaluations", evaluations)) if wanted]
     assert len(starts) == 2 + len(extensions)
     assert pulls and max(pulls) < starts[0][0]
     assert Path(starts[0][1][starts[0][1].index("-f") + 1]).name == "compose.yaml"
@@ -486,6 +491,48 @@ def test_shell_installs_ingestion_and_keeps_it_on_rerun(shell_installer):
     assert {name: (ingestion / name).read_bytes() for name in kept} == kept
 
 
+def assert_replication_installed(result, env):
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert_started(env, replication=True)
+    target = Path(env["ICEBERG_INSTALL_DIR"])
+    commands = calls(env)
+    registration = next(i for i, args in enumerate(commands) if "--extension" in args and "replication" in args)
+    assert registration < next(i for i, args in enumerate(commands) if "up" in args)
+    assert re.search(r"(?m)^PLATFORM_EXTENSIONS=(.*,)?replication=http://localhost:3014", (target / ".env").read_text())
+    for name in (".env", ".env.bridge"):
+        assert (target / "replication" / name).is_file()
+        if sys.platform != "win32":
+            assert (target / "replication" / name).stat().st_mode & 0o777 == 0o600
+    config = (target / "replication/.env").read_text()
+    assert "LAUNCHER_TOKEN=" in config and "REP_SECRET_KEY=" in config and "REP_PORT=3014" in config
+    # The runner image comes with the images profile, before anything starts.
+    pull = next(i for i, args in enumerate(commands) if args[-1] == "pull" and "images" in args
+                and any(a.endswith("compose.yaml") and "replication" in a for a in args))
+    assert pull < next(i for i, args in enumerate(commands) if "up" in args)
+    output = result.stdout.split("is running.")[1]
+    assert "3. Keep databases in step with Replication (OLake)\n   http://localhost:3014\n" in output
+    assert "--client-id ext-replication-mcp --callback-port 3010 iceberg-replication http://localhost:3014/mcp" in output
+    assert "Skill    replication:" in output
+    assert "docker compose -f replication/compose.yaml up -d --wait" in output
+    return target / "replication"
+
+
+def test_shell_installs_replication_and_keeps_it_on_rerun(shell_installer):
+    run, env = shell_installer
+    env["ICEBERG_EXTENSIONS"] = "replication"
+    replication = assert_replication_installed(run(), env)
+    kept = {name: (replication / name).read_bytes() for name in (".env", ".env.bridge")}
+    del env["ICEBERG_EXTENSIONS"]
+    for log in ("TEST_DOCKER_LOG", "TEST_DOWNLOAD_LOG"):
+        Path(env[log]).unlink()
+    result = run()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert_started(env, replication=True)
+    assert not any("--extension" in args for args in calls(env))
+    # The secret key decrypts the stored passwords, so a rerun keeps it.
+    assert {name: (replication / name).read_bytes() for name in kept} == kept
+
+
 def assert_maintenance_installed(result, env, cbi=False, dbt=False, ingestion=False):
     assert result.returncode == 0, result.stdout + result.stderr
     assert_started(env, cbi=cbi, dbt=dbt, ingestion=ingestion, maintenance=True)
@@ -672,6 +719,12 @@ def test_powershell_installs_all_extensions(powershell_installer):
     assert run().returncode == 0
     assert_started(env, cbi=True, dbt=True, ingestion=True, maintenance=True)
     assert not any("--extension" in args for args in calls(env))
+
+
+def test_powershell_installs_replication(powershell_installer):
+    run, env = powershell_installer
+    env["ICEBERG_EXTENSIONS"] = "replication"
+    assert_replication_installed(run(), env)
 
 
 def test_powershell_installs_pgadmin_and_keeps_it_on_rerun(powershell_installer):

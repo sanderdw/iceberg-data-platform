@@ -8,8 +8,8 @@ Its choices hold for Bridge contract 0.1. Only the runner image and this extensi
 Apache SeaTunnel, dlt and Apache NiFi were compared. dlt (Apache-2.0, the open-source
 `dlt[pyiceberg]`; the paid dltHub tier is not used) is a Python library, so it fits the platform's
 Python, uv and PyIceberg stack. Its REST, SQL and file sources are declarative, so pipelines can be
-configuration rather than code. Batch only. SeaTunnel stays the candidate for bulk database copies
-and change data capture, which would need long-lived credentials from the Bridge.
+configuration rather than code. Batch only. Change data capture is the Replication extension's
+(OLake, `extensions/replication/DECISIONS.md`), which runs in short runs with the same tokens.
 
 The earlier proposal in the platform (`docs/proposals/ingestion-extension.md`, in git history up to
 commit 96c75f7) used DuckDB and dlt only as readers, with the extension's own writer and a forwarder

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#000000">
+<link rel="preload" href="/fonts/doto.ttf" as="font" type="font/ttf" crossorigin>
+<title>Replication · Iceberg Data Platform</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="site">
+  <a class="brand" href="#/"><img src="/favicon.svg" alt="">iceberg<span>/ replication</span></a>
+  <nav id="crumbs" aria-label="Location"></nav>
+  <div class="header-actions">
+    <a id="portal-link" class="quiet-link" target="_blank" rel="noopener" hidden>User portal <span aria-hidden="true">↗</span></a>
+    <button id="theme" class="ghost" type="button">Light / ○</button>
+    <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
+  </div>
+</header>
+
+<main id="loading" class="initial"><p class="eyebrow" role="status">[ LOADING ]</p></main>
+
+<main id="signin" hidden>
+  <section class="login">
+    <div class="eyebrow">YOUR DATABASES. IN STEP.</div>
+    <h1>Replication<span class="dot-accent">.</span></h1>
+    <p>Keep operational databases in step with your team's Iceberg databases: OLake reads their changes and writes them as Iceberg tables, every few minutes.</p>
+    <a class="button wide" id="signin-link" href="/auth/login">Sign in with Keycloak <span aria-hidden="true">↗</span></a>
+    <p class="hint">Use your linked Keycloak account.</p>
+  </section>
+  <aside class="intro">
+    <div class="eyebrow">FROM SOURCE TO TABLE</div>
+    <h2>Changes, not copies.</h2>
+    <p>Each run reads the changes since the last one from the source's write-ahead log and writes them as your team's service account, isolated from everything else. For APIs, files and one-time loads, use Ingestion (dlt).</p>
+    <ol>
+      <li><span>[ 01 ]</span>Connect a source and set its password</li>
+      <li><span>[ 02 ]</span>Check the source and choose tables</li>
+      <li><span>[ 03 ]</span>Run it every few minutes</li>
+    </ol>
+  </aside>
+</main>
+
+<main id="page" hidden>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div id="content"></div>
+</main>
+
+<dialog id="dialog" class="card" aria-labelledby="dialog-title"></dialog>
+</body>
+</html>

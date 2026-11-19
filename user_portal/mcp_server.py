@@ -55,7 +55,8 @@ compiles the model's agreed SQL and reads with the user's own grants. Find the e
 on, such as a region's spelling, with list_dimension_values instead of guessing. State the metric
 definition, filters and period with every answer, and use preview_rows only to look at raw rows. All tools read with the user's Polaris grants; none runs free-form SQL.
 No tool uploads files or fetches URLs. To load data from elsewhere (a file, an API, another
-database), use the Ingestion (dlt) extension's MCP server when it is installed, or write a uv
+database), use the Ingestion (dlt) extension's MCP server when it is installed (the Replication
+(OLake) extension's to keep a database in step, with its updates and deletes), or write a uv
 script with the platform's iceberg_connect.py: it writes with PyIceberg or a writable DuckDB
 connection under the user's own grants (AGENTS.md, "Loading data from somewhere else"). Land
 outside data as-is in a raw namespace and transform it from there.

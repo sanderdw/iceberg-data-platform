@@ -93,9 +93,10 @@ platform:
 - Postgres (the bundled volume `data-postgres-0`, or your managed database) and the RustFS volume
   `data-rustfs-0`;
 - the Secret `iceberg-platform`, and the extensions' Secrets `iceberg-dbt`, `iceberg-ingestion` (its
-  `ING_SECRET_KEY` encrypts the stored source passwords), `iceberg-maintenance` and `iceberg-conversationalbi`;
+  `ING_SECRET_KEY` encrypts the stored source passwords), `iceberg-replication` (its `REP_SECRET_KEY`
+  likewise), `iceberg-maintenance` and `iceberg-conversationalbi`;
 - the extensions' volumes `dbt-state` (projects and their Git repositories), `dbt-artifacts`,
-  `ing-state`, `ing-artifacts`, `mnt-state` (policies and table health) and `mnt-artifacts`, and the
+  `ing-state`, `ing-artifacts`, `rep-state`, `rep-artifacts`, `mnt-state` (policies and table health) and `mnt-artifacts`, and the
   notebook volumes in `iceberg-notebooks`.
 
 ### Use a managed PostgreSQL
@@ -199,12 +200,16 @@ extension gets the host `<host>.<domain>` and its own certificate.
 chart=oci://ghcr.io/sanderdw/charts
 # 1. Register the extensions you want, with their hosts.
 helm upgrade iceberg $chart/iceberg-data-platform --version 0.9.12 -n iceberg --reset-then-reuse-values \
-  --set extensions.dbt.host=dbt --set extensions.ingestion.host=ingest --set extensions.maintenance.host=maintain \
+  --set extensions.dbt.host=dbt --set extensions.ingestion.host=ingest --set extensions.replication.host=replicate \
+  --set extensions.maintenance.host=maintain \
   --set extensions.conversationalbi.host=cbi --set extensions.evaluations.host=eval --wait
 # 2. Install their charts, with the same ingress settings as the platform.
 common="-n iceberg --set ingress.className=traefik --set tls.clusterIssuer=letsencrypt-prod --wait"
 helm install dbt $chart/iceberg-dbt --version 0.1.4 $common
 helm install ingestion $chart/iceberg-ingestion --version 0.1.4 $common
+# Replication: list the networks of your operational databases.
+helm install replication $chart/iceberg-replication --version 0.1.0 $common \
+  --set 'runs.allowedSourceNetworks={10.20.0.0/16}'
 # Maintenance (beta): snapshot expiry, compaction and orphan cleanup for the teams' tables.
 helm install maintenance $chart/iceberg-maintenance --version 0.0.1 $common
 # Conversational BI reads its LLM from a Secret, so the key stays out of Helm's values.
@@ -219,6 +224,9 @@ helm install evaluations $chart/iceberg-evaluations --version 0.1.1 $common
 - **dbt and Ingestion** run every build or load as a Kubernetes Job in a namespace of their own
   (`iceberg-dbt-runs`, `iceberg-ingestion-runs`), with the same isolation as on Docker. Ingestion runs
   reach public sources only; `--set runs.allowPrivateSources=true` also allows sources in your own network.
+- **Replication** runs OLake as a Job in `iceberg-replication-runs`, with the same isolation as on
+  Docker. Its runs reach public sources and the networks in `runs.allowedSourceNetworks`, whose
+  addresses the gateway checks and pins before every run.
 - **Maintenance** (beta) runs every health check, dry run and maintenance run as a Job in
   `iceberg-maintenance-runs`, with the same isolation as on Docker. Its runs have no internet: they
   reach only the catalog, storage and the launcher.
@@ -316,12 +324,12 @@ kubectl -n iceberg logs job/keycloak-bootstrap
 ## Uninstall
 
 ```bash
-helm uninstall conversationalbi dbt ingestion maintenance -n iceberg   # the extensions you installed
+helm uninstall conversationalbi dbt ingestion replication maintenance -n iceberg   # the extensions you installed
 helm uninstall iceberg -n iceberg
 ```
 
 This removes the platform and the extensions, but keeps their Secrets (`iceberg-platform`,
-`iceberg-dbt`, `iceberg-ingestion`, `iceberg-maintenance`, `iceberg-conversationalbi`), the volumes with your data and the
+`iceberg-dbt`, `iceberg-ingestion`, `iceberg-replication`, `iceberg-maintenance`, `iceberg-conversationalbi`), the volumes with your data and the
 notebooks namespace `iceberg-notebooks` with the notebook files. Installing again with the same
 names finds them. To remove everything, delete the namespaces `iceberg` and `iceberg-notebooks`;
 this cannot be undone. A managed PostgreSQL is not part of the cluster: delete its databases yourself.

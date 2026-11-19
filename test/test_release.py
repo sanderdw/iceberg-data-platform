@@ -24,6 +24,7 @@ from scripts.release import (
     installer_source,
     maintenance_bundle,
     release_channel,
+    replication_bundle,
     release_files,
 )
 
@@ -51,6 +52,11 @@ def release_tree(tmp_path):
         target = root / "extensions/ingestion" / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / "extensions/ingestion" / name, target)
+    # And the Replication extension's compose file, setup and agent skill.
+    for name in ("pyproject.toml", "compose.yaml", "scripts/setup.py", "skills/replication/SKILL.md"):
+        target = root / "extensions/replication" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "extensions/replication" / name, target)
     # And the Maintenance extension's compose file, setup and agent skill.
     for name in ("pyproject.toml", "compose.yaml", "scripts/setup.py", "skills/maintenance/SKILL.md"):
         target = root / "extensions/maintenance" / name
@@ -159,6 +165,16 @@ def test_ingestion_bundle_uses_its_published_images(release_tree):
     assert files["ingestion/scripts/setup.py"] == (release_tree / "extensions/ingestion/scripts/setup.py").read_bytes()
     assert files[".agents/skills/ingestion/SKILL.md"] == (
         release_tree / "extensions/ingestion/skills/ingestion/SKILL.md").read_bytes()
+
+
+def test_replication_bundle_uses_its_published_images(release_tree):
+    version, files = replication_bundle(release_tree)
+    compose = files["replication/compose.yaml"].decode()
+    assert compose.count(f"image: ghcr.io/sanderdw/iceberg-replication:{version}\n") == 2
+    assert f"RUNNER_IMAGE: ${{RUNNER_IMAGE:-ghcr.io/sanderdw/iceberg-replication-runner:{version}}}" in compose
+    assert "build:" not in compose
+    assert files[".agents/skills/replication/SKILL.md"] == (
+        release_tree / "extensions/replication/skills/replication/SKILL.md").read_bytes()
 
 
 def test_a_preview_bundle_uses_the_ingestion_images_of_its_build(release_tree):

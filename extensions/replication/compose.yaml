@@ -1,0 +1,99 @@
+# The Replication (OLake) extension: a separate Compose project that uses the platform only through the
+# Extension Bridge (contracts/bridge in the platform repository), Iceberg REST and S3.
+name: iceberg-replication
+
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+# OpenTelemetry export of logs and traces; off while OTEL_EXPORTER_OTLP_ENDPOINT is empty.
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
+
+services:
+  rep-gateway:
+    build: .
+    image: iceberg-replication:0.1.0
+    <<: *hardened
+    labels:
+      io.iceberg-platform.extension: replication
+    env_file: [.env.bridge]
+    environment:
+      <<: *otel-env
+      LAUNCHER_URL: http://rep-launcher:3024
+      LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
+      REP_SECRET_KEY: ${REP_SECRET_KEY:?Run uv run python -m scripts.setup first}
+      REP_MAX_CONCURRENT_RUNS: ${REP_MAX_CONCURRENT_RUNS:-4}
+      REP_MAX_RUNS_PER_TEAM: ${REP_MAX_RUNS_PER_TEAM:-2}
+      REP_RUN_RETENTION: ${REP_RUN_RETENTION:-30}
+      REP_RUN_TIMEOUT_SECONDS: ${REP_RUN_TIMEOUT_SECONDS:-43200}
+      REP_ALLOW_PRIVATE_SOURCES: ${REP_ALLOW_PRIVATE_SOURCES:-false}
+      # Private networks where your operational databases live, such as 10.20.0.0/16 (comma-separated).
+      REP_ALLOWED_SOURCE_NETWORKS: ${REP_ALLOWED_SOURCE_NETWORKS:-}
+    ports:
+      - "127.0.0.1:${REP_PORT:-3014}:3014"
+    volumes:
+      - rep-state:/data
+      - rep-artifacts:/data/artifacts:ro
+    networks: [platform, launch]
+    depends_on:
+      rep-launcher:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3014/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # The only container with the Docker socket. It launches the pinned runner image, with fixed
+  # isolation: a private network holding only the platform's catalog and storage, and a separate
+  # network to reach the sources.
+  rep-launcher:
+    image: iceberg-replication:0.1.0
+    <<: *hardened
+    command: ["/app/.venv/bin/uvicorn", "launcher.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3024", "--no-access-log"]
+    user: "0:0"
+    labels:
+      io.iceberg-platform.extension: replication
+    environment:
+      LAUNCHER_TOKEN: ${LAUNCHER_TOKEN:?Run uv run python -m scripts.setup first}
+      RUNNER_IMAGE: ${RUNNER_IMAGE:-iceberg-replication-runner:0.1.0}
+      ARTIFACTS_DIR: /artifacts
+      BRIDGE_EXTENSION_ID: replication
+      RUN_MEMORY: ${RUN_MEMORY:-4g}
+      RUN_CPUS: ${RUN_CPUS:-2}
+      REP_ALLOW_PRIVATE_SOURCES: ${REP_ALLOW_PRIVATE_SOURCES:-false}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - rep-artifacts:/artifacts
+    networks: [launch]
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:3024/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # The isolated image every run uses: built or pulled with --profile images, never started here.
+  runner-image:
+    image: iceberg-replication-runner:0.1.0
+    build:
+      context: .
+      dockerfile: runner/Dockerfile
+    profiles: [images]
+
+networks:
+  platform:
+    external: true
+    name: ${PLATFORM_NETWORK:-iceberg-platform_default}
+  launch:
+    internal: true
+
+volumes:
+  rep-state:
+  rep-artifacts:

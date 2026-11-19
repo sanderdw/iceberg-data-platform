@@ -1,0 +1,56 @@
+[project]
+name = "iceberg-replication"
+version = "0.1.0"
+description = "Replication (OLake) for the Iceberg Data Platform: keeps operational databases in step with Iceberg through change data capture, with a UI, API and MCP server"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi==0.163.1",
+  "uvicorn[standard]>=0.53.0",
+  "httpx>=0.28.1",
+  "joserfc>=1.8.0",
+  "mcp>=2.3.0,<3",
+  "croniter>=7.0.0",
+  "cryptography>=46.0.0",
+]
+
+[dependency-groups]
+# OpenTelemetry export, used only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+otel = [
+  "opentelemetry-sdk>=1.45.1",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+  "opentelemetry-instrumentation-fastapi>=0.66b1",
+  "opentelemetry-instrumentation-httpx>=0.66b1",
+  "opentelemetry-instrumentation-logging>=0.66b1",
+]
+# The launcher is the only component with the Docker socket.
+launcher = ["docker==7.2.0"]
+dev = [
+  {include-group = "otel"},
+  {include-group = "launcher"},
+  # scripts/e2e_smoke.py prepares its test source (BSD-3-Clause).
+  "pg8000>=1.31.6",
+  "pytest>=9.2.0",
+  "ruff>=0.17.5",
+]
+
+[tool.iceberg-replication]
+# Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
+bridge-contract = ">=0.1,<0.2"
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "C4", "RUF"]
+ignore = ["RUF001", "RUF002"]

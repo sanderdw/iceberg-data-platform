@@ -9,7 +9,7 @@ main() {
         1)
             if [ "$1" = --help ]; then
                 printf 'Usage: sh install.sh [--dir DIRECTORY]\nDefault: ~/iceberg-data-platform (or ICEBERG_INSTALL_DIR)\nRequires Linux or macOS, Docker with Compose v2, curl and tar.\n'
-                printf '\nExtensions (optional): ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion,maintenance,evaluations,pgadmin names the ones to add. In\na terminal the installer asks; ICEBERG_EXTENSIONS=none skips the questions.\n'
+                printf '\nExtensions (optional): ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion,replication,maintenance,evaluations,pgadmin names the ones to add. In\na terminal the installer asks; ICEBERG_EXTENSIONS=none skips the questions.\n'
                 printf '\nConversational BI also starts with LLM_MODEL and its key, for example\nLLM_MODEL=anthropic:claude-sonnet-5-5 ANTHROPIC_API_KEY=...\nVariables: %s\n' "$cbi_variables"
                 return
             fi
@@ -87,6 +87,21 @@ main() {
         answer=
         read -r answer </dev/tty || answer=
         case $answer in [Yy]*) ing=true ;; esac
+    fi
+    # And the Replication (OLake) extension.
+    rep=false
+    rep_registered=false
+    case ",${ICEBERG_EXTENSIONS:-}," in *,replication,*) rep=true ;; esac
+    if [ -f "$install_dir/replication/.env.bridge" ] && [ -f "$install_dir/.env" ] &&
+        grep -Eq '^PLATFORM_EXTENSIONS=(.*,)?replication=' "$install_dir/.env"; then
+        rep=true
+        rep_registered=true
+    fi
+    if [ "$rep" = false ] && [ -z "${ICEBERG_EXTENSIONS+set}" ] && has_tty; then
+        printf 'Add Replication (OLake), which keeps operational databases in step with your tables? Its launcher\nuses the Docker socket to start each run in an isolated container. [y/N] ' >/dev/tty
+        answer=
+        read -r answer </dev/tty || answer=
+        case $answer in [Yy]*) rep=true ;; esac
     fi
     # And the Maintenance extension (beta).
     mnt=false
@@ -166,8 +181,9 @@ main() {
     bundle_dir=$temporary_dir/bundle
     for file in compose.yaml compose.users.yaml .env.example scripts/setup.py pgadmin/servers.json \
         conversationalbi/compose.yaml conversationalbi/scripts/setup.py dbt/compose.yaml dbt/scripts/setup.py \
-        dbt/iceberg_dbt.py ingestion/compose.yaml ingestion/scripts/setup.py maintenance/compose.yaml \
-        maintenance/scripts/setup.py evaluations/compose.yaml evaluations/scripts/setup.py; do
+        dbt/iceberg_dbt.py ingestion/compose.yaml ingestion/scripts/setup.py replication/compose.yaml \
+        replication/scripts/setup.py maintenance/compose.yaml maintenance/scripts/setup.py evaluations/compose.yaml \
+        evaluations/scripts/setup.py; do
         [ -f "$bundle_dir/$file" ] || fail "Installation bundle is missing $file"
     done
 
@@ -175,7 +191,7 @@ main() {
     install_dir=$(cd "$install_dir" && pwd)
     # Back up generated configuration when rerunning; never replace .env.
     for file in compose.yaml compose.users.yaml compose.lan.yaml compose.users.lan.yaml conversationalbi/compose.yaml \
-        dbt/compose.yaml ingestion/compose.yaml maintenance/compose.yaml evaluations/compose.yaml; do
+        dbt/compose.yaml ingestion/compose.yaml replication/compose.yaml maintenance/compose.yaml evaluations/compose.yaml; do
         if [ -f "$install_dir/$file" ]; then
             cp "$install_dir/$file" "$install_dir/$file.bak"
         fi
@@ -222,6 +238,14 @@ main() {
         printf 'Preparing Ingestion (dlt) in %s/ingestion...\n' "$install_dir"
         setup_run "$setup_image" /install/ingestion/scripts/setup.py >/dev/null
     fi
+    if [ "$rep" = true ]; then
+        if [ "$rep_registered" = false ]; then
+            setup_run "$setup_image" /install/scripts/setup.py --extension replication \
+                --origin http://localhost:3014 --handshake /install/replication/.env.bridge >/dev/null
+        fi
+        printf 'Preparing Replication (OLake) in %s/replication...\n' "$install_dir"
+        setup_run "$setup_image" /install/replication/scripts/setup.py >/dev/null
+    fi
     if [ "$mnt" = true ]; then
         if [ "$mnt_registered" = false ]; then
             setup_run "$setup_image" /install/scripts/setup.py --extension maintenance \
@@ -246,6 +270,7 @@ main() {
     # The images profile adds the runner image, which the launcher starts for every run.
     [ "$dbt" = false ] || dbt_compose --profile images pull
     [ "$ing" = false ] || ing_compose --profile images pull
+    [ "$rep" = false ] || rep_compose --profile images pull
     [ "$mnt" = false ] || mnt_compose --profile images pull
     [ "$eval" = false ] || eval_compose pull
     printf 'Starting administration and data services...\n'
@@ -263,6 +288,10 @@ main() {
     if [ "$ing" = true ]; then
         printf 'Starting Ingestion (dlt)...\n'
         ing_compose up -d --no-build --wait --wait-timeout 300
+    fi
+    if [ "$rep" = true ]; then
+        printf 'Starting Replication (OLake)...\n'
+        rep_compose up -d --no-build --wait --wait-timeout 300
     fi
     if [ "$mnt" = true ]; then
         printf 'Starting Maintenance...\n'
@@ -325,6 +354,16 @@ main() {
         printf '   Skill    ingestion: ask your agent, for example "Load the orders table from our PostgreSQL"\n'
         stop="docker compose -f ingestion/compose.yaml down && $stop"
         start="$start && docker compose -f ingestion/compose.yaml up -d --wait"
+        step=$((step + 1))
+    fi
+    if [ "$rep" = true ]; then
+        rep_origin=$(file_value "$install_dir/replication/.env.bridge" EXTENSION_ORIGIN)
+        printf '\n%s. Keep databases in step with Replication (OLake)\n   %s\n' "$step" "$rep_origin"
+        printf '   A team administrator enables it once per environment: Enable, on the page\n'
+        printf '   Agent    claude mcp add --transport http --client-id ext-replication-mcp --callback-port 3010 iceberg-replication %s/mcp\n' "${rep_origin%/}"
+        printf '   Skill    replication: ask your agent, for example "Replicate the orders tables of our PostgreSQL"\n'
+        stop="docker compose -f replication/compose.yaml down && $stop"
+        start="$start && docker compose -f replication/compose.yaml up -d --wait"
         step=$((step + 1))
     fi
     if [ "$mnt" = true ]; then
@@ -429,6 +468,10 @@ dbt_compose() {
 
 ing_compose() {
     docker compose --env-file "$install_dir/ingestion/.env" -f "$install_dir/ingestion/compose.yaml" "$@"
+}
+
+rep_compose() {
+    docker compose --env-file "$install_dir/replication/.env" -f "$install_dir/replication/compose.yaml" "$@"
 }
 
 mnt_compose() {

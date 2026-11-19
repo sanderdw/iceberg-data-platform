@@ -32,4 +32,4 @@ Concepts:
 - [Architecture](architecture.md): components, authorization boundaries and the repository layout.
 - [Keycloak](keycloak.md): realm, clients, configuration and deployment boundaries.
 
-Extension internals: [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md) and [OpenMetadata](openmetadata.md).
+Extension internals: [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md), [Replication (OLake)](replication.md) and [OpenMetadata](openmetadata.md).

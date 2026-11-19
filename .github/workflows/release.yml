@@ -98,6 +98,25 @@ jobs:
           if [ -n "$problem" ]; then
             echo "$problem. Release Ingestion first." >&2; exit 1
           fi
+      - name: Replication release is published
+        # The same for Replication (OLake): its tag, its bundled files and its public images.
+        if: steps.version.outputs.preview != 'true'
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('extensions/replication/pyproject.toml', 'rb'))['project']['version'])")
+          problem=
+          if ! git rev-parse -q --verify "refs/tags/replication-v$version" >/dev/null; then
+            problem="Tag replication-v$version does not exist"
+          elif ! git diff --quiet "replication-v$version" HEAD -- extensions/replication/compose.yaml extensions/replication/scripts/setup.py extensions/replication/skills; then
+            problem="The bundled Replication files changed since replication-v$version"
+          else
+            for image in iceberg-replication iceberg-replication-runner; do
+              docker --config "$(mktemp -d)" manifest inspect "ghcr.io/sanderdw/$image:$version" >/dev/null \
+                || problem="ghcr.io/sanderdw/$image:$version is not public"
+            done
+          fi
+          if [ -n "$problem" ]; then
+            echo "$problem. Release Replication first." >&2; exit 1
+          fi
       - name: Maintenance release is published
         # The same for Maintenance (beta): its tag, its bundled files and its public images.
         if: steps.version.outputs.preview != 'true'
@@ -219,7 +238,7 @@ jobs:
   extension-images:
     # Previews only: the extensions from this commit, under the preview's image tag. Stable
     # releases install the images of their own releases (conversationalbi-release.yml, dbt-release.yml,
-    # ingestion-release.yml, maintenance-release.yml, evaluations-release.yml).
+    # ingestion-release.yml, replication-release.yml, maintenance-release.yml, evaluations-release.yml).
     needs: validate
     if: needs.validate.outputs.preview == 'true'
     permissions:
@@ -229,8 +248,8 @@ jobs:
       fail-fast: false
       matrix:
         image: [iceberg-conversationalbi, iceberg-conversationalbi-runtime, iceberg-dbt, iceberg-dbt-runner,
-                iceberg-ingestion, iceberg-ingestion-runner, iceberg-maintenance, iceberg-maintenance-runner,
-                iceberg-evaluations]
+                iceberg-ingestion, iceberg-ingestion-runner, iceberg-replication, iceberg-replication-runner,
+                iceberg-maintenance, iceberg-maintenance-runner, iceberg-evaluations]
         arch: [amd64, arm64]
         include:
           - image: iceberg-conversationalbi
@@ -251,6 +270,12 @@ jobs:
           - image: iceberg-ingestion-runner
             dockerfile: extensions/ingestion/runner/Dockerfile
             context: extensions/ingestion
+          - image: iceberg-replication
+            dockerfile: extensions/replication/Dockerfile
+            context: extensions/replication
+          - image: iceberg-replication-runner
+            dockerfile: extensions/replication/runner/Dockerfile
+            context: extensions/replication
           - image: iceberg-maintenance
             dockerfile: extensions/maintenance/Dockerfile
             context: extensions/maintenance
@@ -327,8 +352,8 @@ jobs:
           done
           if [ "$PREVIEW" = true ]; then
             for image in iceberg-conversationalbi iceberg-conversationalbi-runtime iceberg-dbt iceberg-dbt-runner \
-              iceberg-ingestion iceberg-ingestion-runner iceberg-maintenance iceberg-maintenance-runner \
-              iceberg-evaluations; do
+              iceberg-ingestion iceberg-ingestion-runner iceberg-replication iceberg-replication-runner \
+              iceberg-maintenance iceberg-maintenance-runner iceberg-evaluations; do
               docker buildx imagetools create --tag "ghcr.io/sanderdw/${image}:${IMAGE_TAG}" \
                 "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-amd64" "ghcr.io/sanderdw/${image}:${IMAGE_TAG}-arm64"
             done
@@ -360,8 +385,8 @@ jobs:
           done
           # New GHCR packages start private: make them public in the package settings, then re-run.
           for image in iceberg-conversationalbi iceberg-conversationalbi-runtime iceberg-dbt iceberg-dbt-runner \
-              iceberg-ingestion iceberg-ingestion-runner iceberg-maintenance iceberg-maintenance-runner \
-              iceberg-evaluations; do
+              iceberg-ingestion iceberg-ingestion-runner iceberg-replication iceberg-replication-runner \
+              iceberg-maintenance iceberg-maintenance-runner iceberg-evaluations; do
             docker --config "$anonymous_config" manifest inspect "ghcr.io/sanderdw/${image}:${IMAGE_TAG}" > /dev/null \
               || { echo "ghcr.io/sanderdw/${image} is not public" >&2; exit 1; }
           done
@@ -390,7 +415,7 @@ jobs:
 
           Requires Docker with Compose v2 and a fresh installation. Uses the same project names, volumes and ports as stable; use a separate Docker environment to test alongside an existing installation.
 
-          The installer can also add the Conversational BI, dbt, Ingestion (dlt), Maintenance (beta) and Evaluations extensions, built from the same commit: it asks in a terminal, or set ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion,maintenance,evaluations (see https://sanderdw.github.io/iceberg-data-platform/extensions/).
+          The installer can also add the Conversational BI, dbt, Ingestion (dlt), Replication (OLake), Maintenance (beta) and Evaluations extensions, built from the same commit: it asks in a terminal, or set ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion,replication,maintenance,evaluations (see https://sanderdw.github.io/iceberg-data-platform/extensions/).
 
           Open http://localhost:3000 and use PLATFORM_ADMIN_USERNAME and PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Change the initial password, then create a team, database and user. The user portal is http://localhost:3002 and Keycloak is http://localhost:8080/admin. No demo accounts or data are created automatically.
 
@@ -451,7 +476,7 @@ jobs:
 
           \`irm https://github.com/${GH_REPO}/releases/latest/download/install.ps1 | iex\`
 
-          The installer creates configuration and random credentials, pulls the images of this release and starts both Compose projects. It can also add the separately released Conversational BI, dbt, Ingestion (dlt), Maintenance (beta) and Evaluations extensions; see https://sanderdw.github.io/iceberg-data-platform/extensions/. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
+          The installer creates configuration and random credentials, pulls the images of this release and starts both Compose projects. It can also add the separately released Conversational BI, dbt, Ingestion (dlt), Replication (OLake), Maintenance (beta) and Evaluations extensions; see https://sanderdw.github.io/iceberg-data-platform/extensions/. Open http://localhost:3000 and sign in with the PLATFORM_ADMIN_USERNAME and initial PLATFORM_ADMIN_PASSWORD from ~/iceberg-data-platform/.env. Keycloak is available on http://localhost:8080.
 
           The commands above always install the newest release. To install exactly this version, replace \`latest/download\` with \`download/v${VERSION}\`; its installers, Compose files and images are pinned to ${VERSION}.
 

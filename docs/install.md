@@ -32,7 +32,7 @@ The installer scripts and archives are available in the [release assets](https:/
 
 ## Add extensions
 
-The installer can also add [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md), [Maintenance](maintenance.md) (beta) and, with Conversational BI, [Evaluations](evaluations.md); in a terminal it asks for each one. See [extensions](extensions.md#install).
+The installer can also add [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md), [Replication (OLake)](replication.md), [Maintenance](maintenance.md) (beta) and, with Conversational BI, [Evaluations](evaluations.md); in a terminal it asks for each one. See [extensions](extensions.md#install).
 
 ## Install a specific version
 
@@ -81,6 +81,7 @@ docker compose -f compose.users.yaml up -d --wait users
 docker compose -f conversationalbi/compose.yaml up -d --wait   # with Conversational BI
 docker compose -f dbt/compose.yaml up -d --wait                # with dbt pipelines
 docker compose -f ingestion/compose.yaml up -d --wait          # with Ingestion (dlt)
+docker compose -f replication/compose.yaml up -d --wait        # with Replication (OLake)
 docker compose -f maintenance/compose.yaml up -d --wait        # with Maintenance
 docker compose -f evaluations/compose.yaml up -d --wait        # with Evaluations
 ```
@@ -94,6 +95,7 @@ docker compose -f evaluations/compose.yaml down        # with Evaluations
 docker compose -f maintenance/compose.yaml down        # with Maintenance
 docker compose -f conversationalbi/compose.yaml down   # with Conversational BI
 docker compose -f dbt/compose.yaml down                # with dbt pipelines
+docker compose -f replication/compose.yaml down        # with Replication (OLake)
 docker compose -f ingestion/compose.yaml down          # with Ingestion (dlt)
 docker compose -f compose.users.yaml down
 docker compose down
