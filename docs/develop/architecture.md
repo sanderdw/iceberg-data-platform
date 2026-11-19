@@ -76,7 +76,7 @@ The third party never signs in to a portal. A team administrator hands over the 
 | `extensions/conversationalbi/compose.yaml` | `iceberg-conversationalbi` | Optional Conversational BI extension, released separately (see [extensions](../extensions.md)) |
 | `extensions/dbt/compose.yaml` | `iceberg-dbt` | Optional dbt extension: API, MCP and viewer, and the launcher of isolated run containers, released separately |
 | `extensions/ingestion/compose.yaml` | `iceberg-ingestion` | Optional Ingestion (dlt) extension: page, API and MCP, and the launcher of isolated run containers, released separately |
-| `extensions/replication/compose.yaml` | `iceberg-replication` | Optional Replication (OLake) extension: page, API and MCP, and the launcher of isolated OLake run containers, released separately |
+| `extensions/replication/compose.yaml` | `iceberg-replication` | Optional Replication (OLake) extension (beta): page, API and MCP, and the launcher of isolated OLake run containers, released separately |
 | `extensions/maintenance/compose.yaml` | `iceberg-maintenance` | Optional Maintenance extension (beta): page, API and MCP, and the launcher of isolated run containers with the Go runner, released separately |
 | `extensions/openmetadata/compose.yaml` | `iceberg-openmetadata` | Optional OpenMetadata sync of listed data shares, with its own installer and release |
 

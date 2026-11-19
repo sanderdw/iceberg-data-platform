@@ -1,4 +1,4 @@
-# The Replication (OLake) extension: a separate Compose project that uses the platform only through the
+# The Replication (OLake) extension (beta): a separate Compose project that uses the platform only through the
 # Extension Bridge (contracts/bridge in the platform repository), Iceberg REST and S3.
 name: iceberg-replication
 

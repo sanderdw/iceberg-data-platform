@@ -32,7 +32,7 @@ The installer scripts and archives are available in the [release assets](https:/
 
 ## Add extensions
 
-The installer can also add [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md), [Replication (OLake)](replication.md), [Maintenance](maintenance.md) (beta) and, with Conversational BI, [Evaluations](evaluations.md); in a terminal it asks for each one. See [extensions](extensions.md#install).
+The installer can also add [Conversational BI](conversational-bi.md), [dbt pipelines](dbt.md), [Ingestion (dlt)](ingestion.md), [Replication (OLake)](replication.md) (beta), [Maintenance](maintenance.md) (beta) and, with Conversational BI, [Evaluations](evaluations.md); in a terminal it asks for each one. See [extensions](extensions.md#install).
 
 ## Install a specific version
 

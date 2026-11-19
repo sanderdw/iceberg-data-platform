@@ -1,7 +1,7 @@
 [project]
 name = "iceberg-replication"
 version = "0.0.1"
-description = "Replication (OLake) for the Iceberg Data Platform: keeps operational databases in step with Iceberg through change data capture, with a UI, API and MCP server"
+description = "Replication (OLake) for the Iceberg Data Platform (beta): keeps operational databases in step with Iceberg through change data capture, with a UI, API and MCP server"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]

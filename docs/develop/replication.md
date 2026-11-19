@@ -1,6 +1,6 @@
 # Replication internals
 
-How the [Replication (OLake)](../replication.md) extension is built. Its source is in [`extensions/replication`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/replication): its own Compose project (`iceberg-replication`), dependencies, images, version and releases. It uses the platform only through the [Extension Bridge](extension-bridge.md) v1, Iceberg REST and S3, so the platform and this extension upgrade independently.
+How the [Replication (OLake)](../replication.md) extension (beta) is built. Its source is in [`extensions/replication`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/replication): its own Compose project (`iceberg-replication`), dependencies, images, version and releases. It uses the platform only through the [Extension Bridge](extension-bridge.md) v1, Iceberg REST and S3, so the platform and this extension upgrade independently.
 
 | | |
 | --- | --- |

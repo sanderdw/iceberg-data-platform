@@ -88,7 +88,7 @@ main() {
         read -r answer </dev/tty || answer=
         case $answer in [Yy]*) ing=true ;; esac
     fi
-    # And the Replication (OLake) extension.
+    # And the Replication (OLake) extension (beta).
     rep=false
     rep_registered=false
     case ",${ICEBERG_EXTENSIONS:-}," in *,replication,*) rep=true ;; esac
@@ -98,7 +98,7 @@ main() {
         rep_registered=true
     fi
     if [ "$rep" = false ] && [ -z "${ICEBERG_EXTENSIONS+set}" ] && has_tty; then
-        printf 'Add Replication (OLake), which keeps operational databases in step with your tables? Its launcher\nuses the Docker socket to start each run in an isolated container. [y/N] ' >/dev/tty
+        printf 'Add Replication (OLake, beta), which keeps operational databases in step with your tables? Its launcher\nuses the Docker socket to start each run in an isolated container. [y/N] ' >/dev/tty
         answer=
         read -r answer </dev/tty || answer=
         case $answer in [Yy]*) rep=true ;; esac
@@ -358,7 +358,7 @@ main() {
     fi
     if [ "$rep" = true ]; then
         rep_origin=$(file_value "$install_dir/replication/.env.bridge" EXTENSION_ORIGIN)
-        printf '\n%s. Keep databases in step with Replication (OLake)\n   %s\n' "$step" "$rep_origin"
+        printf '\n%s. Keep databases in step with Replication (OLake, beta)\n   %s\n' "$step" "$rep_origin"
         printf '   A team administrator enables it once per environment: Enable, on the page\n'
         printf '   Agent    claude mcp add --transport http --client-id ext-replication-mcp --callback-port 3010 iceberg-replication %s/mcp\n' "${rep_origin%/}"
         printf '   Skill    replication: ask your agent, for example "Replicate the orders tables of our PostgreSQL"\n'

@@ -1,6 +1,8 @@
-# Replication (OLake)
+# Replication (OLake, beta)
 
 Keep operational databases in step with a team's Apache Iceberg databases. Each run reads the changes since the last one with [OLake](https://github.com/datazip-inc/olake-go): inserts, updates and deletes from PostgreSQL's write-ahead log (change data capture), or the rows whose cursor column grew. It writes them as the team's service account and stops. Run it every few minutes on a schedule. People use the replications page; AI agents and scripts use the same capabilities through MCP and a REST API.
+
+**0.0.1 is the first, beta release.** It supports PostgreSQL only, and OLake has open issues that affect some tables; see [known issues](#known-issues) before you rely on it.
 
 | | |
 | --- | --- |

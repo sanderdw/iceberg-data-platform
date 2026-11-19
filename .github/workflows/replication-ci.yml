@@ -1,5 +1,5 @@
 name: Replication extension CI
-# The Replication extension (extensions/replication) is tested and released on its own. It runs when the extension, the
+# The Replication extension (extensions/replication, beta) is tested and released on its own. It runs when the extension, the
 # Bridge contract it depends on, or the Bridge implementation changes.
 on:
   push:

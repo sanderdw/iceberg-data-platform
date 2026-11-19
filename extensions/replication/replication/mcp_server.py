@@ -30,7 +30,7 @@ WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent
 RUN = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
 DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
                               open_world_hint=False)
-INSTRUCTIONS = """Replication (OLake) on the Iceberg Data Platform: keeps operational databases in step with a
+INSTRUCTIONS = """Replication (OLake, beta) on the Iceberg Data Platform: keeps operational databases in step with a
 team's Iceberg databases. Each run reads the changes since the last one (change data capture from
 PostgreSQL's write-ahead log, or an incremental cursor), writes them as the team's service account
 and stops. For REST APIs, files and one-time database loads, use the Ingestion (dlt) extension.

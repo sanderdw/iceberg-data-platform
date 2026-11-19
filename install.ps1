@@ -79,13 +79,13 @@
         $Answer = Read-Host "Add Ingestion (dlt), which loads REST APIs, databases and files into your tables? Its launcher`nuses the Docker socket to start each run in an isolated container. [y/N]"
         $Ingestion = $Answer -match '^[Yy]'
     }
-    # And the Replication (OLake) extension.
+    # And the Replication (OLake) extension (beta).
     $Replication = @($env:ICEBERG_EXTENSIONS -split ',' | ForEach-Object { $_.Trim() }) -contains 'replication'
     $ReplicationRegistered = (Test-Path "$InstallDir/replication/.env.bridge") -and (Test-Path "$InstallDir/.env") -and
         [bool](Select-String -Path "$InstallDir/.env" -Pattern '^PLATFORM_EXTENSIONS=(.*,)?replication=' -Quiet)
     if ($ReplicationRegistered) { $Replication = $true }
     if (-not $Replication -and -not $env:ICEBERG_EXTENSIONS -and $Interactive) {
-        $Answer = Read-Host "Add Replication (OLake), which keeps operational databases in step with your tables? Its launcher`nuses the Docker socket to start each run in an isolated container. [y/N]"
+        $Answer = Read-Host "Add Replication (OLake, beta), which keeps operational databases in step with your tables? Its launcher`nuses the Docker socket to start each run in an isolated container. [y/N]"
         $Replication = $Answer -match '^[Yy]'
     }
     # And the Maintenance extension (beta).
@@ -333,7 +333,7 @@
         }
         if ($Replication) {
             $ReplicationOrigin = (Get-FileValue "$InstallDir/replication/.env.bridge" EXTENSION_ORIGIN).TrimEnd('/')
-            Write-Host "`n$Step. Keep databases in step with Replication (OLake)"
+            Write-Host "`n$Step. Keep databases in step with Replication (OLake, beta)"
             Write-Host "   $ReplicationOrigin"
             Write-Host '   A team administrator enables it once per environment: Enable, on the page'
             Write-Host "   Agent    claude mcp add --transport http --client-id ext-replication-mcp --callback-port 3010 iceberg-replication $ReplicationOrigin/mcp"

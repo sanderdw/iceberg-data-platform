@@ -164,7 +164,7 @@ jobs:
         # Never "latest": releases/latest/download/install.sh must stay the platform's installer.
         run: |
           gh release create "replication-v${VERSION}" dist/*.tar.gz dist/*.tgz --repo "$GITHUB_REPOSITORY" --latest=false \
-            --title "Replication (OLake) ${VERSION}" --notes "Replication (OLake) ${VERSION} for the Iceberg Data Platform (Bridge contract 0.1). Images: ghcr.io/sanderdw/iceberg-replication:${VERSION} and ghcr.io/sanderdw/iceberg-replication-runner:${VERSION}."
+            --prerelease --title "Replication (OLake) ${VERSION} (beta)" --notes "Replication (OLake) ${VERSION} (beta) for the Iceberg Data Platform (Bridge contract 0.1). Images: ghcr.io/sanderdw/iceberg-replication:${VERSION} and ghcr.io/sanderdw/iceberg-replication-runner:${VERSION}."
       - name: Create the preview prerelease
         if: needs.validate.outputs.preview == 'true'
         env:

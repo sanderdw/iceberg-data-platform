@@ -288,7 +288,7 @@ def ingestion_bundle(root=ROOT, image_tag=None):
 
 
 def replication_bundle(root=ROOT, image_tag=None):
-    """The Replication (OLake) extension for the installer: its compose file on the published images, its setup and skill."""
+    """The Replication (OLake) extension (beta) for the installer: its compose file on the published images, its setup and skill."""
     version, compose = launcher_compose(root, REP, "iceberg-replication", image_tag)
     return version, {"replication/compose.yaml": compose,
                      "replication/scripts/setup.py": (root / REP / "scripts/setup.py").read_bytes(),

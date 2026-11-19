@@ -305,3 +305,5 @@ select.pill, .field select, .hints select {
 .mode .title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 form.secret-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; border: 0; }
 form.secret-row input { flex: 1 1 200px; }
+.beta { font: .65rem var(--mono); padding: 1px 8px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent);
+  text-transform: uppercase; letter-spacing: .06em; margin-left: 4px; vertical-align: middle; }

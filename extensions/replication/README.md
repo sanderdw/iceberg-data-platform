@@ -1,4 +1,4 @@
-# Replication (OLake) for the Iceberg Data Platform
+# Replication (OLake) for the Iceberg Data Platform (beta)
 
 Keep operational databases in step with a team's Apache Iceberg databases. Each run reads the
 changes since the last one with [OLake](https://github.com/datazip-inc/olake-go) (change data
@@ -6,6 +6,9 @@ capture from PostgreSQL's write-ahead log, or an incremental cursor), writes the
 service account and stops. People use the replications page; AI agents and scripts use the same
 capabilities through MCP and a REST API. For REST APIs, files and one-time loads, use Ingestion
 (dlt).
+
+**0.0.1 is the first, beta release:** PostgreSQL only, and OLake has open issues that affect some
+tables (see the known issues in [DECISIONS.md](DECISIONS.md)).
 
 This is an extension: its own Compose project (`iceberg-replication`) and Helm chart (`deploy/helm/iceberg-replication`, published as `oci://ghcr.io/sanderdw/charts/iceberg-replication`), dependencies, images, version
 and releases. It uses the platform only through the **Extension Bridge v1** (`contracts/bridge` in

@@ -77,7 +77,7 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
 
     app = FastAPI(title="Replication (OLake) · Iceberg Data Platform", version=VERSION, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url="/api/v1/openapi.json",
-                  description="Replications that keep operational databases in step with your teams' Iceberg "
+                  description="Replications (beta) that keep operational databases in step with your teams' Iceberg "
                               "databases with OLake (change data capture), with source checks, runs and schedules. "
                               "Authenticate with a Keycloak bearer token "
                               "for the iceberg-bridge audience (client ext-replication-mcp), or sign in with the "

@@ -510,7 +510,7 @@ def assert_replication_installed(result, env):
                 and any(a.endswith("compose.yaml") and "replication" in a for a in args))
     assert pull < next(i for i, args in enumerate(commands) if "up" in args)
     output = result.stdout.split("is running.")[1]
-    assert "3. Keep databases in step with Replication (OLake)\n   http://localhost:3014\n" in output
+    assert "3. Keep databases in step with Replication (OLake, beta)\n   http://localhost:3014\n" in output
     assert "--client-id ext-replication-mcp --callback-port 3010 iceberg-replication http://localhost:3014/mcp" in output
     assert "Skill    replication:" in output
     assert "docker compose -f replication/compose.yaml up -d --wait" in output

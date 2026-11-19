@@ -2,7 +2,7 @@
 
 ## 0.0.1 - unreleased
 
-- First version of Replication (OLake) for the Iceberg Data Platform, on Extension Bridge contract 0.1.
+- First, beta version of Replication (OLake) for the Iceberg Data Platform, on Extension Bridge contract 0.1.
 - PostgreSQL sources: change data capture through a replication slot and publication, incremental
   on a cursor column, or full copies, per table. The first run copies the existing rows (or only
   follows new changes), then each run reads the changes since the last one.

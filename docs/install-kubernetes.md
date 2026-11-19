@@ -207,7 +207,7 @@ helm upgrade iceberg $chart/iceberg-data-platform --version 0.9.12 -n iceberg --
 common="-n iceberg --set ingress.className=traefik --set tls.clusterIssuer=letsencrypt-prod --wait"
 helm install dbt $chart/iceberg-dbt --version 0.1.4 $common
 helm install ingestion $chart/iceberg-ingestion --version 0.1.4 $common
-# Replication: list the networks of your operational databases.
+# Replication (beta): list the networks of your operational databases.
 helm install replication $chart/iceberg-replication --version 0.0.1 $common \
   --set 'runs.allowedSourceNetworks={10.20.0.0/16}'
 # Maintenance (beta): snapshot expiry, compaction and orphan cleanup for the teams' tables.
@@ -224,7 +224,7 @@ helm install evaluations $chart/iceberg-evaluations --version 0.1.1 $common
 - **dbt and Ingestion** run every build or load as a Kubernetes Job in a namespace of their own
   (`iceberg-dbt-runs`, `iceberg-ingestion-runs`), with the same isolation as on Docker. Ingestion runs
   reach public sources only; `--set runs.allowPrivateSources=true` also allows sources in your own network.
-- **Replication** runs OLake as a Job in `iceberg-replication-runs`, with the same isolation as on
+- **Replication** (beta) runs OLake as a Job in `iceberg-replication-runs`, with the same isolation as on
   Docker. Its runs reach public sources and the networks in `runs.allowedSourceNetworks`, whose
   addresses the gateway checks and pins before every run.
 - **Maintenance** (beta) runs every health check, dry run and maintenance run as a Job in

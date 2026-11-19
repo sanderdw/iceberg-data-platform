@@ -3,7 +3,7 @@ name: replication
 description: Keep an operational PostgreSQL database in step with a team's Iceberg databases on the Iceberg Data Platform, with change data capture through the Replication (OLake) extension's MCP tools. Use when a user asks to replicate, mirror, sync or stream a database's tables (including updates and deletes) into Iceberg, to set up change data capture, or to fix a failing replication run. For REST APIs, files and one-time loads, use the ingestion skill instead.
 ---
 
-# Replication (OLake) on the Iceberg Data Platform
+# Replication (OLake) on the Iceberg Data Platform (beta)
 
 The Replication extension's MCP server (`iceberg-replication`, at `http://localhost:3014/mcp`)
 keeps operational databases in step with the team's Apache Iceberg databases. Each run reads the
