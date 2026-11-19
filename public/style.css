@@ -100,3 +100,12 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 /* A drawn chevron: the native arrow ignores padding and sits against the border. Placed last so it survives the background shorthands above. */
 select, label select, .filters select, .metric-heading select, .team-role select { appearance:none; padding-right:40px; background-image:var(--chevron); background-repeat:no-repeat; background-position:right 16px center; background-size:12px 8px; }
 .filters select { padding-right:28px; background-position:right 4px center; }
+
+/* Team administrators: read-only. The server refuses every change anyway; this hides the controls. */
+.read-only #create, .read-only #empty-create, .read-only #add-user, .read-only [data-revoke-share],
+.read-only [data-revoke-automation], .read-only [data-rename-db], .read-only [data-move],
+.read-only [data-memberships], .read-only [data-edit-team], .read-only [data-delete],
+.read-only [data-delete-team], .read-only [data-delete-db], .read-only #identity-new,
+.read-only #identity-link, .read-only [data-retry-identity], .read-only [data-reset-identity],
+.read-only [data-link-identity], .read-only #guide-teams { display: none !important; }
+.read-only-badge { border-color: var(--accent); color: var(--text-primary); }

@@ -336,3 +336,51 @@ def test_user_link_identity_permissions_and_token_expiry(issuer):
         assert client.get(token_path, headers={"Authorization": "Bearer hidden-runtime-token"}).status_code == 403
         assert client.get("/api/workspace").status_code == 403
         assert client.get(start(client, state), follow_redirects=False).status_code == 403
+
+
+def team_member(provider, role):
+    """A portal user with `role` in a new team, and the account-link claims of their Keycloak token."""
+    from server.models import TeamInput, UserInput
+
+    team = provider.save_team(TeamInput(name=f"team-{role}"))["id"]
+    user = provider.create_user(UserInput(name=f"user-{role}", memberships=[{"team": team, "role": role}]))
+    return {"resource_access": {"iceberg-admin": {"roles": []}},
+            "polaris": {"principal_name": user["user"]["id"], "principal_id": 0}}
+
+
+def test_team_administrators_get_read_only_access(issuer):
+    oidc, state = issuer
+    provider = MemoryPolaris()
+    state["access_changes"] = team_member(provider, "admin")
+    with TestClient(create_app(provider, PASSWORD, oidc=oidc)) as client:
+        assert client.get(start(client, state), follow_redirects=False).status_code == 303
+        assert client.get("/api/session").json()["access"] == "viewer"
+        # Everything is visible.
+        for path in ("/api/overview", "/api/teams", "/api/users", "/api/databases"):
+            assert client.get(path).status_code == 200, path
+        # Nothing changes, whatever the request.
+        refused = client.post("/api/teams", json={"name": "new-team"}, headers=HEADERS)
+        assert refused.status_code == 403 and "read-only" in refused.json()["error"]
+        team = provider.list_teams()[0]["id"]
+        assert client.delete(f"/api/teams/{team}", headers=HEADERS).status_code == 403
+        assert len(provider.list_teams()) == 1
+        # Signing out still works.
+        assert client.delete("/api/session", headers=HEADERS).status_code == 200
+
+
+def test_members_who_administer_no_team_are_refused(issuer):
+    oidc, state = issuer
+    provider = MemoryPolaris()
+    state["access_changes"] = team_member(provider, "writer")
+    with TestClient(create_app(provider, PASSWORD, oidc=oidc)) as client:
+        assert client.get(start(client, state), follow_redirects=False).status_code == 403
+        assert client.get("/api/teams").status_code == 401
+
+
+def test_platform_administrators_keep_full_access(issuer):
+    oidc, state = issuer
+    provider = MemoryPolaris()
+    with TestClient(create_app(provider, PASSWORD, oidc=oidc)) as client:
+        assert client.get(start(client, state), follow_redirects=False).status_code == 303
+        assert client.get("/api/session").json()["access"] == "admin"
+        assert client.post("/api/teams", json={"name": "new-team"}, headers=HEADERS).status_code in (200, 201)

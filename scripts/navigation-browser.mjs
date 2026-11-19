@@ -78,6 +78,28 @@ try {
   await page.screenshot({path: 'test-results/navigation/guide-mobile.png', fullPage: true});
   await page.getByRole('button', {name: 'Start with a team'}).click();
   await expect(page.getByRole('heading', {name: 'Teams.', exact: true})).toBeVisible();
+  // A team administrator: read-only. Everything shows; nothing that changes the platform does.
+  const readOnly = await browser.newPage({viewport: {width: 1440, height: 1000}});
+  readOnly.on('pageerror', error => errors.push(error.message));
+  await readOnly.route('http://navigation.test/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/session') return route.fulfill({json: {authenticated: true, access: 'viewer', user: 'tom.admin', loginUrl: '/auth/login', userManagement: 'keycloak'}});
+    if (path === '/api/overview') return route.fulfill({json: {...overview, databases: [{id: 'db-a', name: 'sales', team: 'team-a', environment: 'development', status: 'ready', users: []}]}});
+    const asset = path === '/' ? 'public/index.html' : `public${path}`;
+    const contentType = path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.ttf') ? 'font/ttf' : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
+    return route.fulfill({body: await readFile(asset), contentType});
+  });
+  await readOnly.goto('http://navigation.test');
+  await expect(readOnly.getByRole('heading', {name: 'Teams.', exact: true})).toBeVisible();
+  await expect(readOnly.locator('.read-only-badge')).toHaveText('Read-only');
+  await expect(readOnly.locator('.profile')).toContainText('tom.admin');
+  await expect(readOnly.locator('.profile')).toContainText('Team administrator · read-only');
+  await expect(readOnly.locator('tbody')).toContainText('Analytics');
+  for (const name of ['Create team', 'Edit', 'Delete']) await expect(readOnly.getByRole('button', {name, exact: true})).toHaveCount(0);
+  await readOnly.getByRole('button', {name: 'Databases'}).first().click();
+  await expect(readOnly.locator('tbody')).toContainText('sales');
+  for (const name of ['Create database', 'Rename', 'Move', 'Delete']) await expect(readOnly.getByRole('button', {name, exact: true})).toHaveCount(0);
+  await readOnly.screenshot({path: 'test-results/navigation/read-only.png', fullPage: true});
   expect(errors).toEqual([]);
-  console.log('PASS: admin reload and Back/Forward, persistent search, timed/focus list updates, unsaved form preservation, user-creation spacing, page-scoped status, getting started guide');
+  console.log('PASS: admin reload and Back/Forward, persistent search, timed/focus list updates, unsaved form preservation, user-creation spacing, page-scoped status, getting started guide, read-only team administrators');
 } finally { await browser.close(); }

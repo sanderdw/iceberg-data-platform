@@ -45,7 +45,7 @@ def test_auth_static_csrf_validation_and_logout():
         login = c.post("/api/session", json={"password": PASSWORD}, headers=HEADERS)
         assert "HttpOnly" in login.headers["set-cookie"]
         assert "SameSite=strict" in login.headers["set-cookie"]
-        assert c.get("/api/session").json() == {"authenticated": True}
+        assert c.get("/api/session").json() == {"authenticated": True, "access": "admin"}
         assert c.get("/openapi.json").json()["info"]["title"] == "Iceberg Workspace API"
         assert c.post("/api/teams", content='{"name":', headers=HEADERS).status_code == 422
         assert c.post("/api/teams", content="x" * 8193, headers=HEADERS).status_code == 413
