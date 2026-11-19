@@ -14,8 +14,8 @@ test('central teams, memberships, move and deletion through FastAPI', async ({ p
     await expect(page.getByRole('heading', { name: 'Welcome to Iceberg' })).toBeVisible();
     await page.getByLabel('Admin password').fill(process.env.PORTAL_PASSWORD);
     await page.getByRole('button', { name: 'Open workspace' }).click();
-    await expect(page.getByRole('heading', { name: 'Databases.' })).toBeVisible();
-    await page.getByRole('button', { name: 'Teams', exact: true }).click();
+    // The portal opens on Teams, where setting up starts.
+    await expect(page.getByRole('heading', { name: 'Teams.' })).toBeVisible();
     for (const name of [first, second]) {
       await page.getByRole('button', { name: 'Create team', exact: true }).click();
       await page.getByLabel('Team name').fill(name);
