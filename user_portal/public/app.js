@@ -135,25 +135,54 @@ function notebookLoader(label) {
 }
 function hideNotebookLoader() { clearInterval(loaderTimer); loaderTimer = null; $('#notebook-loader')?.remove(); }
 function resetEditor() { hideNotebookLoader(); $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
-function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; $('#guide-nav').hidden = true; sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#workspace-screen').classList.remove('started'); $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
+function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; $('#guide-nav').hidden = true; $('#apps').hidden = true; closeMenus(); placeThemeToggle(false); sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#workspace-screen').classList.remove('started'); $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
 // A stopped server answers through the proxy with plain text, or not at all.
 const serverDown = 'The workspace server is not responding. Try again in a moment.';
 async function api(path, method = 'GET', body) { let response, result; try { response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); } catch { throw new Error(serverDown); } try { result = await response.json(); } catch { throw new Error(response.status >= 500 ? serverDown : `The request failed with HTTP ${response.status}.`); } if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
-// Extensions open in their own origin; the portal only links to them.
-const extensionLabels = {conversationalbi: 'Conversational BI', dbt: 'Pipelines', ingestion: 'Ingestion (dlt)', replication: 'Replication (OLake)', maintenance: 'Maintenance', openmetadata: 'OpenMetadata', evaluations: 'Evaluations'};
+// Extensions open in their own origin; the portal only links to them, from the Apps menu.
+const extensionLabels = {conversationalbi: 'Conversational BI', dbt: 'Pipelines', ingestion: 'Ingestion', replication: 'Replication', maintenance: 'Maintenance', openmetadata: 'OpenMetadata', evaluations: 'Evaluations'};
+const extensionPurposes = {conversationalbi: 'Ask questions about your semantic models', dbt: 'Build, test and schedule dbt models', ingestion: 'Load APIs, files and one-time database copies', replication: 'Keep operational databases in step', maintenance: 'Keep your tables compact and tidy', openmetadata: 'Your data products in OpenMetadata', evaluations: "Check Conversational BI's answers"};
 function renderExtensions() {
-  document.querySelectorAll('#workspace-nav .extension-link').forEach(link => link.remove());
-  for (const extension of state.extensions || []) {
+  const links = (state.extensions || []).map(extension => {
     const label = extensionLabels[extension.id] || extension.id;
-    const link = element('a', label, 'nav-item extension-link');
-    link.href = extension.origin + '/'; link.target = '_blank'; link.rel = 'noopener';
-    link.title = `Open ${label} in a new tab`; link.dataset.extension = extension.id;
-    $('#workspace-nav').append(link);
-  }
+    const link = element('a', undefined, 'extension-link');
+    link.href = extension.origin + '/'; link.target = '_blank'; link.rel = 'noopener'; link.dataset.extension = extension.id;
+    link.append(element('strong', label), element('span', extensionPurposes[extension.id] || 'Opens in a new tab'));
+    link.addEventListener('click', () => closeMenus());
+    return link;
+  });
+  $('#apps-list').replaceChildren(...links);
+  $('#apps').hidden = !links.length;
   fitHeader();
 }
-// With extension links the sections may not fit beside the actions: then the navigation takes its own row.
+// Header menus (Apps, account): one open at a time; Escape or a click elsewhere closes it.
+function closeMenus(except) {
+  for (const toggle of document.querySelectorAll('.menu-toggle')) {
+    if (toggle === except) continue;
+    toggle.setAttribute('aria-expanded', 'false');
+    $('#' + toggle.getAttribute('aria-controls')).hidden = true;
+  }
+}
+for (const toggle of document.querySelectorAll('.menu-toggle')) toggle.addEventListener('click', () => {
+  const open = toggle.getAttribute('aria-expanded') !== 'true';
+  closeMenus(toggle);
+  toggle.setAttribute('aria-expanded', String(open));
+  $('#' + toggle.getAttribute('aria-controls')).hidden = !open;
+});
+document.addEventListener('click', e => { if (!e.target.closest('.menu-anchor')) closeMenus(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.menu-toggle[aria-expanded="true"]');
+  if (open) { closeMenus(); open.focus(); }
+});
+// The theme switch sits in the header before sign-in, and in the account menu after it.
+function placeThemeToggle(signedIn) {
+  if (signedIn) $('#account-menu').prepend($('#theme-toggle'));
+  else $('#identity').before($('#theme-toggle'));
+  $('#theme-toggle').className = signedIn ? 'menu-item' : 'ghost';
+}
+// On narrow screens the sections may not fit beside the actions: then the navigation takes its own row.
 function fitHeader() {
   const header = document.querySelector('header');
   header.classList.remove('stacked');
@@ -163,7 +192,7 @@ const refitHeader = () => { if (!$('#workspace-nav').hidden) fitHeader(); };
 window.addEventListener('resize', refitHeader);
 document.fonts?.ready.then(refitHeader);
 function renderState() {
-  $('#login-screen').hidden = true; $('#identity').hidden = false; $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; $('#workspace-nav').hidden = false; $('#guide-nav').hidden = false; placeNotice();
+  $('#login-screen').hidden = true; $('#identity').hidden = false; placeThemeToggle(true); $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; $('#workspace-nav').hidden = false; $('#guide-nav').hidden = false; placeNotice();
   renderExtensions();
   $('#team').replaceChildren(...state.teams.map(t => { const option = element('option', `${t.name} · ${roleNames[t.role] || t.role}`); option.value = t.id; return option; })); $('#team').value = state.activeTeam;
   $('#environment').replaceChildren(...state.environments.map(env => { const option = element('option', envNames[env]); option.value = env; return option; })); $('#environment').value = state.activeEnvironment;

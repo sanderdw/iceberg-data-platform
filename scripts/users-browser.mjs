@@ -13,7 +13,7 @@ try {
   const sockets = []; page.on('websocket', ws => { const socket = {url: ws.url(), received: 0}; sockets.push(socket); ws.on('framereceived', () => socket.received++); });
   await page.goto(data.baseURL);
   await page.locator('#workspace-screen').waitFor({state: 'visible'});
-  await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click();
+  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.locator('#workspace-screen').waitFor({state: 'visible'});
@@ -23,7 +23,7 @@ try {
   await page.locator('.object-label').filter({hasText: 'events'}).waitFor();
   await page.locator('.object-label').filter({hasText: 'event_report'}).waitFor();
   await page.screenshot({path: 'test-results/users-catalog-light.png', fullPage: true});
-  await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click();
+  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.screenshot({path: 'test-results/users-catalog-dark.png', fullPage: true});
   await navigation.getByRole('button', {name: 'Notebooks', exact: true}).click();
   await page.locator('#notebooks button').first().click();
@@ -49,7 +49,7 @@ try {
   await page.setViewportSize({width: 390, height: 844});
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Mobile page overflows');
   await page.screenshot({path: 'test-results/users-mobile.png', fullPage: true});
-  await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click();
+  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Light mobile page overflows');
   await page.screenshot({path: 'test-results/users-mobile-light.png', fullPage: true});
   console.log('PASS: persistent dark/light themes, browser catalog, marimo WebSocket and table execution, mobile layout');

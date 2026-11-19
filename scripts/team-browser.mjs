@@ -160,7 +160,7 @@ try {
   await page.getByLabel('Active team', {exact: true}).selectOption('analytics');
   await page.getByLabel('Environment', {exact: true}).selectOption('development');
   await expect(page.locator('#team-databases')).toContainText('Energy');
-  await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click();
+  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.screenshot({path: 'test-results/team/overview-light.png', fullPage: true});
   await page.setViewportSize({width: 390, height: 844});
   await expect(page.locator('#team-members')).toContainText('bob');
@@ -203,7 +203,7 @@ try {
   await page.screenshot({path: 'test-results/team/databases-mobile.png', fullPage: true});
   await page.setViewportSize({width: 1440, height: 1050});
   await page.screenshot({path: 'test-results/team/databases-light.png', fullPage: true});
-  await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click();
+  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.screenshot({path: 'test-results/team/databases-dark.png', fullPage: true});
   expect(errors).toEqual([]);
   console.log('PASS: team summary, scoped members, safe text, context switching, stale responses, refresh/recovery, workspace links, route restoration, getting started guide, database lifecycle, dark/light/mobile layouts');

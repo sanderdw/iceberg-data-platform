@@ -103,7 +103,7 @@ try {
   await page.getByRole('button', {name: 'Refresh catalog', exact: true}).click();
   await expect(page.locator('#namespace-title')).toHaveText('readings');
   await expect(page.getByRole('tab', {name: 'Overview', exact: true})).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click();
+  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.screenshot({path: 'test-results/catalog/table-light.png', fullPage: true});
   await page.setViewportSize({width: 390, height: 844});
   for (const name of ['Overview', 'Schema', 'Snapshots', 'Partitioning & sort', 'Properties', 'Preview']) {
@@ -147,7 +147,9 @@ try {
   const ask = page.getByRole('link', {name: 'Ask in Conversational BI'});
   await expect(ask).toHaveAttribute('href', 'http://bi.test/#/ask?database=warehouse-dev&namespace=%5B%22analytics%22%5D&model=energy_model');
   await expect(ask).toHaveAttribute('rel', 'noopener');
-  await expect(page.locator('#workspace-nav .extension-link')).toHaveText('Conversational BI');
+  await page.locator('#apps-toggle').click();
+  await expect(page.locator('#apps-list .extension-link strong')).toHaveText('Conversational BI');
+  await page.keyboard.press('Escape');
   const modelUrl = page.url();
   await page.reload();
   await expect(page.locator('#namespace-title')).toHaveText('energy_model');

@@ -255,7 +255,7 @@ print(json.dumps(outputs))
   const rotatedSnippet = await page.evaluate(() => window.copied);
   expect(rotatedSnippet).toContain("CLIENT_SECRET 'second-secret'");
   expect(rotatedSnippet).not.toContain('first-secret');
-  await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click();
+  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.setViewportSize({width: 390, height: 844});
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Mobile overflow in the credential panel');
   await page.screenshot({path: 'test-results/shares/credential-mobile.png', fullPage: true});
