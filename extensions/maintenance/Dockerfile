@@ -1,5 +1,5 @@
 # The Maintenance extension's service image: the API/MCP/page (mnt-gateway) and the launcher. Context: extensions/maintenance.
-FROM ghcr.io/astral-sh/uv:0.13.8 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9 AS uv
 FROM python:3.14.10-slim
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
