@@ -7,7 +7,7 @@
     "start": "node server.mjs"
   },
   "dependencies": {
-    "@ag-ui/client": "1.0.4",
+    "@ag-ui/client": "1.0.5",
     "@copilotkit/runtime": "1.84.1"
   },
   "overrides": {
