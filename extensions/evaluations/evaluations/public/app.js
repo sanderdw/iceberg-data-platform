@@ -42,13 +42,19 @@ async function api(method, path, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401) { show('signin'); throw new Error(data.error || 'Sign in again.'); }
+  if (response.status === 401) { showSignin(); throw new Error(data.error || 'Sign in again.'); }
   if (!response.ok) throw new Error(data.error || `The request failed (${response.status}).`);
   return data;
 }
 
 function show(id) {
   for (const main of document.querySelectorAll('main')) main.hidden = main.id !== id;
+}
+
+function showSignin() {
+  show('signin');
+  $('identity').hidden = true;
+  $('signin-link').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`;
 }
 
 function notice(text, error = false) {
@@ -502,28 +508,35 @@ async function route() {
 function theme(next) {
   document.documentElement.dataset.theme = next;
   $('theme').textContent = next === 'dark' ? 'Light / ○' : 'Dark / ●';
-  try { localStorage.setItem('theme', next); } catch { /* private mode */ }
+  try { localStorage.setItem('iceberg-theme', next); } catch { /* private mode */ }
 }
 
 async function start() {
   let saved = 'dark';
-  try { saved = localStorage.getItem('theme') || 'dark'; } catch { /* private mode */ }
+  try { saved = localStorage.getItem('iceberg-theme') || 'dark'; } catch { /* private mode */ }
   theme(saved);
   $('theme').addEventListener('click', () => theme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
-  const session = await fetch('/api/session', { credentials: 'same-origin' }).then((r) => r.json());
-  if (!session.authenticated) { show('signin'); return; }
-  $('identity').hidden = false;
-  $('username').textContent = session.user;
   $('logout').addEventListener('click', async () => {
     const { logoutUrl } = await fetch('/auth/logout', { method: 'POST', headers: { 'x-iceberg-evaluations': '1' } }).then((r) => r.json());
     location.href = logoutUrl;
   });
   $('new-set').addEventListener('click', newSetForm);
-  state.me = await api('GET', '/me');
-  IcebergApps.mount($('apps'), {...state.me.apps, current: state.me.extension});
-  state.roles = Object.fromEntries(state.me.memberships.map((m) => [m.team, m.role]));
-  window.addEventListener('hashchange', route);
-  await route();
+  try {
+    const session = await fetch('/api/session', { credentials: 'same-origin' }).then((r) => r.json());
+    if (!session.authenticated) { showSignin(); return; }
+    $('identity').hidden = false;
+    $('username').textContent = session.user || '';
+    state.me = await api('GET', '/me');
+    $('username').textContent = state.me.user?.name || session.user || '';
+    IcebergApps.mount($('apps'), {...state.me.apps, current: state.me.extension});
+    state.roles = Object.fromEntries(state.me.memberships.map((m) => [m.team, m.role]));
+    window.addEventListener('hashchange', route);
+    await route();
+  } catch (error) {
+    if (!$('signin').hidden) return;
+    show('loading');
+    document.querySelector('#loading p').textContent = error.message;
+  }
 }
 
 start();
