@@ -36,9 +36,9 @@ Yes, on a [Kubernetes installation](install-kubernetes.md): it has stable public
 
 ## Accounts and access
 
-### I'm a team Administrator. Why can't I open the administration portal?
+### I'm a team Administrator. Why can't I change anything in the administration portal?
 
-The administration portal needs the Keycloak role `iceberg-admin/platform-admin`. Team roles never grant it, including the Administrator role. See the [administration guide](admin-guide.md).
+Team Administrators have read-only access there: you can look at every page and change nothing. Changing the platform needs the Keycloak role `iceberg-admin/platform-admin`, which no team role grants, including the Administrator role. Manage your own team's databases and data shares in the [user portal](user-portal.md). See the [administration guide](admin-guide.md#read-only-access-for-team-administrators).
 
 ### What can Read, Read & write and Administrator do?
 

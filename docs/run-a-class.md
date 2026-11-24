@@ -46,7 +46,7 @@ Read the one-time password from the platform Secret:
 kubectl -n iceberg get secret iceberg-platform -o jsonpath='{.data.PLATFORM_ADMIN_PASSWORD}' | base64 -d; echo
 ```
 
-Open `https://admin.<domain>`, sign in as `platform-admin` and choose a new password. The overview shows no teams yet.
+Open `https://admin.<domain>`, sign in as `platform-admin` and choose a new password. The **Teams** page shows no teams yet.
 
 ## 3. Create the company
 

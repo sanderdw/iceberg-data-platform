@@ -12,7 +12,7 @@ A user holds one role per team, and that role applies to every database the team
 
 ## Platform administration
 
-Portal administration is the Keycloak client role `iceberg-admin/platform-admin`. No team role grants it, including Administrator. It is needed for the administration portal and its MCP server; see the [administration guide](../admin-guide.md).
+Portal administration is the Keycloak client role `iceberg-admin/platform-admin`. No team role grants it, including Administrator. It is needed to change anything on the administration portal and for its MCP server. A team Administrator can sign in to the administration portal with read-only access to all of it; see the [administration guide](../admin-guide.md#read-only-access-for-team-administrators).
 
 ## Recipients of a data share
 

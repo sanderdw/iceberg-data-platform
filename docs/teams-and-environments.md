@@ -30,7 +30,7 @@ The **Active team** and **Environment** in the user portal only choose what you 
 
 ## Platform administration is separate
 
-Platform administrators create teams and users on the administration portal. That is a separate Keycloak role, and no team role grants it. A team Administrator in turn creates the team's databases in the user portal as the team needs them, and manages its data shares, but never the platform.
+Platform administrators create teams and users on the administration portal. That is a separate Keycloak role, and no team role grants it; a team Administrator can sign in there to look, never to change. A team Administrator in turn creates the team's databases in the user portal as the team needs them, and manages its data shares, but never the platform.
 
 ## Everyone signs in the same way
 

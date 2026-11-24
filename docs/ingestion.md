@@ -10,7 +10,7 @@ Get data in: declarative [dlt](https://dlthub.com/docs) pipelines that load REST
 | | |
 | --- | --- |
 | Sources | `rest_api`, `sql_database` (PostgreSQL, MySQL, MariaDB), `filesystem` (HTTPS, S3) |
-| Page | `http://localhost:3008` (pipelines, secrets, runs, logs, schedules), linked from the user portal as **Ingestion (dlt)** |
+| Page | `http://localhost:3008` (pipelines, secrets, runs, logs, schedules), listed under **Apps** in the user portal as **Ingestion** |
 | API | `http://localhost:3008/api/v1` |
 | MCP | `http://localhost:3008/mcp` (Keycloak sign-in through the `ext-ingestion-mcp` client) |
 

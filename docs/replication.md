@@ -7,7 +7,7 @@ Keep operational databases in step with a team's Apache Iceberg databases. Each 
 | | |
 | --- | --- |
 | Sources | PostgreSQL with logical replication (tested with PostgreSQL 17). MySQL, MongoDB, SQL Server and Oracle are planned |
-| Page | `http://localhost:3014` (replications, source checks, tables, runs, logs, schedules), linked from the user portal as **Replication (OLake)** |
+| Page | `http://localhost:3014` (replications, source checks, tables, runs, logs, schedules), listed under **Apps** in the user portal as **Replication** |
 | API | `http://localhost:3014/api/v1` |
 | MCP | `http://localhost:3014/mcp` (Keycloak sign-in through the `ext-replication-mcp` client) |
 

@@ -1,6 +1,6 @@
 # Administration guide
 
-The administration portal at http://localhost:3000 (on Kubernetes `https://admin.<domain>`) manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role. For the service list, see [services](reference/services.md); to start and stop the platform, see [installation](install.md#update-or-restart).
+The administration portal at http://localhost:3000 (on Kubernetes `https://admin.<domain>`) manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role, but a team Administrator can sign in to [look without changing anything](#read-only-access-for-team-administrators). For the service list, see [services](reference/services.md); to start and stop the platform, see [installation](install.md#update-or-restart).
 
 You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). The portal's **Getting started** page has instructions and examples for each, using this installation's address. Lists refresh every 30 seconds while visible, and navigation and filters are kept in the URL.
 
@@ -49,6 +49,16 @@ Move or delete its databases first. Deletion is refused if a user would lose the
 ### Use the Keycloak console
 
 The portal's user management uses the `iceberg-provisioner` service account in the `iceberg` realm. For anything else, use the Keycloak console at http://localhost:8080/admin: sign in as `admin` and select the **iceberg** realm. On Kubernetes the console is not published; open it with `kubectl -n iceberg port-forward svc/keycloak 8080` and sign in with `KEYCLOAK_ADMIN_PASSWORD` from the Secret `iceberg-platform`. You grant portal administration there by assigning the `iceberg-admin` client role `platform-admin`. **Revoke** refuses accounts that have this role.
+
+## Read-only access for team Administrators
+
+A team Administrator can sign in to the administration portal with their own Keycloak account. The portal then shows a **Read-only** badge.
+
+- **What they see:** every page, for the whole platform and not only their own team: teams, users, databases and their connection settings, data shares, extension service accounts, the catalog browser and Infrastructure.
+- **What they can change:** nothing. The portal hides the buttons and refuses every change with `403`, also from a script.
+- **Where they manage their team:** the [user portal](user-portal.md), for the team's databases and data shares.
+
+Members with the Read or Read & write role are refused at sign-in. The portal checks the role again within a minute, so removing a user's Administrator role ends the access. The [MCP server](#connect-an-mcp-client) stays for platform administrators only.
 
 ## Extension service accounts
 
@@ -133,7 +143,7 @@ curl -b 'iceberg_admin=<cookie>' -H 'Content-Type: application/json' -H 'X-Porta
   -d '{"name": "marketing"}' http://localhost:3000/api/teams
 ```
 
-The table lists the main endpoints; `/docs` has all of them, including Keycloak account management.
+The table lists the main endpoints; `/docs` has all of them, including Keycloak account management. With a team Administrator's [read-only session](#read-only-access-for-team-administrators) only the `GET` endpoints work; every change returns `403`.
 
 | Method | Path | Action |
 | --- | --- | --- |

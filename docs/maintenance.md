@@ -8,7 +8,7 @@ Keep your tables in shape: expire old snapshots, compact small data files, clean
 | | |
 | --- | --- |
 | Operations | Expire snapshots, compact data files, remove dangling delete files, rewrite manifests, remove orphan files |
-| Page | `http://localhost:3013` (table health, policies, runs), linked from the user portal as **Maintenance** |
+| Page | `http://localhost:3013` (table health, policies, runs), listed under **Apps** in the user portal as **Maintenance** |
 | API | `http://localhost:3013/api/v1` |
 | MCP | `http://localhost:3013/mcp` (Keycloak sign-in through the `ext-maintenance-mcp` client) |
 

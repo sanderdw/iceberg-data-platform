@@ -5,7 +5,7 @@ dbt v2 pipelines for your teams' tables. The extension is **API and MCP first**:
 | | |
 | --- | --- |
 | Engine | dbt v2 OSS with its built-in DuckDB adapter and Iceberg REST catalogs |
-| Viewer | `http://localhost:3004` (pipelines, runs, schedules, docs), linked from the user portal as **Pipelines** |
+| Viewer | `http://localhost:3004` (pipelines, runs, schedules, docs), listed under **Apps** in the user portal as **Pipelines** |
 | API | `http://localhost:3004/api/v1` |
 | MCP | `http://localhost:3004/mcp` (Keycloak sign-in through the `ext-dbt-mcp` client) |
 
