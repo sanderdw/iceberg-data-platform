@@ -371,16 +371,24 @@ def note_unpushed(root, state, ref):
               file=sys.stderr)
 
 
+def fresh(shown, lines):
+    """The lines not shown yet. Both are the tail of one growing log, so a long log slides out of `shown`."""
+    for start in range(len(shown) + 1):
+        if shown[start:] == lines[:len(shown) - start]:
+            return lines[len(shown) - start:]
+    return lines
+
+
 def follow(api, run):
-    printed = 0
+    shown = []
     while True:
         lines = api.call("GET", f"/runs/{run['id']}/logs", params={"tail": 5000})["lines"]
-        for line in lines[printed:]:
+        for line in fresh(shown, lines):
             print(line, flush=True)
-        printed = max(printed, len(lines))
+        shown = lines
         run = api.call("GET", f"/runs/{run['id']}", params={"wait": 5})
         if run["status"] not in ("queued", "running"):
-            for line in api.call("GET", f"/runs/{run['id']}/logs", params={"tail": 5000})["lines"][printed:]:
+            for line in fresh(shown, api.call("GET", f"/runs/{run['id']}/logs", params={"tail": 5000})["lines"]):
                 print(line, flush=True)
             return run
 

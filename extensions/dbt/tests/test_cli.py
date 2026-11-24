@@ -103,3 +103,25 @@ def test_files_from_the_server_stay_inside_the_folder(tmp_path, path):
     assert not any(root.iterdir())
     cli.write_tree(root, {"models/a.sql": "select 1"})
     assert (root / "models" / "a.sql").read_text() == "select 1"
+
+
+def test_following_a_log_keeps_printing_once_it_is_longer_than_one_request(capsys):
+    """The API returns the last lines only, so a long log slides: what was shown is matched by content."""
+    log = [f"line {n}" for n in range(12)]
+    assert cli.fresh([], log[:3]) == log[:3]
+    assert cli.fresh(log[:3], log[:5]) == log[3:5]
+    assert cli.fresh(log[:5], log[:5]) == []
+    assert cli.fresh(log[:5], log[2:7]) == log[5:7]
+    assert cli.fresh(log[2:7], log[7:12]) == log[7:12]  # nothing in common: all of it is new
+
+    class Api:
+        windows = iter([log[:3], log[:5], log[2:7], log[7:12]])
+        statuses = iter(["running", "running", "success"])
+
+        def call(self, method, path, params=None):
+            if path.endswith("/logs"):
+                return {"lines": next(self.windows)}
+            return {"id": "run-1", "status": next(self.statuses)}
+
+    assert cli.follow(Api(), {"id": "run-1"})["status"] == "success"
+    assert capsys.readouterr().out.splitlines() == log
