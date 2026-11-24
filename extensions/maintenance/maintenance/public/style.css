@@ -9,6 +9,7 @@
   --black: #000; --surface: #111; --surface-raised: #1a1a1a; --border: #222; --border-visible: #333;
   --text-disabled: #666; --text-secondary: #999; --text-primary: #e8e8e8; --text-display: #fff;
   --accent: #d71921; --success: #4a9e5c; --warn: #d9a23b; --fail: #e0474f; --idle: #555;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23e8e8e8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --source: #3f7fd9; --seed: #9a6bd6; --model: #e8e8e8; --snapshot: #3fb6b0; --exposure: #d9a23b;
   --body: 'Space Grotesk', system-ui, sans-serif; --mono: 'Space Mono', ui-monospace, monospace; --display: Doto, var(--mono);
   --large: 4.5rem; --medium: 1rem; --small: .75rem;
@@ -19,6 +20,7 @@
   --black: #f5f5f5; --surface: #fff; --surface-raised: #f0f0f0; --border: #e8e8e8; --border-visible: #ccc;
   --text-disabled: #999; --text-secondary: #666; --text-primary: #1a1a1a; --text-display: #000;
   --model: #1a1a1a; --idle: #bbb;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%231a1a1a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; background: var(--black); }
@@ -264,6 +266,8 @@ dialog h2 { color: var(--text-display); font-size: 1.25rem; }
 }
 .status-line.spaced { margin: -16px 0 24px; }
 .field input, .field select, input.inline, .hints select { height: 40px; }
+/* A drawn chevron: the native arrow ignores padding and sits against the border. */
+select.pill, .field select, .hints select { appearance: none; padding-right: 32px; background-image: var(--chevron); background-repeat: no-repeat; background-position: right 12px center; background-size: 10px 7px; }
 .status.set { background: var(--success); }
 .status.missing { background: var(--warn); }
 .card > a.button, .card > button { justify-self: start; }
