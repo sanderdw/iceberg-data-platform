@@ -94,6 +94,8 @@ try {
   await expect(readOnly.locator('.read-only-badge')).toHaveText('Read-only');
   await expect(readOnly.locator('.profile')).toContainText('tom.admin');
   await expect(readOnly.locator('.profile')).toContainText('Team administrator · read-only');
+  await expect(readOnly.locator('.profile > span:not(.avatar)')).toBeVisible();
+  await expect(readOnly.locator('thead th')).not.toContainText(['Actions']);
   await expect(readOnly.locator('tbody')).toContainText('Analytics');
   for (const name of ['Create team', 'Edit', 'Delete']) await expect(readOnly.getByRole('button', {name, exact: true})).toHaveCount(0);
   await readOnly.getByRole('button', {name: 'Databases'}).first().click();

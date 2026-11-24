@@ -85,7 +85,7 @@ header { min-height: 96px; padding: 24px 48px; display: flex; justify-content: s
 .eyebrow, label, .hint, .footer-note { font: var(--small)/1.6 var(--mono); color: var(--text-secondary); }
 .eyebrow, label { text-transform: uppercase; letter-spacing: .06em; }
 h1 { font: 500 var(--large)/1.1 Doto, var(--mono); letter-spacing: -.03em; color: var(--text-display); margin: 16px 0; }
-.accent { color: var(--text-disabled); }
+.accent { color: var(--accent); }
 label { display: grid; gap: 12px; }
 input, select { min-width: 0; width: 100%; min-height: 44px; padding: 12px; background: var(--black); color: var(--text-primary); border: 1px solid var(--border-visible); border-radius: 6px; font: var(--small)/1.5 var(--mono); }
 /* A drawn chevron: the native arrow ignores padding and sits against the border. */
