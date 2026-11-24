@@ -230,8 +230,8 @@ def test_validation_errors_are_readable_and_never_echo_values(admin):
 def test_offline_provider_and_provider_errors(admin):
     ok(admin, "create_team", {"name": "data-team"})
     admin.provider.fail = lambda path, method, body: path == "/catalogs"
-    overview = ok(admin, "get_overview")
-    assert overview["health"]["status"] != "online" and overview["teams"] == []
+    # Not the empty lists the portal page shows while it waits: an agent would read an empty platform.
+    refused(admin, "get_overview", {}, "data provider is unavailable")
     admin.provider.fail = lambda path, method, body: path == "/principal-roles"
     refused(admin, "list_teams", {}, "injected failure")
 

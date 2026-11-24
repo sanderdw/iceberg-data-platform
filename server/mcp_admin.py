@@ -96,8 +96,14 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
 
     @mcp.tool(annotations=READ_ONLY)
     async def get_overview() -> dict[str, Any]:
-        """Provider health with every team, database, user and data share."""
-        return await query(overview)
+        """Provider health with every team, database, user, data share and extension service account, and the
+        registered extensions."""
+        result = await query(overview)
+        if result["health"]["status"] != "online":
+            # The portal page shows empty lists while it waits; an agent would read them as an empty platform.
+            raise ToolError("The data provider is unavailable, so teams, databases and users cannot be read. "
+                            "Try again when the platform is running.")
+        return result
 
     @mcp.tool(annotations=READ_ONLY)
     async def list_teams() -> dict[str, Any]:

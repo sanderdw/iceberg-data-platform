@@ -203,9 +203,11 @@ def test_tools_use_the_callers_grants(stack, monkeypatch):
     table = result.structured_content
     assert table["columns"][0]["doc"] == "Event ID" and table["currentSnapshotId"] == SNAPSHOT
     assert table["snapshotCount"] == 1 and table["properties"] == {"owner": "analytics"}
+    assert "comment" in table and "producer" in table
     assert "hidden-" not in text(result)
     result = call(stack, stack.token, "describe_view", {"database": database, "namespace": ["analytics"], "view": "report"})
     assert result.structured_content["versions"][0]["representations"][0]["sql"] == "SELECT * FROM events"
+    assert "comment" in result.structured_content
     result = call(stack, stack.token, "list_semantic_models", {"database": database, "namespace": ["analytics"]})
     assert result.structured_content["semanticModels"] == [{"name": "revenue", "namespace": ["analytics"]}]
     result = call(stack, stack.token, "describe_semantic_model", {"database": database, "namespace": ["analytics"], "model": "revenue"})

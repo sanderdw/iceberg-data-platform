@@ -305,14 +305,15 @@ def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
 
     @mcp.tool(annotations=READ_ONLY)
     async def describe_table(database: DatabaseId, namespace: Namespace, table: Name) -> dict[str, Any]:
-        """Schema, partitioning, sort order, branches and tags and the latest snapshots of a table."""
+        """Description, schema, partitioning, sort order, branches and tags and the latest snapshots of a table,
+        and the pipeline that produced it when one says so."""
         parts = namespace_parts(namespace, table)
         if not parts:
             raise ToolError("Select a namespace.")
         session, _ = await resolve(database, shared=True)
         details = await query(directory.details, session, database, parts, "table", table)
         keep = (
-            "name", "namespace", "uuid", "formatVersion", "location", "columns", "properties",
+            "name", "namespace", "uuid", "formatVersion", "location", "comment", "producer", "columns", "properties",
             "currentSnapshotId", "updatedAt", "refs", "partitionSpecs", "defaultSpecId",
             "sortOrders", "defaultSortOrderId",
         )
@@ -325,13 +326,14 @@ def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
 
     @mcp.tool(annotations=READ_ONLY)
     async def describe_view(database: DatabaseId, namespace: Namespace, view: Name) -> dict[str, Any]:
-        """Schema and the SQL of the latest versions of a view."""
+        """Description, schema and the SQL of the latest versions of a view."""
         parts = namespace_parts(namespace, view)
         if not parts:
             raise ToolError("Select a namespace.")
         session, _ = await resolve(database, shared=True)
         details = await query(directory.details, session, database, parts, "view", view)
-        keep = ("name", "namespace", "uuid", "formatVersion", "location", "columns", "properties", "currentVersionId")
+        keep = ("name", "namespace", "uuid", "formatVersion", "location", "comment", "columns", "properties",
+                "currentVersionId")
         return {**{k: details[k] for k in keep}, "versions": details["versions"][:5]}
 
     @mcp.tool(annotations=READ_ONLY)

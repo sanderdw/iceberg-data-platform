@@ -28,7 +28,7 @@ Operator = Literal["=", "!=", "<", "<=", ">", ">=", "in", "not_in", "between", "
 Scalar = str | int | float | bool
 Name = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")]
 FieldRef = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}\.[A-Za-z_][A-Za-z0-9_]{0,127}$",
-                                description="DATASET.field, as listed by describe_model.")]
+                                description="DATASET.field, as listed by describe_semantic_model.")]
 TIME_TYPES = ("date", "timestamp", "timestamptz", "timestamp_ns", "timestamptz_ns")
 DUCKDB_TYPES = {"string": "VARCHAR", "int": "INTEGER", "long": "BIGINT", "float": "FLOAT", "double": "DOUBLE",
                 "boolean": "BOOLEAN", "date": "DATE", "timestamp": "TIMESTAMP", "timestamptz": "TIMESTAMPTZ",
@@ -430,7 +430,7 @@ def compile_values(model, schemas, ref, search=None, limit=50):
 
 
 def reachable(model, home):
-    """For describe_model: each dimension reachable from a metric home, with its join path or options."""
+    """For describe_semantic_model: each dimension reachable from a metric home, with its join path or options."""
     found = []
     for dataset in model.datasets:
         options = paths(model, home, dataset.name)
