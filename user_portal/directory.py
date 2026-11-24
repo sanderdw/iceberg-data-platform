@@ -363,7 +363,7 @@ class UserDirectory:
         if confirm_name is not None and confirm_name != name:
             raise ServiceError(422, "Type the share name exactly to confirm revoking it.")
         self.metadata.delete_share(id)
-        return {"deleted": True, "id": id, "name": name}
+        return {"deleted": True, "share": id, "name": name}
 
     def request(self, session, path):
         return self.send(session, "GET", path)
@@ -575,14 +575,14 @@ class UserDirectory:
             updated = self.send(session, "PUT", self.semantic_model_path(database, namespace, name),
                                 {"document": document, "entity-version": stored})
             action, version = "updated", updated.get("entity-version")
-        return {"action": action, "name": name, "namespace": namespace, "entityVersion": version,
+        return {"action": action, "model": name, "namespace": namespace, "entityVersion": version,
                 "warnings": warnings}
 
     def delete_semantic_model(self, session, database, namespace, name, confirm_name):
         if confirm_name != name:
             raise ServiceError(422, "Type the semantic model's name exactly to confirm deleting it.")
         self.send(session, "DELETE", self.semantic_model_path(database, namespace, name))
-        return {"deleted": True, "name": name, "namespace": namespace}
+        return {"deleted": True, "model": name, "namespace": namespace}
 
     def semantic_query_guide(self, session, database, namespace, name):
         """What query_semantic_model can answer: each metric's dataset and the dimensions reachable from it."""

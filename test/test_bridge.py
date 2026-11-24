@@ -1,10 +1,13 @@
+import ast
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
-from server.bridge import CONTRACT, create_bridge_app
+from server import bridge as bridge_module
+from server.bridge import CODES, CONTRACT, ERROR_CODES, BridgeError, create_bridge_app
 from server.models import DatabaseInput, ServiceError, ShareInput, ShareUpdate, TeamInput, UserInput
 from test.conftest import SEMANTIC_MODEL, MemoryPolaris, members
 
@@ -78,7 +81,7 @@ def bridge():
             headers = {**({"Authorization": f"Bearer {token}"} if token else {}), **(headers or {})}
             return client.request(method, "/bridge/v1" + path, headers=headers, **kwargs)
 
-        yield SimpleNamespace(call=call, provider=provider, verifier=verifier, team=team, other=other, dev=dev,
+        yield SimpleNamespace(call=call, client=client, provider=provider, verifier=verifier, team=team, other=other, dev=dev,
                               foreign=foreign, admin=admin, writer=writer)
 
 
@@ -176,7 +179,10 @@ def test_team_admins_enable_an_extension_idempotently(bridge):
     assert created.status_code == 201
     item = created.json()
     assert (item["extension"], item["environment"], item["createdBy"]) == ("dbt", "development", "alice")
-    assert bridge.call("POST", path, "alice", json={"environment": "development"}).status_code == 200
+    # Both answers are the principal as the contract describes it, and nothing else.
+    assert set(item) == {"id", "name", "team", "environment", "extension", "status", "createdAt", "createdBy"}
+    again = bridge.call("POST", path, "alice", json={"environment": "development"})
+    assert (again.status_code, again.json()) == (200, item)
     assert bridge.call("POST", path, "alice", json={"environment": "staging"}).status_code == 422
     # Members see this extension's principals of the team; the extension sees all of its own.
     assert [i["id"] for i in bridge.call("GET", path, "bob").json()["automationPrincipals"]] == [item["id"]]
@@ -414,6 +420,98 @@ def test_a_failed_listing_read_removes_its_temporary_role(bridge):
     assert bridge.provider.sweep_listing_roles() == ["portal-listing-left"]
 
 
+def error_of(response, status, code):
+    """Every refusal has the same body: readable text and a stable code, and nothing else."""
+    body = response.json()
+    assert (response.status_code, body["code"]) == (status, code), (response.status_code, body)
+    assert set(body) == {"error", "code"} and isinstance(body["error"], str) and body["error"]
+    assert response.headers["cache-control"] == "no-store"
+    return body
+
+
+def test_unknown_paths_and_wrong_methods_use_the_error_shape(bridge):
+    error_of(bridge.call("GET", "/nothing-here", "alice"), 404, "not_found")
+    error_of(bridge.client.get("/elsewhere"), 404, "not_found")
+    error_of(bridge.call("GET", "/nothing-here"), 404, "not_found")
+    for method, path in (("PUT", "/me"), ("DELETE", ""), ("POST", "/listings"),
+                         ("PATCH", f"/teams/{bridge.team}/automation-principals")):
+        response = bridge.call(method, path, "alice")
+        error_of(response, 405, "method_not_allowed")
+        assert response.headers["allow"]
+    # A resource that does not exist keeps the same code as a path that does not.
+    error_of(bridge.call("GET", f"/automation-principals/svc-{'0' * 32}", "service"), 404, "not_found")
+    error_of(bridge.call("GET", "/automation-principals/not-an-id", "service"), 422, "invalid_request")
+    assert bridge.call("GET", "/me", None).headers["www-authenticate"] == "Bearer"
+
+
+def test_an_unexpected_exception_uses_the_error_shape_and_is_logged(bridge, caplog):
+    def broken(*args, **kwargs):
+        raise RuntimeError("secret detail of the failure")
+
+    bridge.provider.list_teams = broken
+    with caplog.at_level("ERROR", logger="server.bridge"):
+        body = error_of(bridge.call("GET", "/me", "alice"), 500, "internal_error")
+    # The caller learns that it failed, the log says why.
+    assert "secret detail" not in body["error"]
+    assert "Bridge request failed: GET /bridge/v1/me" in caplog.text and "secret detail" in caplog.text
+    del bridge.provider.list_teams
+    assert bridge.call("GET", "/me", "alice").status_code == 200
+
+
+def test_a_status_without_a_code_of_its_own_is_an_internal_error(bridge):
+    def unsupported(*args, **kwargs):
+        raise ServiceError(406, "This feature is not enabled.")
+
+    bridge.provider.list_teams = unsupported
+    body = error_of(bridge.call("GET", "/me", "alice"), 406, "internal_error")
+    assert body["error"] == "This feature is not enabled."
+    assert BridgeError(418, "Odd.").code == "internal_error" and BridgeError(409, "Taken.").code == "conflict"
+    with pytest.raises(ValueError, match="not a Bridge error code"):
+        BridgeError(403, "Refused.", "made_up")
+
+
+def raised_codes():
+    """Every code the Bridge names in its source: in a BridgeError, or in a direct error response."""
+    codes = set()
+    for node in ast.walk(ast.parse(Path(bridge_module.__file__).read_text())):
+        if not isinstance(node, ast.Call) or getattr(node.func, "id", None) not in ("BridgeError", "error"):
+            continue
+        code = node.args[2] if len(node.args) > 2 else next((k.value for k in node.keywords if k.arg == "code"), None)
+        if isinstance(code, ast.Constant):
+            codes.add(code.value)
+        elif code is None and isinstance(node.args[0], ast.Constant):
+            codes.add(CODES[node.args[0].value])
+    return codes
+
+
+def test_the_error_codes_are_an_enum_of_exactly_the_codes_in_use(bridge):
+    assert len(ERROR_CODES) == len(set(ERROR_CODES)) == 18
+    # Seven extensions read these codes, so none may be renamed or dropped.
+    assert set(ERROR_CODES) == {
+        "invalid_request", "unauthorized", "forbidden", "not_found", "method_not_allowed", "conflict",
+        "provider_error", "unavailable", "internal_error", "unknown_extension", "not_linked", "user_required",
+        "service_required", "listing_not_enabled", "not_a_member", "forbidden_role", "no_teams",
+        "extension_not_enabled"}
+    assert "error" not in ERROR_CODES
+    # The enum lists what the code can answer with, no more and no less.
+    assert raised_codes() | set(CODES.values()) == set(ERROR_CODES)
+    contract = json.loads(CONTRACT.read_text())
+    assert contract["components"]["schemas"]["Error"]["properties"]["code"]["enum"] == list(ERROR_CODES)
+    # Every operation documents the error shape, also for a wrong method and an unexpected failure.
+    for path, operations in contract["paths"].items():
+        for method, operation in operations.items():
+            statuses = {"500"} if path == "/bridge/v1" else {"401", "403", "404", "405", "409", "422", "500", "502",
+                                                             "503"}
+            for status in statuses:
+                schema = operation["responses"][status]["content"]["application/json"]["schema"]
+                assert schema == {"$ref": "#/components/schemas/Error"}, (method, path, status)
+    # Extension authors find each code, with its status and meaning, in the contract's README.
+    readme = (CONTRACT.parent.parent / "README.md").read_text()
+    section = readme.split("\n## Errors\n")[1].split("\n## ")[0]
+    rows = [line.split("|")[1].strip().strip("`") for line in section.splitlines() if line.startswith("| `")]
+    assert sorted(rows) == sorted(ERROR_CODES)
+
+
 def test_committed_contract_matches_the_implementation(bridge):
     app = create_bridge_app(TokenPolaris(), FakeVerifier(), ENV)
     assert json.loads(CONTRACT.read_text()) == json.loads(json.dumps(app.openapi())), (
@@ -422,11 +520,8 @@ def test_committed_contract_matches_the_implementation(bridge):
     )
 
 
-
 def test_every_extension_uses_the_reference_apps_menu():
     """Extensions copy the Apps menu (capability `app-directory`) unchanged from contracts/bridge/v1/apps-menu."""
-    from pathlib import Path
-
     root = Path(__file__).resolve().parent.parent
     reference = root / "contracts/bridge/v1/apps-menu"
     copies = [p for p in (root / "extensions").glob("*/*/public/apps-menu.*") if ".venv" not in p.parts]

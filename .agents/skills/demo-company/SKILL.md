@@ -114,7 +114,7 @@ Portal administration grants no data access, so give the administrator's own Key
 
 1. The account is `PLATFORM_ADMIN_USERNAME` from `.env` (default `platform-admin`). Call `find_accounts(<username>)`.
 2. **Not linked yet:** `link_user(username=<username>, name=<username>, memberships=[{"team": <team id>, "role": "reader"}, …])` with one membership per blueprint team. Its password stays the same, so there is nothing to add to the summary.
-3. **Already linked:** find its user in `list_users` (the user named `<username>`). Call `update_user_access(user=<portal-… id>, memberships=…)` with all of its current memberships plus `reader` in each blueprint team it isn't in yet. Never lower a role it already holds in a team.
+3. **Already linked:** find its user in `list_users` (the user named `<username>`). Call `update_user_access(user=<portal-… id>, memberships=…)` with all of its current memberships plus `reader` in each blueprint team it isn't in yet. The call replaces the list, so a team you leave out is removed. Never lower a role it already holds in a team.
 4. If the account can't be found or its user isn't in `list_users`, report it and continue.
 
 This also runs when the skill runs again for a bigger class, so new teams are added.

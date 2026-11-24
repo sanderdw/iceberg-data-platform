@@ -20,6 +20,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -69,6 +79,16 @@
               }
             }
           },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict",
             "content": {
@@ -81,6 +101,16 @@
           },
           "422": {
             "description": "Unprocessable Content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
             "content": {
               "application/json": {
                 "schema": {
@@ -174,6 +204,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -193,6 +233,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "502": {
             "content": {
@@ -287,6 +337,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -306,6 +366,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "502": {
             "content": {
@@ -402,6 +472,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -421,6 +501,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "502": {
             "content": {
@@ -505,6 +595,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -524,6 +624,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "502": {
             "content": {
@@ -598,6 +708,16 @@
               }
             }
           },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict",
             "content": {
@@ -610,6 +730,16 @@
           },
           "422": {
             "description": "Unprocessable Content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
             "content": {
               "application/json": {
                 "schema": {
@@ -724,6 +854,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -743,6 +883,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "502": {
             "content": {
@@ -839,6 +989,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -858,6 +1018,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "502": {
             "content": {
@@ -932,6 +1102,16 @@
               }
             }
           },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict",
             "content": {
@@ -944,6 +1124,16 @@
           },
           "422": {
             "description": "Unprocessable Content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
             "content": {
               "application/json": {
                 "schema": {
@@ -1053,6 +1243,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -1072,6 +1272,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "502": {
             "content": {
@@ -1478,6 +1688,26 @@
           },
           "code": {
             "type": "string",
+            "enum": [
+              "invalid_request",
+              "unauthorized",
+              "forbidden",
+              "not_found",
+              "method_not_allowed",
+              "conflict",
+              "provider_error",
+              "unavailable",
+              "internal_error",
+              "unknown_extension",
+              "not_linked",
+              "user_required",
+              "service_required",
+              "listing_not_enabled",
+              "not_a_member",
+              "forbidden_role",
+              "no_teams",
+              "extension_not_enabled"
+            ],
             "title": "Code"
           }
         },

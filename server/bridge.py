@@ -18,7 +18,7 @@ import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 import httpx
 from fastapi import Body, Depends, FastAPI, Header, Request, Response
@@ -31,6 +31,7 @@ from joserfc.jwk import KeySet
 from joserfc.jws import JWSRegistry
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException
 
 from . import extensions as registry
 from . import listings
@@ -45,8 +46,19 @@ CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "s
 BRIDGE_AUDIENCE = "iceberg-bridge"
 CONTRACT = Path(__file__).resolve().parent.parent / "contracts" / "bridge" / "v1" / "openapi.yaml"
 ADMIN_ROLES = ("admin", "bucket-admin")
+# Every `code` an error response can carry; contracts/bridge/README.md says what each one means.
+# Extensions read them, so a code is never renamed or reused: a new one is a contract change.
+ErrorCode = Literal[
+    "invalid_request", "unauthorized", "forbidden", "not_found", "method_not_allowed", "conflict",
+    "provider_error", "unavailable", "internal_error",
+    "unknown_extension", "not_linked", "user_required", "service_required", "listing_not_enabled",
+    "not_a_member", "forbidden_role", "no_teams", "extension_not_enabled",
+]
+ERROR_CODES = get_args(ErrorCode)
+# The code of an error that names none: one per status, and `internal_error` for any other status.
 CODES = {400: "invalid_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
-         409: "conflict", 422: "invalid_request", 502: "provider_error", 503: "unavailable"}
+         405: "method_not_allowed", 409: "conflict", 422: "invalid_request", 500: "internal_error",
+         502: "provider_error", 503: "unavailable"}
 LOG = logging.getLogger(__name__)
 AUDIT = logging.getLogger("iceberg.bridge.audit")
 
@@ -63,17 +75,23 @@ def audit(event, fields, message, *args):
     AUDIT.info(message, *args, extra={"otel.event.name": "iceberg.bridge." + event, **fields})
 
 
+def code_for(status):
+    return CODES.get(status, "internal_error")
+
+
 class BridgeError(ServiceError):
     def __init__(self, status, message, code=None):
         super().__init__(status, message)
-        self.code = code or CODES.get(status, "error")
+        self.code = code or code_for(status)
+        if self.code not in ERROR_CODES:
+            raise ValueError(f"{self.code!r} is not a Bridge error code. Add it to ErrorCode and to the contract.")
 
 
 # Response schemas: the contract. Changing them is a contract change (contracts/bridge/COMPATIBILITY.md).
 
 class Error(BaseModel):
     error: str
-    code: str
+    code: ErrorCode
 
 
 class CatalogEndpoints(BaseModel):
@@ -535,15 +553,28 @@ def create_bridge_app(provider=None, verifier=None, env=None):
 
     @app.exception_handler(ServiceError)
     async def service_error(request, exc):
-        return error(exc.status, str(exc), getattr(exc, "code", None) or CODES.get(exc.status, "error"))
+        return error(exc.status, str(exc), getattr(exc, "code", None) or code_for(exc.status))
 
     @app.exception_handler(RequestValidationError)
     async def invalid(request, exc):
         return error(422, validation_message(exc.errors(), request.url.path), "invalid_request")
 
+    @app.exception_handler(HTTPException)
+    async def http_error(request, exc):
+        # Raised by the router itself, for a path or a method that no operation has.
+        message = {404: "This path does not exist.", 405: "This method is not allowed on this path."}
+        response = error(exc.status_code, message.get(exc.status_code, str(exc.detail)), code_for(exc.status_code))
+        response.headers.update(exc.headers or {})
+        return response
+
     @app.middleware("http")
     async def headers(request, call_next):
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Whatever went wrong, an extension gets the error shape; the cause goes to the log only.
+            LOG.exception("Bridge request failed: %s %s", request.method, request.url.path)
+            response = error(500, "The Bridge could not complete this request.", "internal_error")
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
@@ -611,12 +642,13 @@ def create_bridge_app(provider=None, verifier=None, env=None):
             raise BridgeError(403, "You are not a member of this team.", "not_a_member")
         return roles[team]
 
-    errors = {status: {"model": Error} for status in (401, 403, 404, 409, 422, 502, 503)}
+    errors = {status: {"model": Error} for status in (401, 403, 404, 405, 409, 422, 500, 502, 503)}
     team_id = Annotated[str, PathParam(pattern=r"^team-[a-f0-9]{32}$")]
     automation_id = Annotated[str, PathParam(pattern=r"^svc-[a-f0-9]{32}$")]
     share_id = Annotated[str, PathParam(pattern=r"^share-[a-f0-9]{32}$")]
 
-    @app.get("/bridge/v1", response_model=Discovery, summary="Discover the platform")
+    @app.get("/bridge/v1", response_model=Discovery, responses={500: {"model": Error}},
+             summary="Discover the platform")
     def discovery():
         public_catalog = env.get("POLARIS_PUBLIC_URL", "http://localhost:8181").rstrip("/") + "/api/catalog"
         return {
@@ -669,7 +701,7 @@ def create_bridge_app(provider=None, verifier=None, env=None):
     @app.post("/bridge/v1/teams/{teamId}/automation-principals", response_model=AutomationPrincipal,
               status_code=201, responses={**errors, 200: {"model": AutomationPrincipal}},
               summary="Enable this extension for a team environment (team administrators)")
-    async def enable(teamId: team_id, data: Annotated[AutomationInput, Body()], c: UserCaller):
+    async def enable(teamId: team_id, data: Annotated[AutomationInput, Body()], c: UserCaller, response: Response):
         def run():
             if team_role(c, teamId) not in ADMIN_ROLES:
                 raise BridgeError(403, "Only team administrators can enable an extension.", "forbidden_role")
@@ -684,7 +716,9 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                "iceberg.team": teamId, "iceberg.environment": data.environment, **actor(c)},
               "automation principal %s: %s extension=%s team=%s environment=%s by=%s",
               state, item["id"], c.extension, teamId, data.environment, c.principal["name"])
-        return JSONResponse(item, status_code=201 if created else 200)
+        if not created:
+            response.status_code = 200
+        return item
 
     @app.delete("/bridge/v1/automation-principals/{id}", response_model=Revoked, responses=errors,
                 summary="Revoke an automation principal (team administrators or the extension)")

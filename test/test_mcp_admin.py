@@ -19,7 +19,7 @@ from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
 from server.app import create_app
 from server.identity import UserManagement
 from server.mcp_auth import KeycloakVerifier, protected_resource
-from server.models import ServiceError
+from server.models import ServiceError, ShareInput
 from test.conftest import PASSWORD, MemoryPolaris
 from test.test_identity_management import MemoryKeycloak
 from test.test_oidc import ISSUER, issuer  # noqa: F401 - fixture
@@ -29,13 +29,23 @@ TOOLS = {
     "get_overview", "list_teams", "create_team", "update_team", "delete_team",
     "list_databases", "create_database", "rename_database", "move_database", "delete_database", "get_database_connection",
     "browse_catalog", "list_users", "find_accounts", "create_user", "link_user", "update_user_access",
-    "retry_user_setup", "delete_user", "list_shares", "revoke_share",
-    "list_automation_principals", "revoke_automation_principal",
+    "retry_user_setup", "delete_user", "list_shares", "delete_share",
+    "list_automation_principals", "delete_automation_principal",
 }
-DESTRUCTIVE = {"delete_team", "delete_database", "delete_user", "revoke_share", "revoke_automation_principal"}
 READS = {
     "get_overview", "list_teams", "list_databases", "get_database_connection", "browse_catalog",
     "list_users", "find_accounts", "list_shares", "list_automation_principals",
+}
+# Hints as (readOnly, destructive, idempotent); openWorld is false for every tool.
+CREATES = {"create_team", "create_database", "create_user", "link_user", "retry_user_setup"}
+UPDATES = {"update_team", "rename_database"}
+# Replace what was there: a repeat changes nothing further, but what is left out or left behind loses access.
+REPLACES = {"move_database", "update_user_access"}
+DELETES = {"delete_team", "delete_database", "delete_user", "delete_share", "delete_automation_principal"}
+HINTS = {
+    **dict.fromkeys(READS, (True, False, True)), **dict.fromkeys(CREATES, (False, False, False)),
+    **dict.fromkeys(UPDATES, (False, False, True)), **dict.fromkeys(REPLACES, (False, True, True)),
+    **dict.fromkeys(DELETES, (False, True, False)),
 }
 
 
@@ -183,11 +193,12 @@ def test_admin_lifecycle_creates_links_edits_and_deletes(admin, caplog):
     assert ok(admin, "delete_user", {"user": carol}) == {"deleted": True, "user": carol}
     assert ok(admin, "delete_user", {"user": bob})["deleted"]
     refused(admin, "delete_user", {"user": bob}, "missing")  # MemoryPolaris's 404 text
-    refused(admin, "revoke_share", {"share": "share-" + "a" * 32}, "share")
     principal, _ = admin.provider.create_automation(team, "development", "dbt", {"id": bob, "name": "bob"})
     assert [p["id"] for p in ok(admin, "list_automation_principals")["automationPrincipals"]] == [principal["id"]]
-    assert ok(admin, "revoke_automation_principal", {"principal": principal["id"]})["revoked"]
-    refused(admin, "revoke_automation_principal", {"principal": principal["id"]}, "no longer exists")
+    assert ok(admin, "delete_automation_principal", {"principal": principal["id"]}) == {
+        "deleted": True, "principal": principal["id"]}
+    refused(admin, "delete_automation_principal", {"principal": principal["id"]}, "no longer exists")
+    assert admin.provider.list_automation() == []
     refused(admin, "delete_team", {"team": team}, "databases first")
     assert ok(admin, "delete_database", {"database": database["id"], "confirm_name": "analytics_new"})["deleted"]
     assert ok(admin, "delete_team", {"team": team}) == {"deleted": True, "team": team}
@@ -208,6 +219,29 @@ def test_delete_database_requires_the_display_name(admin):
     assert raised.value.status == 409 and "portal.deleting" not in catalog["properties"]
     assert ok(admin, "delete_database", {"database": database, "confirm_name": "analytics"})["name"] == "analytics"
     assert database not in admin.provider.resources["catalogs"]
+
+
+def test_delete_share_requires_the_share_name(admin):
+    team = ok(admin, "create_team", {"name": "data-team"})["id"]
+    database = ok(admin, "create_database", {"name": "analytics", "team": team})["id"]
+    share = admin.provider.create_share(ShareInput.model_validate({
+        "database": database, "name": "partner", "recipient": "Partner BV",
+        "objects": [{"kind": "table", "namespace": ["analytics"], "name": "orders"}],
+    }), {"id": "portal-" + "c" * 32, "name": "carol"})["share"]["id"]
+    assert [s["name"] for s in ok(admin, "list_shares")["shares"]] == ["partner"]
+    refused(admin, "delete_share", {"share": share, "confirm_name": "Partner"}, "Nothing was deleted")
+    refused(admin, "delete_share", {"share": share, "confirm_name": ""}, "Nothing was deleted")
+    assert call(admin, admin.token, "delete_share", {"share": share}).is_error  # confirm_name is required
+    assert [s["id"] for s in ok(admin, "list_shares")["shares"]] == [share]
+    refused(admin, "delete_share", {"share": "share-" + "a" * 32, "confirm_name": "partner"},
+            "Share not found. Nothing was deleted.")
+    assert ok(admin, "delete_share", {"share": share, "confirm_name": "partner"}) == {
+        "deleted": True, "share": share, "name": "partner"}
+    assert ok(admin, "list_shares")["shares"] == []
+    refused(admin, "delete_share", {"share": share, "confirm_name": "partner"}, "Share not found")
+    # The old names are gone, not kept beside the new ones.
+    for old in ("revoke_share", "revoke_automation_principal"):
+        assert call(admin, admin.token, old, {}).is_error
 
 
 def test_validation_errors_are_readable_and_never_echo_values(admin):
@@ -249,13 +283,16 @@ def test_streamable_http_round_trip_lists_annotated_tools(admin):
                 return getattr(tools, "tools", tools), await client.call_tool(name, {})
 
     tools, result = asyncio.run(run(admin.token, "list_teams"))
-    assert {t.name for t in tools} == TOOLS
+    assert {t.name for t in tools} == TOOLS == set(HINTS)
     for tool in tools:
         hints = tool.annotations
-        assert hints.read_only_hint == (tool.name in READS), tool.name
-        assert hints.destructive_hint == (tool.name in DESTRUCTIVE or tool.name == "move_database"), tool.name
-        if tool.name in DESTRUCTIVE:
-            assert not hints.idempotent_hint
+        assert (hints.read_only_hint, hints.destructive_hint, hints.idempotent_hint) == HINTS[tool.name], tool.name
+        assert hints.open_world_hint is False, tool.name
+    # Leaving a team out removes it, and a retry may hand out another one-time password.
+    assert HINTS["update_user_access"] == (False, True, True) and HINTS["retry_user_setup"] == (False, False, False)
+    schemas = {t.name: t.input_schema for t in tools}
+    assert schemas["delete_share"]["required"] == ["share", "confirm_name"]
+    assert schemas["delete_automation_principal"]["required"] == ["principal"]
     assert not result.is_error and result.structured_content == {"teams": []}
     tools, result = asyncio.run(run(admin.reader, "list_teams"))
     assert len(tools) == len(TOOLS)

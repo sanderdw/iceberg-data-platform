@@ -134,8 +134,9 @@ Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Cl
 Every call requires the `platform-admin` role. The tools are the administration API's operations:
 
 - **Read:** `get_overview`, `list_teams`, `list_databases`, `get_database_connection`, `browse_catalog`, `list_users`, `find_accounts`, `list_shares`, `list_automation_principals`
-- **Change:** `create_team`, `update_team`, `create_database`, `rename_database`, `move_database`, `create_user`, `link_user`, `update_user_access`, `retry_user_setup`
-- **Destructive:** `delete_team`, `delete_database` (requires `confirm_name`), `delete_user`, `revoke_share`, `revoke_automation_principal`
+- **Change:** `create_team`, `update_team`, `create_database`, `rename_database`, `create_user`, `link_user`, `retry_user_setup`
+- **Change that can take access away:** `move_database` (members of the old team lose access) and `update_user_access` (it replaces the memberships, so a team you leave out is removed)
+- **Destructive:** `delete_team`, `delete_database` and `delete_share` (both require `confirm_name`, the exact name), `delete_user`, `delete_automation_principal`
 
 `create_user` returns the one-time password in the agent's transcript. Treat that transcript as confidential, and reset the password if in doubt. Users connect to the [user portal's endpoint](ai-agents.md) in the same way.
 

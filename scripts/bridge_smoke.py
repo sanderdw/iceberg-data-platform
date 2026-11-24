@@ -108,7 +108,13 @@ def main():
     discovery = httpx.get(bridge, timeout=15).raise_for_status().json()
     assert discovery["contractVersion"].startswith("0.1.") and "automation-tokens" in discovery["capabilities"]
     # The smoke extension is not registered with --listing, so it may not read listings.
-    assert {"id": extension, "origin": origin, "listing": False} in discovery["extensions"]
+    assert any((e["id"], e["origin"], e["listing"]) == (extension, origin, False) for e in discovery["extensions"])
+    # Every refusal has the error shape, also where no operation answers.
+    for method, path, status, code in (("GET", "/me", 401, "unauthorized"), ("GET", "/nothing-here", 404, "not_found"),
+                                       ("PUT", "/me", 405, "method_not_allowed")):
+        refused = httpx.request(method, bridge + path, timeout=15)
+        assert refused.status_code == status and set(refused.json()) == {"error", "code"}, refused.text
+        assert refused.json()["code"] == code, refused.text
 
     service = httpx.post(f"{issuer}/protocol/openid-connect/token", timeout=15, data={
         "grant_type": "client_credentials", "client_id": f"ext-{extension}", "client_secret": secret,

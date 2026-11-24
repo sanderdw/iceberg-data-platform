@@ -35,6 +35,8 @@ READ_ONLY = ToolAnnotations(
 )
 CREATE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
 UPDATE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+# Replaces what was there: a repeat changes nothing further, but what the call leaves out is gone.
+REPLACE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False)
 DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False)
 INSTRUCTIONS = """Iceberg Workspaces exposes the signed-in user's Apache Iceberg databases.
 Start with list_databases: it returns the user's teams with their role per team and the
@@ -60,9 +62,10 @@ database), use the Ingestion (dlt) extension's MCP server when it is installed (
 script with the platform's iceberg_connect.py: it writes with PyIceberg or a writable DuckDB
 connection under the user's own grants (AGENTS.md, "Loading data from somewhere else"). Land
 outside data as-is in a raw namespace and transform it from there.
-Writers create a semantic model with publish_semantic_model. To replace one, read it with
-describe_semantic_model first and pass its entityVersion; a newer version is refused. Ask the
-user before replacing a model or calling delete_semantic_model, which needs confirm_name.
+Writers create a semantic model with publish_semantic_model: model is its name and definition the
+Apache Ossie document. To replace one, read it with describe_semantic_model first and pass its
+entityVersion as entity_version; a newer version is refused. Ask the user before replacing a model
+or calling delete_semantic_model, which needs confirm_name equal to model.
 Only a current Administrator or Database + bucket administrator of a team may create,
 rename or delete its databases. create_database takes the owning team id and environment;
 rename_database and delete_database take the database id. Deletion immediately destroys
@@ -78,10 +81,12 @@ create_share, update_share, rotate_share_credential or delete_share, and list_sh
 names the teams that can receive one. Views and semantic models share only their definition:
 the recipient reads the underlying tables with the same credential, so select those tables
 too. By default create_share and update_share add the tables that selected semantic models
-read and report them in addedTables. create_share of an external share and
+read and report them in addedTables. objects in update_share replaces the whole selection: what
+you leave out is no longer shared, so ask the user first. create_share of an external share and
 rotate_share_credential return a client secret once: hand it only to the intended recipient
 and never store it in notebooks, files or chat history. Rotation invalidates the old secret
-and delete_share revokes all access immediately, so ask the user first.
+and delete_share, which needs confirm_name equal to the share's name, ends all access immediately,
+so ask the user first.
 A share can also be listed (listed=true) when a data catalog extension is installed: its
 names, schemas, descriptions and semantic models are published to that catalog, without data
 or a credential, so others can find the data product and ask the owning team for access.
@@ -448,30 +453,35 @@ def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
             "truncated": out["truncated"], "dataAsOf": as_of(out, compiled.bindings[0]["view"]),
         }
 
-    @mcp.tool(annotations=UPDATE)
+    @mcp.tool(annotations=DESTRUCTIVE)
     async def publish_semantic_model(
-        database: DatabaseId, namespace: Namespace, name: ModelName,
-        model: Annotated[dict[str, Any], Field(description="One Apache Ossie semantic model, or a document that holds one.")],
+        database: DatabaseId, namespace: Namespace, model: ModelName,
+        definition: Annotated[dict[str, Any], Field(
+            description="One Apache Ossie semantic model, or a document that holds one.")],
         entity_version: Annotated[int | None, Field(description="entityVersion from describe_semantic_model; "
                                                                 "required to replace an existing model.")] = None,
     ) -> dict[str, Any]:
-        """Create a semantic model in a namespace, or replace the version you read (Writer role)."""
-        parts = namespace_parts(namespace, name)
+        """Create the semantic model named model in a namespace, or replace the version you read (Writer role).
+
+        Replacing overwrites the stored definition; the earlier one is not kept.
+        """
+        parts = namespace_parts(namespace, model)
         if not parts:
             raise ToolError("Select a namespace.")
         session, _ = await resolve(database)
-        return await query(directory.publish_semantic_model, session, database, parts, name, model, entity_version)
+        return await query(directory.publish_semantic_model, session, database, parts, model, definition,
+                           entity_version)
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def delete_semantic_model(
-        database: DatabaseId, namespace: Namespace, name: ModelName, confirm_name: str
+        database: DatabaseId, namespace: Namespace, model: ModelName, confirm_name: str
     ) -> dict[str, Any]:
-        """Permanently delete a semantic model (Writer role); confirm_name must equal its name."""
-        parts = namespace_parts(namespace, name)
+        """Permanently delete a semantic model (Writer role); confirm_name must equal model, its name."""
+        parts = namespace_parts(namespace, model)
         if not parts:
             raise ToolError("Select a namespace.")
         session, _ = await resolve(database)
-        return await query(directory.delete_semantic_model, session, database, parts, name, confirm_name)
+        return await query(directory.delete_semantic_model, session, database, parts, model, confirm_name)
 
     async def owned_share(database, share):
         """A session for the share's owning database; the share must belong to it."""
@@ -526,7 +536,7 @@ def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
         session, _ = await resolve(database)
         return await query(lambda: directory.create_share(session, data, include_model_tables=include_model_tables))
 
-    @mcp.tool(annotations=UPDATE)
+    @mcp.tool(annotations=REPLACE)
     async def update_share(
         database: DatabaseId,
         share: ShareId,
@@ -540,7 +550,11 @@ def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
         include_model_tables: ModelTables = True,
     ) -> dict[str, Any]:
         """Change a share's objects, recipient, description, listing, contact or expiry; omitted fields stay
-        as they are."""
+        as they are.
+
+        objects replaces the whole selection: an object you leave out is no longer shared, and its
+        recipients lose access to it at once.
+        """
         if expires_at and remove_expiry:
             raise ToolError("Give expires_at or remove_expiry, not both.")
         fields = {"recipient": recipient, "description": description, "listed": listed, "contact": contact,
@@ -564,7 +578,7 @@ def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def delete_share(database: DatabaseId, share: ShareId, confirm_name: str) -> dict[str, Any]:
-        """Revoke a share: all access ends immediately. confirm_name must equal the share's name."""
+        """Delete a share: all access through it ends immediately. confirm_name must equal the share's name."""
         session = await owned_share(database, share)
         return await query(directory.delete_share, session, share, confirm_name)
 

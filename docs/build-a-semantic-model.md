@@ -31,7 +31,7 @@ Put an Apache Ossie document at `semantic_models/<database>/<namespace>/<name>.y
 
 ## Publish it through MCP
 
-An agent connected to the [user portal's MCP server](ai-agents.md) publishes a model with `publish_semantic_model`. Replacing a model needs the `entityVersion` you read, so an update is refused if someone else changed it since. The tool returns warnings for metrics a governed query would refuse, and refuses fields that are not columns of their table.
+An agent connected to the [user portal's MCP server](ai-agents.md) publishes a model with `publish_semantic_model`: `model` is its name and `definition` the document. Replacing a model needs the `entityVersion` you read, so an update is refused if someone else changed it since. The tool returns warnings for metrics a governed query would refuse, and refuses fields that are not columns of their table.
 
 ## Check the result
 

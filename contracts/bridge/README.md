@@ -58,6 +58,43 @@ An extension reaches the core through four doors:
 | `team-extensions` | 0.1.3 | `GET /teams/{teamId}/extensions` for an extension the team enabled: the extensions it enabled, per environment |
 | `app-directory` | 0.1.4 | Discovery: `title` and `purpose` per extension, and `userPortalPages`, for the shared Apps menu ([`v1/apps-menu/`](v1/apps-menu)) |
 
+## Errors
+
+Every response that is not a success has the same JSON body, also for a path that does not exist, a
+method a path does not have and a failure the Bridge did not expect:
+
+```json
+{"error": "Only team administrators can enable an extension.", "code": "forbidden_role"}
+```
+
+`error` is text for a person and may change. `code` is stable: act on the code, never on the text.
+The codes are the `enum` of `Error.code` in [`v1/openapi.yaml`](v1/openapi.yaml). A new code is a
+contract change and gets an entry in [CHANGELOG.md](CHANGELOG.md); an existing code is never renamed
+or given another meaning.
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `invalid_request` | 400, 422 | The body, a query parameter or a path parameter is missing or not valid |
+| `unauthorized` | 401 | No bearer token, or the token is invalid or expired. The response has `WWW-Authenticate: Bearer` |
+| `unknown_extension` | 403 | The token was issued to a client that is not a registered extension |
+| `not_linked` | 403 | The user's Keycloak account is not linked to a platform user, or no longer |
+| `user_required` | 403 | The operation acts for a signed-in user and was called with the service account |
+| `service_required` | 403 | The operation is reserved for the extension's service account and was called with a user's token |
+| `listing_not_enabled` | 403 | The extension is not registered to publish listings (`--listing`) |
+| `no_teams` | 403 | The user is not a member of any team any more |
+| `not_a_member` | 403 | The user is not a member of the team in the path |
+| `forbidden_role` | 403 | The user is a member, but only a team administrator may do this |
+| `extension_not_enabled` | 403 | The team has not enabled this extension, so it may not read which extensions the team enabled |
+| `forbidden` | 403 | Refused for another reason; `error` says which |
+| `not_found` | 404 | The path does not exist, or the resource does not exist or belongs to another extension |
+| `method_not_allowed` | 405 | The path exists, but not with this method. The response has `Allow` |
+| `conflict` | 409 | The resource changed while the call ran, or is in a state that does not allow this. Read it again and retry |
+| `internal_error` | 500 | The Bridge failed in a way it did not expect; the Bridge's log has the cause. Also the code of any status not in this table |
+| `provider_error` | 502 | Polaris or the object storage refused or failed |
+| `unavailable` | 503 | Polaris or the object storage cannot be reached. Try again later |
+
+An extension that passes a Bridge error on to its own caller keeps the code as it is.
+
 ## Registering an extension
 
 `scripts.setup --extension <id> --origin <url> --handshake <file>` registers an extension and writes

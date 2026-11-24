@@ -286,22 +286,27 @@ def stored_models(stack):
 
 def test_semantic_models_are_published_queried_and_deleted_as_the_caller(stack, stored_models, monkeypatch):
     store, writes = stored_models
-    where = {"database": stack.databases[0], "namespace": ["analytics"], "name": "events"}
-    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": EVENTS_MODEL})
+    where = {"database": stack.databases[0], "namespace": ["analytics"], "model": "events"}
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "definition": EVENTS_MODEL})
     assert not result.is_error, text(result)
-    assert result.structured_content["action"] == "created" and result.structured_content["entityVersion"] == 1
+    assert result.structured_content == {"action": "created", "model": "events", "namespace": ["analytics"],
+                                         "entityVersion": 1, "warnings": []}
+    # The model is named by `model` and its document is `definition`; the earlier parameter names are refused.
+    old = {"database": where["database"], "namespace": ["analytics"], "name": "events", "model": EVENTS_MODEL}
+    assert call(stack, stack.token, "publish_semantic_model", old).is_error
     stored = json.loads(store["events"]["document"]["semantic_model"])
     assert stored == {"version": "0.2.0", "semantic_model": [EVENTS_MODEL]}
     # Replacing needs the version that was read, so a teammate's change is never overwritten unseen.
-    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": EVENTS_MODEL})
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "definition": EVENTS_MODEL})
     assert result.is_error and "exists at version 1" in text(result)
-    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": EVENTS_MODEL, "entity_version": 1})
+    result = call(stack, stack.token, "publish_semantic_model",
+                  {**where, "definition": EVENTS_MODEL, "entity_version": 1})
     assert result.structured_content["action"] == "updated" and result.structured_content["entityVersion"] == 2
     broken = {**EVENTS_MODEL, "description": "", "metrics": [{"name": "x", "description": "X. Unit: count.",
                                                               "expression": "count(*)"}],
               "datasets": [{**EVENTS_MODEL["datasets"][0], "fields": [
                   {"name": "id", "dimension": True, "expression": "id"}]}]}
-    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": broken, "entity_version": 2})
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "definition": broken, "entity_version": 2})
     assert result.is_error and "no description" in text(result) and '"is_time"' in text(result)
     assert [w[0] for w in writes] == ["POST", "PUT"]
 
@@ -331,13 +336,16 @@ def test_semantic_models_are_published_queried_and_deleted_as_the_caller(stack, 
 
     result = call(stack, stack.token, "delete_semantic_model", {**where, "confirm_name": "event"})
     assert result.is_error and "events" in store
+    # The name is typed twice on purpose: once to address the model, once to confirm.
+    assert call(stack, stack.token, "delete_semantic_model", where).is_error and "events" in store
     result = call(stack, stack.token, "delete_semantic_model", {**where, "confirm_name": "events"})
-    assert result.structured_content["deleted"] and "events" not in store
+    assert result.structured_content == {"deleted": True, "model": "events", "namespace": ["analytics"]}
+    assert "events" not in store
 
 
 def test_describe_summarises_and_narrows_a_model(stack, stored_models):
     where = {"database": stack.databases[0], "namespace": ["analytics"]}
-    call(stack, stack.token, "publish_semantic_model", {**where, "name": "events", "model": EVENTS_MODEL})
+    call(stack, stack.token, "publish_semantic_model", {**where, "model": "events", "definition": EVENTS_MODEL})
     summary = call(stack, stack.token, "describe_semantic_model", {**where, "model": "events"}).structured_content
     metric = summary["models"][0]["metrics"][0]
     assert metric == {"name": "events", "dataset": "EVENTS", "unit": "count", "expression": "count(*)",
@@ -358,7 +366,7 @@ def test_describe_summarises_and_narrows_a_model(stack, stored_models):
 
 def test_dimension_values_help_pick_exact_filter_values(stack, stored_models, monkeypatch):
     where = {"database": stack.databases[0], "namespace": ["analytics"]}
-    call(stack, stack.token, "publish_semantic_model", {**where, "name": "events", "model": EVENTS_MODEL})
+    call(stack, stack.token, "publish_semantic_model", {**where, "model": "events", "definition": EVENTS_MODEL})
     run = Mock(return_value={"columns": [], "rows": [["door", 7], ["Doorbell", 2]], "truncated": True,
                              "snapshots": {"EVENTS": {"id": 1, "committedAt": 1790000000000}}})
     monkeypatch.setattr("user_portal.mcp_server.run_preview", run)
@@ -380,16 +388,16 @@ def test_dimension_values_help_pick_exact_filter_values(stack, stored_models, mo
 
 
 def test_publish_checks_fields_against_the_table_columns(stack, stored_models):
-    where = {"database": stack.databases[0], "namespace": ["analytics"], "name": "events"}
+    where = {"database": stack.databases[0], "namespace": ["analytics"], "model": "events"}
     dataset = EVENTS_MODEL["datasets"][0]
     typo = {**EVENTS_MODEL, "datasets": [{**dataset, "fields": [*dataset["fields"], {
         "name": "kind", "description": "A misspelt column.",
         "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "kind"}]}}]}]}
-    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": typo})
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "definition": typo})
     assert result.is_error and "EVENTS.kind is not a column of the table" in text(result)
     # A table that does not exist yet is not a reason to refuse the model, but the caller hears about it.
     missing = {**typo, "datasets": [{**typo["datasets"][0], "source": "lakehouse.analytics.later"}]}
-    result = call(stack, stack.token, "publish_semantic_model", {**where, "model": missing})
+    result = call(stack, stack.token, "publish_semantic_model", {**where, "definition": missing})
     assert not result.is_error, text(result)
     assert any("analytics.later is missing or not readable" in w for w in result.structured_content["warnings"])
 
@@ -582,6 +590,8 @@ def test_share_tools_manage_the_whole_lifecycle_for_administrators(stack):
         "description": "Revenue model",
     })
     assert not updated.is_error, text(updated)
+    # objects replaces the selection: the table that create_share added is no longer shared.
+    assert {o["name"] for o in updated.structured_content["share"]["objects"]} == {"sessions", "revenue"}
     assert updated.structured_content["warnings"] == ["revenue reads analytics.events, which is not selected."]
     assert updated.structured_content["share"]["description"] == "Revenue model"
     assert call(stack, stack.token, "update_share", {"database": database, "share": id}).is_error
@@ -592,8 +602,10 @@ def test_share_tools_manage_the_whole_lifecycle_for_administrators(stack):
     assert rotated.structured_content["credentials"]["clientSecret"] != secret
     refused = call(stack, stack.token, "delete_share", {"database": database, "share": id, "confirm_name": "other"})
     assert refused.is_error and "exactly" in text(refused)
+    assert call(stack, stack.token, "delete_share", {"database": database, "share": id}).is_error
     deleted = call(stack, stack.token, "delete_share", {"database": database, "share": id, "confirm_name": "partner"})
     assert not deleted.is_error, text(deleted)
+    assert deleted.structured_content == {"deleted": True, "share": id, "name": "partner"}
     assert call(stack, stack.token, "list_shares", {"database": database}).structured_content["shares"] == []
 
 
@@ -643,13 +655,33 @@ def test_streamable_http_round_trip_authenticates_each_request(stack):
          "list_share_teams", "list_shares", "list_received_shares", "create_share", "update_share",
          "rotate_share_credential", "delete_share"]
     )
-    assert all(t.annotations.read_only_hint for t in tools if t.name in {
+    # Hints as (readOnly, destructive, idempotent); openWorld is false for every tool.
+    reads = {
         "list_databases", "list_namespaces", "list_tables", "describe_table", "describe_view", "preview_rows",
-        "list_semantic_models", "describe_semantic_model", "query_semantic_model", "list_share_teams", "list_shares",
-        "list_received_shares",
-    })
-    assert all(next(t for t in tools if t.name == name).annotations.destructive_hint
-               for name in ("delete_database", "rotate_share_credential", "delete_share", "delete_semantic_model"))
+        "list_semantic_models", "describe_semantic_model", "query_semantic_model", "list_dimension_values",
+        "list_share_teams", "list_shares", "list_received_shares",
+    }
+    expected = {
+        **dict.fromkeys(reads, (True, False, True)),
+        **dict.fromkeys(("create_database", "create_share"), (False, False, False)),
+        "rename_database": (False, False, True),
+        # Replaces the selection of objects, so it can withdraw access; a repeat changes nothing further.
+        "update_share": (False, True, True),
+        # Replaces the stored model; a repeat with the same version is refused.
+        "publish_semantic_model": (False, True, False),
+        **dict.fromkeys(("delete_database", "rotate_share_credential", "delete_share", "delete_semantic_model"),
+                        (False, True, False)),
+    }
+    hints = {t.name: (t.annotations.read_only_hint, t.annotations.destructive_hint, t.annotations.idempotent_hint)
+             for t in tools}
+    assert hints == expected
+    assert all(t.annotations.open_world_hint is False for t in tools)
+    schemas = {t.name: t.input_schema for t in tools}
+    assert schemas["publish_semantic_model"]["required"] == ["database", "namespace", "model", "definition"]
+    assert set(schemas["publish_semantic_model"]["properties"]) == {
+        "database", "namespace", "model", "definition", "entity_version"}
+    assert schemas["delete_semantic_model"]["required"] == ["database", "namespace", "model", "confirm_name"]
+    assert schemas["delete_share"]["required"] == ["database", "share", "confirm_name"]
     assert not result.is_error, text(result)
     assert [d["id"] for d in result.structured_content["databases"]] == stack.databases[:1]
 

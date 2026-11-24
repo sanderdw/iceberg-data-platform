@@ -90,4 +90,4 @@ Expressions use the `ANSI_SQL` dialect and run in DuckDB, so `FILTER (WHERE …)
 - **Several paths to one dataset.** A flight has a departure and an arrival airport. Give each relationship a role name and say in the instructions which `via` means what; without `via`, an agent's query is refused as ambiguous.
 - **Ratios.** Always `nullif(denominator, 0)`, and state in the description what the denominator includes.
 - **Sentinels.** Treat `NULL`, `''`, `'Unknown'` and `'null'` together when the interview says they all mean unknown.
-- **Names.** Model names use letters, digits, `-` and `_`. Renaming means publishing under the new name and removing the old model with the MCP tool `delete_semantic_model`, after the user agrees.
+- **Names.** Model names use letters, digits, `-` and `_`. Renaming means publishing under the new name and removing the old model with the MCP tool `delete_semantic_model` (`model` and `confirm_name` are both the old name), after the user agrees.

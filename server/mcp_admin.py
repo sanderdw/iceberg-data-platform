@@ -16,6 +16,7 @@ from .models import (
     Environment,
     Membership,
     Memberships,
+    ServiceError,
     ShareId,
     TeamId,
     TeamInput,
@@ -27,7 +28,8 @@ from .validation import validation_message
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 CREATE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
 UPDATE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
-MOVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False)
+# Replaces what was there: a repeat changes nothing further, but what the call leaves out is gone.
+REPLACE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False)
 DESTRUCTIVE = ToolAnnotations(
     read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False
 )
@@ -38,11 +40,13 @@ every other tool takes the id. Database names repeat across environments (develo
 production) and are unique per team and environment. Roles per team are reader, writer and admin;
 bucket-admin (direct S3 access) is not available to Keycloak users. create_user creates a Keycloak
 account and returns a temporary password exactly once: pass it to the person over a secure channel
-and never store or repeat it. delete_team, delete_database, delete_user and revoke_share are
-irreversible, like revoke_automation_principal, which stops an extension such as Conversational BI from
+and never store or repeat it. delete_team, delete_database, delete_user and delete_share are
+irreversible, like delete_automation_principal, which stops an extension such as Conversational BI from
 acting for a team environment. delete_database destroys every table, view, storage object and data share of that
-database and requires confirm_name; delete_user revokes platform access but keeps the Keycloak
-account. Ask the administrator before any destructive call. browse_catalog lists namespaces,
+database and requires confirm_name, the database's display name; delete_share ends all access through a
+share and requires confirm_name, the share's name; delete_user revokes platform access but keeps the
+Keycloak account. update_user_access replaces a user's memberships: a team you leave out is removed.
+Ask the administrator before any destructive call. browse_catalog lists namespaces,
 tables, views and semantic models by name only."""
 
 # Free-text parameters stay unconstrained here and are validated by the API's own models,
@@ -150,7 +154,7 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
         data = validated(DatabaseRename, "/api/databases", name=name)
         return await query(provider.rename_database, database, data.name)
 
-    @mcp.tool(annotations=MOVE)
+    @mcp.tool(annotations=REPLACE)
     async def move_database(database: DatabaseId, team: TeamId) -> dict[str, Any]:
         """Move a database to another team; members of the old team lose access at once."""
         return await query(provider.move_database, database, team)
@@ -190,9 +194,9 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
         """All platform users with their memberships and identity status."""
         return {"users": await query(users)}
 
-    @mcp.tool(annotations=UPDATE)
+    @mcp.tool(annotations=REPLACE)
     async def update_user_access(user: UserId, memberships: MembershipList) -> dict[str, Any]:
-        """Replace a user's teams and the role per team."""
+        """Replace a user's teams and the role per team; a team you leave out is removed, with its access."""
         data = validated(Memberships, "/api/users", memberships=[m.model_dump() for m in memberships])
         return await query(update_user, user, data)
 
@@ -211,11 +215,24 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
         return {"shares": await query(provider.list_shares)}
 
     @mcp.tool(annotations=DESTRUCTIVE)
-    async def revoke_share(share: ShareId) -> dict[str, Any]:
+    async def delete_share(share: ShareId, confirm_name: str) -> dict[str, Any]:
         """End all access through this share immediately: the recipient team's and any external credential.
-        A listed share also leaves the data catalog."""
-        await query(provider.delete_share, share)
-        return {"revoked": True, "share": share}
+        A listed share also leaves the data catalog.
+
+        confirm_name must equal the share's name from list_shares; nothing is deleted otherwise.
+        """
+        def delete():
+            try:
+                name = provider.require_share(share)["properties"]["portal.name"]
+            except ServiceError as exc:
+                if exc.status != 404:
+                    raise
+                raise ServiceError(404, "Share not found. Nothing was deleted.") from None
+            if name != confirm_name:
+                raise ServiceError(422, "confirm_name does not match the share's name. Nothing was deleted.")
+            provider.delete_share(share)
+            return name
+        return {"deleted": True, "share": share, "name": await query(delete)}
 
     @mcp.tool(annotations=READ_ONLY)
     async def list_automation_principals() -> dict[str, Any]:
@@ -223,16 +240,16 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
         return {"automationPrincipals": await query(provider.list_automation)}
 
     @mcp.tool(annotations=DESTRUCTIVE)
-    async def revoke_automation_principal(principal: AutomationPrincipalId) -> dict[str, Any]:
+    async def delete_automation_principal(principal: AutomationPrincipalId) -> dict[str, Any]:
         """Stop an extension from acting for a team environment.
 
         It gets no new tokens; issued ones expire within POLARIS_TOKEN_LIFETIME (one hour by default).
         """
-        def revoke():
+        def delete():
             provider.require_automation(principal)
             provider.delete_automation(principal)
-        await query(revoke)
-        return {"revoked": True, "principal": principal}
+        await query(delete)
+        return {"deleted": True, "principal": principal}
 
     if user_management:
 
@@ -275,7 +292,7 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
             )
             return await query(user_management.create, provider, data, "link")
 
-        @mcp.tool(annotations=UPDATE)
+        @mcp.tool(annotations=CREATE)
         async def retry_user_setup(user: UserId) -> dict[str, Any]:
             """Finish an interrupted account setup; a new account may get another one-time password."""
             return await query(user_management.resume, provider, user)

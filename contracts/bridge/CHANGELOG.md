@@ -8,6 +8,18 @@ Released with core 1.0.0. Additive: extensions built for 0.1.0 to 0.1.3 keep wor
   user portal's pages in `userPortalPages` (`id`, `title`, `url`). With them every extension shows
   the same Apps menu as the user portal; the menu's script and stylesheet are in
   `v1/apps-menu/`, to copy unchanged.
+- Errors: `Error.code` is an enum of every code, and the [README](README.md#errors) lists each one
+  with its status and meaning. No existing code changed. Every response that is not a success now
+  has the error shape:
+  - A path that does not exist answers 404 `not_found`. It was FastAPI's `{"detail": "Not Found"}`.
+  - A method a path does not have answers 405 with the new code `method_not_allowed` and an `Allow`
+    header. It was `{"detail": "Method Not Allowed"}`.
+  - A failure the Bridge did not expect answers 500 with the new code `internal_error`. It was a
+    plain-text response. A status that has no code of its own gets `internal_error` too; that
+    was `error`.
+- Every operation documents 405 and 500 with the `Error` schema, and discovery documents 500.
+- `POST /teams/{teamId}/automation-principals` answers with exactly the `AutomationPrincipal` schema,
+  for 201 as for 200. The fields are the same as before.
 
 ## 0.1.3 - 2026-11-09
 
