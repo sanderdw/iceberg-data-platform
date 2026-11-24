@@ -183,11 +183,11 @@ class Services:
         """Create one (no id) or change one; new YAML is a new version."""
         cases = questions.parse(data.yaml) if data.yaml is not None else None
         if data.id is None:
+            if not data.team or not data.name or not data.model or not cases:
+                raise EvalError(422, "A new question set needs a team, a name, a semantic model and at least one "
+                                     "case.", "invalid_request")
             me = await self.me(caller)
             self.needs(self.role(me, data.team), data.environment, "edit")
-            if not data.model or not cases:
-                raise EvalError(422, "A new question set needs a semantic model and at least one case.",
-                                "invalid_request")
             if any(s["name"] == data.name and s["environment"] == data.environment
                    for s in self.store.question_sets([data.team])):
                 raise EvalError(409, "This team already has a question set with this name there.", "name_taken")

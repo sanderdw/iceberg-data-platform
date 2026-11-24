@@ -27,6 +27,12 @@ def test_cases_are_validated_and_versioned(stack):
     bad = stack.create(yaml="cases:\n- name: x\n  inputs: {question: q}\n  expected_output: {clarify: true, "
                             "refusal: fan_out}\n")
     assert bad.status_code == 422 and "exactly one" in bad.json()["error"]
+    # A new one says what is missing, whichever of team, name, model or cases it is.
+    for missing in ("team", "name", "model", "yaml"):
+        body = {"team": TEAM, "name": "flights_checks", "model": MODEL, "yaml": YAML}
+        del body[missing]
+        refused = stack.call("POST", "/question-sets", json=body)
+        assert (refused.status_code, refused.json()["code"]) == (422, "invalid_request"), missing
     id = stack.create().json()["id"]
     changed = stack.call("POST", "/question-sets", json={"id": id, "yaml": YAML.replace("fan_out", "no_path"),
                                                           "note": "runway refusal"}).json()

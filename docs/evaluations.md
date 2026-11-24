@@ -22,7 +22,7 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/dow
   ICEBERG_EXTENSIONS=conversationalbi,evaluations sh
 ```
 
-Open http://localhost:3012 and sign in. A team administrator enables Evaluations for an environment (**Enable** on the page, or `enable_environment`), and Conversational BI in the same environment: a run asks Conversational BI for the whole team, with what every member of the team can read. On Kubernetes, register it as `extensions.evaluations.host` and install its chart `iceberg-evaluations` ([add extensions](install-kubernetes.md#add-extensions)).
+Open http://localhost:3012 and sign in. A team administrator enables Evaluations for an environment, through an AI agent (`enable_environment`) or with `POST /api/v1/teams/{team}/environments/{environment}`, and Conversational BI in the same environment: a run asks Conversational BI for the whole team, with what every member of the team can read. On Kubernetes, register it as `extensions.evaluations.host` and install its chart `iceberg-evaluations` ([add extensions](install-kubernetes.md#add-extensions)).
 
 For an LLM judge, put `JUDGE_MODEL` (a Pydantic AI model string) and its provider's key in `evaluations/llm.env` in the installation directory, then run `docker compose up -d` in `evaluations`. To compare LLMs, the platform administrator lists them in Conversational BI's `BI_EVAL_MODELS` (with their keys in its `llm.env`).
 
@@ -75,7 +75,7 @@ The `agent-evaluations` skill tells the agent how to write cases, run them and e
 
 | Tool | What it does |
 | --- | --- |
-| `whoami`, `list_environments`, `enable_environment` | Your teams and where Evaluations is enabled |
+| `whoami`, `list_environments`, `enable_environment`, `disable_environment` | Your teams and where Evaluations is enabled |
 | `list_agent_models` | The semantic models the agent answers from, and the LLMs a run may choose |
 | `list_question_sets`, `get_question_set`, `save_question_set`, `import_questions`, `delete_question_set` | Question sets and their versions |
 | `run_evaluation`, `compare_models`, `measure_semantic_model`, `list_runs`, `get_run`, `compare_runs` | Runs and comparisons |

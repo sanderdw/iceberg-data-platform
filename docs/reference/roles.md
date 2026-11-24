@@ -31,6 +31,7 @@ Each extension checks the same team role. Only a team Administrator enables an e
 | Extension | reader | writer | admin |
 | --- | --- | --- | --- |
 | [Conversational BI](../conversational-bi.md) | Ask questions about the team's models and the models shared with it | as reader | Also enable the environment |
+| [Evaluations](../evaluations.md) | View question sets, runs, results, schedules and the review queue | Also create, edit and delete question sets, run them in development, and review live conversations | Also enable environments, work in acceptance and production, schedule runs, switch live evaluation on and off |
 | [dbt pipelines](../dbt.md) | View projects, files, runs, schedules and pipelines; compile, preview and test | Also create projects and branches, commit to and delete branches, build any branch in development and `main` in acceptance and production, stop runs, schedule development | Also merge to `main`, enable environments, schedule acceptance and production, delete projects |
 | [Ingestion (dlt)](../ingestion.md) | View pipelines, runs, logs and schedules; validate a definition | Also run pipelines and stop runs | Also create, change and delete pipelines, set secrets and schedules, enable environments |
 | [Replication (OLake)](../replication.md) (beta) | View replications, source checks, runs, logs and schedules; validate a definition | Also check sources, run replications and stop runs | Also create, change and delete replications, choose tables, set the password and schedules, enable environments |
