@@ -368,6 +368,24 @@ def test_team_administrators_get_read_only_access(issuer):
         assert client.delete("/api/session", headers=HEADERS).status_code == 200
 
 
+def test_only_platform_administrators_look_up_keycloak_accounts(issuer):
+    from server.identity import UserManagement
+    from test.test_identity_management import MemoryKeycloak
+
+    oidc, state = issuer
+    provider = MemoryPolaris()
+    app = create_app(provider, PASSWORD, oidc=oidc, user_management=UserManagement(MemoryKeycloak()))
+    with TestClient(app) as client:
+        assert client.get(start(client, state), follow_redirects=False).status_code == 303
+        assert client.get("/api/identity/accounts?username=alice").json() == []
+    state["access_changes"] = team_member(provider, "admin")
+    with TestClient(app) as client:
+        assert client.get(start(client, state), follow_redirects=False).status_code == 303
+        assert client.get("/api/users").status_code == 200
+        refused = client.get("/api/identity/accounts?username=alice")
+        assert refused.status_code == 403 and "platform administrators" in refused.json()["error"]
+
+
 def test_members_who_administer_no_team_are_refused(issuer):
     oidc, state = issuer
     provider = MemoryPolaris()
