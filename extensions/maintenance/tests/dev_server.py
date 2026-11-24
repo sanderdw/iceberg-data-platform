@@ -64,13 +64,12 @@ async def seed(app, bridge, launcher):
     await bridge.enable("alice", TEAM, "production")
     alice = Caller("alice", "sub-alice", "alice", "ext-maintenance", 4102444800.0)
     dev = DATABASES[("grid-capacity", "development")]
-    await services.set_policy(alice, dev, {"settings": {"orphanFiles": {"enabled": True}},
-                                           "exclude": ["raw.transformer_register"], "cron": "0 2 * * *"})
+    await services.update_policy(alice, dev, {"settings": {"orphanFiles": {"enabled": True}},
+                                              "exclude": ["raw.transformer_register"]})
+    await services.set_schedule(alice, dev, "0 2 * * *")
     launcher.seconds = 0
-    run = await services.run_maintenance(alice, dev, "inspect")
-    await services.runs.wait(run["id"], 10)
-    run = await services.run_maintenance(alice, DATABASES[("grid-capacity", "production")], "inspect")
-    await services.runs.wait(run["id"], 10)
+    await services.run_maintenance(alice, dev, "inspect", wait=10)
+    await services.run_maintenance(alice, DATABASES[("grid-capacity", "production")], "inspect", wait=10)
     launcher.seconds = 6
 
 

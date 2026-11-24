@@ -156,12 +156,11 @@ class RunManager:
             await self.http.delete(f"/runs/{id}")
 
     async def wait(self, id, timeout):
+        """The run when it is final or after `timeout` seconds, whichever comes first. Waiting never fails on
+        its own: a run that is stopped or fails meanwhile is simply returned as it is."""
         task = self.tasks.get(id)
         if task:
-            try:
-                await asyncio.wait_for(asyncio.shield(task), timeout)
-            except TimeoutError:
-                pass
+            await asyncio.wait({task}, timeout=timeout)
         return self.store.run(id)
 
     async def execute(self, run, principal):
@@ -255,9 +254,11 @@ class RunManager:
         if response.status_code not in (200, 404):
             LOG.warning("The artifacts of %s could not be removed (%s).", id, response.status_code)
 
-    async def logs(self, id, tail=2000):
+    async def logs(self, id, limit=500):
+        """The last `limit` lines of a run's log: from its artifacts, or from the launcher while it runs."""
         path = self.artifacts / id / "out" / "run.log"
         if path.exists():
-            return path.read_text(errors="replace").splitlines()[-tail:]
-        response = await self.http.get(f"/runs/{id}/logs", params={"tail": tail})
+            return path.read_text(errors="replace").splitlines()[-limit:]
+        # `tail` is the launcher's own parameter name.
+        response = await self.http.get(f"/runs/{id}/logs", params={"tail": limit})
         return response.text.splitlines() if response.status_code == 200 else []

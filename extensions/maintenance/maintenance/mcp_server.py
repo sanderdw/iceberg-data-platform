@@ -33,33 +33,44 @@ snapshots, compacts small data files (applying their deletes), removes dangling 
 manifests and removes orphan files, per database, on a schedule or on demand.
 
 Start with whoami (your teams, roles, databases, the policy defaults and where Maintenance is
-enabled), then list_databases and list_tables (attention=true for tables that need work). Table
-health comes from the last run that saw a table: run_maintenance with mode inspect refreshes it.
+enabled), then list_databases and list_table_health (attention=true for tables that need work). Table
+health comes from the last run that saw a table: inspect_database refreshes it and changes nothing.
 Runs only happen in environments a team administrator enabled: enable_environment turns one on
 (ask the user first: runs act for the whole team).
 
-A policy belongs to one database (get_policy, set_policy for team administrators). Without one,
-the defaults apply to inspections and dry runs, and scheduled maintenance is off. Before maintaining,
-run_maintenance with mode dry-run shows what the policy would do; mode maintain applies it.
+A policy belongs to one database (get_policy, update_policy for team administrators). Without one,
+the defaults apply to inspections and dry runs, and nothing is maintained. Before maintaining,
+inspect_database with mode dry-run shows what the policy would do; run_maintenance applies it.
+set_schedule maintains a database on a cron schedule (UTC, at most once an hour; needs a policy) and
+delete_schedule removes it.
+
+A run starts in the background: pass wait (up to 600 seconds) to get it back finished, or read it
+with get_run, which also takes wait. Its status is queued, running, success, partial (some tables
+failed, the others were maintained), failed, error, cancelled or incomplete. Times are RFC 3339 in
+UTC.
 
 Expired snapshots can no longer be used for time travel. Branch and tag heads, each ref's own
 retention and the table properties history.expire.* are always respected. Files that expired
 snapshots leave behind are deleted by orphan cleanup in a later run, never in the same run, and orphan
 files younger than a day are never deleted. Tables with gc.enabled=false keep their history.
 
-Ask the user before maintaining in acceptance or production, before changing a policy, and before any
-tool marked destructive."""
+Ask the user before maintaining in acceptance or production, before changing a policy or a schedule,
+and before any tool marked destructive."""
 
 Environment = Literal["development", "acceptance", "production"]
-Mode = Literal["inspect", "dry-run", "maintain"]
 DatabaseId = Annotated[str, Field(pattern=r"^db-[a-f0-9]{32}$", description="Database id from list_databases.")]
-TableName = Annotated[str, Field(min_length=3, max_length=300, description="namespace.table, as list_tables shows.")]
+TableName = Annotated[str, Field(min_length=3, max_length=300,
+                                 description="namespace.table, as list_table_health shows.")]
 RunId = Annotated[str, Field(pattern=r"^run-[a-f0-9]{24}$", description="Run id.")]
 TeamId = Annotated[str, Field(pattern=r"^team-[a-f0-9]{32}$", description="Team id from whoami.")]
 Settings = Annotated[dict[str, dict[str, Any]], Field(description=(
     "Per operation, the settings to change: expireSnapshots {enabled, olderThanHours, retainLast}, compaction "
     "{enabled, targetFileSizeMb, minInputFiles, deleteRatio, maxInputMbPerRun}, orphanFiles {enabled, "
     "olderThanHours >= 24}, rewriteManifests {enabled, minManifests}, danglingDeletes {enabled}."))]
+Tables = Annotated[list[str] | None, Field(max_length=200, description=(
+    "Only these tables (namespace.table); all when empty."))]
+Wait = Annotated[int, Field(ge=0, le=600, description=(
+    "Seconds to wait for the run to finish; it is returned as it is then, finished or not."))]
 
 
 class Verifier:
@@ -107,7 +118,7 @@ def create_mcp(settings, services, verifier):
     @mcp.tool(annotations=READ)
     async def list_environments(team: TeamId) -> dict[str, Any]:
         """Where Maintenance is enabled for a team, and the databases of each environment."""
-        return {"environments": await call(services.environments, team)}
+        return await call(services.environments, team)
 
     @mcp.tool(annotations=WRITE)
     async def enable_environment(team: TeamId, environment: Environment) -> dict[str, Any]:
@@ -123,19 +134,21 @@ def create_mcp(settings, services, verifier):
     @mcp.tool(annotations=READ)
     async def list_databases(team: TeamId | None = None, environment: Environment | None = None) -> dict[str, Any]:
         """Your teams' databases with their policy, schedule, last run and how many tables need attention."""
-        return {"databases": await call(services.list_databases, team, environment)}
+        return await call(services.list_databases, team, environment)
 
     @mcp.tool(annotations=READ)
-    async def list_tables(database: DatabaseId | None = None, team: TeamId | None = None,
-                          environment: Environment | None = None, attention: bool = False) -> dict[str, Any]:
+    async def list_table_health(database: DatabaseId | None = None, team: TeamId | None = None,
+                                environment: Environment | None = None, attention: bool = False,
+                                limit: Annotated[int, Field(ge=1, le=5000)] = 500) -> dict[str, Any]:
         """Table health from the last runs: snapshots, data and small files, delete files, manifests, and why a
-        table needs attention. attention=true lists only those."""
-        return {"tables": await call(services.list_tables, database, team, environment, attention)}
+        table needs attention. attention=true lists only those. total counts the tables that match; narrow by
+        database when it is more than limit."""
+        return await call(services.list_table_health, database, team, environment, attention, limit)
 
     @mcp.tool(annotations=READ)
-    async def get_table(database: DatabaseId, table: TableName) -> dict[str, Any]:
+    async def get_table_health(database: DatabaseId, table: TableName) -> dict[str, Any]:
         """One table's health, the actions of its last run, the effective policy and recent runs."""
-        return await call(services.get_table, database, table)
+        return await call(services.get_table_health, database, table)
 
     @mcp.tool(annotations=READ)
     async def get_policy(database: DatabaseId) -> dict[str, Any]:
@@ -143,51 +156,65 @@ def create_mcp(settings, services, verifier):
         return await call(services.get_policy, database)
 
     @mcp.tool(annotations=WRITE)
-    async def set_policy(database: DatabaseId, settings: Settings | None = None,
-                         exclude: Annotated[list[str] | None, Field(max_length=500, description=(
-                             "Tables (namespace.table) maintenance leaves alone; replaces the list."))] = None,
-                         cron: Annotated[str | None, Field(max_length=100, description=(
-                             "Five-field cron in UTC, at most hourly; empty removes the schedule."))] = None,
-                         schedule_enabled: bool | None = None,
-                         expected_revision: int | None = None) -> dict[str, Any]:
-        """Create or change a database's policy and schedule (team administrators). Give only what changes. Ask the
-        user first: scheduled runs expire snapshots and rewrite files."""
-        data = {"settings": settings, "exclude": exclude, "scheduleEnabled": schedule_enabled,
-                "expected_revision": expected_revision}
-        data = {k: v for k, v in data.items() if v is not None}
-        if cron is not None:
-            data["cron"] = cron
-        return await call(services.set_policy, database, data)
+    async def update_policy(database: DatabaseId, settings: Settings | None = None,
+                            exclude: Annotated[list[str] | None, Field(max_length=500, description=(
+                                "Tables (namespace.table) maintenance leaves alone; replaces the list."))] = None,
+                            expected_revision: Annotated[int | None, Field(description=(
+                                "Fail if the policy changed since this revision (0: only if there is none "
+                                "yet)."))] = None) -> dict[str, Any]:
+        """Change a database's policy (team administrators): give only what changes, the rest keeps its value.
+        Without a policy it creates one from the defaults. Ask the user first: maintenance runs expire snapshots
+        and rewrite files by it. The schedule is set with set_schedule."""
+        data = {"settings": settings, "exclude": exclude, "expectedRevision": expected_revision}
+        return await call(services.update_policy, database, {k: v for k, v in data.items() if v is not None})
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def delete_policy(database: DatabaseId) -> dict[str, Any]:
         """Remove a database's policy and schedule (team administrators). Table health and past runs stay."""
         return await call(services.delete_policy, database)
 
+    @mcp.tool(annotations=WRITE)
+    async def set_schedule(database: DatabaseId, cron: Annotated[str, Field(min_length=1, max_length=100)],
+                           enabled: bool = True) -> dict[str, Any]:
+        """Maintain a database on a five-field cron schedule in UTC, at most once an hour (team administrators).
+        The database needs a policy. enabled=false keeps the schedule and pauses it. A due run is skipped while
+        another run of the database is in progress. Ask the user first: scheduled runs expire snapshots and
+        rewrite files."""
+        return await call(services.set_schedule, database, cron, enabled)
+
     @mcp.tool(annotations=DESTRUCTIVE)
-    async def run_maintenance(database: DatabaseId, mode: Mode = "inspect",
-                              tables: Annotated[list[str] | None, Field(max_length=200, description=(
-                                  "Only these tables (namespace.table); all when empty."))] = None,
-                              wait: Annotated[int, Field(ge=0, le=600)] = 0) -> dict[str, Any]:
-        """Run on a database now (writers). inspect refreshes table health and dry-run plans the policy: neither
-        changes anything. maintain applies the policy (needs one): ask the user first. wait blocks up to that many
-        seconds."""
+    async def delete_schedule(database: DatabaseId) -> dict[str, Any]:
+        """Remove a database's schedule (team administrators). Its policy stays."""
+        return await call(services.delete_schedule, database)
+
+    @mcp.tool(annotations=WRITE)
+    async def inspect_database(database: DatabaseId, mode: Literal["inspect", "dry-run"] = "inspect",
+                               tables: Tables = None, wait: Wait = 0) -> dict[str, Any]:
+        """Read a database now, without changing a table (writers). inspect refreshes every table's health;
+        dry-run plans the policy, or the defaults, and returns per table what maintenance would do."""
         return await call(services.run_maintenance, database, mode, tables, wait)
+
+    @mcp.tool(annotations=DESTRUCTIVE)
+    async def run_maintenance(database: DatabaseId, tables: Tables = None, wait: Wait = 0) -> dict[str, Any]:
+        """Maintain a database now (writers): apply its policy, which it needs. This expires snapshots, which
+        ends time travel to them, and rewrites and deletes files. Ask the user first, and show them a dry run
+        (inspect_database with mode dry-run)."""
+        return await call(services.run_maintenance, database, "maintain", tables, wait)
 
     @mcp.tool(annotations=READ)
     async def list_runs(database: DatabaseId, limit: Annotated[int, Field(ge=1, le=200)] = 20) -> dict[str, Any]:
-        """A database's runs, newest first."""
-        return {"runs": await call(services.list_runs, database, limit)}
+        """A database's runs, newest first, without each table's results."""
+        return await call(services.list_runs, database, limit)
 
     @mcp.tool(annotations=READ)
-    async def get_run(run: RunId) -> dict[str, Any]:
-        """A run's status, totals and each table's actions."""
-        return await call(services.get_run, run)
+    async def get_run(run: RunId, wait: Wait = 0) -> dict[str, Any]:
+        """A run's status, totals and each table's actions (results)."""
+        return await call(services.get_run, run, wait)
 
     @mcp.tool(annotations=READ)
-    async def get_run_logs(run: RunId, tail: Annotated[int, Field(ge=1, le=5000)] = 500) -> dict[str, Any]:
-        """The last lines of a run's log."""
-        return await call(services.get_run_logs, run, tail)
+    async def get_run_logs(run: RunId, limit: Annotated[int, Field(ge=1, le=5000)] = 500) -> dict[str, Any]:
+        """The last limit lines of a run's log."""
+        return await call(services.get_run_logs, run, limit)
 
     @mcp.tool(annotations=WRITE)
     async def cancel_run(run: RunId) -> dict[str, Any]:
@@ -205,7 +232,8 @@ class Endpoint:
 
     async def __call__(self, scope, receive, send):
         if self.app is None:
-            await JSONResponse({"error": "The MCP transport is not running."}, status_code=503)(scope, receive, send)
+            await JSONResponse({"error": "The MCP transport is not running.", "code": "unavailable"},
+                               status_code=503)(scope, receive, send)
             return
         body, more = bytearray(), True
         while more:
@@ -215,7 +243,8 @@ class Endpoint:
             body.extend(message.get("body", b""))
             more = message.get("more_body", False)
             if len(body) > MAX_BODY:
-                await JSONResponse({"error": "Request is too large."}, status_code=413)(scope, receive, send)
+                await JSONResponse({"error": "Request is too large.", "code": "too_large"},
+                                   status_code=413)(scope, receive, send)
                 return
         replayed = False
 

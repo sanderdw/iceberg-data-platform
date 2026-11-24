@@ -41,7 +41,7 @@ A table's page shows its file sizes as a histogram, its snapshots per day, its b
 
 ## Policies
 
-A team administrator sets one policy per database, with an optional schedule (cron in UTC, at most once an hour). Without a policy, health checks and dry runs use the defaults, and nothing is maintained. The defaults follow Apache Iceberg and Amazon S3 Tables:
+A team administrator sets one policy per database. Without a policy, health checks and dry runs use the defaults, and nothing is maintained. The defaults follow Apache Iceberg and Amazon S3 Tables:
 
 | Operation | Default | What it does |
 | --- | --- | --- |
@@ -54,6 +54,27 @@ A team administrator sets one policy per database, with an optional schedule (cr
 Tables can be excluded: maintenance reads their health but never changes them.
 
 **Dry run** plans the saved policy, or the defaults, and shows per table what it would do. It changes nothing.
+
+## Schedule
+
+A database with a policy can have one schedule: a five-field cron expression in UTC, set under **Schedule** on the database's page. A scheduled run applies the policy to every table that is not excluded, and is skipped while another run of the database is in progress. Pause it by clearing **Enabled**; **Remove** deletes it, and so does removing the policy.
+
+Maintenance runs at most once an hour, where other extensions allow every 5 minutes: a run rewrites files, and the time between two runs is the grace period before orphan cleanup deletes what the previous run expired.
+
+## Runs
+
+A run is a health check (`inspect`), a dry run (`dry-run`) or maintenance (`maintain`), of a whole database or of the tables you name. Its status is one of:
+
+| Status | Meaning |
+| --- | --- |
+| `queued`, `running` | Not finished yet |
+| `success` | Every table succeeded |
+| `partial` | Some tables failed; the others were maintained. The next run tries the failed ones again |
+| `failed` | The runner reported failure |
+| `error` | The platform could not run it: it could not start, exceeded its time limit, or the extension restarted |
+| `cancelled` | Stopped on request. Tables it already maintained keep the changes |
+
+`incomplete`, which other extensions use for a run that left work for the next one, never occurs here.
 
 ## What a run never does
 
@@ -79,10 +100,14 @@ The `maintenance` [agent skill](agent-skills.md) in `extensions/maintenance/skil
 | `whoami` | Your teams with your role in each, their databases per environment, where Maintenance is enabled, and the policy defaults. |
 | `list_environments` / `enable_environment` / `disable_environment` | Where Maintenance is enabled for a team; enables or disables it for an environment (team administrators). |
 | `list_databases` | Your teams' databases with their policy, schedule, last run and tables that need attention. |
-| `list_tables` / `get_table` | Table health from the last runs, optionally only tables that need attention; one table with its last actions and recent runs. |
-| `get_policy` / `set_policy` / `delete_policy` | A database's policy and schedule, or the defaults; creates or changes it (team administrators), giving only what changes; removes it. |
-| `run_maintenance` | Runs on a database now (writers): `inspect`, `dry-run` or `maintain`, optionally for some tables. `wait` blocks up to 600 seconds. |
-| `list_runs` / `get_run` / `get_run_logs` / `cancel_run` | A database's runs; one run with each table's actions; its log; stops a run (writers). |
+| `list_table_health` / `get_table_health` | Table health from the last runs, optionally only tables that need attention, at most `limit` (500) with the `total` that match; one table with its last actions and recent runs. |
+| `get_policy` / `update_policy` / `delete_policy` | A database's policy and schedule, or the defaults; changes it, or creates it from the defaults (team administrators), giving only what changes; removes it with its schedule. |
+| `set_schedule` / `delete_schedule` | Maintains a database on a cron schedule in UTC, at most once an hour (team administrators, needs a policy); removes the schedule. |
+| `inspect_database` | Reads a database now (writers): `inspect` refreshes table health, `dry-run` plans the policy. Changes no table. `wait` blocks up to 600 seconds. |
+| `run_maintenance` | Maintains a database now (writers): applies its policy, optionally to some tables. Marked destructive, so your agent asks first. `wait` blocks up to 600 seconds. |
+| `list_runs` / `get_run` / `get_run_logs` / `cancel_run` | A database's runs; one run with each table's actions, optionally waiting for it to finish; the last lines of its log; stops a run (writers). |
+
+Every tool returns what the REST operation of the same capability returns. Times are RFC 3339 strings in UTC, such as `2026-11-24T09:15:02.123Z`. An error has a readable `error` and a stable `code`, such as `policy_required` when you maintain or schedule a database without a policy.
 
 What each role may do is in [roles and permissions](reference/roles.md#extensions).
 

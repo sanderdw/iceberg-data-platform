@@ -7,6 +7,10 @@ const LABELS = {development: 'Development', acceptance: 'Acceptance', production
 const WRITERS = ['writer', 'admin', 'bucket-admin'];
 const ADMINS = ['admin', 'bucket-admin'];
 const ACTIVE = new Set(['queued', 'running']);
+// Every run status of the platform's extensions; Maintenance itself never reports incomplete.
+const RUN_STATUSES = new Set(['queued', 'running', 'success', 'incomplete', 'partial', 'failed', 'error', 'cancelled']);
+// The most table health one request returns; the response's total says how many there are.
+const TABLE_LIMIT = 5000;
 const STATES = {healthy: 'Healthy', attention: 'Needs attention', failed: 'Failed', 'no-policy': 'No policy', excluded: 'Excluded'};
 const STATE_CLASS = {healthy: 'healthy', attention: 'attention', failed: 'failed', 'no-policy': 'idle', excluded: 'idle'};
 const MODES = {inspect: 'Health check', 'dry-run': 'Dry run', maintain: 'Maintenance'};
@@ -52,18 +56,18 @@ async function api(path, options = {}) {
 }
 const send = (path, method, body) => api(path, {method, body: body === undefined ? undefined : JSON.stringify(body)});
 
-// Formatting
-function when(seconds) {
-  if (!seconds) return '—';
-  const date = new Date(seconds * 1000), diff = (Date.now() - date) / 1000, ahead = diff < 0, d = Math.abs(diff);
+// Formatting. The API's times are RFC 3339 strings in UTC, such as 2026-11-24T09:15:02.123Z.
+function when(value) {
+  if (!value) return '—';
+  const date = new Date(value), diff = (Date.now() - date) / 1000, ahead = diff < 0, d = Math.abs(diff);
   const text = d < 60 ? (ahead ? 'in a moment' : 'just now') : d < 3600 ? `${Math.round(d / 60)} min` : d < 86400 ? `${Math.round(d / 3600)} h` : null;
   if (!text) return date.toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'});
   return d < 60 ? text : ahead ? `in ${text}` : `${text} ago`;
 }
-function time(seconds) {
-  return h('time', {datetime: seconds ? new Date(seconds * 1000).toISOString() : null,
-                    title: seconds ? new Date(seconds * 1000).toLocaleString(undefined, {dateStyle: 'full', timeStyle: 'long'}) : null,
-                    text: when(seconds)});
+function time(value) {
+  return h('time', {datetime: value || null,
+                    title: value ? new Date(value).toLocaleString(undefined, {dateStyle: 'full', timeStyle: 'long'}) : null,
+                    text: when(value)});
 }
 function age(ms) {
   if (!ms) return '—';
@@ -72,7 +76,7 @@ function age(ms) {
 }
 function duration(run) {
   if (!run.startedAt) return '—';
-  const s = Math.max(0, Math.round((run.finishedAt || Date.now() / 1000) - run.startedAt));
+  const s = Math.max(0, Math.round(((run.finishedAt ? Date.parse(run.finishedAt) : Date.now()) - Date.parse(run.startedAt)) / 1000));
   if (s < 60) return `${s} s`;
   if (s < 3600) return `${Math.floor(s / 60)} min ${s % 60} s`;
   return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
@@ -87,6 +91,7 @@ function hours(value) {
   return value % 24 === 0 ? (value === 24 ? '1 day' : `${value / 24} days`) : `${value} hours`;
 }
 function chip(status, label) { return h('span', {class: `chip ${status}`}, h('i', {class: `status ${status}`, 'aria-hidden': 'true'}), label || status); }
+function runChip(status) { return chip(RUN_STATUSES.has(status) ? status : 'idle', status); }
 function stateChip(state) { return chip(STATE_CLASS[state] || 'idle', STATES[state] || state); }
 function teamName(id) { return (me?.memberships.find(m => m.team === id) || {}).teamName || id; }
 const isAdmin = role => ADMINS.includes(role);
@@ -173,7 +178,8 @@ async function renderHome(token) {
   const query = new URLSearchParams();
   if (route.team) query.set('team', route.team);
   if (route.environment) query.set('environment', route.environment);
-  const [databases, tables] = await Promise.all([api(`/databases?${query}`), api(`/tables?${query}`)]);
+  const tableQuery = new URLSearchParams([...query, ['limit', TABLE_LIMIT]]);
+  const [{databases}, {tables, total}] = await Promise.all([api(`/databases?${query}`), api(`/tables?${tableQuery}`)]);
   if (token !== renderToken) return;
   const setFilter = changes => {
     const next = new URLSearchParams({team: route.team, environment: route.environment, attention: route.attention ? '1' : '', ...changes});
@@ -191,25 +197,26 @@ async function renderHome(token) {
       [['', 'All'], ...ENVIRONMENTS.map(e => [e, LABELS[e]])].map(([value, label]) =>
         h('button', {type: 'button', 'aria-pressed': String(route.environment === value), text: label, onclick: () => setFilter({environment: value})}))),
     h('div', {class: 'segmented', role: 'group', 'aria-label': 'Health'},
-      h('button', {type: 'button', 'aria-pressed': String(!route.attention), text: `All ${tables.length}`, onclick: () => setFilter({attention: ''})}),
+      h('button', {type: 'button', 'aria-pressed': String(!route.attention), text: `All ${total}`, onclick: () => setFilter({attention: ''})}),
       h('button', {type: 'button', 'aria-pressed': String(route.attention), text: `Needs attention ${needs.length}`, onclick: () => setFilter({attention: '1'})})));
   fill($('#content'),
     heading('MAINTENANCE', h('h1', {}, 'Table health', h('span', {class: 'dot-accent', text: '.'})),
       'Snapshots, small files and delete files in your teams\' Iceberg databases, and the policies that keep them in check. Runs act as each team\'s service account.'),
-    filters, statsRow(databases, tables, needs),
+    filters, statsRow(databases, total, needs),
+    total > tables.length && h('div', {class: 'notice', text: `Showing the first ${number.format(tables.length)} of ${number.format(total)} tables. Choose a team or an environment, or open a database, to see the rest.`}),
     tables.length ? tableList(shown) : emptyState(databases),
     databasesCard(databases),
     h('div', {class: 'columns spaced-top'}, environmentsCard(), agentCard()));
   if (runsBusy) schedulePoll(() => render(true), 4000);
 }
 
-function statsRow(databases, tables, needs) {
+function statsRow(databases, total, needs) {
   const runs = databases.map(d => d.lastRun).filter(Boolean);
   const expired = runs.reduce((sum, r) => sum + (r.summary?.totals?.snapshotsExpired || 0), 0);
   const compacted = runs.reduce((sum, r) => sum + (r.summary?.totals?.filesCompacted || 0), 0);
   const policies = databases.filter(d => d.policy).length;
   return h('div', {class: 'stats'},
-    h('div', {class: 'stat'}, h('span', {class: 'label', text: 'Tables'}), h('span', {class: 'value', text: number.format(tables.length)}),
+    h('div', {class: 'stat'}, h('span', {class: 'label', text: 'Tables'}), h('span', {class: 'value', text: number.format(total)}),
       h('span', {class: 'sub', text: `${databases.length} databases · ${policies} with a policy`})),
     h('div', {class: 'stat'}, h('span', {class: 'label', text: 'Needs attention'}), h('span', {class: `value ${needs.length ? 'warn' : ''}`, text: number.format(needs.length)}),
       h('span', {class: 'sub', text: needs.length ? 'small files, snapshots or deletes' : 'all tables are in shape'})),
@@ -272,7 +279,7 @@ function databasesCard(databases) {
         h('td', {}, d.policy ? chip('success', 'Policy') : chip('idle', 'Defaults')),
         h('td', {class: 'mono'}, d.schedule ? (d.schedule.enabled ? d.schedule.cron : `${d.schedule.cron} (paused)`) : h('span', {class: 'muted', text: '—'})),
         h('td', {class: 'num'}, number.format(d.tables), d.attention ? h('div', {class: 'reasons', text: `${d.attention} need attention`}) : null),
-        h('td', {class: 'wide'}, d.lastRun ? h('div', {class: 'run-cell'}, h('a', {href: `#/runs/${d.lastRun.id}`}, chip(d.lastRun.status)),
+        h('td', {class: 'wide'}, d.lastRun ? h('div', {class: 'run-cell'}, h('a', {href: `#/runs/${d.lastRun.id}`}, runChip(d.lastRun.status)),
           h('span', {class: 'small-print'}, MODES[d.lastRun.mode], ' · ', time(d.lastRun.createdAt))) : h('span', {class: 'muted small', text: 'Never'})))))));
 }
 
@@ -314,7 +321,7 @@ function agentCard() {
 
 // One database: its tables, policy and runs
 async function renderDatabase(token) {
-  const [databases, tables, policy, runs] = await Promise.all([api('/databases'), api(`/tables?database=${route.id}`),
+  const [{databases}, {tables, total}, policy, {runs}] = await Promise.all([api('/databases'), api(`/tables?database=${route.id}&limit=${TABLE_LIMIT}`),
     api(`/databases/${route.id}/policy`), api(`/databases/${route.id}/runs?limit=10`)]);
   if (token !== renderToken) return;
   const d = databases.find(x => x.id === route.id);
@@ -333,12 +340,13 @@ async function renderDatabase(token) {
     h('div', {class: 'status-line spaced'}, policy.exists ? chip('success', 'Policy') : chip('idle', 'No policy: defaults'),
       policy.schedule && h('span', {class: 'chip', text: policy.schedule.enabled ? `Every ${policy.schedule.cron} UTC` : 'Schedule paused'}),
       blocked && !active ? h('span', {class: 'small-print', text: blocked}) : null),
+    total > tables.length && h('div', {class: 'notice', text: `Showing the first ${number.format(tables.length)} of ${number.format(total)} tables.`}),
     tables.length ? tableList(tables, false) : h('section', {class: 'card'},
       h('h2', {text: 'Tables'}), h('p', {class: 'small', text: 'No health yet. Check health reads every table and changes nothing.'})),
     h('div', {class: 'columns spaced-top'},
       h('div', {class: 'stack'},
         h('section', {class: 'card'}, h('div', {class: 'section-title'}, h('h2', {text: 'Runs'}), h('span', {class: 'small-print', text: 'Newest first'})), runsTable(runs))),
-      h('div', {class: 'stack'}, policySummary(policy, d), scheduleSummary(policy))));
+      h('div', {class: 'stack'}, policySummary(policy, d), scheduleCard(policy, d))));
   if (active) schedulePoll(() => render(true), 3000);
 }
 
@@ -347,11 +355,11 @@ function runsTable(runs) {
   return h('div', {class: 'table-wrap'}, h('table', {class: 'responsive'},
     h('thead', {}, h('tr', {}, ['Status', 'Kind', 'Started', 'Duration', 'By'].map(t => h('th', {scope: 'col', text: t})))),
     h('tbody', {}, runs.map(r => h('tr', {class: 'run-row', onclick: event => { if (!event.target.closest('a')) location.hash = `#/runs/${r.id}`; }},
-      h('td', {}, h('a', {href: `#/runs/${r.id}`, 'aria-label': `Run ${r.status}, ${when(r.createdAt)}`}, chip(r.status))),
+      h('td', {}, h('a', {href: `#/runs/${r.id}`, 'aria-label': `Run ${r.status}, ${when(r.createdAt)}`}, runChip(r.status))),
       h('td', {class: 'small', text: MODES[r.mode] + (r.tables.length ? ` · ${r.tables.length} tables` : '')}),
       h('td', {class: 'nowrap'}, time(r.startedAt || r.createdAt)),
       h('td', {class: 'nowrap mono', text: duration(r)}),
-      h('td', {class: 'wide small'}, r.schedule ? 'schedule' : r.triggeredBy, r.agent && h('span', {class: 'agent', text: 'agent'})))))));
+      h('td', {class: 'wide small'}, r.scheduled ? 'schedule' : r.triggeredBy, r.agent && h('span', {class: 'agent', text: 'agent'})))))));
 }
 
 function policyFacts(s) {
@@ -374,13 +382,39 @@ function policySummary(policy, d) {
     h('a', {class: 'button quiet small', href: `#/databases/${d.id}/policy`, text: isAdmin(d.role) ? (policy.exists ? 'Edit policy' : 'Create policy') : 'Open policy'}));
 }
 
-function scheduleSummary(policy) {
-  const s = policy.schedule;
+// A database's schedule: one per database, set and removed on its own (PUT and DELETE …/schedule). It applies the
+// policy, so it needs one.
+function scheduleFacts(s) {
+  return h('dl', {class: 'facts'},
+    h('dt', {text: 'Cron (UTC)'}), h('dd', {text: s.cron + (s.enabled ? '' : ' · paused')}),
+    h('dt', {text: 'Next run'}), h('dd', {}, s.enabled ? time(s.nextRunAt) : '—'),
+    s.lastRun && h('dt', {text: 'Last scheduled run'}), s.lastRun && h('dd', {}, h('a', {href: `#/runs/${s.lastRun}`, text: 'Open'})));
+}
+
+function scheduleCard(policy, d) {
+  const admin = isAdmin(d.role), s = policy.schedule;
+  const cron = h('input', {class: 'inline', value: s?.cron || '0 2 * * *', placeholder: '0 2 * * *', required: true, maxlength: '100',
+    'aria-label': 'Cron expression in UTC', autocomplete: 'off', spellcheck: 'false'});
+  const enabled = h('input', {type: 'checkbox', checked: s ? s.enabled : true});
+  const save = async event => {
+    event.preventDefault();
+    try { await send(`/databases/${d.id}/schedule`, 'PUT', {cron: cron.value.trim(), enabled: enabled.checked}); go(location.hash, ['Schedule saved.']); }
+    catch (error) { failure(error); }
+  };
+  const remove = async () => {
+    try { await send(`/databases/${d.id}/schedule`, 'DELETE'); go(location.hash, ['Schedule removed.']); } catch (error) { failure(error); }
+  };
   return h('section', {class: 'card'}, h('h2', {text: 'Schedule'}),
-    s ? h('dl', {class: 'facts'},
-      h('dt', {text: 'Cron (UTC)'}), h('dd', {text: s.cron + (s.enabled ? '' : ' · paused')}),
-      h('dt', {text: 'Next run'}), h('dd', {}, s.enabled ? time(s.nextRunAt) : '—'))
-      : h('p', {class: 'small', text: 'Not scheduled. Maintenance runs only when someone starts it.'}),
+    s ? scheduleFacts(s) : h('p', {class: 'small', text: 'Not scheduled. Maintenance runs only when someone starts it.'}),
+    admin && policy.exists && h('form', {class: 'stack', onsubmit: save},
+      h('div', {class: 'presets', role: 'group', 'aria-label': 'Presets'}, CRON_PRESETS.map(([label, value]) =>
+        h('button', {type: 'button', class: 'quiet', text: label, onclick: () => { cron.value = value; cron.focus(); }}))),
+      h('div', {class: 'cron-row'}, cron, h('label', {class: 'check'}, enabled, 'Enabled')),
+      h('p', {class: 'small-print', text: 'Five fields in UTC, at most once an hour.'}),
+      h('div', {class: 'actions'}, h('button', {type: 'submit', class: 'small', text: s ? 'Save schedule' : 'Schedule'}),
+        s && h('button', {type: 'button', class: 'quiet small', text: 'Remove', onclick: remove}))),
+    !policy.exists && h('p', {class: 'small-print', text: admin ? 'A schedule applies the policy: create the policy first.' : 'A schedule needs a policy, which a team administrator creates.'}),
+    policy.exists && !admin && h('p', {class: 'small-print', text: 'A team administrator sets the schedule.'}),
     h('p', {class: 'small-print', text: 'A scheduled run applies the policy to every table that is not excluded, and is skipped while another run of the database is in progress.'}));
 }
 
@@ -401,7 +435,7 @@ function numberInput(value, label, min, max, disabled, onchange) {
 function field(label, control, help) { return h('label', {class: 'field'}, h('span', {text: label}), control, help && h('span', {class: 'help', text: help})); }
 
 async function renderPolicy(token) {
-  const [databases, tables, policy] = await Promise.all([api('/databases'), api(`/tables?database=${route.id}`), api(`/databases/${route.id}/policy`)]);
+  const [{databases}, {tables}, policy] = await Promise.all([api('/databases'), api(`/tables?database=${route.id}&limit=${TABLE_LIMIT}`), api(`/databases/${route.id}/policy`)]);
   if (token !== renderToken) return;
   const d = databases.find(x => x.id === route.id);
   if (!d) throw new Error('No such database in your teams.');
@@ -435,14 +469,6 @@ async function renderPolicy(token) {
     op('orphanFiles', 'Remove orphan files', 'Deletes files under a table\'s location that no snapshot references: leftovers of failed writes and the files of expired snapshots. Runs before expiry, so what one run expires stays until the next run.', [
       field('Older than', select(s.orphanFiles.olderThanHours, [[24, '1 day'], [72, '3 days'], [168, '7 days'], [336, '14 days']], 'Remove orphan files older than', locked, set('orphanFiles', 'olderThanHours')), 'never younger than a day, so running writes are safe')]),
   ];
-  // Schedule
-  const cron = h('input', {class: 'inline', value: policy.schedule?.cron || '', placeholder: '0 2 * * *', 'aria-label': 'Cron expression in UTC', autocomplete: 'off', spellcheck: 'false', disabled: locked});
-  const scheduleOn = h('input', {type: 'checkbox', checked: policy.schedule ? policy.schedule.enabled : true, disabled: locked});
-  const schedule = h('div', {class: 'op'}, h('h3', {text: 'Schedule'}),
-    h('div', {class: 'cron-row'}, cron, h('label', {class: 'check'}, scheduleOn, 'Enabled')),
-    !locked && h('div', {class: 'presets', role: 'group', 'aria-label': 'Presets'}, [...CRON_PRESETS, ['Off', '']].map(([label, value]) =>
-      h('button', {type: 'button', class: 'quiet', text: label, onclick: () => { cron.value = value; cron.focus(); }}))),
-    h('p', {class: 'small-print', text: 'Five fields in UTC, at most once an hour. Empty: no schedule.'}));
   // Excluded tables
   const known = tables.map(t => t.name);
   const chips = h('div', {class: 'chips'});
@@ -482,12 +508,13 @@ async function renderPolicy(token) {
   }
   update();
   const save = async () => {
-    const body = {settings: s, exclude, cron: cron.value.trim(), scheduleEnabled: scheduleOn.checked, expected_revision: policy.revision};
-    try { await send(`/databases/${d.id}/policy`, 'PUT', body); go(`#/databases/${d.id}`, ['Policy saved.']); }
+    // The schedule is not part of the policy: the database's page sets it.
+    const body = {settings: s, exclude, expectedRevision: policy.revision};
+    try { await send(`/databases/${d.id}/policy`, 'PATCH', body); go(`#/databases/${d.id}`, [policy.exists ? 'Policy saved.' : 'Policy created. Set a schedule to maintain this database regularly.']); }
     catch (error) { failure(error); }
   };
   const remove = async () => {
-    if (!await confirmDialog(`Remove the policy of ${d.name}?`, 'Scheduled maintenance stops. Table health and past runs stay.', 'Remove policy', true)) return;
+    if (!await confirmDialog(`Remove the policy of ${d.name}?`, 'Its schedule goes with it, so scheduled maintenance stops. Table health and past runs stay.', 'Remove policy', true)) return;
     try { await send(`/databases/${d.id}/policy`, 'DELETE'); go(`#/databases/${d.id}`, ['Policy removed.']); } catch (error) { failure(error); }
   };
   const enabled = enabledIn(d.team).includes(d.environment);
@@ -499,8 +526,11 @@ async function renderPolicy(token) {
       admin && h('button', {type: 'button', text: policy.exists ? 'Save policy' : 'Create policy', onclick: save})),
     !policy.exists && h('div', {class: 'notice', text: 'No policy yet. These are the defaults, as in Apache Iceberg and Amazon S3 Tables: saving creates the policy.'}),
     h('div', {class: 'columns'},
-      h('section', {class: 'card'}, sections, excludeSection, schedule),
+      h('section', {class: 'card'}, sections, excludeSection),
       h('div', {class: 'stack'},
+        h('section', {class: 'card'}, h('h2', {text: 'Schedule'}),
+          policy.schedule ? scheduleFacts(policy.schedule) : h('p', {class: 'small', text: 'Not scheduled. Maintenance runs only when someone starts it.'}),
+          h('a', {class: 'button quiet small', href: `#/databases/${d.id}`, text: !admin || !policy.exists ? 'Back to database' : policy.schedule ? 'Change the schedule' : 'Set the schedule'})),
         h('section', {class: 'card estimate'}, h('div', {class: 'section-title'}, h('h2', {text: 'From the last check'}),
           h('span', {class: 'small-print', text: tables.length ? 'estimated' : 'no health yet'})), estimate,
           h('p', {class: 'small-print', text: 'A dry run plans the saved policy exactly and changes nothing.'})),
@@ -603,7 +633,7 @@ function tableFacts(health) {
 // One run
 async function renderRun(token) {
   const run = await api(`/runs/${route.id}`);
-  const logs = await api(`/runs/${run.id}/logs?tail=2000`);
+  const logs = await api(`/runs/${run.id}/logs?limit=2000`);
   if (token !== renderToken) return;
   crumbs([`${teamName(run.team)} · ${run.databaseName}`, `#/databases/${run.database}`], ['Run']);
   const active = ACTIVE.has(run.status), totals = run.summary?.totals || {};
@@ -623,13 +653,13 @@ async function renderRun(token) {
       orphanFiles: planned('orphanFiles', 'files'), orphanBytes: planned('orphanFiles', 'bytes')});
   }
   fill($('#content'),
-    heading(`${run.databaseName} · ${LABELS[run.environment]} · ${run.schedule ? 'scheduled' : run.triggeredBy}`.toUpperCase(), h('h1', {class: 'compact', text: MODES[run.mode]}), null,
+    heading(`${run.databaseName} · ${LABELS[run.environment]} · ${run.scheduled ? 'scheduled' : run.triggeredBy}`.toUpperCase(), h('h1', {class: 'compact', text: MODES[run.mode]}), null,
       active && isWriter(run.role) && h('button', {type: 'button', class: 'danger', text: 'Stop run', onclick: async event => {
         event.target.disabled = true;
         try { await send(`/runs/${run.id}/cancel`, 'POST'); go(location.hash, ['Stopping the run…']); } catch (error) { failure(error); }
       }}),
       h('a', {class: 'button quiet', href: `#/databases/${run.database}`, text: 'Back to database'})),
-    h('div', {class: 'status-line spaced'}, chip(run.status), run.mode === 'dry-run' && h('span', {class: 'chip', text: 'nothing changed'}),
+    h('div', {class: 'status-line spaced'}, runChip(run.status), run.mode === 'dry-run' && h('span', {class: 'chip', text: 'nothing changed'}),
       h('span', {class: 'small-print', text: `${duration(run)}${run.tables.length ? ` · ${run.tables.join(', ')}` : ''}`})),
     run.error && h('div', {class: 'notice error', text: run.error}),
     maintain && !active && h('div', {class: 'stats'},
@@ -656,7 +686,7 @@ async function renderRun(token) {
           h('dt', {text: 'Queued'}), h('dd', {}, time(run.createdAt)),
           h('dt', {text: 'Started'}), h('dd', {}, time(run.startedAt)),
           h('dt', {text: 'Finished'}), h('dd', {}, active ? '—' : time(run.finishedAt)),
-          h('dt', {text: 'Started by'}), h('dd', {}, run.schedule ? 'schedule' : run.triggeredBy, run.agent && h('span', {class: 'agent', text: run.agent})),
+          h('dt', {text: 'Started by'}), h('dd', {}, run.scheduled ? 'schedule' : run.triggeredBy, run.agent && h('span', {class: 'agent', text: run.agent})),
           run.exitCode !== null && run.exitCode !== undefined && h('dt', {text: 'Exit code'}),
           run.exitCode !== null && run.exitCode !== undefined && h('dd', {text: String(run.exitCode)}))),
         h('section', {class: 'card'}, h('h2', {text: 'What a run changes'}),

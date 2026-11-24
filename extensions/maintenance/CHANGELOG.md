@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+The REST API and the MCP tools follow the platform's one set of conventions. Nothing of the old shapes
+is kept: update scripts and agent instructions.
+
+- **A schedule of its own.** `PUT /databases/{database}/schedule` with `{cron, enabled}` and
+  `DELETE /databases/{database}/schedule`, as the tools `set_schedule` and `delete_schedule`. It needs a
+  policy (409 `policy_required`) and is no longer set through the policy (`cron`, `scheduleEnabled`). A
+  schedule is `{cron, enabled, nextRunAt, lastRun}`, read with the policy and the database. Changing it
+  does not change the policy's revision. The minimum stays once an hour.
+- **Policy.** `PATCH /databases/{database}/policy` (was `PUT`) with `{settings, exclude,
+  expectedRevision}` (was `expected_revision`); the tool is `update_policy` (was `set_policy`). Without a
+  policy it creates one from the defaults.
+- **Two tools start a run.** `inspect_database` (`mode` `inspect` or `dry-run`) changes no table and is
+  no longer marked destructive; `run_maintenance` always maintains and takes no `mode`. The REST
+  operation keeps `mode`. Maintaining without a policy is 409 `policy_required` (was `no_policy`, which
+  now only means there is no policy to delete).
+- **Runs.** Starting a run returns 202 with the run as `get_run` returns it, `results` included.
+  `GET /runs/{run}` and `get_run` take `wait` (0 to 600 seconds). A run has `scheduled` (was
+  `schedule`). Run logs take `limit` (was `tail`). The statuses are the platform's eight: `queued`,
+  `running`, `success`, `incomplete`, `partial`, `failed`, `error`, `cancelled`.
+- **Table health.** The tools are `list_table_health` and `get_table_health` (were `list_tables` and
+  `get_table`; operation ids `listTableHealth`, `getTableHealth`). The list takes `limit` (500, at most
+  5000) and returns `{tables, total}`.
+- **Lists are objects.** `GET /databases` returns `{databases}`, `GET /databases/{database}/runs`
+  `{runs}`, `GET /teams/{team}/environments` `{environments}`; the tools return the same.
+- **Environments.** Enabling and disabling return the environment `{team, environment, enabled,
+  enabledBy, databases}`, not the platform's service account. Disabling one that is not enabled is 409
+  `environment_not_enabled` (was 404). `whoami` is built field by field and no longer passes on
+  `sharedDatabases`.
+- **Times** are RFC 3339 strings in UTC with milliseconds, such as `2026-11-24T09:15:02.123Z` (were
+  seconds as a number).
+- **Errors.** Every error has `{error, code}`: an unknown path is 404 `not_found`, a wrong method 405
+  `method_not_allowed`, an unexpected failure 500 `internal_error` (was `error`). A `team` filter that
+  names a team you are not in is 403 `not_a_member` (was an empty list).
+- The OpenAPI contract describes every response and the error body.
+- The page sets the schedule in its own form on the database's page, and the policy editor edits the
+  policy only.
+
 ## 0.0.1 - 2026-11-18
 
 - First version of Maintenance for the Iceberg Data Platform, a **beta**, on Extension Bridge contract 0.1.

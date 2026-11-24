@@ -82,6 +82,36 @@ There is no `docker cp` on Kubernetes. The Go runner switches to remote mode whe
 with the ticket; each works once. A failed fetch still reports a failed result. Unlike Ingestion's, the
 runs' NetworkPolicy has no internet egress at all: DNS, the catalog, storage and the launcher only.
 
+## The API follows the platform's conventions, with three choices of its own (2026-11-25)
+
+The REST API and the MCP tools use the same rules as the other extensions: one run shape and status
+vocabulary, lists as objects, one environment shape, RFC 3339 times, one error body. Three things are
+Maintenance's own:
+
+- **A schedule runs at most once an hour.** The other extensions allow every five minutes. A
+  maintenance run rewrites files and expires snapshots, and the time between two runs is the grace
+  period before orphan cleanup deletes what the previous run expired (see "How a run applies a
+  policy"). A shorter interval adds commits that conflict with writers and gains nothing. A cron that
+  runs more often is refused with `invalid_cron`.
+- **The schedule is set on its own, and stored on the policy.** `PUT` and `DELETE
+  /databases/{database}/schedule` (`set_schedule`, `delete_schedule`), as a pipeline has one schedule in
+  Ingestion. A schedule applies the policy, so it needs one (`policy_required`), and deleting the policy
+  removes it. Setting it does not change the policy's revision: someone changing when maintenance runs
+  does not conflict with someone editing what it does. It has no `createdBy` or `createdAt`, because
+  the policy row has no columns for them.
+- **Two tools start a run.** `POST /databases/{database}/runs` keeps `mode`. For agents it is
+  `inspect_database` (`inspect` or `dry-run`, which read with a `read` token) and `run_maintenance`
+  (always `maintain`). Only the second is marked destructive, so an agent's client asks the user before
+  maintaining and not before every health check. It is the one run tool on the platform that is
+  destructive: it expires snapshots and deletes files.
+
+`partial` keeps its meaning here: some tables failed and the others were maintained. `incomplete` is in
+the shared vocabulary and Maintenance never reports it.
+
+The table health inside `health` (`oldestSnapshotMs`, `currentSnapshotMs`) and the actions inside
+`results` are what the runner wrote and stay as it wrote them; its snapshot times are Iceberg's own
+milliseconds.
+
 ## Not in 0.0.1
 
 - Record expiration (row TTL, as S3 Tables offers): it deletes data, so it needs its own opt-in per table.

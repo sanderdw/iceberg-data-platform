@@ -28,18 +28,35 @@ the extension is not installed: stop and tell the user to run the installer agai
 1. `whoami`: teams, your role, databases per environment, `enabledEnvironments` and the policy
    `defaults`. Nothing runs where Maintenance is not enabled; a team administrator enables it with
    `enable_environment` (ask the user first: runs act for the whole team).
-2. `list_databases`, then `list_tables` with `attention=true`. Health comes from the last run that saw
-   a table; if a database has none or it is old, `run_maintenance` with `mode="inspect"` and `wait=120`
-   refreshes it. It only reads.
+2. `list_databases`, then `list_table_health` with `attention=true`. It returns at most `limit` tables
+   (500 by default) and `total`, the number that match: narrow by `database` when there are more.
+   Health comes from the last run that saw a table; if a database has none or it is old,
+   `inspect_database` with `wait=120` refreshes it. It only reads.
 3. Explain what you found in plain words: small files slow queries down, snapshots keep old files and
-   time travel, delete files are applied by compaction.
-4. `get_policy`. Propose changes and `run_maintenance` with `mode="dry-run"`, then `get_run` to show
-   per table what would happen. Nothing changes in a dry run.
-5. With the user's agreement, a team administrator sets the policy with `set_policy` (only the settings
-   that change) and a schedule (`cron`, UTC, at most hourly). Exclude tables that must keep their full
-   history, or set the table properties `history.expire.*` on them.
-6. Maintain now only when the user asks: `run_maintenance` with `mode="maintain"` (needs a policy), then
+   time travel, delete files are applied by compaction. `get_table_health` shows one table in detail.
+4. `get_policy`. Propose changes and `inspect_database` with `mode="dry-run"` and `wait=120`: its
+   `results` show per table what would happen. Nothing changes in a dry run.
+5. With the user's agreement, a team administrator changes the policy with `update_policy` (only the
+   settings that change; without a policy it creates one from the defaults). Exclude tables that must
+   keep their full history, or set the table properties `history.expire.*` on them.
+6. A schedule is separate from the policy and needs one: `set_schedule` with a five-field `cron` in
+   UTC, at most once an hour (`enabled=false` pauses it), and `delete_schedule` to remove it.
+   `get_policy` and `list_databases` show it as `schedule`, with `nextRunAt` and `lastRun`.
+7. Maintain now only when the user asks: `run_maintenance` (needs a policy; it always maintains), then
    `get_run` and `get_run_logs`.
+
+## Runs
+
+- `inspect_database` and `run_maintenance` return the run at once, usually `queued`. Pass `wait` (up to
+  600 seconds) to get it back finished, or call `get_run` with `wait`. Waiting never fails: when the
+  time is up you get the run as it is.
+- A run's `status` is `queued`, `running`, `success`, `partial` (some tables failed, the others were
+  maintained), `failed` (the runner reported failure), `error` (the platform could not run it),
+  `cancelled` or `incomplete` (other extensions use it; Maintenance does not).
+- `get_run` returns each table's actions in `results`; `list_runs` leaves them out. `get_run_logs`
+  returns the last `limit` lines. `cancel_run` stops a run; a finished one answers `run_finished`.
+- Times are RFC 3339 strings in UTC, such as `2026-11-24T09:15:02.123Z`.
+- Without a policy, `run_maintenance` and `set_schedule` answer `policy_required`.
 
 ## Rules
 
@@ -47,5 +64,6 @@ the extension is not installed: stop and tell the user to run the installer agai
 - Branch and tag heads are never expired. Their snapshots stay until someone removes the branch or tag.
 - Orphan cleanup is off by default and never deletes files younger than a day. Files of expired
   snapshots are deleted by orphan cleanup in a later run.
-- Ask before maintaining in acceptance or production, before changing a policy and before any tool
-  marked destructive.
+- Ask before maintaining in acceptance or production, before changing a policy or a schedule and
+  before any tool marked destructive (`run_maintenance`, `delete_policy`, `delete_schedule`,
+  `disable_environment`). `inspect_database` is not: it changes no table.

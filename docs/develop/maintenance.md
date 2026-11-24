@@ -42,6 +42,31 @@ flowchart LR
 
 The JSON between gateway and runner is the only boundary, so the runner can change library without touching the gateway. `runner/job.go` defines both; the runner checks the job again, and refuses orphan cleanup younger than a day whatever the job says. A run exits 0 when every table succeeded, 1 when the run or every table failed; a `partial` run has some failed tables.
 
+## API
+
+The REST API (`maintenance/api.py`) and the MCP server (`maintenance/mcp_server.py`) call the same service methods (`maintenance/services.py`), and a tool returns exactly what its operation returns. The API follows the conventions of the platform's extensions:
+
+- Fields are camelCase in REST; tool names and tool parameters are snake_case.
+- A list is an object with one plural key: `{"databases": [...]}`, `{"runs": [...]}`, `{"environments": [...]}`, and `{"tables": [...], "total": n}` for table health, where `limit` is 500 by default and at most 5000.
+- Every response is built field by field by a `public_*` function; no stored row and no Bridge answer is passed on. Times go through `timestamp()`: RFC 3339, UTC, milliseconds.
+- A run has one shape. `POST /databases/{database}/runs` answers 202 with the run as `GET /runs/{run}` returns it, with `results`; both take `wait` (0 to 600 seconds), and waiting never fails. A list of runs leaves `results` out.
+- An error is `{"error", "code"}`, also for an unknown path (`not_found`), a wrong method (`method_not_allowed`) and an unexpected failure (`internal_error`).
+
+| Operation | Method and path | Tool |
+| --- | --- | --- |
+| `whoami` | `GET /me` | `whoami` |
+| `listEnvironments`, `enableEnvironment`, `disableEnvironment` | `GET /teams/{team}/environments`, `POST` and `DELETE /teams/{team}/environments/{environment}` | `list_environments`, `enable_environment`, `disable_environment` |
+| `listDatabases` | `GET /databases` | `list_databases` |
+| `listTableHealth` | `GET /tables` | `list_table_health` |
+| `getTableHealth` | `GET /databases/{database}/tables/{table}` | `get_table_health` |
+| `getPolicy`, `updatePolicy`, `deletePolicy` | `GET`, `PATCH` and `DELETE /databases/{database}/policy` | `get_policy`, `update_policy`, `delete_policy` |
+| `setSchedule`, `deleteSchedule` | `PUT` and `DELETE /databases/{database}/schedule` | `set_schedule`, `delete_schedule` |
+| `runMaintenance` | `POST /databases/{database}/runs` | `inspect_database` (`inspect`, `dry-run`) and `run_maintenance` (`maintain`) |
+| `listRuns` | `GET /databases/{database}/runs` | `list_runs` |
+| `getRun`, `getRunLogs`, `cancelRun` | `GET /runs/{run}`, `GET /runs/{run}/logs`, `POST /runs/{run}/cancel` | `get_run`, `get_run_logs`, `cancel_run` |
+
+Starting a run is one operation with two tools, so that only maintaining is marked destructive. A database's schedule is stored on its policy row and set on its own; it needs a policy, and it runs at most once an hour. The extension's [decisions](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/maintenance/DECISIONS.md) explain both.
+
 ## Run from source
 
 Next to a running platform, from the platform directory:

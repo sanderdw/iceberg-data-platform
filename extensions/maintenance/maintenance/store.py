@@ -106,7 +106,8 @@ class Store:
                 for row in self.query(f"SELECT * FROM policies WHERE database IN ({marks})", *databases)}
 
     def save_policy(self, database, expected_revision=None, **fields):
-        """Create or change a database's policy. With expected_revision, only when nobody changed it since."""
+        """Create or change a database's policy. With expected_revision, only when nobody changed it since.
+        The schedule columns are not touched: set_schedule writes those."""
         now = time.time()
         existing = self.policy(database)
         if existing is None:
@@ -128,6 +129,13 @@ class Store:
 
     def delete_policy(self, database):
         return self.execute("DELETE FROM policies WHERE database = ?", database)
+
+    def set_schedule(self, database, cron, schedule_enabled, next_run_at):
+        """A database's schedule lives on its policy row. It is not part of the policy's revision: changing when
+        maintenance runs does not conflict with someone editing what it does. An empty cron means no schedule."""
+        self.execute("UPDATE policies SET cron = ?, schedule_enabled = ?, next_run_at = ? WHERE database = ?",
+                     cron, schedule_enabled, next_run_at, database)
+        return self.policy(database)
 
     def due_policies(self, now):
         return [decode(row) for row in self.query(
@@ -167,6 +175,15 @@ class Store:
             f"WHERE database IN ({marks}) GROUP BY database) last "
             "ON last.database = r.database AND last.at = r.created_at", *databases)
         return {row["database"]: decode(row) for row in rows}
+
+    def last_scheduled_runs(self, databases):
+        """Per database, the id of the newest run a schedule started."""
+        if not databases:
+            return {}
+        marks = ",".join("?" * len(databases))
+        rows = self.query(f"SELECT database, id FROM runs WHERE database IN ({marks}) AND schedule != '' "
+                          "ORDER BY created_at", *databases)
+        return {row["database"]: row["id"] for row in rows}
 
     def unfinished_runs(self):
         return self.query("SELECT * FROM runs WHERE status IN ('queued', 'running')")

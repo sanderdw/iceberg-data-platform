@@ -4,9 +4,9 @@ Needs three linked Keycloak accounts of one team: an administrator, a writer and
 (E2E_{ADMIN,WRITER,READER}_{USER,PASSWORD}; the platform's demo accounts by default).
 
 It writes a table with small files into the team's development database as the team's automation
-principal (a Bridge write token), checks its health, sets a policy, dry-runs it, maintains the
-database, and reads the table back: every row is still there, in fewer files, behind a `replace`
-snapshot of the run. The table is dropped at the end.
+principal (a Bridge write token), checks its health, sets a policy and a schedule, dry-runs the policy,
+maintains the database, and reads the table back: every row is still there, in fewer files, behind a
+`replace` snapshot of the run. The table is dropped at the end.
 """
 
 import asyncio
@@ -23,6 +23,8 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
+
+RFC3339 = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z")
 
 
 def read_env(path):
@@ -110,11 +112,18 @@ def catalog(env, platform, team, warehouse):
 
 
 async def run(agent, database, mode, **arguments):
-    result = await agent.call("run_maintenance", database=database, mode=mode, wait=600, **arguments)
+    """Start a run and wait for it: inspect and dry-run with inspect_database, maintain with run_maintenance.
+    Both return the run as get_run does, with each table's results."""
+    if mode == "maintain":
+        result = await agent.call("run_maintenance", database=database, wait=600, **arguments)
+    else:
+        result = await agent.call("inspect_database", database=database, mode=mode, wait=600, **arguments)
+    assert result["mode"] == mode and RFC3339.fullmatch(result["createdAt"]), result
     if result["status"] != "success":
-        logs = await agent.call("get_run_logs", run=result["id"], tail=80)
+        logs = await agent.call("get_run_logs", run=result["id"], limit=80)
         raise AssertionError(f"Run failed: {result['error']}\n" + "\n".join(logs["lines"]))
-    return await agent.call("get_run", run=result["id"])
+    assert result == await agent.call("get_run", run=result["id"], wait=5)
+    return result
 
 
 async def main():
@@ -137,7 +146,8 @@ async def main():
         me = await writer.call("whoami")
         team = next(m for m in me["memberships"] if m["role"] == "writer")["team"]
         await writer.refused("enable_environment", "forbidden_role", team=team, environment="development")
-        await admin.call("enable_environment", team=team, environment="development")
+        enabled = await admin.call("enable_environment", team=team, environment="development")
+        assert enabled["enabled"] is True and enabled["environment"] == "development", enabled
         database = next(d for d in me["databases"] if d["team"] == team and d["environment"] == "development")
 
         tables = catalog(env, platform, team, database["id"])
@@ -150,17 +160,28 @@ async def main():
                                    "value": [f"v{j}" for j in range(10)]}))
         full = f"{namespace}.{name}"
         try:
-            await reader.refused("run_maintenance", "forbidden_role", database=database["id"])
+            await reader.refused("inspect_database", "forbidden_role", database=database["id"])
             await run(writer, database["id"], "inspect")
-            health = await reader.call("get_table", database=database["id"], table=full)
+            listed = await reader.call("list_table_health", database=database["id"])
+            assert listed["total"] >= 1 and full in {t["name"] for t in listed["tables"]}, listed["total"]
+            health = await reader.call("get_table_health", database=database["id"], table=full)
             assert health["health"]["dataFiles"] == 8 and health["health"]["snapshots"] == 8, health["health"]
             assert health["state"] == "no-policy", health
             print("health", full, health["reasons"])
 
-            await writer.refused("run_maintenance", "no_policy", database=database["id"], mode="maintain")
-            await writer.refused("set_policy", "forbidden_role", database=database["id"], settings={})
-            await admin.call("set_policy", database=database["id"],
+            await writer.refused("run_maintenance", "policy_required", database=database["id"])
+            await admin.refused("set_schedule", "policy_required", database=database["id"], cron="0 2 * * *")
+            await writer.refused("update_policy", "forbidden_role", database=database["id"], settings={})
+            await admin.call("update_policy", database=database["id"],
                              settings={"compaction": {"minInputFiles": 2}})
+            await admin.refused("set_schedule", "invalid_cron", database=database["id"], cron="*/30 * * * *")
+            scheduled = await admin.call("set_schedule", database=database["id"], cron="0 2 * * *", enabled=False)
+            assert scheduled == {"cron": "0 2 * * *", "enabled": False, "nextRunAt": None,
+                                 "lastRun": scheduled["lastRun"]}, scheduled
+            assert (await reader.call("get_policy", database=database["id"]))["schedule"] == scheduled
+            assert (await admin.call("delete_schedule", database=database["id"])) == {
+                "deleted": True, "database": database["id"]}
+            await admin.refused("delete_schedule", "no_schedule", database=database["id"])
             dry = await run(writer, database["id"], "dry-run", tables=[full])
             planned = {a["operation"]: a["status"] for a in dry["results"][0]["actions"]}
             assert planned["compaction"] == "planned", dry["results"]

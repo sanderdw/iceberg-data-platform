@@ -13,7 +13,17 @@
 - Every capability is a service method in `maintenance/services.py`, exposed as a REST operation
   (`maintenance/api.py`, listed in `OPERATIONS`) and an MCP tool (`maintenance/mcp_server.py`).
   `tests/test_api.py` fails when they diverge or when `contracts/maintenance-api/v1/openapi.yaml` is
-  stale: regenerate it with `uv run python -m scripts.api_contract`.
+  stale: regenerate it with `uv run python -m scripts.api_contract`. Starting a run is the one operation
+  with two tools: `inspect_database` (inspect, dry-run) and `run_maintenance` (maintain, destructive).
+- The API follows the platform's conventions: camelCase in REST, snake_case tool and parameter names, and
+  a tool returns exactly what its REST operation returns. Every response is built field by field by a
+  `public_*` function in `services.py`, with times through `timestamp()` (RFC 3339, UTC, milliseconds);
+  no stored row and no Bridge answer is passed on. The response models in `api.py` describe those shapes
+  for the contract: change both together. A list is an object with one plural key. Errors are
+  `MaintenanceError(status, message, code)`, one status per code.
+- A database has one schedule, stored on its policy row (`cron`, `schedule_enabled`, `next_run_at`) and
+  set with `PUT`/`DELETE /databases/{database}/schedule`, not through the policy. It needs a policy and
+  runs at most once an hour, stricter than the other extensions' five minutes (see `DECISIONS.md`).
 - Policy settings are an allowlist with bounds (`maintenance/policy.py`); the runner checks the job again
   (`runner/job.go`). Orphan cleanup never removes files younger than a day, whatever a job says.
 - Authorization lives in `Services`. Health checks and dry runs get `read` tokens of the team's automation

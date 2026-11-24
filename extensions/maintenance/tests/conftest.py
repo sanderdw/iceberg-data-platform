@@ -216,8 +216,30 @@ def stack(tmp_path, monkeypatch):
         def run(mode="inspect", user="bob", database=DEV, **fields):
             return call("POST", f"/databases/{database}/runs", user, json={"mode": mode, "wait": 5, **fields})
 
-        yield SimpleNamespace(client=client, call=call, run=run, bridge=bridge, launcher=launcher, app=app,
-                              services=app.state.services, settings=config)
+        def tool(name, user="alice", **arguments):
+            """Call an MCP tool as a signed-in agent would, in the app's event loop; its result as a dict."""
+            return client.portal.call(_call_tool, app, user, name, arguments)
+
+        yield SimpleNamespace(client=client, call=call, run=run, tool=tool, bridge=bridge, launcher=launcher,
+                              app=app, services=app.state.services, settings=config)
+
+
+async def _call_tool(app, user, name, arguments):
+    from mcp.server.auth.middleware.auth_context import auth_context_var
+    from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
+    from mcp.server.auth.provider import AccessToken
+
+    from maintenance.mcp_server import create_mcp
+
+    services = app.state.services
+    mcp = create_mcp(services.settings, services, None)
+    access = AccessToken(token=user, client_id="ext-maintenance-mcp", scopes=[], expires_at=4102444800,
+                         subject=f"sub-{user}", claims={"name": user})
+    signed_in = auth_context_var.set(AuthenticatedUser(access))
+    try:
+        return (await mcp.call_tool(name, arguments)).structured_content
+    finally:
+        auth_context_var.reset(signed_in)
 
 
 def _fast_sleep(original):
