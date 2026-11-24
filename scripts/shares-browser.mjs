@@ -26,6 +26,7 @@ try {
     else if (path === '/api/notebooks' && method === 'POST') {
       body = {id: 'notebook-1', database: database.id, environment, url: '/notebook-fixture', filesUrl: '/notebook-fixture'}; notebooks = [body];
     } else if (path === '/api/notebooks/notebook-1' && method === 'DELETE') { notebooks = []; body = {deleted: true}; }
+    else if (path === '/api/notebooks/notebook-1/files') body = {notebooks: [{path: 'workspace.py', url: '/notebook-fixture?file=workspace.py'}], examples: [], allFilesUrl: '/notebook-fixture'};
     else if (path === '/notebook-fixture') return route.fulfill({contentType: 'text/html', body: '<p>Notebook fixture</p>'});
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'meters', namespace: ['analytics']}, {name: 'readings', namespace: ['analytics']}], views: [{name: 'daily_energy', namespace: ['analytics']}], semanticModels: [{name: 'energy_model', namespace: ['analytics']}]} : {namespaces: [['analytics']], tables: [], views: []};
     else if (path === '/api/details' && url.searchParams.get('kind') === 'semantic-model') body = {kind: 'semantic-model', models: [{datasets: [{table: {namespace: ['analytics'], name: 'readings'}}, {table: {namespace: ['analytics'], name: 'meters'}}]}]};

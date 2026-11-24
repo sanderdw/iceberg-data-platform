@@ -37,7 +37,7 @@ try {
     const url = new URL(route.request().url()), path = url.pathname;
     let body;
     if (path === '/api/session') body = {authenticated: true, ...(oidc ? {loginUrl: '/auth/login'} : {})};
-    else if (path === '/api/workspace') body = {user: {name: 'Analyst'}, teams: [{id: 'analytics', name: 'Energy analytics', role: 'reader'}], databases: [database], activeTeam: 'analytics', activeRole: 'reader', activeEnvironment: 'development', environments: ['development', 'acceptance', 'production'], notebooks: [], extensions: [{id: 'conversationalbi', origin: 'http://bi.test'}]};
+    else if (path === '/api/workspace') body = {user: {name: 'Analyst'}, teams: [{id: 'analytics', name: 'Energy analytics', role: 'reader'}], databases: [database], activeTeam: 'analytics', activeRole: 'reader', activeEnvironment: 'development', environments: ['development', 'acceptance', 'production'], notebooks: [], extensions: [{id: 'conversationalbi', origin: 'http://bi.test', title: 'Conversational BI', purpose: 'Ask questions about your semantic models'}]};
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'readings'}], views: [{name: 'daily_energy'}], semanticModels: [{name: 'energy_model'}]} : {namespaces: [['analytics']], tables: [], views: []};
     else if (path === '/api/details') body = ({database: {kind: 'database', database}, namespace: {kind: 'namespace', properties: {owner: 'Energy analytics'}}, table, view, 'semantic-model': semantic})[url.searchParams.get('kind')];
     else if (path === '/api/preview') {
