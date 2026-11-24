@@ -489,3 +489,41 @@ def test_only_heads_of_main_reach_production_and_docs(stack):
     docs = run({"command": "docs"}, "carol")
     served = stack.client.get(f"/docs-site/{docs['id']}/index.html", headers={"Authorization": "Bearer alice"})
     assert served.status_code == 200
+
+
+def test_a_sign_in_belongs_to_the_browser_that_started_it(tmp_path):
+    """A callback URL sent to another browser signs nobody in (login CSRF)."""
+    import asyncio
+
+    import httpx
+    import pytest
+
+    from dbt_portal.auth import BrowserLogin
+    from dbt_portal.errors import DbtError
+    from tests.conftest import FakeVerifier, settings
+
+    token = httpx.MockTransport(lambda request: httpx.Response(200, json={"access_token": "alice",
+                                                                          "refresh_token": "r"}))
+    login = BrowserLogin(settings(tmp_path), FakeVerifier(), httpx.AsyncClient(transport=token))
+    url, binding = login.start("/#/runs")
+    state = dict(part.split("=", 1) for part in url.split("?", 1)[1].split("&"))["state"]
+    with pytest.raises(DbtError):
+        asyncio.run(login.finish(state, "code", "someone-elses-binding"))
+    # The failed attempt used up the state.
+    with pytest.raises(DbtError):
+        asyncio.run(login.finish(state, "code", binding))
+    url, binding = login.start("/#/runs")
+    state = dict(part.split("=", 1) for part in url.split("?", 1)[1].split("&"))["state"]
+    session, target = asyncio.run(login.finish(state, "code", binding))
+    assert session in login.sessions and target == "/#/runs"
+
+
+def test_the_login_route_sets_the_binding_cookie(stack):
+    response = stack.client.get("/auth/login", follow_redirects=False)
+    assert response.status_code == 303
+    cookie = response.headers["set-cookie"]
+    assert "iceberg_dbt_login=" in cookie and "HttpOnly" in cookie and "Path=/auth/callback" in cookie
+    state = response.headers["location"].split("state=", 1)[1].split("&", 1)[0]
+    stack.client.cookies.clear()
+    failed = stack.client.get(f"/auth/callback?state={state}&code=x", follow_redirects=False)
+    assert failed.headers["location"] == "/?signin=failed"

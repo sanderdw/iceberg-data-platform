@@ -162,3 +162,41 @@ def test_committed_contract_matches_the_implementation(stack):
     committed = ROOT / "contracts" / "conversationalbi-api" / "v1" / "openapi.yaml"
     assert json.loads(committed.read_text()) == stack.client.get("/api/v1/openapi.json").json(), (
         "Regenerate with `uv run python -m scripts.api_contract`")
+
+
+def test_a_sign_in_belongs_to_the_browser_that_started_it():
+    """A callback URL sent to another browser signs nobody in (login CSRF)."""
+    import asyncio
+
+    import httpx
+    import pytest
+
+    from conversationalbi.auth import BrowserLogin
+    from conversationalbi.errors import CbiError
+    from tests.conftest import FakeVerifier, settings
+
+    token = httpx.MockTransport(lambda request: httpx.Response(200, json={"access_token": "alice",
+                                                                          "refresh_token": "r"}))
+    login = BrowserLogin(settings(), FakeVerifier(), httpx.AsyncClient(transport=token))
+    url, binding = login.start("/#/ask")
+    state = dict(part.split("=", 1) for part in url.split("?", 1)[1].split("&"))["state"]
+    with pytest.raises(CbiError):
+        asyncio.run(login.finish(state, "code", "someone-elses-binding"))
+    # The failed attempt used up the state.
+    with pytest.raises(CbiError):
+        asyncio.run(login.finish(state, "code", binding))
+    url, binding = login.start("/#/ask")
+    state = dict(part.split("=", 1) for part in url.split("?", 1)[1].split("&"))["state"]
+    session, target = asyncio.run(login.finish(state, "code", binding))
+    assert session in login.sessions and target == "/#/ask"
+
+
+def test_the_login_route_sets_the_binding_cookie(stack):
+    response = stack.client.get("/auth/login", follow_redirects=False)
+    assert response.status_code == 303
+    cookie = response.headers["set-cookie"]
+    assert "iceberg_conversationalbi_login=" in cookie and "HttpOnly" in cookie and "Path=/auth/callback" in cookie
+    state = response.headers["location"].split("state=", 1)[1].split("&", 1)[0]
+    stack.client.cookies.clear()
+    failed = stack.client.get(f"/auth/callback?state={state}&code=x", follow_redirects=False)
+    assert failed.headers["location"] == "/?signin=failed"

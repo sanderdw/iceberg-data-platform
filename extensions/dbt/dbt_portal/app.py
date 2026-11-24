@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from . import api
-from .auth import COOKIE, BrowserLogin, TokenVerifier
+from .auth import COOKIE, LOGIN_COOKIE, LOGIN_SECONDS, BrowserLogin, TokenVerifier
 from .bridge_client import BridgeClient
 from .config import VERSION, Settings
 from .errors import DbtError
@@ -138,15 +138,25 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
 
     @app.get("/auth/login", include_in_schema=False)
     def auth_login(return_to: str = "/"):
-        return RedirectResponse(login.start(return_to), status_code=303)
+        url, binding = login.start(return_to)
+        response = RedirectResponse(url, status_code=303)
+        # Lax: Keycloak's redirect back is a top-level navigation, so the browser sends it with the callback.
+        response.set_cookie(LOGIN_COOKIE, binding, max_age=LOGIN_SECONDS, path="/auth/callback", httponly=True,
+                            secure=settings.secure, samesite="lax")
+        return response
 
     @app.get("/auth/callback", include_in_schema=False)
-    async def auth_callback(state: str = "", code: str = ""):
+    async def auth_callback(request: Request, state: str = "", code: str = ""):
         try:
-            session_id, target = await login.finish(state, code)
+            session_id, target = await login.finish(state, code, request.cookies.get(LOGIN_COOKIE, ""))
         except DbtError:
-            return RedirectResponse("/?signin=failed", status_code=303)
+            response = RedirectResponse("/?signin=failed", status_code=303)
+            response.delete_cookie(LOGIN_COOKIE, path="/auth/callback", httponly=True, secure=settings.secure,
+                                   samesite="lax")
+            return response
         response = RedirectResponse(target, status_code=303)
+        response.delete_cookie(LOGIN_COOKIE, path="/auth/callback", httponly=True, secure=settings.secure,
+                               samesite="lax")
         response.set_cookie(COOKIE, session_id, max_age=28800, httponly=True, secure=settings.secure, samesite="lax")
         return response
 

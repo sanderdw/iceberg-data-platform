@@ -23,6 +23,9 @@ from .errors import EvalError
 
 AUDIENCE = "iceberg-bridge"
 COOKIE = "iceberg_evaluations_session"
+# Binds a sign-in to the browser that started it, so a callback URL sent to someone else signs nobody in.
+LOGIN_COOKIE = "iceberg_evaluations_login"
+LOGIN_SECONDS = 300
 LOG = logging.getLogger(__name__)
 
 
@@ -107,21 +110,23 @@ class BrowserLogin:
         return self.settings.origin + "/auth/callback"
 
     def start(self, return_to="/"):
+        """The Keycloak URL, and the binding the browser keeps in LOGIN_COOKIE until the callback."""
         now = time.monotonic()
         self.pending = {k: v for k, v in self.pending.items() if v["until"] > now}
         while len(self.pending) >= 500:
             del self.pending[next(iter(self.pending))]
-        state, (code_verifier, challenge) = secrets.token_urlsafe(24), pkce()
+        state, binding, (code_verifier, challenge) = secrets.token_urlsafe(24), secrets.token_urlsafe(32), pkce()
         parsed = urlsplit(return_to)
         if parsed.scheme or parsed.netloc or not return_to.startswith("/") or return_to.startswith("//"):
             return_to = "/"
-        self.pending[state] = {"verifier": code_verifier, "until": now + 300, "return_to": return_to}
+        self.pending[state] = {"verifier": code_verifier, "until": now + LOGIN_SECONDS, "return_to": return_to,
+                               "binding": hashlib.sha256(binding.encode()).hexdigest()}
         query = urlencode({
             "client_id": self.settings.client_id, "response_type": "code", "redirect_uri": self.redirect_uri,
             "scope": "openid profile", "state": state, "code_challenge": challenge,
             "code_challenge_method": "S256",
         })
-        return self.settings.issuer + "/protocol/openid-connect/auth?" + query
+        return self.settings.issuer + "/protocol/openid-connect/auth?" + query, binding
 
     async def token(self, data):
         try:
@@ -134,10 +139,13 @@ class BrowserLogin:
             raise EvalError(401, "Sign-in failed. Try again.", "unauthorized") from exc
         return response.json()
 
-    async def finish(self, state, code):
+    async def finish(self, state, code, binding=""):
         pending = self.pending.pop(state or "", None)
         if not pending or pending["until"] <= time.monotonic() or not code:
             raise EvalError(401, "The sign-in expired. Try again.", "unauthorized")
+        # Only the browser that started this sign-in holds its binding.
+        if not secrets.compare_digest(pending["binding"], hashlib.sha256((binding or "").encode()).hexdigest()):
+            raise EvalError(401, "Start the sign-in again from this browser.", "unauthorized")
         issued = await self.token({"grant_type": "authorization_code", "code": code,
                                    "redirect_uri": self.redirect_uri, "code_verifier": pending["verifier"]})
         caller = await self.verifier.verify(issued["access_token"])
