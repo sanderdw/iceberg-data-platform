@@ -29,6 +29,8 @@ const semantic = {
   }],
 };
 let previewCalls = [], deny = false, oidc = true;
+// Nothing may scroll sideways.
+const noOverflow = async (page, label) => { const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (wide > 0) throw new Error(`Horizontal overflow of ${wide}px in ${label}`); };
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 try {
   const page = await browser.newPage({viewport: {width: 1440, height: 1050}});
@@ -80,7 +82,22 @@ try {
   await expect(page.locator('#namespace-title')).toHaveText('readings');
   await expect(page.getByRole('tabpanel')).toContainText(current);
   expect(page.url()).toBe(tableUrl);
+  // A size reads in binary units; the exact byte count is its tooltip.
+  const size = page.locator('.catalog-facts > div').filter({has: page.locator('dt', {hasText: /^Data file size$/})}).locator('dd');
+  await expect(size).toHaveText('180.7 KiB');
+  await expect(size.locator('span')).toHaveAttribute('title', '185,000 bytes');
+  await expect(page.getByRole('tabpanel')).not.toContainText('(bytes)');
+  expect(await page.evaluate(() => [0, 1023, 1024, 48339354, '9007199254740993', undefined, 'n/a'].map(value => { const size = byteSize(value); return size instanceof Node ? `${size.textContent} | ${size.title}` : size; }))).toEqual([
+    '0 B | 0 bytes', '1023 B | 1,023 bytes', '1.0 KiB | 1,024 bytes', '46.1 MiB | 48,339,354 bytes', '8.0 PiB | 9,007,199,254,740,993 bytes', '—', 'n/a']);
   await page.screenshot({path: 'test-results/catalog/table-dark.png', fullPage: true});
+  await page.setViewportSize({width: 1280, height: 800});
+  for (const name of ['Overview', 'Schema', 'Snapshots', 'Partitioning & sort', 'Properties', 'Preview']) {
+    await page.getByRole('tab', {name, exact: true}).click();
+    await noOverflow(page, `${name} at 1280×800`);
+  }
+  expect(await page.evaluate(() => document.querySelector('header').getBoundingClientRect().height)).toBe(60);
+  await page.getByRole('tab', {name: 'Overview', exact: true}).click();
+  await page.setViewportSize({width: 1440, height: 1050});
   await page.getByRole('tab', {name: 'Schema', exact: true}).click();
   await expect(page.getByRole('tabpanel')).toContainText('<script>alert(1)</script>');
   await expect(page.locator('#catalog-tab-panel script')).toHaveCount(0);
@@ -108,7 +125,7 @@ try {
   await page.setViewportSize({width: 390, height: 844});
   for (const name of ['Overview', 'Schema', 'Snapshots', 'Partitioning & sort', 'Properties', 'Preview']) {
     await page.getByRole('tab', {name, exact: true}).click();
-    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error(`Mobile overflow in ${name}`);
+    await noOverflow(page, `${name} at 390×844`);
   }
   await page.screenshot({path: 'test-results/catalog/table-mobile.png', fullPage: true});
   await page.locator('#breadcrumbs').getByRole('button', {name: 'analytics', exact: true}).click();
@@ -179,8 +196,10 @@ try {
   await expect(page.locator('.view-sql')).toContainText('"name": "Energy"');
   for (const name of ['Overview', 'Diagram', 'Datasets & fields', 'Metrics & relationships', 'Definition']) {
     await page.getByRole('tab', {name, exact: true}).click();
-    await page.setViewportSize({width: 390, height: 844});
-    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error(`Mobile overflow in semantic ${name}`);
+    for (const [width, height] of [[390, 844], [1280, 800]]) {
+      await page.setViewportSize({width, height});
+      await noOverflow(page, `semantic ${name} at ${width}×${height}`);
+    }
     await page.setViewportSize({width: 1440, height: 1050});
   }
   await page.getByRole('tab', {name: 'Datasets & fields', exact: true}).click();
@@ -188,5 +207,5 @@ try {
   await expect(page.locator('#namespace-title')).toHaveText('readings');
   await expect(page.getByRole('tab', {name: 'Snapshots', exact: true})).toBeVisible();
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS: catalog navigation/filtering, connect panel only with OIDC, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts, semantic models listed, filtered, opened by URL, rendered as text and drawn as a diagram, linked to Conversational BI');
+  console.log('PASS: byte sizes in binary units with the exact count as tooltip, no sideways scrolling at 1280×800 and 390×844, catalog navigation/filtering, connect panel only with OIDC, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts, semantic models listed, filtered, opened by URL, rendered as text and drawn as a diagram, linked to Conversational BI');
 } finally { await browser.close(); }

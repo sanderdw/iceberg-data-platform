@@ -26,7 +26,7 @@ A member has one role per team: Read, Read & write or Administrator. That role a
 
 A person can be in several teams, with a different role in each: Read & write in `analytics` and Read in `operations`, for example. Access is the union of all of them.
 
-The **Active team** and **Environment** in the user portal only choose what you see. Your credentials stay valid for all of your teams, so a notebook or tool on your computer can reach every database you have access to.
+**Team** and **Environment** in the user portal only choose what you see. Your credentials stay valid for all of your teams, so a notebook or tool on your computer can reach every database you have access to.
 
 ## Platform administration is separate
 

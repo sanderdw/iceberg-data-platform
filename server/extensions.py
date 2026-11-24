@@ -66,9 +66,9 @@ DIRECTORY = {
     "evaluations": ("Evaluations", "Check Conversational BI's answers"),
     "openmetadata": ("OpenMetadata", "Your data products in OpenMetadata"),
 }
-# The user portal's pages, which every Apps menu links to.
-PORTAL_PAGES = [("catalog", "Catalog"), ("notebooks", "Notebooks"), ("databases", "Databases"),
-                ("shares", "Data shares"), ("team", "Team overview")]
+# The user portal's pages, which every Apps menu links to, in the order of the portal's own navigation.
+PORTAL_PAGES = [("team", "Team overview"), ("databases", "Databases"), ("catalog", "Catalog"),
+                ("notebooks", "Notebooks"), ("shares", "Data shares")]
 
 
 def public(env):

@@ -6,6 +6,16 @@ function displayValue(value) {
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 function timestamp(value) { return value ? new Date(value).toLocaleString() : '—'; }
+// A byte count in binary units, such as 46.1 MiB; the exact count is the tooltip.
+function byteSize(value) {
+  if (!/^\d+$/.test(String(value ?? ''))) return displayValue(value);
+  let amount = Number(value), unit = 0;
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+  while (amount >= 1024 && unit < units.length - 1) { amount /= 1024; unit++; }
+  const size = element('span', `${unit ? amount.toFixed(1) : amount} ${units[unit]}`);
+  size.title = `${BigInt(value).toLocaleString('en-US')} bytes`;
+  return size;
+}
 function dataGrid(headers, rows, caption) {
   if (!rows.length) return element('p', 'No entries available.', 'catalog-empty');
   const wrap = element('div', undefined, 'data-grid');
@@ -20,7 +30,7 @@ function dataGrid(headers, rows, caption) {
 }
 function facts(entries) {
   const list = element('dl', undefined, 'catalog-facts');
-  entries.forEach(([key, value]) => { const item = element('div'); if (['Location', 'Catalog URI'].includes(key)) item.className = 'catalog-fact-wide'; item.append(element('dt', key), element('dd', displayValue(value))); list.append(item); });
+  entries.forEach(([key, value]) => { const item = element('div'); if (['Location', 'Catalog URI'].includes(key)) item.className = 'catalog-fact-wide'; const dd = element('dd'); dd.append(value instanceof Node ? value : displayValue(value)); item.append(element('dt', key), dd); list.append(item); });
   return list;
 }
 function propertyGrid(values) { return dataGrid(['Property', 'Value'], Object.entries(values || {}).sort(([a], [b]) => a.localeCompare(b)), 'Properties'); }
@@ -157,7 +167,7 @@ function renderObjectDetails(detail, db, ns, name, version) {
       const current = detail.snapshots.find(s => s.id === detail.currentSnapshotId);
       p.append(facts(entries));
       p.append(element('h3', 'Current snapshot statistics'));
-      p.append(facts([['Data file records', current?.summary['total-records']], ['Data files', current?.summary['total-data-files']], ['Data file size (bytes)', current?.summary['total-files-size']], ['Delete files', current?.summary['total-delete-files']]]));
+      p.append(facts([['Data file records', current?.summary['total-records']], ['Data files', current?.summary['total-data-files']], ['Data file size', byteSize(current?.summary['total-files-size'])], ['Delete files', current?.summary['total-delete-files']]]));
       p.append(element('p', 'Statistics come from snapshot metadata when available. Record totals may include rows affected by delete files.', 'hint'));
     } else { entries.unshift(['Current version', detail.currentVersionId]); p.append(facts(entries)); }
   });

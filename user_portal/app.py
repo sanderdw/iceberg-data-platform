@@ -40,6 +40,7 @@ from server.validation import validation_message
 from .directory import UserDirectory, validate_namespace
 from .mcp_server import create_mcp
 from .notebook_files import NotebookFiles
+from .notebook_files import enabled as notebook_examples_enabled
 from .preview import run_preview
 from .runtime import RuntimeBackendError, filespace_key, notebook_runtime
 
@@ -167,6 +168,8 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                 if any(d["environment"] == env for d in team_databases)
             ],
             "notebooks": [w.public() for w in runtime.workspaces.values() if w.session_id == session.id],
+            # Whether the notebook picker offers the platform's examples (NOTEBOOK_EXAMPLES).
+            "notebookExamples": notebook_examples_enabled(os.environ),
             "catalogUri": directory.metadata.public_url + "/api/catalog",
             "extensions": extensions.public(os.environ),
         }

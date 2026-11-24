@@ -11,7 +11,7 @@ import pytest
 
 from server.models import ServiceError
 from user_portal.notebook.seed import seed_workspace
-from user_portal.notebook_files import EXAMPLE_TITLES, EXAMPLES, TEMPLATE, NotebookFiles, examples
+from user_portal.notebook_files import EXAMPLE_TITLES, EXAMPLES, TEMPLATE, NotebookFiles, enabled, examples
 from user_portal.runtime import Workspace
 
 TOKEN = "gateway-token"
@@ -116,6 +116,8 @@ def test_the_platform_can_turn_the_examples_off(marimo):
     fake, workspace, _ = marimo
     off = NotebookFiles({"NOTEBOOK_EXAMPLES": "false"}, httpx.Client(transport=httpx.MockTransport(fake.handler)))
     assert off.files(workspace)["examples"] == [] and examples({"NOTEBOOK_EXAMPLES": "false"}) == []
+    # The portal shows this switch to the page, which then leaves the examples out of its text.
+    assert enabled({}) and enabled({"NOTEBOOK_EXAMPLES": "true"}) and not enabled({"NOTEBOOK_EXAMPLES": "false"})
     with pytest.raises(ServiceError):
         off.copy_example(workspace, "01_pyiceberg_neighborhood.py")
 

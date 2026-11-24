@@ -8,7 +8,12 @@ const recipient = '<img src=x onerror=alert(1)> Partner BV';
 const ownerTeamName = '<img src=x onerror=alert(1)> Source team';
 let sharedOnly = false, includeOwned = false, listing = false;
 let role = 'reader', shares = [], calls = [], notebooks = [], environment = 'development', objectLimit = 50;
-const workspace = () => ({user: {name: 'Team member'}, teams: [{id: 'analytics', name: 'Energy analytics', role}], databases: environment === 'development' ? [{...database, ...(sharedOnly ? {shared: true, sharedWithTeam: 'analytics', team: 'owner-team', ownerTeamName} : {})}, ...(includeOwned ? [{...database, id: 'owned-db'}] : [])] : [], activeTeam: 'analytics', activeRole: role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], deletingDatabases: [], notebooks, extensions: listing ? [{id: 'openmetadata', origin: 'http://catalog.test', listing: true}] : []});
+// The platform's examples, and the notebooks in the team's folder: one example was opened before.
+const examples = [{id: '01_pyiceberg_neighborhood.py', title: '01 · Neighborhood data with PyIceberg'}, {id: '02_duckdb_visualization.py', title: '02 · Visualize with DuckDB'}];
+const teamFiles = ['workspace.py', 'examples/02_duckdb_visualization.py'];
+// Nothing may scroll sideways.
+const noOverflow = async (page, label) => { const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (wide > 0) throw new Error(`Horizontal overflow of ${wide}px in ${label}`); };
+const workspace = () => ({user: {name: 'Team member'}, teams: [{id: 'analytics', name: 'Energy analytics', role}], databases: environment === 'development' ? [{...database, ...(sharedOnly ? {shared: true, sharedWithTeam: 'analytics', team: 'owner-team', ownerTeamName} : {})}, ...(includeOwned ? [{...database, id: 'owned-db'}] : [])] : [], activeTeam: 'analytics', activeRole: role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], deletingDatabases: [], notebooks, notebookExamples: true, extensions: listing ? [{id: 'openmetadata', origin: 'http://catalog.test', listing: true}] : []});
 const issued = (share, secret) => ({share, credentials: {clientId: share.clientId, clientSecret: secret}, connection: {type: 'iceberg-rest', uri: 'https://catalog.example/api/catalog', warehouse: database.id, oauth2ServerUri: 'https://catalog.example/api/catalog/v1/oauth/tokens', scope: 'PRINCIPAL_ROLE:ALL', accessDelegation: 'vended-credentials', s3Endpoint: 'https://s3.example', credential: `${share.clientId}:${secret}`, identifiers: share.objects.map(o => ({kind: o.kind, identifier: [...o.namespace, o.name].join('.')}))}});
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 try {
@@ -26,7 +31,9 @@ try {
     else if (path === '/api/notebooks' && method === 'POST') {
       body = {id: 'notebook-1', database: database.id, environment, url: '/notebook-fixture', filesUrl: '/notebook-fixture'}; notebooks = [body];
     } else if (path === '/api/notebooks/notebook-1' && method === 'DELETE') { notebooks = []; body = {deleted: true}; }
-    else if (path === '/api/notebooks/notebook-1/files') body = {notebooks: [{path: 'workspace.py', url: '/notebook-fixture?file=workspace.py'}], examples: [], allFilesUrl: '/notebook-fixture'};
+    else if (path === '/api/notebooks/notebook-1/files' && method === 'GET') body = {notebooks: teamFiles.map(file => ({path: file, url: `/notebook-fixture?file=${file}`})), examples, allFilesUrl: '/notebook-fixture'};
+    else if (path === '/api/notebooks/notebook-1/files') { const file = request.postDataJSON().name + '.py'; teamFiles.unshift(file); body = {path: file, url: `/notebook-fixture?file=${file}`}; status = 201; }
+    else if (path.startsWith('/api/notebooks/notebook-1/examples/')) { const file = 'examples/' + decodeURIComponent(path.split('/').at(-1)); teamFiles.unshift(file); body = {path: file, url: `/notebook-fixture?file=${file}`}; }
     else if (path === '/notebook-fixture') return route.fulfill({contentType: 'text/html', body: '<p>Notebook fixture</p>'});
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'meters', namespace: ['analytics']}, {name: 'readings', namespace: ['analytics']}], views: [{name: 'daily_energy', namespace: ['analytics']}], semanticModels: [{name: 'energy_model', namespace: ['analytics']}]} : {namespaces: [['analytics']], tables: [], views: []};
     else if (path === '/api/details' && url.searchParams.get('kind') === 'semantic-model') body = {kind: 'semantic-model', models: [{datasets: [{table: {namespace: ['analytics'], name: 'readings'}}, {table: {namespace: ['analytics'], name: 'meters'}}]}]};
@@ -72,6 +79,53 @@ try {
   await page.locator('#notebook-databases button').click();
   await expect(page.locator('#editor')).toBeVisible();
   await expect(page.locator('#notice')).toContainText('Marimo is ready.');
+  // One workbench bar on the notebook frame replaces the editor toolbar and the notebook picker row.
+  const bar = page.locator('.workbench-bar');
+  await expect(bar).toHaveCount(1);
+  await expect(page.locator('.editor-toolbar, .notebook-picker')).toHaveCount(0);
+  await expect(bar.locator('> div').first().locator('.status-dot, #editor-title, #notebook-file, #new-notebook')).toHaveCount(4);
+  await expect(bar.locator('> div').nth(1).locator('#back, #editor-external, #close-notebook')).toHaveCount(3);
+  await expect(page.locator('#editor-title')).toHaveText('Energy · Development');
+  for (const [id, text] of [['new-notebook', 'New'], ['back', 'Catalog'], ['editor-external', 'New tab ↗'], ['close-notebook', 'Stop']]) await expect(page.locator('#' + id)).toHaveText(text);
+  // The picker shows an example the team opened before once, as the team's own file; the others under Examples.
+  const picker = page.getByRole('combobox', {name: 'Notebook', exact: true});
+  const pickerGroups = () => picker.locator('optgroup').evaluateAll(groups => groups.map(group => [group.label, [...group.children].map(option => option.textContent)]));
+  await expect(picker.locator('optgroup')).toHaveCount(3);
+  expect(await pickerGroups()).toEqual([
+    ['Team notebooks', ['workspace.py', 'examples/02_duckdb_visualization.py']],
+    ['Examples · opens a copy for your team', ['01 · Neighborhood data with PyIceberg']],
+    ['Folder', ['All files']],
+  ]);
+  await picker.selectOption({label: '01 · Neighborhood data with PyIceberg'});
+  await expect(page.locator('#notice')).toContainText('Opened examples/01_pyiceberg_neighborhood.py, your team\'s own copy.');
+  await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', '/notebook-fixture?file=examples/01_pyiceberg_neighborhood.py');
+  await expect(picker.locator('optgroup')).toHaveCount(2);
+  expect(await pickerGroups()).toEqual([
+    ['Team notebooks', ['examples/01_pyiceberg_neighborhood.py', 'workspace.py', 'examples/02_duckdb_visualization.py']],
+    ['Folder', ['All files']],
+  ]);
+  await expect(picker).toHaveValue('/notebook-fixture?file=examples/01_pyiceberg_neighborhood.py');
+  // New opens the name form over the frame, so the bar and the notebook stay where they are.
+  const frameTop = () => page.locator('#frame-host').evaluate(host => host.getBoundingClientRect().top);
+  const before = await frameTop();
+  await page.getByRole('button', {name: 'New notebook', exact: true}).click();
+  await expect(page.locator('#new-notebook-form')).toBeVisible();
+  await expect(page.locator('#new-notebook')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#new-notebook-name')).toBeFocused();
+  expect(await frameTop()).toBe(before);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#new-notebook-form')).toBeHidden();
+  await expect(page.locator('#new-notebook')).toBeFocused();
+  await page.getByRole('button', {name: 'New notebook', exact: true}).click();
+  await page.locator('#new-notebook-name').fill('forecast');
+  await page.locator('#new-notebook-form').getByRole('button', {name: 'Create', exact: true}).click();
+  await expect(page.locator('#notice')).toContainText('Created forecast.py');
+  await expect(page.locator('#new-notebook-form')).toBeHidden();
+  await expect(page.locator('#new-notebook')).toHaveAttribute('aria-expanded', 'false');
+  await expect(picker).toHaveValue('/notebook-fixture?file=forecast.py');
+  await expect(picker.locator('option', {hasText: 'forecast.py'})).toHaveCount(1);
+  await picker.selectOption({label: 'All files'});
+  await expect(page.locator('#frame-host iframe')).toHaveAttribute('src', '/notebook-fixture');
   await page.locator('#notebook-databases button').click();
   await expect(page.locator('#notice')).toContainText('Your existing notebook for this database has resumed.');
   await page.getByRole('button', {name: 'Data shares', exact: true}).click();
@@ -79,6 +133,26 @@ try {
   await expect(page.locator('#notice')).toBeHidden();
   await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
   await expect(page.locator('#notice')).toBeHidden();
+  // On a laptop: a 60px header on one row, a 52px context bar and the 46px bar on the frame, which fits the screen.
+  await page.setViewportSize({width: 1280, height: 800});
+  const chrome = await page.evaluate(() => {
+    const box = selector => { const {top, bottom, height} = document.querySelector(selector).getBoundingClientRect(); return {top, bottom, height}; };
+    return {header: box('header'), stacked: document.querySelector('header').classList.contains('stacked'), context: box('.workspace-heading'), bar: box('.workbench-bar'), host: box('#frame-host'), frame: box('#frame-host iframe')};
+  });
+  expect(chrome.stacked).toBe(false);
+  expect(chrome.header.height).toBe(60);
+  expect(Math.round(chrome.context.height)).toBe(52);
+  expect(chrome.bar.height).toBe(46);
+  expect(chrome.bar.bottom).toBe(chrome.host.top);
+  expect(chrome.frame.top).toBeLessThanOrEqual(180);
+  expect(chrome.frame.bottom).toBeLessThanOrEqual(800);
+  await noOverflow(page, 'an open notebook at 1280×800');
+  await page.setViewportSize({width: 390, height: 844});
+  await noOverflow(page, 'an open notebook at 390×844');
+  await page.getByRole('button', {name: 'New notebook', exact: true}).click();
+  await noOverflow(page, 'the new notebook form at 390×844');
+  await page.locator('#new-notebook-cancel').click();
+  await page.setViewportSize({width: 1440, height: 1050});
   await page.locator('#frame-host iframe').evaluate(frame => { frame.dataset.preserved = 'yes'; });
   await page.getByRole('navigation', {name: 'Workspace', exact: true}).getByRole('button', {name: 'Catalog', exact: true}).click();
   await expect(page.locator('.catalog-summary')).toContainText('Energy analytics');
@@ -205,6 +279,23 @@ print(json.dumps(outputs))
   await expect(page.locator('body')).not.toContainText('first-secret');
   await expect(grid).toContainText('Not granted (dropped or recreated): analytics.daily_energy');
   await expect(grid).toContainText('Still granted under a new name: analytics.renamed');
+  // Shared objects: the first two names as tags and a count for the rest. Names are text, never markup.
+  const tags = grid.locator('.share-tag'), sharedObjects = shares[0].objects;
+  await expect(tags).toHaveText(['analytics.daily_energy', 'analytics.readings']);
+  await expect(grid.locator('.share-more')).toHaveCount(0);
+  await expect(grid).not.toContainText('2 selected');
+  shares[0].objects = [{kind: 'table', namespace: ['analytics'], name: '<img src=x onerror=alert(1)>', granted: true}, ...sharedObjects, ...['meters', 'archive'].map(name => ({kind: 'table', namespace: ['analytics'], name, granted: true}))];
+  await page.evaluate(() => refreshWorkspace());
+  await expect(tags).toHaveText(['analytics.<img src=x onerror=alert(1)>', 'analytics.daily_energy']);
+  await expect(grid.locator('.share-more')).toHaveText('+3 more');
+  await expect(grid.locator('.share-more')).toHaveAttribute('title', 'analytics.readings, analytics.meters, analytics.archive');
+  await expect(grid.locator('img')).toHaveCount(0);
+  await page.setViewportSize({width: 1280, height: 800});
+  await noOverflow(page, 'the share list at 1280×800');
+  await page.setViewportSize({width: 1440, height: 1050});
+  shares[0].objects = sharedObjects;
+  await page.evaluate(() => refreshWorkspace());
+  await expect(tags).toHaveCount(2);
   shares[0].recipient = 'Updated by a teammate';
   await page.evaluate(() => refreshWorkspace());
   await expect(grid).toContainText('Updated by a teammate');
@@ -383,21 +474,21 @@ print(json.dumps(outputs))
   await page.reload();
   await expect(page.locator('#editor-database-context')).toContainText(ownerTeamName);
   await expect(page.locator('#notebooks img')).toHaveCount(0);
-  for (const width of [390, 1440]) {
-    await page.setViewportSize({width, height: 1000});
+  for (const [width, height] of [[390, 844], [1280, 800], [1440, 1000]]) {
+    await page.setViewportSize({width, height});
     for (const theme of ['light', 'dark']) {
       await page.evaluate(theme => applyTheme(theme), theme);
-      for (const name of ['team', 'databases', 'catalog', 'notebooks']) {
+      for (const name of ['team', 'databases', 'catalog', 'notebooks', 'shares']) {
         await page.locator(`#workspace-nav [data-page=${name}]`).click();
-        expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+        await noOverflow(page, `${name} at ${width}×${height}`);
         await page.screenshot({path: `test-results/shares/shared-${name}-${theme}-${width}.png`, fullPage: true});
       }
     }
   }
-  await page.getByRole('button', {name: 'Data shares', exact: true}).click();
+  await expect(page.locator('#shares-page')).toBeVisible();
   await expect(page.getByRole('region', {name: 'Received data shares'})).toContainText(ownerTeamName);
   await expect(page.locator('#team-shares img')).toHaveCount(0);
   await expect(page.getByRole('button', {name: 'New data share', exact: true})).toHaveCount(0);
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS: workspace navigation, share lifecycle, credentials, escaping, ownership across overview/databases/catalog/notebooks, duplicate database names, shared-only teams, read-only controls, route restoration, dark/light/mobile layouts, semantic models add their tables to a share, listings only with a data catalog extension');
+  console.log('PASS: workspace navigation, one workbench bar on the notebook, a copied example once in the picker, share object tags as text, no sideways scrolling at 1280×800 and 390×844, share lifecycle, credentials, escaping, ownership across overview/databases/catalog/notebooks, duplicate database names, shared-only teams, read-only controls, route restoration, dark/light/mobile layouts, semantic models add their tables to a share, listings only with a data catalog extension');
 } finally { await browser.close(); }

@@ -6,14 +6,16 @@ const teams = [
   {id: 'analytics', name: 'Energy analytics', description: 'Understand energy use together.', role: 'reader'},
   {id: 'research', name: 'Research', description: '', role: 'writer'},
 ];
-let team = 'analytics', environment = 'development', failMembers = false, delayedMembers = null, keycloak = false, catalogUri = 'http://team.test/api/catalog';
+let team = 'analytics', environment = 'development', failMembers = false, delayedMembers = null, keycloak = false, catalogUri = 'http://team.test/api/catalog', notebookExamples = true;
+// Nothing may scroll sideways.
+const noOverflow = async (page, label) => { const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (wide > 0) throw new Error(`Horizontal overflow of ${wide}px in ${label}`); };
 const members = {
   analytics: [{id: 'alice', name: 'alice', role: 'reader'}, {id: 'bob', name: '<img src=x onerror=alert(1)>', role: 'admin'}],
   research: [{id: 'alice', name: 'alice', role: 'writer'}],
 };
 const database = {id: 'energy-dev', name: 'Energy', team: 'analytics', environment: 'development'};
 const databases = [database];
-const workspace = () => ({user: {id: 'alice', name: 'alice'}, teams, activeTeam: team, activeRole: teams.find(t => t.id === team).role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], databases: databases.filter(db => db.team === team && db.environment === environment), deletingDatabases: [], notebooks: [], catalogUri});
+const workspace = () => ({user: {id: 'alice', name: 'alice'}, teams, activeTeam: team, activeRole: teams.find(t => t.id === team).role, activeEnvironment: environment, environments: ['development', 'acceptance', 'production'], databases: databases.filter(db => db.team === team && db.environment === environment), deletingDatabases: [], notebooks: [], catalogUri, notebookExamples});
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 try {
   const page = await browser.newPage({viewport: {width: 1440, height: 1050}}), errors = [];
@@ -205,6 +207,41 @@ try {
   await page.screenshot({path: 'test-results/team/databases-light.png', fullPage: true});
   await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.screenshot({path: 'test-results/team/databases-dark.png', fullPage: true});
+  // The compact layout: on a laptop a 60px header on one row and a 52px context bar with the page title, its
+  // description and the Team and Environment selects; on no page does anything scroll sideways.
+  for (const [width, height] of [[1280, 800], [390, 844]]) {
+    await page.setViewportSize({width, height});
+    for (const name of ['team', 'databases', 'catalog', 'notebooks', 'shares', 'guide']) {
+      await page.locator(`header [data-page=${name}]`).click();
+      await expect(page.locator(`#${name}-page`)).toBeVisible();
+      await noOverflow(page, `${name} at ${width}×${height}`);
+      if (width !== 1280) continue;
+      const bars = await page.evaluate(() => {
+        const box = selector => { const {top, bottom, height} = document.querySelector(selector).getBoundingClientRect(); return {top, bottom, height}; };
+        return {header: box('header'), stacked: document.querySelector('header').classList.contains('stacked'), context: box('.workspace-heading'), title: box('.workspace-heading h1'), description: box('#page-description'), team: box('#team'), environment: box('#environment')};
+      });
+      expect(bars.stacked).toBe(false);
+      expect(bars.header.height).toBe(60);
+      expect(Math.round(bars.context.height)).toBe(52);
+      for (const part of [bars.title, bars.description, bars.team, bars.environment]) {
+        expect(part.top).toBeGreaterThanOrEqual(bars.context.top);
+        expect(part.bottom).toBeLessThanOrEqual(bars.context.bottom);
+      }
+    }
+  }
+  await page.setViewportSize({width: 1440, height: 1050});
+  expect(await page.locator('.workspace-heading label').evaluateAll(labels => labels.map(label => label.firstChild.textContent))).toEqual(['Team', 'Environment']);
+  await expect(page.locator('.workspace-heading .eyebrow')).toHaveCount(0);
+  // The empty Notebooks page points at the examples only when the platform offers them (NOTEBOOK_EXAMPLES).
+  await page.locator('#workspace-nav [data-page=notebooks]').click();
+  await expect(page.locator('#notebook-empty')).toContainText('Use the notebook picker to explore the examples.', {useInnerText: true});
+  notebookExamples = false;
+  await page.evaluate(() => refreshWorkspace());
+  await expect(page.locator('#notebook-examples-hint')).toBeHidden();
+  await expect(page.locator('#notebook-empty p')).toHaveText('Resume an active notebook or open a database in marimo.', {useInnerText: true});
+  notebookExamples = true;
+  await page.evaluate(() => refreshWorkspace());
+  await expect(page.locator('#notebook-examples-hint')).toBeVisible();
   expect(errors).toEqual([]);
-  console.log('PASS: team summary, scoped members, safe text, context switching, stale responses, refresh/recovery, workspace links, route restoration, getting started guide, database lifecycle, dark/light/mobile layouts');
+  console.log('PASS: team summary, scoped members, safe text, context switching, stale responses, refresh/recovery, workspace links, route restoration, getting started guide, database lifecycle, dark/light/mobile layouts, compact header and context bar, no sideways scrolling at 1280×800 and 390×844, the examples sentence follows the switch');
 } finally { await browser.close(); }

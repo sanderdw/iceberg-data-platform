@@ -1,7 +1,9 @@
 """Authorization boundaries of the standalone user gateway."""
 
 import asyncio
+import re
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -10,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from server import extensions
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
 from test.conftest import SEMANTIC_MODEL, MemoryPolaris, members
 from user_portal import app as user_app
@@ -937,6 +940,22 @@ def test_a_share_is_listed_only_with_a_data_catalog_extension(users, monkeypatch
     # Without the extension a listing can still be edited otherwise, and revoked.
     assert c.patch(f"/api/shares/{share['id']}", json={"description": "Orders"}, headers=JSON).status_code == 200
     assert c.delete(f"/api/shares/{share['id']}", headers=JSON).status_code == 200
+
+
+def test_the_workspace_says_whether_the_examples_are_offered(users, monkeypatch):
+    # The Notebooks page mentions the examples only when the platform offers them (NOTEBOOK_EXAMPLES).
+    c = users.client
+    login(c)
+    monkeypatch.delenv("NOTEBOOK_EXAMPLES", raising=False)
+    assert c.get("/api/workspace").json()["notebookExamples"] is True
+    monkeypatch.setenv("NOTEBOOK_EXAMPLES", "false")
+    assert c.get("/api/workspace").json()["notebookExamples"] is False
+
+
+def test_the_apps_menu_lists_the_pages_in_the_order_of_the_navigation():
+    html = (Path(user_app.__file__).parent / "public" / "index.html").read_text(encoding="utf-8")
+    navigation = html[html.index('<nav id="workspace-nav"'):html.index("</nav>")]
+    assert re.findall(r'data-page="([a-z]+)"[^>]*>([^<]+)<', navigation) == extensions.PORTAL_PAGES
 
 
 def test_notebook_files_are_reached_only_through_the_sessions_own_notebook(users):

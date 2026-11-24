@@ -12,13 +12,15 @@ Polars reads and writes Iceberg data files itself. Pass it the table's storage s
 
 ## Your notebooks
 
-The **Notebook** picker above the editor lists:
+A bar sits on top of the open notebook. On the left it shows the database and environment, the notebook picker and **New**. On the right, **Catalog** takes you back to the catalog, **New tab ↗** opens the notebook in a tab of its own and **Stop** ends your session; saved files stay.
+
+The notebook picker lists:
 
 - **Team notebooks:** every notebook in the team's folder, newest first. A new folder starts with `workspace.py`, which opens for your own databases, and `shared_workspace.py`, which opens for databases shared with your team.
-- **Examples:** the notebooks below. Picking one copies it into `examples/` in the team's folder, with the data files it reads, and opens the copy. From then on it is your team's own: picking it again opens that copy, with your changes.
+- **Examples:** the notebooks below that your team has not opened yet. Picking one copies it into `examples/` in the team's folder, with the data files it reads, and opens the copy. From then on it is your team's own, so you find it under **Team notebooks** as `examples/<file>`, with your changes.
 - **All files:** marimo's file browser, to rename, move, upload or delete files.
 
-**New notebook** asks for a name and creates it from the starter notebook, which connects to the open database. It never replaces an existing file.
+**New** asks for a name and creates the notebook from the starter notebook, which connects to the open database. It never replaces an existing file.
 
 The platform administrator can hide the examples with `NOTEBOOK_EXAMPLES=false` (chart value `notebooks.examples`), for example on a platform without demo data. Copies a team already made stay in its folder.
 

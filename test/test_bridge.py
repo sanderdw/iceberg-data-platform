@@ -88,7 +88,10 @@ def test_discovery_is_public_and_complete(bridge):
     assert body["capabilities"] == ["user-context", "automation-principals", "automation-tokens", "shared-data",
                                     "listings", "team-extensions", "app-directory"]
     # app-directory: the user portal's pages and each extension's name, for the shared Apps menu.
-    assert [p["id"] for p in body["userPortalPages"]] == ["catalog", "notebooks", "databases", "shares", "team"]
+    # In the order of the user portal's own navigation.
+    assert [p["title"] for p in body["userPortalPages"]] == [
+        "Team overview", "Databases", "Catalog", "Notebooks", "Data shares"]
+    assert [p["id"] for p in body["userPortalPages"]] == ["team", "databases", "catalog", "notebooks", "shares"]
     assert all(p["url"].startswith("http") and "/#" in p["url"] for p in body["userPortalPages"])
     assert all(set(e) >= {"id", "origin", "title", "purpose"} for e in body["extensions"])
     assert body["oidc"] == {"issuer": ISSUER, "internalIssuer": ISSUER, "bridgeAudience": "iceberg-bridge"}
