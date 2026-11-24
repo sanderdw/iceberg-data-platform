@@ -705,7 +705,8 @@ try {
   await close.close();
   // Getting started in the administration portal: portal, AI agent or API.
   if (need(47)) {
-    await portal.locator('[data-page="guide"]').first().click();
+    await portal.locator('#account-toggle').click();
+    await portal.locator('#guide-link').click();
     await portal.locator('.guide-track').first().waitFor();
     await shot(portal, '47-admin-guide');
   }

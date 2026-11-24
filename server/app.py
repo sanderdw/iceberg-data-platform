@@ -38,7 +38,7 @@ from .validation import validation_message
 PUBLIC = Path(__file__).resolve().parent.parent / "public"
 FILES = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg",
          "/infrastructure.js": "infrastructure.js", "/identity.js": "identity.js", "/guide.js": "guide.js",
-         "/docs.js": "docs.js"}
+         "/docs.js": "docs.js", "/apps-menu.js": "apps-menu.js", "/apps-menu.css": "apps-menu.css"}
 FILES.update({f"/fonts/{name}.ttf": f"fonts/{name}.ttf" for name in ("doto", "space-grotesk", "space-mono")})
 
 
@@ -274,8 +274,12 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         if oidc and request.state.authenticated:
             current = sessions.get(request.cookies.get(session_cookie))
             identity = {"user": current.claims.get("preferred_username") or current.claims.get("name", "")}
-        return {"authenticated": request.state.authenticated, **({"access": request.state.access}
-                                                                    if request.state.authenticated else {}),
+        if request.state.authenticated:
+            # Where the user portal is: the Apps menu and the read-only bar link to it.
+            user_origin = os.environ.get("USER_ORIGIN", "http://localhost:3002")
+            identity |= {"access": request.state.access, "userPortalUrl": user_origin.rstrip("/"),
+                         "userPortalPages": extensions.portal_pages(user_origin)}
+        return {"authenticated": request.state.authenticated,
                 **identity, **({"loginUrl": "/auth/login"} if oidc else {}),
                 **({"userManagement": "keycloak"} if user_management else {})}
 

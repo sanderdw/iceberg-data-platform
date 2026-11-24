@@ -2,7 +2,12 @@
 
 The administration portal at http://localhost:3000 (on Kubernetes `https://admin.<domain>`) manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role, but a team Administrator can sign in to [look without changing anything](#read-only-access-for-team-administrators). For the service list, see [services](reference/services.md); to start and stop the platform, see [installation](install.md#update-or-restart).
 
-You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). The portal's **Getting started** page has instructions and examples for each, using this installation's address. Lists refresh every 30 seconds while visible, and navigation and filters are kept in the URL.
+You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). **Getting started**, in the account menu, has instructions and examples for each, using this installation's address. Lists refresh every 30 seconds while visible, and navigation and filters are kept in the URL.
+
+The header has the pages on the left and two menus on the right:
+
+- **Apps** opens the user portal's pages and the registered [extensions](extensions.md), each in a new tab.
+- The account menu, under your username, shows your role and whether the data provider is online. It also has **Getting started**, the light or dark theme and **Sign out**.
 
 ## Teams, databases and users
 
@@ -52,11 +57,11 @@ The portal's user management uses the `iceberg-provisioner` service account in t
 
 ## Read-only access for team Administrators
 
-A team Administrator can sign in to the administration portal with their own Keycloak account. The portal then shows a **Read-only** badge.
+A team Administrator can sign in to the administration portal with their own Keycloak account. The header then shows a **Read-only** badge, and the Teams, Users, Databases and Data shares pages start with a bar that says so.
 
 - **What they see:** every page, for the whole platform and not only their own team: teams, users, databases and their connection settings, data shares, extension service accounts, the catalog browser and Infrastructure.
 - **What they can change:** nothing. The portal hides the buttons and refuses every change with `403`, also from a script.
-- **Where they manage their team:** the [user portal](user-portal.md), for the team's databases and data shares.
+- **Where they manage their team:** the [user portal](user-portal.md), for the team's databases and data shares. **Open Workspaces** in the bar opens it, and so does the **Apps** menu.
 
 Members with the Read or Read & write role are refused at sign-in. The portal checks the role again within a minute, so removing a user's Administrator role ends the access. The [MCP server](#connect-an-mcp-client) stays for platform administrators only.
 

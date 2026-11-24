@@ -5,7 +5,10 @@ import {readFile} from 'node:fs/promises';
 const team = {id: 'team-' + 'a'.repeat(32), name: 'analytics', description: ''};
 const database = {id: 'db-' + 'b'.repeat(32), name: 'warehouse', team: team.id, environment: 'development', status: 'ready'};
 const account = {id: 'portal-' + 'c'.repeat(32), name: 'analyst', teams: [team.id], memberships: [{team: team.id, role: 'reader'}], identity: {status: 'linked'}};
-const overview = {health: {status: 'online', provider: 'polaris'}, teams: [team], databases: [database], users: [account], shares: []};
+const overview = {health: {status: 'online', provider: 'polaris'}, teams: [team], databases: [database], users: [account], shares: [], automationPrincipals: [],
+  extensions: [{id: 'dbt', origin: 'http://dbt.test', listing: false, title: 'Pipelines', purpose: 'Build, test and schedule dbt models'}]};
+// A signed-in session says what the administrator may do and where the user portal is (the Apps menu).
+const workspaces = {access: 'admin', userPortalUrl: 'http://workspaces.test', userPortalPages: [{id: 'catalog', title: 'Catalog', url: 'http://workspaces.test/#catalog'}]};
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 let signedIn = true, keycloak = true;
 const errors = [], mutations = [], lookups = [];
@@ -15,7 +18,7 @@ try {
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await page.route('http://forms.test/**', async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
-    if (path === '/api/session' && request.method() === 'GET') return route.fulfill({json: {authenticated: signedIn, ...(keycloak ? {userManagement: 'keycloak'} : {})}});
+    if (path === '/api/session' && request.method() === 'GET') return route.fulfill({json: {authenticated: signedIn, ...(signedIn ? workspaces : {}), ...(keycloak ? {userManagement: 'keycloak'} : {})}});
     if (path === '/api/overview') return route.fulfill({json: overview});
     if (path === '/api/identity/accounts') { lookups.push(url.searchParams.get('username')); return route.fulfill({json: [{id: 'subject-1', username: 'external.user', enabled: true, linked: false}]}); }
     if (path.startsWith('/api/')) {

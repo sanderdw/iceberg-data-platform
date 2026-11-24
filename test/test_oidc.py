@@ -354,7 +354,11 @@ def test_team_administrators_get_read_only_access(issuer):
     state["access_changes"] = team_member(provider, "admin")
     with TestClient(create_app(provider, PASSWORD, oidc=oidc)) as client:
         assert client.get(start(client, state), follow_redirects=False).status_code == 303
-        assert client.get("/api/session").json()["access"] == "viewer"
+        session = client.get("/api/session").json()
+        assert session["access"] == "viewer"
+        # The read-only bar and the Apps menu send a team administrator to the user portal.
+        assert session["userPortalUrl"] and all(
+            page["url"].startswith(session["userPortalUrl"] + "/#") for page in session["userPortalPages"])
         # Everything is visible.
         for path in ("/api/overview", "/api/teams", "/api/users", "/api/databases"):
             assert client.get(path).status_code == 200, path

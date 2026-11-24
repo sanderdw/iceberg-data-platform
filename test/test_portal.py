@@ -1,8 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from server import extensions
 from server.app import create_app
 from server.models import DatabaseInput, ServiceError, TeamInput
 from server.polaris import provision
@@ -27,9 +29,11 @@ def user(p, teams, name="analyst", role="reader"):
     return r.json()["user"]
 
 
-def test_auth_static_csrf_validation_and_logout():
+def test_auth_static_csrf_validation_and_logout(monkeypatch):
+    monkeypatch.setenv("USER_ORIGIN", "https://users.example.com/")
     with TestClient(create_app(MemoryPolaris(), PASSWORD)) as c:
         assert c.get("/api/health").status_code == 200
+        assert c.get("/api/session").json() == {"authenticated": False}
         assert c.get("/").status_code == 200
         assert c.get("/.env").status_code == 404
         assert c.get("/api/overview").status_code == 401
@@ -45,7 +49,12 @@ def test_auth_static_csrf_validation_and_logout():
         login = c.post("/api/session", json={"password": PASSWORD}, headers=HEADERS)
         assert "HttpOnly" in login.headers["set-cookie"]
         assert "SameSite=strict" in login.headers["set-cookie"]
-        assert c.get("/api/session").json() == {"authenticated": True, "access": "admin"}
+        # A session says where the user portal is: the Apps menu and the read-only bar link to it.
+        assert c.get("/api/session").json() == {
+            "authenticated": True, "access": "admin", "userPortalUrl": "https://users.example.com",
+            "userPortalPages": extensions.portal_pages("https://users.example.com")}
+        pages = {page["id"]: page["url"] for page in c.get("/api/session").json()["userPortalPages"]}
+        assert pages["catalog"] == "https://users.example.com/#catalog"
         assert c.get("/openapi.json").json()["info"]["title"] == "Iceberg Workspace API"
         assert c.post("/api/teams", content='{"name":', headers=HEADERS).status_code == 422
         assert c.post("/api/teams", content="x" * 8193, headers=HEADERS).status_code == 413
@@ -74,6 +83,17 @@ def test_api_docs_require_session_and_send_write_headers():
         create = schema["paths"]["/api/teams"]["post"]
         assert any(p["name"] == "X-Portal-Request" and p["schema"]["default"] == "1" for p in create["parameters"])
         assert "security" not in schema["paths"]["/api/health"]["get"]
+
+
+def test_admin_portal_uses_the_reference_apps_menu():
+    """The portal serves the Apps menu copied unchanged from contracts/bridge/v1/apps-menu, as extensions do."""
+    root = Path(__file__).resolve().parent.parent
+    with TestClient(create_app(MemoryPolaris(), PASSWORD)) as c:
+        for name in ("apps-menu.js", "apps-menu.css"):
+            reference = (root / "contracts/bridge/v1/apps-menu" / name).read_bytes()
+            assert (root / "public" / name).read_bytes() == reference, f"public/{name} differs from the reference"
+            assert c.get(f"/{name}").content == reference
+        assert all(f'"/{name}"' in c.get("/").text for name in ("apps-menu.js", "apps-menu.css"))
 
 
 def test_login_throttle():
