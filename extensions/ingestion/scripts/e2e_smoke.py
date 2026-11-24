@@ -167,7 +167,7 @@ def catalog(env, platform, team, warehouse):
 async def run(agent, pipeline, **arguments):
     result = await agent.call("run_pipeline", pipeline=pipeline, wait=600, **arguments)
     if result["status"] != "success":
-        logs = await agent.call("get_run_logs", run=result["id"], tail=80)
+        logs = await agent.call("get_run_logs", run=result["id"], limit=80)
         raise AssertionError(f"Run failed: {result['error']}\n" + "\n".join(logs["lines"]))
     return result
 
@@ -194,7 +194,8 @@ async def main():
         assert me["allowPrivateSources"], "Start the extension with ING_ALLOW_PRIVATE_SOURCES=true for this check."
         team = next(m for m in me["memberships"] if m["role"] == "writer")["team"]
         await writer.refused("enable_environment", "forbidden_role", team=team, environment="development")
-        await admin.call("enable_environment", team=team, environment="development")
+        enabled = await admin.call("enable_environment", team=team, environment="development")
+        assert enabled["enabled"] and enabled["team"] == team and "principal" not in enabled, enabled
         database = next(d for d in me["databases"] if d["team"] == team and d["environment"] == "development")
         templates = await reader.call("list_templates")
         assert {t["id"] for t in templates["templates"]} >= {"cbs-statline", "postgres-incremental", "airports-csv"}
@@ -222,10 +223,10 @@ async def main():
         await reader.refused("run_pipeline", "forbidden_role", pipeline=api["id"])
 
         first = await run(writer, api["id"])
-        rows = {t["name"]: t["rows"] for t in first["summary"]["tables"]}
+        rows = {t["name"]: t["rows"] for t in first["results"]}
         assert rows["customers"] == 5 and rows.get("customers__tags") == 5, rows
         assert first["summary"]["published"]["errors"] == [], first["summary"]["published"]
-        logs = await reader.call("get_run_logs", run=first["id"], tail=2000)
+        logs = await reader.call("get_run_logs", run=first["id"], limit=2000)
         assert API_TOKEN not in "\n".join(logs["lines"]), "The run log shows the API token"
         print("rest api run 1", first["id"], rows)
 
@@ -235,7 +236,7 @@ async def main():
         REQUESTS.clear()
         second = await run(writer, api["id"])
         assert any("since=2026-10-05" in r for r in REQUESTS), REQUESTS
-        assert {t["name"]: t["rows"] for t in second["summary"]["tables"]}["customers"] == 2, second["summary"]
+        assert {t["name"]: t["rows"] for t in second["results"]}["customers"] == 2, second["results"]
 
         tables = catalog(env, platform, team, database["id"])
         listed = {name for _, name in tables.list_tables(namespace)}
@@ -249,7 +250,7 @@ async def main():
         assert properties[f"{PRODUCER}.run-id"] == second["summary"]["loadId"], properties
         uuid = customers.metadata.table_uuid
         third = await run(writer, api["id"], full_refresh=True)
-        assert {t["name"]: t["rows"] for t in third["summary"]["tables"]}["customers"] == 6
+        assert {t["name"]: t["rows"] for t in third["results"]}["customers"] == 6
         reloaded = tables.load_table((namespace, "customers"))
         assert reloaded.metadata.table_uuid == uuid and reloaded.scan().to_arrow().num_rows == 6
         print("rest api: incremental, merge without duplicates, full refresh with the same table")
@@ -266,12 +267,12 @@ async def main():
             created.append(probe)
             result = await writer.call("run_pipeline", pipeline=probe["id"], wait=600)
             assert result["status"] == "failed", result
-            lines = "\n".join((await reader.call("get_run_logs", run=result["id"], tail=200))["lines"])
+            lines = "\n".join((await reader.call("get_run_logs", run=result["id"], limit=200))["lines"])
             assert re.search(r"(?i)resolve|name or service|getaddrinfo|refused", lines), lines[-2000:]
         print("runs cannot resolve bridge, keycloak or postgres")
 
         schedule = await admin.call("set_schedule", pipeline=api["id"], cron="0 5 * * *")
-        assert schedule["enabled"]
+        assert schedule["enabled"] and schedule["nextRunAt"].endswith("Z"), schedule
         await writer.refused("delete_schedule", "forbidden_role", pipeline=api["id"])
         await admin.call("delete_schedule", pipeline=api["id"])
 
@@ -279,9 +280,13 @@ async def main():
         async with httpx.AsyncClient(headers={"Authorization": f"Bearer {accounts['reader']}"}) as rest:
             detail = (await rest.get(f"{origin}/api/v1/pipelines/{api['id']}")).json()
             assert detail["secretsSet"] == ["token"] and API_TOKEN not in json.dumps(detail), detail
+            listed = (await rest.get(f"{origin}/api/v1/pipelines/{api['id']}/runs", params={"limit": 2})).json()
+            assert [r["id"] for r in listed["runs"]] == [third["id"], second["id"]], listed
+            assert (await rest.get(f"{origin}/api/v1/runs/{third['id']}")).json() == third
 
         for pipeline in created:
-            await admin.call("delete_pipeline", pipeline=pipeline["id"], confirm_name=pipeline["name"])
+            deleted = await admin.call("delete_pipeline", pipeline=pipeline["id"], confirm_name=pipeline["name"])
+            assert deleted["deleted"] and deleted["pipeline"] == pipeline["id"], deleted
     server.shutdown()
     print("Ingestion e2e passed: roles, secrets, REST API and PostgreSQL loads, incremental state, merge, full "
           "refresh, table properties and network isolation.")
@@ -305,12 +310,12 @@ async def postgres(env, admin, writer, team, database, namespace, tables, create
     created.append(pipeline)
     await admin.call("set_pipeline_secrets", pipeline=pipeline["id"], secrets={"password": "e2e-password"})
     first = await run(writer, pipeline["id"])
-    assert {t["name"]: t["rows"] for t in first["summary"]["tables"]}["orders"] == 3, first["summary"]
+    assert {t["name"]: t["rows"] for t in first["results"]}["orders"] == 3, first["results"]
     db.run("UPDATE orders SET amount = 25, updated_at = '2026-10-05' WHERE id = 2")
     db.run("INSERT INTO orders VALUES (4, 40, '2026-10-06')")
     second = await run(writer, pipeline["id"])
     # The cursor's last row comes again (dlt deduplicates it), plus the changed and the new row.
-    assert {t["name"]: t["rows"] for t in second["summary"]["tables"]}["orders"] <= 3, second["summary"]
+    assert {t["name"]: t["rows"] for t in second["results"]}["orders"] <= 3, second["results"]
     orders = tables.load_table((namespace, "orders")).scan().to_arrow()
     assert orders.num_rows == 4 and sorted(orders["id"].to_pylist()) == [1, 2, 3, 4], orders.num_rows
     db.close()

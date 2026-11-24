@@ -49,12 +49,24 @@ REST API, files, or a one-time or occasional load of a table, use the `ingestion
    `updated_at`; misses deletes) or `full_refresh`. Optional `table` (the Iceberg name),
    `partition` (such as `"/{created_at,month}"`) and `appendOnly`. Read `warnings`: a partitioned
    change-capture table needs `REPLICA IDENTITY FULL` at the source.
-7. `run_replication` with `wait`. `partial` means the first copy stopped at the time limit; run
-   again and it continues. On `failed`, read `get_run` and `get_run_logs`; an out-of-memory stop
-   needs the platform administrator (`RUN_MEMORY`).
+7. `run_replication` with `wait` (up to 600 seconds). It returns the run: `status`, the totals in
+   `summary` and the rows written and replaced per table in `results`. While it is still `queued`
+   or `running`, call `get_run` with `wait`. `incomplete` means the first copy stopped at the time
+   limit; run again and it continues. On `failed` (OLake reported an error) or `error` (the
+   platform could not run it), read `error` and `get_run_logs`; an out-of-memory stop needs the
+   platform administrator (`RUN_MEMORY`).
 8. Check the result with the user portal tools (`describe_table`, `preview_rows`); current rows are
    `_op_type <> 'd'`. Offer a schedule (`set_schedule`, such as `*/15 * * * *` in UTC), then a dbt
    staging model on the raw tables (`dbt-platform` skill) that filters deleted rows.
+
+## Results
+
+- Lists come as an object with one key: `replications`, `runs`, `templates`, `environments`.
+- Times are RFC 3339 strings in UTC. A schedule's `nextRunAt` is `null` while it is not enabled.
+- A run started by a schedule has `scheduled: true` and `triggeredBy: "schedule"`. A source check
+  is a run of `kind` `check`; its findings are in the replication's `lastCheck`.
+- A refusal ends with its code in brackets, such as `[secrets_missing]`, `[no_tables]`,
+  `[run_in_progress]`, `[environment_not_enabled]`, `[invalid_database]` or `[revision_conflict]`.
 
 ## Rules
 
@@ -67,5 +79,6 @@ REST API, files, or a one-time or occasional load of a table, use the `ingestion
   a new host or user removes the password. `full_refresh` copies everything again on purpose.
 - After `delete_replication`, give the database owner the returned `dropSlotSql`: an abandoned slot
   makes the source keep its change log until its disk fills.
-- Ask before running in acceptance or production, before setting secrets, and before
+- Ask before running in acceptance or production, before setting secrets, before an
+  `update_replication` that changes where it reads from or writes to, and before
   `delete_replication`, `delete_schedule` or `disable_environment`.

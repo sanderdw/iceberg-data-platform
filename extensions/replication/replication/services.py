@@ -15,6 +15,7 @@ the person or agent that starts them.
 
 import asyncio
 import time
+from datetime import UTC, datetime
 
 from croniter import croniter
 
@@ -28,6 +29,12 @@ COLUMNS = ("OLake adds the columns _olake_id, _olake_timestamp, _op_type, _cdc_l
            "in the source stays in the table with _op_type = 'd': filter on _op_type <> 'd' for the current rows.")
 
 
+def timestamp(value):
+    """A stored time (seconds since 1970) as every response shows it: RFC 3339 in UTC with milliseconds."""
+    if value is None:
+        return None
+    return datetime.fromtimestamp(value, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
 
 def apps(discovery):
     """The Apps menu's entries (Bridge capability `app-directory`); with an older core, just the user portal."""
@@ -37,6 +44,7 @@ def apps(discovery):
     return {"workspace": [{k: str(p.get(k, "")) for k in ("id", "title", "url")} for p in pages],
             "extensions": [{k: str(e.get(k, "")) for k in ("id", "title", "purpose", "origin")}
                            for e in discovery.get("extensions") or []]}
+
 
 class Services:
     def __init__(self, settings, store, bridge, runs, secrets):
@@ -113,8 +121,8 @@ class Services:
             "namespace": replication["namespace"], "sourceType": replication["source_type"],
             "source": replication["source"], "tables": replication["tables"], "options": replication["options"],
             "secretsSet": sorted(stored & needed), "secretsMissing": sorted(needed - stored),
-            "revision": replication["revision"], "createdAt": replication["created_at"],
-            "createdBy": replication["created_by"], "updatedAt": replication["updated_at"],
+            "revision": replication["revision"], "createdAt": timestamp(replication["created_at"]),
+            "createdBy": replication["created_by"], "updatedAt": timestamp(replication["updated_at"]),
             "updatedBy": replication["updated_by"], "role": role, "url": self.url(replication["id"]),
             "schedule": self.public_schedule(schedule), "lastRun": self.public_run(last_run) if last_run else None,
             "lastCheck": self.public_check(check) if check else None,
@@ -127,28 +135,61 @@ class Services:
     def public_schedule(schedule):
         if not schedule:
             return None
-        return {"cron": schedule["cron"], "enabled": bool(schedule["enabled"]), "nextRunAt": schedule["next_run_at"],
-                "createdBy": schedule["created_by"], "lastRun": schedule["last_run"] or None}
+        enabled = bool(schedule["enabled"])
+        return {"cron": schedule["cron"], "enabled": enabled,
+                "nextRunAt": timestamp(schedule["next_run_at"]) if enabled else None,
+                "lastRun": schedule["last_run"] or None, "createdBy": schedule["created_by"],
+                "createdAt": timestamp(schedule["created_at"])}
 
     @staticmethod
-    def public_run(run):
-        return {
-            "id": run["id"], "replication": run["replication"], "kind": run["kind"], "status": run["status"],
-            "environment": run["environment"], "revision": run["revision"], "fullRefresh": bool(run["full_refresh"]),
-            "triggeredBy": run["triggered_by"], "agent": run["agent"] or None, "schedule": bool(run["schedule"]),
-            "createdAt": run["created_at"], "startedAt": run["started_at"], "finishedAt": run["finished_at"],
+    def public_run(run, results=False):
+        """A run as every response shows it. `results` adds the tables it wrote: for one run, never in a list."""
+        summary = run["summary"]
+        # The runner's totals. The account the run acted as is not shown, the run's own status is the one status,
+        # the tables are the run's results, and a source check's findings are shown by public_check.
+        hidden = ("principal", "status", "tables", "checks", "streams")
+        shown = {
+            "id": run["id"], "replication": run["replication"], "environment": run["environment"],
+            "status": run["status"], "triggeredBy": run["triggered_by"], "agent": run["agent"] or None,
+            "scheduled": bool(run["schedule"]), "kind": run["kind"], "revision": run["revision"],
+            "fullRefresh": bool(run["full_refresh"]), "createdAt": timestamp(run["created_at"]),
+            "startedAt": timestamp(run["started_at"]), "finishedAt": timestamp(run["finished_at"]),
             "exitCode": run["exit_code"],
-            "summary": {k: v for k, v in run["summary"].items() if k not in ("principal", "checks", "streams")},
+            "summary": {k: (v or None) if k == "error" else v for k, v in summary.items() if k not in hidden},
             "error": run["error"] or None,
         }
+        return {**shown, "results": summary.get("tables") or []} if results else shown
 
     @staticmethod
     def public_check(run):
         summary = run["summary"]
-        return {"run": run["id"], "status": run["status"], "checkedAt": run["finished_at"] or run["created_at"],
+        return {"run": run["id"], "status": run["status"],
+                "checkedAt": timestamp(run["finished_at"] or run["created_at"]),
                 "connected": summary.get("connected"), "ready": summary.get("ready"),
                 "message": summary.get("message") or run["error"] or None,
                 "checks": summary.get("checks") or [], "tables": summary.get("streams") or []}
+
+    def public_me(self, me, discovery, enabled):
+        """Who the caller is, built field by field: the Bridge's answer holds more than this API shows."""
+        return {
+            "user": {"id": me["user"]["id"], "name": me["user"]["name"]},
+            "memberships": [{"team": m["team"], "teamName": m["teamName"], "role": m["role"]}
+                            for m in me["memberships"]],
+            "databases": [{k: d[k] for k in ("id", "name", "team", "environment", "status")}
+                          for d in me["databases"]],
+            "extension": self.settings.extension_id, "origin": self.settings.origin,
+            "environments": list(ENVIRONMENTS),
+            "enabledEnvironments": [{"team": team, "environments": envs} for team, envs in enabled.items()],
+            "userPortalUrl": discovery.get("userPortalUrl", ""), "apps": apps(discovery),
+        }
+
+    @staticmethod
+    def public_environment(me, team, environment, principal):
+        """One team environment: whether Replication is enabled there, by whom, and the databases it can write to."""
+        return {"team": team, "environment": environment, "enabled": principal is not None,
+                "enabledBy": principal.get("createdBy") if principal else None,
+                "databases": [{"id": d["id"], "name": d["name"]} for d in me["databases"]
+                              if d["team"] == team and d["environment"] == environment]}
 
     # Discovery
 
@@ -163,42 +204,38 @@ class Services:
         me = await self.me(caller)
         discovery = await self.bridge.discovery()
         enabled = await self.enabled(caller, [m["team"] for m in me["memberships"]])
-        return {**me, "extension": self.settings.extension_id, "origin": self.settings.origin,
-                "environments": list(ENVIRONMENTS), "sourceTypes": list(validate.SOURCE_TYPES),
+        return {**self.public_me(me, discovery, enabled), "sourceTypes": list(validate.SOURCE_TYPES),
                 "allowPrivateSources": self.settings.allow_private,
-                "allowedSourceNetworks": [str(n) for n in self.settings.allowed_networks],
-                "enabledEnvironments": [{"team": team, "environments": envs} for team, envs in enabled.items()],
-                "userPortalUrl": discovery.get("userPortalUrl", ""), "apps": apps(discovery)}
+                "allowedSourceNetworks": [str(n) for n in self.settings.allowed_networks]}
 
     async def environments(self, caller, team):
         me = await self.me(caller)
         if not self.role(me, team):
             raise ReplicationError(403, "You are not a member of this team.", "not_a_member")
         enabled = {p["environment"]: p for p in await self.bridge.team_automation(caller.token, team)}
-        return [{"environment": env, "enabled": env in enabled,
-                 "databases": [{"id": d["id"], "name": d["name"]} for d in me["databases"]
-                               if d["team"] == team and d["environment"] == env],
-                 **({"principal": enabled[env]["id"], "enabledBy": enabled[env].get("createdBy")}
-                    if env in enabled else {})}
-                for env in ENVIRONMENTS]
+        return {"environments": [self.public_environment(me, team, env, enabled.get(env)) for env in ENVIRONMENTS]}
 
     async def enable_environment(self, caller, team, environment):
         if environment not in ENVIRONMENTS:
             raise ReplicationError(422, "Choose development, acceptance or production.", "invalid_request")
+        me = await self.me(caller)
         # The Bridge checks that the caller administers the team.
-        return await self.bridge.enable(caller.token, team, environment)
+        principal = await self.bridge.enable(caller.token, team, environment)
+        return self.public_environment(me, team, environment, principal)
 
     async def disable_environment(self, caller, team, environment):
+        me = await self.me(caller)
         enabled = {p["environment"]: p for p in await self.bridge.team_automation(caller.token, team)}
         if environment not in enabled:
-            raise ReplicationError(404, "Replication is not enabled for this environment.", "environment_not_enabled")
+            raise ReplicationError(409, "Replication is not enabled for this environment.", "environment_not_enabled")
         await self.bridge.revoke(caller.token, enabled[environment]["id"])
-        return {"disabled": True, "environment": environment}
+        return self.public_environment(me, team, environment, None)
 
     async def list_templates(self, caller):
         await self.me(caller)
-        return [{**t, "setupSql": templates.setup_sql(t["sourceType"], t["source"], t["tables"]), "note": COLUMNS}
-                for t in templates.TEMPLATES]
+        return {"templates": [
+            {**t, "setupSql": templates.setup_sql(t["sourceType"], t["source"], t["tables"]), "note": COLUMNS}
+            for t in templates.TEMPLATES]}
 
     # Replications
 
@@ -208,7 +245,7 @@ class Services:
         replications = [r for r in self.store.replications(list(roles))
                         if team in (None, r["team"]) and environment in (None, r["environment"])]
         last = self.store.last_runs([r["id"] for r in replications])
-        return [self.public(r, me, roles[r["team"]], last.get(r["id"])) for r in replications]
+        return {"replications": [self.public(r, me, roles[r["team"]], last.get(r["id"])) for r in replications]}
 
     async def get_replication(self, caller, replication_id):
         replication, me, role = await self.replication_for(caller, replication_id)
@@ -256,7 +293,7 @@ class Services:
                 return d
         if raise_:
             raise ReplicationError(422, "Choose one of the team's databases in this environment.",
-                                   "unknown_database")
+                                   "invalid_database")
         return None
 
     async def create_replication(self, caller, data):
@@ -336,13 +373,14 @@ class Services:
     async def delete_replication(self, caller, replication_id, confirm_name):
         replication, _, _ = await self.replication_for(caller, replication_id, "admin")
         if confirm_name != replication["name"]:
-            raise ReplicationError(422, "confirm_name must be the replication's name.", "confirmation_mismatch")
+            raise ReplicationError(422, "The confirmation must be the replication's exact name.",
+                                   "confirmation_mismatch")
         if self.store.active_run(replication_id):
             raise ReplicationError(409, "The replication is running. Stop the run first.", "run_in_progress")
         for run in self.store.runs(replication_id, 100_000):
             await self.runs.discard(run["id"])
         self.store.delete_replication(replication_id)
-        result = {"deleted": True, "id": replication_id,
+        result = {"deleted": True, "replication": replication_id,
                   "note": "Tables the replication wrote stay in the database, with their data and properties."}
         slot = replication["source"].get("slot")
         if slot:
@@ -373,7 +411,7 @@ class Services:
         run = await self.start_run(replication, triggered_by=triggered_by, agent=agent, full_refresh=full_refresh)
         if wait:
             run = await self.runs.wait(run["id"], wait)
-        return self.public_run(run)
+        return self.public_run(run, results=True)
 
     async def check_source(self, caller, replication_id, wait=120):
         """Connects to the source with the stored secrets: OLake's prerequisites and the tables it can replicate."""
@@ -407,15 +445,18 @@ class Services:
 
     async def list_runs(self, caller, replication_id, limit=20):
         await self.replication_for(caller, replication_id)
-        return [self.public_run(r) for r in self.store.runs(replication_id, limit)]
+        return {"runs": [self.public_run(r) for r in self.store.runs(replication_id, limit)]}
 
-    async def get_run(self, caller, run_id):
+    async def get_run(self, caller, run_id, wait=0):
+        """The run with its results. `wait` holds the answer until the run is final, for at most that many seconds."""
         run, _, _, _ = await self.run_for(caller, run_id)
-        return self.public_run(run)
+        if wait and run["status"] in ("queued", "running"):
+            run = await self.runs.wait(run_id, wait)
+        return self.public_run(run, results=True)
 
-    async def get_run_logs(self, caller, run_id, tail=500):
+    async def get_run_logs(self, caller, run_id, limit=500):
         run, _, _, _ = await self.run_for(caller, run_id)
-        return {"run": run_id, "status": run["status"], "lines": await self.runs.logs(run_id, tail)}
+        return {"run": run_id, "status": run["status"], "lines": await self.runs.logs(run_id, limit)}
 
     async def cancel_run(self, caller, run_id):
         run, _, _, _ = await self.run_for(caller, run_id, "writer")

@@ -5,11 +5,11 @@ one `write` catalog token from the Bridge. The platform sets the token's lifetim
 (POLARIS_TOKEN_LIFETIME, one hour by default), and a run must end well within it: the runner stops
 OLake a few minutes before its time limit. OLake commits a first copy in chunks and records the
 chunks still to do in its state, so a large first copy continues in the next run (status
-"partial"). Source secrets are decrypted only to hand them to the launcher, which puts them in the
+"incomplete"). Source secrets are decrypted only to hand them to the launcher, which puts them in the
 run container's environment.
 
 OLake's state.json holds the position in the source's change log and unfinished chunks. This
-extension keeps it between runs: the state of the last complete or partial run is staged into the
+extension keeps it between runs: the state of the last complete or incomplete run is staged into the
 next one. A failed run keeps the previous state, and OLake then reads the same changes again; its
 upserts make that safe.
 
@@ -289,12 +289,12 @@ class RunManager:
             status, error = "cancelled", "Stopped before it finished. Changes it already committed stay."
         elif launched.get("state") != "finished" or launched.get("timedOut"):
             status, error = "error", f"The run exceeded its time limit of {limit // 60} minutes."
-        elif launched.get("exitCode") == 0 and reported in ("success", "partial"):
+        elif launched.get("exitCode") == 0 and reported in ("success", "incomplete"):
             status, error = reported, ""
         else:
             status = "failed"
             error = summary.get("error") or "OLake reported an error. Read the run log."
-        if status in ("success", "partial") and run["kind"] == "sync":
+        if status in ("success", "incomplete") and run["kind"] == "sync":
             packed = await asyncio.to_thread(pack_state, self.artifacts / id / "out" / "state")
             if packed:
                 self.store.save_state(replication["id"], packed, id)
@@ -318,12 +318,13 @@ class RunManager:
         if response.status_code not in (200, 404):
             LOG.warning("The artifacts of %s could not be removed (%s).", id, response.status_code)
 
-    async def logs(self, id, tail=2000):
+    async def logs(self, id, limit=500):
+        """The last `limit` lines of a run's log."""
         path = self.artifacts / id / "out" / "run.log"
         if path.exists():
-            lines = path.read_text(errors="replace").splitlines()[-tail:]
+            lines = path.read_text(errors="replace").splitlines()[-limit:]
         else:
-            response = await self.http.get(f"/runs/{id}/logs", params={"tail": tail})
+            response = await self.http.get(f"/runs/{id}/logs", params={"tail": limit})
             lines = response.text.splitlines() if response.status_code == 200 else []
         # The runner already masks its secrets; this second pass uses the values stored now.
         run = self.store.run(id)

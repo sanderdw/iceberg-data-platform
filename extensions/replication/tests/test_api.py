@@ -1,6 +1,8 @@
 import asyncio
 import json
+import re
 import sqlite3
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,9 +12,17 @@ from replication.api import OPERATIONS
 from replication.bridge_client import in_range
 from replication.config import ROOT, contract_range
 from replication.errors import ReplicationError
-from tests.conftest import DATABASES, OTHER, SOURCE, TEAM, make_stack
+from tests.conftest import DATABASES, OTHER, SOURCE, TEAM, ToolRefused, make_stack
 
 SECRET = "sk-live-very-secret-value"
+TIMESTAMP = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
+RUN_FIELDS = {"id", "replication", "environment", "status", "triggeredBy", "agent", "scheduled", "kind", "revision",
+              "fullRefresh", "createdAt", "startedAt", "finishedAt", "exitCode", "summary", "error"}
+
+
+def seconds(timestamp):
+    assert TIMESTAMP.match(timestamp), timestamp
+    return datetime.fromisoformat(timestamp).timestamp()
 
 
 def enable(stack, environment="development"):
@@ -23,19 +33,45 @@ def ready(stack, **fields):
     """An enabled environment and a replication with its secret set."""
     enable(stack)
     replication = stack.create(**fields).json()
-    assert stack.call("PUT", f"/replications/{replication['id']}/secrets",
+    assert stack.call("PATCH", f"/replications/{replication['id']}/secrets",
                       json={"secrets": {"password": SECRET}}).status_code == 200
     return replication
 
 
 def test_whoami_and_environments(stack):
     me = stack.call("GET", "/me").json()
+    # Built field by field: nothing else the Bridge says about the caller (such as sharedDatabases) comes along.
+    assert set(me) == {"user", "memberships", "databases", "extension", "origin", "environments",
+                       "enabledEnvironments", "userPortalUrl", "apps", "sourceTypes", "allowPrivateSources",
+                       "allowedSourceNetworks"}
+    assert me["user"] == {"id": "portal-alice" + "0" * 27, "name": "alice"}
+    assert me["memberships"] == [{"team": TEAM, "teamName": TEAM[:9], "role": "admin"}]
+    assert {"id": DATABASES[("sales", "development")], "name": "sales", "team": TEAM, "environment": "development",
+            "status": "ready"} in me["databases"]
     assert me["extension"] == "replication" and me["sourceTypes"] == ["postgres"]
-    assert stack.call("POST", f"/teams/{TEAM}/environments/development", "carol").json()["code"] == "forbidden_role"
-    enable(stack)
-    envs = stack.call("GET", f"/teams/{TEAM}/environments", "carol").json()
-    assert envs[0]["enabled"] and {d["name"] for d in envs[0]["databases"]} == {"sales", "raw-data"}
-    assert stack.call("GET", f"/teams/{TEAM}/environments", "dave").json()["code"] == "not_a_member"
+    assert me["allowPrivateSources"] is False and me["allowedSourceNetworks"] == []
+    assert me["enabledEnvironments"] == [{"team": TEAM, "environments": []}]
+    assert me["apps"]["workspace"] == [{"id": "portal", "title": "User portal", "url": "http://localhost:3002"}]
+    path = f"/teams/{TEAM}/environments"
+    assert stack.call("POST", f"{path}/development", "carol").json()["code"] == "forbidden_role"
+    databases = [{"id": DATABASES[("sales", "development")], "name": "sales"},
+                 {"id": DATABASES[("raw-data", "development")], "name": "raw-data"}]
+    enabled = stack.call("POST", f"{path}/development")
+    assert enabled.status_code == 200
+    assert enabled.json() == {"team": TEAM, "environment": "development", "enabled": True, "enabledBy": "alice",
+                              "databases": databases}
+    envs = stack.call("GET", path, "carol").json()
+    assert list(envs) == ["environments"] and envs["environments"][0] == enabled.json()
+    assert envs["environments"][2] == {"team": TEAM, "environment": "production", "enabled": False,
+                                       "enabledBy": None, "databases": [databases[0] | {
+                                           "id": DATABASES[("sales", "production")]}]}
+    assert stack.call("GET", "/me").json()["enabledEnvironments"] == [{"team": TEAM, "environments": ["development"]}]
+    assert stack.call("GET", path, "dave").json()["code"] == "not_a_member"
+    disabled = stack.call("DELETE", f"{path}/development")
+    assert disabled.status_code == 200
+    assert disabled.json() == {**enabled.json(), "enabled": False, "enabledBy": None}
+    again = stack.call("DELETE", f"{path}/development")
+    assert again.status_code == 409 and again.json()["code"] == "environment_not_enabled"
 
 
 def test_only_administrators_create_replications(stack):
@@ -55,7 +91,11 @@ def test_only_administrators_create_replications(stack):
     assert 'ALTER TABLE "public"."orders" REPLICA IDENTITY FULL;' in body["setupSql"]
     assert "customers" not in body["setupSql"].split("GRANT")[0] and len(body["warnings"]) == 1
     assert stack.create().json()["code"] == "name_taken"
-    assert stack.create(name="x", database="db-" + "2" * 32).json()["code"] == "unknown_database"
+    # A database named in the body that is not the team's in this environment: the field is wrong, not the path.
+    elsewhere = stack.create(name="x", database="db-" + "2" * 32)
+    assert elsewhere.status_code == 422 and elsewhere.json()["code"] == "invalid_database"
+    assert TIMESTAMP.match(body["createdAt"]) and body["updatedAt"] == body["createdAt"]
+    assert body["schedule"] is None and body["lastRun"] is None and body["lastCheck"] is None
     # Tables can be chosen after the source check.
     empty = stack.create(name="later", tables=None).json()
     assert empty["tables"] == {} and "Choose tables" in empty["hint"]
@@ -138,11 +178,13 @@ def test_every_template_is_a_valid_replication():
 def test_secrets_are_write_only_and_encrypted(stack):
     replication = stack.create().json()
     path = f"/replications/{replication['id']}/secrets"
-    assert stack.call("PUT", path, "bob", json={"secrets": {"password": SECRET}}).json()["code"] == "forbidden_role"
-    assert stack.call("PUT", path, json={"secrets": {"other": SECRET}}).json()["code"] == "invalid_replication"
+    assert stack.call("PATCH", path, "bob", json={"secrets": {"password": SECRET}}).json()["code"] == "forbidden_role"
+    assert stack.call("PATCH", path, json={"secrets": {"other": SECRET}}).json()["code"] == "invalid_replication"
     # The log scrubbers do not mask values this short.
-    assert stack.call("PUT", path, json={"secrets": {"password": "abc"}}).json()["code"] == "invalid_replication"
-    response = stack.call("PUT", path, json={"secrets": {"password": SECRET}})
+    assert stack.call("PATCH", path, json={"secrets": {"password": "abc"}}).json()["code"] == "invalid_replication"
+    # The call merges, so it is a PATCH; PUT is gone.
+    assert stack.call("PUT", path, json={"secrets": {"password": SECRET}}).status_code == 405
+    response = stack.call("PATCH", path, json={"secrets": {"password": SECRET}})
     assert response.json()["secretsSet"] == ["password"] and response.json()["secretsMissing"] == []
     for text in (response.text, stack.call("GET", f"/replications/{replication['id']}").text,
                  stack.call("GET", "/replications").text):
@@ -150,7 +192,7 @@ def test_secrets_are_write_only_and_encrypted(stack):
     database = sqlite3.connect(stack.settings.state_dir / "state.sqlite3")
     raw = database.execute("SELECT secrets FROM replications").fetchone()
     assert SECRET not in raw[0] and "password" in json.loads(raw[0])
-    removed = stack.call("PUT", path, json={"secrets": {"password": None}}).json()
+    removed = stack.call("PATCH", path, json={"secrets": {"password": None}}).json()
     assert removed["secretsMissing"] == ["password"]
 
 
@@ -158,16 +200,26 @@ def test_runs_execute_as_the_team_with_state_between_runs(stack):
     replication = stack.create().json()
     path = f"/replications/{replication['id']}/runs"
     assert stack.call("POST", path, "bob").json()["code"] == "secrets_missing"
-    stack.call("PUT", f"/replications/{replication['id']}/secrets", json={"secrets": {"password": SECRET}})
-    assert stack.call("POST", path, "bob").json()["code"] == "environment_not_enabled"
+    stack.call("PATCH", f"/replications/{replication['id']}/secrets", json={"secrets": {"password": SECRET}})
+    not_enabled = stack.call("POST", path, "bob")
+    assert not_enabled.status_code == 409 and not_enabled.json()["code"] == "environment_not_enabled"
     enable(stack)
     assert stack.call("POST", path, "carol").json()["code"] == "forbidden_role"
-    first = stack.call("POST", path, "bob", json={"wait": 30}).json()
+    started = stack.call("POST", path, "bob", json={"wait": 30})
+    assert started.status_code == 202
+    first = started.json()
+    assert set(first) == RUN_FIELDS | {"results"}
     assert first["status"] == "success" and first["triggeredBy"] == "bob" and first["kind"] == "sync"
-    tables = {t["name"]: t for t in first["summary"]["tables"]}
+    assert first["scheduled"] is False and first["agent"] == "ext-replication-mcp" and first["error"] is None
+    # The tables are the run's results, beside its totals; the account it ran as is not shown.
+    tables = {t["name"]: t for t in first["results"]}
     assert tables["public.customers"] == {"name": "public.customers", "table": "customers", "records": 3,
                                           "replaced": 1, "deleteFiles": 1}
     assert first["summary"]["recordsWritten"] == 6 and first["summary"]["readUpTo"] == "0/1"
+    assert not {"tables", "principal", "status", "checks", "streams"} & set(first["summary"])
+    assert first["summary"]["error"] is None
+    assert seconds(first["createdAt"]) <= seconds(first["startedAt"]) <= seconds(first["finishedAt"])
+    assert stack.call("GET", f"/runs/{first['id']}", "carol").json() == first
     started = stack.launcher.started[first["id"]]
     assert started["token"] == "token-write" and started["secrets"] == {"password": SECRET}
     assert stack.bridge.tokens[-1][1] == "write" and started["state"] is None
@@ -181,11 +233,21 @@ def test_runs_execute_as_the_team_with_state_between_runs(stack):
     assert job["deadline"] == started["timeout"] - 180
     second = stack.call("POST", path, "bob", json={"wait": 30}).json()
     assert stack.launcher.started[second["id"]]["state"]["runs"] == 1
-    third = stack.call("POST", path, "bob", json={"wait": 30, "full_refresh": True}).json()
+    old_name = stack.call("POST", path, "bob", json={"full_refresh": True})
+    assert old_name.status_code == 422 and old_name.json()["code"] == "invalid_request"
+    third = stack.call("POST", path, "bob", json={"wait": 30, "fullRefresh": True}).json()
     assert stack.launcher.started[third["id"]]["state"] is None and third["fullRefresh"]
     runs = stack.call("GET", f"{path}?limit=2").json()
-    assert [r["id"] for r in runs] == [third["id"], second["id"]]
-    assert stack.call("GET", f"/replications/{replication['id']}").json()["lastRun"]["id"] == third["id"]
+    assert list(runs) == ["runs"] and [r["id"] for r in runs["runs"]] == [third["id"], second["id"]]
+    # A list never carries the per-table results.
+    assert all(set(r) == RUN_FIELDS for r in runs["runs"])
+    for limit in (0, 201):
+        refused = stack.call("GET", f"{path}?limit={limit}")
+        assert refused.status_code == 422 and refused.json()["code"] == "invalid_request"
+    detail = stack.call("GET", f"/replications/{replication['id']}").json()
+    assert detail["lastRun"]["id"] == third["id"] and set(detail["lastRun"]) == RUN_FIELDS
+    assert [r["id"] for r in detail["recentRuns"]] == [third["id"], second["id"], first["id"]]
+    assert all(set(r) == RUN_FIELDS for r in detail["recentRuns"])
 
 
 def test_the_source_address_is_pinned_and_checked_before_each_run(stack, monkeypatch):
@@ -208,29 +270,45 @@ def test_demo_mode_lets_the_run_resolve_the_source(tmp_path, monkeypatch):
     assert refused.value.code == "source_unresolved"
 
 
-def test_a_partial_first_copy_keeps_its_state(stack):
+def test_an_incomplete_first_copy_keeps_its_state(stack):
     replication = ready(stack)
     path = f"/replications/{replication['id']}/runs"
-    stack.launcher.status = "partial"
+    stack.launcher.status = "incomplete"
     first = stack.call("POST", path, "bob", json={"wait": 30}).json()
-    assert first["status"] == "partial" and first["summary"]["firstCopyComplete"] is False
+    assert first["status"] == "incomplete" and first["summary"]["firstCopyComplete"] is False
+    assert first["error"] is None and first["exitCode"] == 0
+    assert stack.call("GET", f"/replications/{replication['id']}").json()["lastRun"]["status"] == "incomplete"
     stack.launcher.status = "success"
     second = stack.call("POST", path, "bob", json={"wait": 30}).json()
     assert stack.launcher.started[second["id"]]["state"]["runs"] == 1
+    # "partial" was this status in earlier versions. A runner that still reports it is not accepted.
+    stack.launcher.status = "partial"
+    old = stack.call("POST", path, "bob", json={"wait": 30}).json()
+    assert old["status"] == "failed"
+    after = stack.call("POST", path, "bob", json={"wait": 30}).json()
+    assert stack.launcher.started[after["id"]]["state"]["runs"] == 2
 
 
 def test_a_source_check_lists_checks_and_tables(stack):
     replication = ready(stack, tables=None)
     assert stack.call("POST", f"/replications/{replication['id']}/runs", "bob").json()["code"] == "no_tables"
     assert stack.call("POST", f"/replications/{replication['id']}/check", "carol").json()["code"] == "forbidden_role"
-    check = stack.call("POST", f"/replications/{replication['id']}/check", "bob").json()
+    answer = stack.call("POST", f"/replications/{replication['id']}/check", "bob")
+    check = answer.json()
+    assert answer.status_code == 200
+    assert set(check) == {"run", "status", "checkedAt", "connected", "ready", "message", "checks", "tables"}
     assert check["connected"] and not check["ready"] and check["status"] == "success"
+    assert TIMESTAMP.match(check["checkedAt"])
     assert [c["name"] for c in check["checks"] if not c["passed"]] == ["publication"]
     assert check["tables"][0]["name"] == "public.orders" and check["tables"][0]["primaryKey"] == ["id"]
     started = next(s for s in stack.launcher.started.values() if s["job"]["kind"] == "check")
     assert started["state"] is None and started["timeout"] == 600
     shown = stack.call("GET", f"/replications/{replication['id']}", "carol").json()
-    assert shown["lastCheck"]["checks"] == check["checks"] and shown["lastRun"] is None
+    assert shown["lastCheck"] == check and shown["lastRun"] is None
+    # The check is a run of its own kind: its findings are in lastCheck, not in the run's summary or results.
+    run = stack.call("GET", f"/runs/{check['run']}", "carol").json()
+    assert run["kind"] == "check" and run["results"] == [] and not {"checks", "streams"} & set(run["summary"])
+    assert [r["kind"] for r in shown["recentRuns"]] == ["check"]
     # A check is not a sync: it never replaces the saved state.
     assert stack.services.store.state(replication["id"]) is None
 
@@ -239,14 +317,26 @@ def test_logs_mask_secrets(stack):
     replication = ready(stack)
     stack.launcher.log = f"failed to connect with password {SECRET}\nAuthorization: Bearer abcdefghijk\n"
     run = stack.call("POST", f"/replications/{replication['id']}/runs", "bob", json={"wait": 30}).json()
-    lines = stack.call("GET", f"/runs/{run['id']}/logs", "carol").json()["lines"]
+    logs = stack.call("GET", f"/runs/{run['id']}/logs", "carol").json()
+    lines = logs["lines"]
+    assert set(logs) == {"run", "status", "lines"} and logs["run"] == run["id"] and logs["status"] == "success"
     assert SECRET not in "\n".join(lines) and "abcdefghijk" not in "\n".join(lines) and len(lines) == 2
+    # limit gives the last lines; outside 1 to 5000 it is refused, never clamped.
+    last = stack.call("GET", f"/runs/{run['id']}/logs?limit=1", "carol").json()["lines"]
+    assert last == lines[-1:]
+    for limit in (0, 5001):
+        refused = stack.call("GET", f"/runs/{run['id']}/logs?limit={limit}", "carol")
+        assert refused.status_code == 422 and refused.json()["code"] == "invalid_request"
 
 
 def test_one_run_per_replication_and_cancel(stack):
     replication = ready(stack)
     stack.launcher.hold = True
-    run = stack.call("POST", f"/replications/{replication['id']}/runs", "bob").json()
+    started = stack.call("POST", f"/replications/{replication['id']}/runs", "bob")
+    run = started.json()
+    # Without wait the answer is the run as it is now, in the same shape as a finished one.
+    assert started.status_code == 202 and run["status"] == "queued" and run["results"] == []
+    assert run["startedAt"] is None and run["finishedAt"] is None and run["exitCode"] is None
     for _ in range(100):
         status = stack.call("GET", f"/runs/{run['id']}").json()["status"]
         if status == "running" and run["id"] in stack.launcher.started:
@@ -259,21 +349,30 @@ def test_one_run_per_replication_and_cancel(stack):
     assert stack.services.store.create_run(replication=replication["id"], team=TEAM, environment="development",
                                            revision=1, triggered_by="bob") is None
     assert stack.call("POST", f"/runs/{run['id']}/cancel", "carol").json()["code"] == "forbidden_role"
-    assert stack.call("POST", f"/runs/{run['id']}/cancel", "bob").json()["cancelling"]
-    done = stack.services.runs.wait(run["id"], 10)
-    assert stack.client.portal.call(lambda: done)["status"] == "cancelled"
+    # Waiting for a run that does not finish gives the run as it is, not an error.
+    waited = stack.call("GET", f"/runs/{run['id']}?wait=1")
+    assert waited.status_code == 200 and waited.json()["status"] == "running"
+    assert stack.call("GET", f"/runs/{run['id']}?wait=601").json()["code"] == "invalid_request"
+    assert stack.call("POST", f"/runs/{run['id']}/cancel", "bob").json() == {"cancelling": True, "run": run["id"]}
+    # wait on get returns as soon as the run is final.
+    assert stack.call("GET", f"/runs/{run['id']}?wait=30").json()["status"] == "cancelled"
+    finished = stack.call("POST", f"/runs/{run['id']}/cancel", "bob")
+    assert finished.status_code == 409 and finished.json()["code"] == "run_finished"
 
 
 def test_changing_where_a_replication_connects_removes_its_secrets(stack):
     replication = ready(stack)
     path = f"/replications/{replication['id']}"
     stack.call("POST", f"{path}/runs", "bob", json={"wait": 30})
-    renamed = stack.call("PATCH", path, json={"name": "crm orders", "expected_revision": 2}).json()
+    old_name = stack.call("PATCH", path, json={"name": "crm orders", "expected_revision": 2})
+    assert old_name.status_code == 422 and old_name.json()["code"] == "invalid_request"
+    renamed = stack.call("PATCH", path, json={"name": "crm orders", "expectedRevision": 2}).json()
     assert renamed["name"] == "crm orders" and renamed["secretsSet"] == ["password"] and "hint" not in renamed
-    stale = stack.call("PATCH", path, json={"description": "x", "expected_revision": 2}).json()
-    assert stale["code"] == "revision_conflict"
+    assert renamed["revision"] == 3 and renamed["description"] == "" and renamed["namespace"] == "raw_crm"
+    stale = stack.call("PATCH", path, json={"description": "x", "expectedRevision": 2})
+    assert stale.status_code == 409 and stale.json()["code"] == "revision_conflict"
     # A move that fails keeps OLake's state.
-    stale_move = stack.call("PATCH", path, json={"namespace": "raw_crm_v2", "expected_revision": 2}).json()
+    stale_move = stack.call("PATCH", path, json={"namespace": "raw_crm_v2", "expectedRevision": 2}).json()
     assert stale_move["code"] == "revision_conflict" and stack.services.store.state(replication["id"]) is not None
     tables = stack.call("PATCH", path, json={"tables": {"public.orders": {"mode": "cdc"}}}).json()
     assert list(tables["tables"]) == ["public.orders"] and "hint" not in tables
@@ -287,19 +386,32 @@ def test_changing_where_a_replication_connects_removes_its_secrets(stack):
 def test_delete_needs_the_name_and_keeps_tables(stack):
     replication = ready(stack)
     stack.call("POST", f"/replications/{replication['id']}/runs", "bob", json={"wait": 30})
-    path = f"/replications/{replication['id']}/delete"
-    assert stack.call("POST", path, json={"confirm_name": "nope"}).json()["code"] == "confirmation_mismatch"
-    assert stack.call("POST", path, "bob", json={"confirm_name": "crm"}).json()["code"] == "forbidden_role"
-    deleted = stack.call("POST", path, json={"confirm_name": "crm"}).json()
-    assert deleted["deleted"] and "stay" in deleted["note"]
+    path = f"/replications/{replication['id']}"
+    # The old route and its JSON body are gone.
+    assert stack.call("POST", f"{path}/delete", json={"confirm_name": "crm"}).status_code == 404
+    missing = stack.call("DELETE", path)
+    assert missing.status_code == 422 and missing.json()["code"] == "invalid_request"
+    wrong = stack.call("DELETE", path, params={"confirmName": "nope"})
+    assert wrong.status_code == 422 and wrong.json()["code"] == "confirmation_mismatch"
+    assert stack.call("DELETE", path, "bob", params={"confirmName": "crm"}).json()["code"] == "forbidden_role"
+    assert stack.call("GET", path).json()["name"] == "crm"
+    answer = stack.call("DELETE", path, params={"confirmName": "crm"})
+    deleted = answer.json()
+    assert answer.status_code == 200 and set(deleted) == {"deleted", "replication", "note", "dropSlotSql", "warning"}
+    assert deleted["deleted"] is True and deleted["replication"] == replication["id"] and "stay" in deleted["note"]
     assert deleted["dropSlotSql"] == "SELECT pg_drop_replication_slot('iceberg_crm');" and "disk" in deleted["warning"]
-    assert stack.call("GET", f"/replications/{replication['id']}").json()["code"] == "unknown_replication"
+    gone = stack.call("GET", path)
+    assert gone.status_code == 404 and gone.json()["code"] == "unknown_replication"
 
 
 def test_other_teams_see_nothing(stack):
     replication = ready(stack)
     run = stack.call("POST", f"/replications/{replication['id']}/runs", "bob", json={"wait": 30}).json()
-    assert stack.call("GET", "/replications", "dave").json() == []
+    assert stack.call("GET", "/replications", "dave").json() == {"replications": []}
+    listed = stack.call("GET", "/replications", "carol").json()
+    assert list(listed) == ["replications"] and [r["id"] for r in listed["replications"]] == [replication["id"]]
+    assert listed["replications"][0]["lastRun"]["id"] == run["id"] and listed["replications"][0]["role"] == "reader"
+    assert stack.call("GET", f"/replications?team={OTHER}", "carol").json() == {"replications": []}
     assert stack.call("GET", f"/replications/{replication['id']}", "dave").json()["code"] == "unknown_replication"
     assert stack.call("GET", f"/runs/{run['id']}", "dave").json()["code"] == "unknown_run"
     assert stack.call("GET", f"/runs/{run['id']}/logs", "dave").json()["code"] == "unknown_run"
@@ -312,18 +424,29 @@ def test_schedules_never_overlap(stack):
     assert stack.call("PUT", path, json={"cron": "*/5 * * * *"}).json()["cron"] == "*/5 * * * *"
     assert stack.call("PUT", path, json={"cron": "not cron"}).json()["code"] == "invalid_cron"
     assert stack.call("PUT", path, "bob", json={"cron": "0 5 * * *"}).json()["code"] == "forbidden_role"
+    # Not enabled, a schedule has no next run.
+    paused = stack.call("PUT", path, json={"cron": "0 5 * * *", "enabled": False}).json()
+    assert paused["enabled"] is False and paused["nextRunAt"] is None
     schedule = stack.call("PUT", path, json={"cron": "0 5 * * *"}).json()
-    assert schedule["cron"] == "0 5 * * *" and schedule["enabled"]
+    assert set(schedule) == {"cron", "enabled", "nextRunAt", "lastRun", "createdBy", "createdAt"}
+    assert schedule["cron"] == "0 5 * * *" and schedule["enabled"] is True and schedule["lastRun"] is None
+    assert schedule["createdBy"] == "alice" and seconds(schedule["nextRunAt"]) > seconds(schedule["createdAt"])
+    assert stack.call("GET", f"/replications/{replication['id']}").json()["schedule"] == schedule
     scheduler_tick = __import__("replication.scheduler", fromlist=["Scheduler"]).Scheduler(stack.services).tick
     stack.launcher.hold = True
-    started = stack.client.portal.call(scheduler_tick, schedule["nextRunAt"] + 1)
+    started = stack.client.portal.call(scheduler_tick, seconds(schedule["nextRunAt"]) + 1)
     assert len(started) == 1
-    again = stack.client.portal.call(scheduler_tick, schedule["nextRunAt"] + 86400 + 1)
+    again = stack.client.portal.call(scheduler_tick, seconds(schedule["nextRunAt"]) + 86400 + 1)
     assert again == []
-    run = stack.services.store.run(started[0])
-    assert run["triggered_by"] == "schedule" and run["schedule"] == "0 5 * * *"
-    assert stack.call("DELETE", path).json()["deleted"]
-    assert stack.call("DELETE", path).json()["code"] == "no_schedule"
+    # The store keeps the cron text; the response says that a schedule started the run.
+    assert stack.services.store.run(started[0])["schedule"] == "0 5 * * *"
+    run = stack.call("GET", f"/runs/{started[0]}").json()
+    assert run["scheduled"] is True and run["triggeredBy"] == "schedule" and run["agent"] is None
+    assert "schedule" not in run
+    assert stack.call("GET", f"/replications/{replication['id']}").json()["schedule"]["lastRun"] == started[0]
+    assert stack.call("DELETE", path).json() == {"deleted": True, "replication": replication["id"]}
+    missing = stack.call("DELETE", path)
+    assert missing.status_code == 404 and missing.json()["code"] == "no_schedule"
 
 
 def test_runs_stop_before_the_token_expires(stack):
@@ -362,6 +485,165 @@ def test_the_gateway_masks_encoded_secrets_in_run_logs_and_errors():
     assert "Ab12" not in text and "dXNlcjpB" not in text and "for url: https://api.example.test/x?" in text
 
 
+def test_every_error_has_the_same_body(stack, monkeypatch):
+    def refused(response, status, code):
+        body = response.json()
+        assert response.status_code == status and body["code"] == code, response.text
+        assert isinstance(body["error"], str) and body["error"] and set(body) <= {"error", "code", "detail"}
+
+    refused(stack.call("GET", "/nothing-here"), 404, "not_found")
+    refused(stack.client.get("/nothing/here"), 404, "not_found")
+    refused(stack.call("PUT", "/me"), 405, "method_not_allowed")
+    refused(stack.call("GET", "/me", "mallory"), 401, "unauthorized")
+    refused(stack.call("GET", "/replications?environment=test"), 422, "invalid_request")
+    refused(stack.call("GET", "/replications/rp-" + "0" * 24), 404, "unknown_replication")
+    refused(stack.call("GET", "/runs/run-" + "0" * 24), 404, "unknown_run")
+    refused(stack.call("POST", "/replications/validate", json={"sourceType": "postgres", "source": {"x": 1}}), 422,
+            "invalid_replication")
+
+    async def broken(caller):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(stack.services, "whoami", broken)
+    refused(stack.call("GET", "/me"), 500, "internal_error")
+    assert ReplicationError(418, "x").code == "internal_error"
+    assert ReplicationError(405, "x").code == "method_not_allowed"
+
+
+def test_tools_return_what_the_api_returns(stack):
+    """An MCP tool gives the REST operation's body, unchanged and without a wrapper of its own."""
+    replication = ready(stack)
+    id = replication["id"]
+    check = stack.tool("check_source", "bob", replication=id)
+    assert check["connected"] and check["tables"][0]["name"] == "public.orders"
+    run = stack.tool("run_replication", "bob", replication=id, wait=30, full_refresh=True)
+    assert run["status"] == "success" and run["fullRefresh"] and run["kind"] == "sync"
+    assert [t["name"] for t in run["results"]] == ["public.orders", "public.customers"]
+    schedule = stack.tool("set_schedule", replication=id, cron="*/15 * * * *")
+    assert schedule == stack.call("GET", f"/replications/{id}").json()["schedule"]
+    for tool, arguments, path in (
+            ("whoami", {}, "/me"),
+            ("list_environments", {"team": TEAM}, f"/teams/{TEAM}/environments"),
+            ("list_templates", {}, "/templates"),
+            ("list_replications", {}, "/replications"),
+            ("list_replications", {"team": TEAM, "environment": "production"},
+             f"/replications?team={TEAM}&environment=production"),
+            ("get_replication", {"replication": id}, f"/replications/{id}"),
+            ("list_runs", {"replication": id, "limit": 1}, f"/replications/{id}/runs?limit=1"),
+            ("get_run", {"run": run["id"]}, f"/runs/{run['id']}"),
+            ("get_run", {"run": run["id"], "wait": 5}, f"/runs/{run['id']}?wait=5"),
+            ("get_run_logs", {"run": run["id"], "limit": 1}, f"/runs/{run['id']}/logs?limit=1")):
+        assert stack.tool(tool, "carol", **arguments) == stack.call("GET", path, "carol").json(), tool
+    assert list(stack.tool("list_runs", replication=id)) == ["runs"]
+    assert stack.tool("get_run", run=run["id"]) == run
+    assert stack.tool("get_replication", replication=id)["lastCheck"] == check
+    assert stack.tool("get_run_logs", run=run["id"])["lines"] == ["Total records read: 3"]
+    changed = stack.tool("update_replication", replication=id, description="CRM orders", expected_revision=2)
+    assert changed["description"] == "CRM orders" and changed["revision"] == 3
+    with pytest.raises(ToolRefused, match=r"\[revision_conflict\]"):
+        stack.tool("update_replication", replication=id, description="again", expected_revision=2)
+    removed = stack.tool("set_replication_secrets", replication=id, secrets={"password": None})
+    assert removed["secretsMissing"] == ["password"]
+    with pytest.raises(ToolRefused, match=r"\[secrets_missing\]"):
+        stack.tool("run_replication", "bob", replication=id)
+    with pytest.raises(ToolRefused, match=r"\[run_finished\]"):
+        stack.tool("cancel_run", "bob", run=run["id"])
+    assert stack.tool("delete_schedule", replication=id) == {"deleted": True, "replication": id}
+    with pytest.raises(ToolRefused, match=r"\[no_schedule\]"):
+        stack.tool("delete_schedule", replication=id)
+    with pytest.raises(ToolRefused, match=r"\[confirmation_mismatch\]"):
+        stack.tool("delete_replication", replication=id, confirm_name="nope")
+    deleted = stack.tool("delete_replication", replication=id, confirm_name="crm")
+    assert deleted["deleted"] is True and deleted["replication"] == id and "id" not in deleted
+    assert "pg_drop_replication_slot" in deleted["dropSlotSql"]
+    environment = stack.tool("disable_environment", team=TEAM, environment="development")
+    assert environment["enabled"] is False and environment["enabledBy"] is None and environment["team"] == TEAM
+    with pytest.raises(ToolRefused, match=r"\[environment_not_enabled\]"):
+        stack.tool("disable_environment", team=TEAM, environment="development")
+    assert stack.tool("enable_environment", team=TEAM, environment="development") == {
+        **environment, "enabled": True, "enabledBy": "alice"}
+
+
+def test_tool_parameters_and_annotations(stack):
+    tools = stack.tools()
+
+    def parameters(tool):
+        return tools[tool]["inputSchema"]["properties"]
+
+    def hints(tool):
+        a = tools[tool]["annotations"]
+        return a["readOnlyHint"], a["destructiveHint"], a["idempotentHint"], a["openWorldHint"]
+
+    for tool in ("run_replication", "get_run"):
+        wait = parameters(tool)["wait"]
+        assert (wait["default"], wait["minimum"], wait["maximum"]) == (0, 0, 600), tool
+    limit = parameters("get_run_logs")["limit"]
+    assert (limit["default"], limit["minimum"], limit["maximum"]) == (500, 1, 5000)
+    assert "tail" not in parameters("get_run_logs")
+    limit = parameters("list_runs")["limit"]
+    assert (limit["default"], limit["minimum"], limit["maximum"]) == (20, 1, 200)
+    assert {"replication", "confirm_name"} == set(parameters("delete_replication"))
+    assert {"expected_revision", "source_type"} <= set(parameters("update_replication"))
+    assert "full_refresh" in parameters("run_replication")
+    # A resource is named by its noun, never "id".
+    assert not [name for name in tools if "id" in parameters(name)]
+    read = (True, False, True, False)
+    for tool in ("whoami", "list_environments", "list_templates", "list_replications", "get_replication",
+                 "validate_replication", "list_runs", "get_run", "get_run_logs"):
+        assert hints(tool) == read, tool
+    # These can remove secrets and the saved position, or overwrite a value nobody can read back.
+    for tool in ("update_replication", "set_replication_secrets", "delete_replication", "delete_schedule",
+                 "disable_environment"):
+        assert hints(tool) == (False, True, False, False), tool
+    for tool in ("enable_environment", "create_replication", "cancel_run", "set_schedule"):
+        assert hints(tool) == (False, False, False, False), tool
+    # A run and a source check connect to the source, outside the platform.
+    for tool in ("run_replication", "check_source"):
+        assert hints(tool) == (False, False, False, True), tool
+    assert "incomplete" in stack.client.portal.call(_instructions, stack.app)
+
+
+def test_the_contract_describes_errors_and_the_shared_shapes(stack):
+    schema = stack.app.openapi()
+    schemas = schema["components"]["schemas"]
+    assert {"Error", "Me", "Environment", "EnvironmentList", "Run", "RunList", "RunLogs", "CancelResult",
+            "Schedule", "Deleted", "TemplateList", "ReplicationList"} <= set(schemas)
+    assert "HTTPValidationError" not in schemas
+    assert set(schemas["Error"]["properties"]) == {"error", "code", "detail"}
+    assert schemas["Error"]["required"] == ["error", "code"]
+    operations = {op["operationId"]: (method, path, op) for path, item in schema["paths"].items()
+                  for method, op in item.items()}
+    for id, (_, _, op) in operations.items():
+        for status in ("401", "403", "404", "409", "422", "500", "502", "503"):
+            assert op["responses"][status]["content"]["application/json"]["schema"]["$ref"].endswith("/Error"), id
+
+    def answer(id, status="200"):
+        return operations[id][2]["responses"][status]["content"]["application/json"]["schema"]["$ref"].split("/")[-1]
+
+    assert answer("whoami") == "Me" and answer("listEnvironments") == "EnvironmentList"
+    assert answer("enableEnvironment") == answer("disableEnvironment") == "Environment"
+    assert answer("listTemplates") == "TemplateList" and answer("listReplications") == "ReplicationList"
+    assert answer("runReplication", "202") == answer("getRun") == "Run" and answer("listRuns") == "RunList"
+    assert answer("getRunLogs") == "RunLogs" and answer("cancelRun") == "CancelResult"
+    assert answer("setSchedule") == "Schedule" and answer("createReplication", "201") == "Replication"
+    assert answer("deleteReplication") == answer("deleteSchedule") == "Deleted"
+    assert "results" in schemas["Run"]["properties"] and "results" not in schemas["RunItem"]["properties"]
+    assert "incomplete" in schemas["RunItem"]["properties"]["status"]["enum"]
+    assert operations["deleteReplication"][:2] == ("delete", "/api/v1/replications/{replication}")
+    assert operations["setReplicationSecrets"][:2] == ("patch", "/api/v1/replications/{replication}/secrets")
+
+    def query(id):
+        return {p["name"]: p for p in operations[id][2]["parameters"] if p["in"] == "query"}
+
+    assert query("deleteReplication")["confirmName"]["required"] is True
+    assert query("getRun")["wait"]["schema"] == {"type": "integer", "maximum": 600, "minimum": 0, "default": 0,
+                                                 "title": "Wait", "description": query("getRun")["wait"]["description"]}
+    assert set(query("getRunLogs")) == {"limit"} and query("getRunLogs")["limit"]["schema"]["maximum"] == 5000
+    assert set(schemas["RunInput"]["properties"]) == {"fullRefresh", "wait"}
+    assert "expectedRevision" in schemas["ReplicationChange"]["properties"]
+    # No path parameter is called id.
+    assert not [path for path in schema["paths"] if "{id}" in path]
+
+
 def test_every_operation_has_an_mcp_tool_and_the_contract_is_current(stack):
     schema = stack.app.openapi()
     operations = {op["operationId"] for path in schema["paths"].values() for op in path.values()}
@@ -372,6 +654,11 @@ def test_every_operation_has_an_mcp_tool_and_the_contract_is_current(stack):
     assert json.loads(contract.read_text()) == json.loads(json.dumps(schema)), (
         "Regenerate extensions/replication/contracts/replication-api/v1/openapi.yaml with "
         "`uv run python -m scripts.api_contract`")
+
+
+async def _instructions(app):
+    from replication.mcp_server import INSTRUCTIONS
+    return INSTRUCTIONS
 
 
 async def _tools(app):
@@ -392,7 +679,7 @@ def test_other_team_cannot_create_in_a_foreign_team(stack):
     assert stack.create("dave").json()["code"] == "forbidden_role"
     assert stack.call("POST", "/replications", "dave", json={
         "team": OTHER, "name": "x", "database": "sales", "namespace": "raw", "sourceType": "postgres",
-        "source": SOURCE}).json()["code"] == "unknown_database"
+        "source": SOURCE}).json()["code"] == "invalid_database"
 
 
 def test_a_sign_in_belongs_to_the_browser_that_started_it(tmp_path):

@@ -219,7 +219,7 @@ def test_the_deadline_stops_olake_and_the_next_run_continues(work, monkeypatch):
     folder, _, _ = work
     monkeypatch.setenv("FAKE_MODE", "slow")
     code, result, log = run(folder, deadline=1)
-    assert code == 0 and result["status"] == "partial" and result["stoppedAtLimit"]
+    assert code == 0 and result["status"] == "incomplete" and result["stoppedAtLimit"]
     assert not result["firstCopyComplete"] and "Time limit reached" in log
     saved = json.loads((folder / "out" / "state" / "state.json").read_text())
     assert saved["streams"][0]["state"]["chunks"] == [{"min": 5}]

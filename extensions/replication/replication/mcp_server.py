@@ -28,6 +28,7 @@ READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_h
 WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
 # Runs reach outside the platform: the source.
 RUN = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
+# Deletes something, or overwrites what cannot be read back: clients ask the user first.
 DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
                               open_world_hint=False)
 INSTRUCTIONS = """Replication (OLake, beta) on the Iceberg Data Platform: keeps operational databases in step with a
@@ -56,10 +57,13 @@ vectors (dv, Iceberg v3). Equality deletes are never used: PyIceberg and Polars 
 OLake adds _olake_id, _olake_timestamp, _op_type, _cdc_lsn and _cdc_timestamp. A row deleted in the
 source stays with _op_type = 'd': filter on _op_type <> 'd' for the current rows.
 
-run_replication (writers) starts a run; pass wait to block until it finishes, then read get_run
-(changes per table) and get_run_logs. A large first copy may take several runs (status partial);
-each continues where the last stopped. Schedule frequent runs with set_schedule. Read the tables
-with the user portal's MCP server.
+run_replication (writers) starts a run and returns it; pass wait (up to 600 seconds) to block until
+it finishes, on run_replication or later on get_run. A run's status is queued, running, success,
+incomplete (the first copy stopped at the time limit; the next run continues where it stopped),
+failed (OLake reported an error), error (the platform could not run it) or cancelled; its results
+list the changes per table. get_run_logs gives the last lines of its log. Times are RFC 3339
+strings in UTC. Schedule frequent runs with set_schedule. Read the tables with the user portal's
+MCP server.
 
 Ask the user before running in acceptance or production, before setting secrets, and before any
 tool marked destructive."""
@@ -127,29 +131,30 @@ def create_mcp(settings, services, verifier):
     @mcp.tool(annotations=READ)
     async def list_environments(team: TeamId) -> dict[str, Any]:
         """Where Replication is enabled for a team, and the databases of each environment."""
-        return {"environments": await call(services.environments, team)}
+        return await call(services.environments, team)
 
     @mcp.tool(annotations=WRITE)
     async def enable_environment(team: TeamId, environment: Environment) -> dict[str, Any]:
         """Enable Replication for a team environment (team administrators). Runs there act as the team's service
-        account. Ask the user first."""
+        account. Returns the environment, as list_environments shows it. Ask the user first."""
         return await call(services.enable_environment, team, environment)
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def disable_environment(team: TeamId, environment: Environment) -> dict[str, Any]:
-        """Disable Replication for a team environment (team administrators): its replications stop running."""
+        """Disable Replication for a team environment (team administrators): its replications stop running.
+        Returns the environment, as list_environments shows it."""
         return await call(services.disable_environment, team, environment)
 
     @mcp.tool(annotations=READ)
     async def list_templates() -> dict[str, Any]:
         """Replication templates: a complete definition per source type to adapt, with the secrets each needs and
         the SQL the database owner runs once."""
-        return {"templates": await call(services.list_templates)}
+        return await call(services.list_templates)
 
     @mcp.tool(annotations=READ)
     async def list_replications(team: TeamId | None = None, environment: Environment | None = None) -> dict[str, Any]:
         """Replications of your teams with their schedule and last run; optionally of one team or environment."""
-        return {"replications": await call(services.list_replications, team, environment)}
+        return await call(services.list_replications, team, environment)
 
     @mcp.tool(annotations=READ)
     async def get_replication(replication: ReplicationId) -> dict[str, Any]:
@@ -180,7 +185,7 @@ def create_mcp(settings, services, verifier):
             "database": database, "namespace": namespace, "sourceType": source_type, "source": source,
             "tables": tables, "options": options})
 
-    @mcp.tool(annotations=WRITE)
+    @mcp.tool(annotations=DESTRUCTIVE)
     async def update_replication(replication: ReplicationId, source: Source | None = None, tables: Tables | None = None,
                               options: Options | None = None,
                               name: Annotated[str | None, Field(max_length=64)] = None,
@@ -191,7 +196,8 @@ def create_mcp(settings, services, verifier):
                               expected_revision: int | None = None) -> dict[str, Any]:
         """Change a replication (team administrators). Give only what changes; source, tables and options replace
         the old ones whole. A new host removes the secrets; a new source, slot, database or namespace makes the next
-        run copy everything again."""
+        run copy everything again. expected_revision fails the change when someone else changed the replication
+        since you read it."""
         data = {"source": source, "tables": tables, "options": options, "name": name, "description": description,
                 "database": database, "namespace": namespace, "sourceType": source_type}
         return await call(services.update_replication, replication, {k: v for k, v in data.items() if v is not None},
@@ -205,7 +211,7 @@ def create_mcp(settings, services, verifier):
         keeps its change log. confirm_name must be the replication's name. Ask the user first."""
         return await call(services.delete_replication, replication, confirm_name)
 
-    @mcp.tool(annotations=WRITE)
+    @mcp.tool(annotations=DESTRUCTIVE)
     async def set_replication_secrets(replication: ReplicationId,
                                    secrets: Annotated[dict[str, str | None], Field(
                                        description="Secret name → value, or null to remove it.")]) -> dict[str, Any]:
@@ -224,24 +230,26 @@ def create_mcp(settings, services, verifier):
     async def run_replication(replication: ReplicationId, full_refresh: bool = False,
                            wait: Annotated[int, Field(ge=0, le=600)] = 0) -> dict[str, Any]:
         """Run a replication now (writers). full_refresh copies everything again. wait blocks up to that many
-        seconds for the run to finish."""
+        seconds for the run to finish; the answer is the run as it is then, with the changes per table so far in
+        results."""
         return await call(services.run_replication, replication, full_refresh, wait)
 
     @mcp.tool(annotations=READ)
     async def list_runs(replication: ReplicationId, limit: Annotated[int, Field(ge=1, le=200)] = 20) -> dict[str, Any]:
         """A replication's runs, newest first."""
-        return {"runs": await call(services.list_runs, replication, limit)}
+        return await call(services.list_runs, replication, limit)
 
     @mcp.tool(annotations=READ)
-    async def get_run(run: RunId) -> dict[str, Any]:
-        """A run's status, the changes per table (inserts, updates, deletes), how far it read the change log, and its
-        error."""
-        return await call(services.get_run, run)
+    async def get_run(run: RunId, wait: Annotated[int, Field(ge=0, le=600)] = 0) -> dict[str, Any]:
+        """A run's status, its totals and how far it read the change log in summary, the changes per table (rows
+        written, replaced or deleted) in results, and its error. wait blocks up to that many seconds for the run
+        to finish."""
+        return await call(services.get_run, run, wait)
 
     @mcp.tool(annotations=READ)
-    async def get_run_logs(run: RunId, tail: Annotated[int, Field(ge=1, le=5000)] = 500) -> dict[str, Any]:
-        """The last lines of a run's log, with secrets masked."""
-        return await call(services.get_run_logs, run, tail)
+    async def get_run_logs(run: RunId, limit: Annotated[int, Field(ge=1, le=5000)] = 500) -> dict[str, Any]:
+        """The last limit lines of a run's log, with secrets masked."""
+        return await call(services.get_run_logs, run, limit)
 
     @mcp.tool(annotations=WRITE)
     async def cancel_run(run: RunId) -> dict[str, Any]:
@@ -271,7 +279,8 @@ class Endpoint:
 
     async def __call__(self, scope, receive, send):
         if self.app is None:
-            await JSONResponse({"error": "The MCP transport is not running."}, status_code=503)(scope, receive, send)
+            await JSONResponse({"error": "The MCP transport is not running.", "code": "unavailable"},
+                               status_code=503)(scope, receive, send)
             return
         body, more = bytearray(), True
         while more:
@@ -281,7 +290,8 @@ class Endpoint:
             body.extend(message.get("body", b""))
             more = message.get("more_body", False)
             if len(body) > MAX_BODY:
-                await JSONResponse({"error": "Request is too large."}, status_code=413)(scope, receive, send)
+                await JSONResponse({"error": "Request is too large.", "code": "too_large"},
+                                   status_code=413)(scope, receive, send)
                 return
         replayed = False
 

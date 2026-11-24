@@ -51,29 +51,29 @@ async function api(path, options = {}) {
 }
 const send = (path, method, body) => api(path, {method, body: body === undefined ? undefined : JSON.stringify(body)});
 
-// Formatting
-function when(seconds) {
-  if (!seconds) return '—';
-  const date = new Date(seconds * 1000), diff = (Date.now() - date) / 1000, ahead = diff < 0, d = Math.abs(diff);
+// Formatting. The API gives every time as an RFC 3339 string in UTC, or null.
+function when(timestamp) {
+  if (!timestamp) return '—';
+  const date = new Date(timestamp), diff = (Date.now() - date) / 1000, ahead = diff < 0, d = Math.abs(diff);
   const text = d < 60 ? (ahead ? 'in a moment' : 'just now') : d < 3600 ? `${Math.round(d / 60)} min` : d < 86400 ? `${Math.round(d / 3600)} h` : null;
   if (!text) return date.toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'});
   return d < 60 ? text : ahead ? `in ${text}` : `${text} ago`;
 }
-function time(seconds) {
-  return h('time', {datetime: seconds ? new Date(seconds * 1000).toISOString() : null,
-                    title: seconds ? new Date(seconds * 1000).toLocaleString(undefined, {dateStyle: 'full', timeStyle: 'long'}) : null,
-                    text: when(seconds)});
+function time(timestamp) {
+  return h('time', {datetime: timestamp || null,
+                    title: timestamp ? new Date(timestamp).toLocaleString(undefined, {dateStyle: 'full', timeStyle: 'long'}) : null,
+                    text: when(timestamp)});
 }
 function duration(run) {
   if (!run.startedAt) return '—';
-  const s = Math.max(0, Math.round((run.finishedAt || Date.now() / 1000) - run.startedAt));
+  const s = Math.max(0, Math.round(((run.finishedAt ? new Date(run.finishedAt) : Date.now()) - new Date(run.startedAt)) / 1000));
   if (s < 60) return `${s} s`;
   if (s < 3600) return `${Math.floor(s / 60)} min ${s % 60} s`;
   return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
 }
 function chip(status, label) { return h('span', {class: `chip ${status}`}, h('i', {class: `status ${status}`, 'aria-hidden': 'true'}), label || status); }
 function typeChip(type) { return h('span', {class: 'chip type', text: SOURCE_LABELS[type] || type}); }
-const STATUS_LABELS = {partial: 'continues next run'};
+const STATUS_LABELS = {incomplete: 'continues next run'};
 function target(p) {
   return h('span', {class: 'target'}, p.databaseName || p.database, h('span', {class: 'sep', 'aria-hidden': 'true', text: '›'}),
            h('span', {class: 'visually-hidden', text: ' namespace '}), p.namespace);
@@ -150,7 +150,7 @@ async function renderList() {
   const query = new URLSearchParams();
   if (route.team) query.set('team', route.team);
   if (route.environment) query.set('environment', route.environment);
-  const replications = await api(`/replications?${query}`);
+  const {replications} = await api(`/replications?${query}`);
   const adminTeams = me.memberships.filter(m => isAdmin(m.role));
   const setFilter = changes => {
     const next = new URLSearchParams({team: route.team, environment: route.environment, ...changes});
@@ -176,7 +176,7 @@ async function renderList() {
 
 function lastRunCell(run) {
   if (!run) return h('span', {class: 'muted small', text: 'Never run'});
-  const detail = run.status === 'partial' ? 'first copy continues next run' : run.error ? run.error
+  const detail = run.status === 'incomplete' ? 'first copy continues next run' : run.error ? run.error
     : `${written(run)} rows written`;
   return h('div', {class: 'run-cell'},
     h('a', {href: `#/runs/${run.id}`, class: 'plain-link'}, chip(run.status)),
@@ -194,7 +194,7 @@ function replicationTable(replications) {
       h('td', {}, typeChip(p.sourceType), h('p', {class: 'small-print mono', text: source(p)})),
       h('td', {}, target(p)),
       h('td', {class: 'mono nowrap', text: p.lastRun?.summary?.readUpTo || '—'}),
-      h('td', {class: 'mono nowrap'}, p.schedule ? h('span', {title: `Next run ${new Date(p.schedule.nextRunAt * 1000).toLocaleString()}`},
+      h('td', {class: 'mono nowrap'}, p.schedule ? h('span', {title: p.schedule.nextRunAt ? `Next run ${new Date(p.schedule.nextRunAt).toLocaleString()}` : null},
         p.schedule.enabled ? p.schedule.cron : `${p.schedule.cron} (paused)`) : h('span', {class: 'muted', text: '—'})),
       h('td', {class: 'wide'}, lastRunCell(p.lastRun)))))));
 }
@@ -260,7 +260,7 @@ function agentCard() {
 async function renderEditor(token) {
   const editing = route.page === 'edit';
   const existing = editing ? await api(`/replications/${route.id}`) : null;
-  templates = templates || await api('/templates');
+  templates = templates || (await api('/templates')).templates;
   if (token !== renderToken) return;
   const adminTeams = me.memberships.filter(m => isAdmin(m.role));
   if (!editing && !adminTeams.length) {
@@ -339,7 +339,7 @@ async function renderEditor(token) {
     const button = event.submitter; if (button) button.disabled = true;
     try {
       if (editing) {
-        const changed = await send(`/replications/${existing.id}`, 'PATCH', {...data, expected_revision: existing.revision});
+        const changed = await send(`/replications/${existing.id}`, 'PATCH', {...data, expectedRevision: existing.revision});
         go(`#/replications/${existing.id}`, [changed.hint || 'Saved. The next run uses the new settings.']);
       } else {
         const created = await send('/replications', 'POST', {...data, team: state.team, environment: state.environment, sourceType: 'postgres'});
@@ -392,6 +392,8 @@ async function renderEditor(token) {
 // One replication
 async function renderReplication(token) {
   const p = await api(`/replications/${route.id}`);
+  // The tables a run wrote are its results, which only the run itself carries.
+  const last = p.lastRun ? await api(`/runs/${p.lastRun.id}`) : null;
   if (token !== renderToken) return;
   crumbs([`${teamName(p.team)} · ${p.name}`]);
   const writer = isWriter(p.role), admin = isAdmin(p.role);
@@ -421,7 +423,7 @@ async function renderReplication(token) {
     p.warnings.length ? h('div', {class: 'notice error'}, h('ul', {class: 'plain'}, p.warnings.map(w => h('li', {text: w})))) : null,
     h('div', {class: 'columns'},
       h('div', {class: 'stack'},
-        hasTables ? lastRunCard(p) : null,
+        hasTables ? lastRunCard(p, last) : null,
         tablesCard(p),
         h('section', {class: 'card'}, h('div', {class: 'section-title'}, h('h2', {text: 'Runs'}), h('span', {class: 'small-print', text: 'Newest first'})),
           runsTable(p.recentRuns))),
@@ -431,15 +433,14 @@ async function renderReplication(token) {
 
 function stat(label, value) { return h('div', {class: 'stat'}, h('span', {class: 'eyebrow', text: label}), h('b', {text: value})); }
 
-function lastRunCard(p) {
-  const run = p.lastRun;
+function lastRunCard(p, run) {
   if (!run) return h('section', {class: 'card'}, h('h2', {text: 'Last run'}), h('p', {class: 'small muted', text: 'Not run yet. Run it now, or schedule it.'}));
-  const s = run.summary || {}, tables = s.tables || [];
+  const s = run.summary || {}, tables = run.results || [];
   return h('section', {class: 'card'},
     h('div', {class: 'section-title'}, h('h2', {text: 'Last run'}),
       h('span', {class: 'small-print'}, time(run.finishedAt || run.createdAt), ` · ${duration(run)}`)),
     run.error && h('p', {class: 'error-text', text: run.error}),
-    run.status === 'partial' && h('p', {class: 'small', text: 'The first copy stopped at the time limit; the next run continues where it stopped.'}),
+    run.status === 'incomplete' && h('p', {class: 'small', text: 'The first copy stopped at the time limit; the next run continues where it stopped.'}),
     h('div', {class: 'stats'},
       stat('Changes read', number.format(s.recordsRead || 0)), stat('Rows written', number.format(s.recordsWritten || 0)),
       stat('Replaced or deleted', number.format(tables.reduce((n, t) => n + t.replaced, 0))), stat('Read up to', s.readUpTo || '—')),
@@ -494,7 +495,7 @@ function tablesCard(p) {
                       ...(c.partition ? {partition: c.partition} : {})};
     }
     try {
-      const changed = await send(`/replications/${p.id}`, 'PATCH', {tables, expected_revision: p.revision});
+      const changed = await send(`/replications/${p.id}`, 'PATCH', {tables, expectedRevision: p.revision});
       go(location.hash, [changed.hint || `${Object.keys(tables).length} tables chosen.`]);
     } catch (error) { failure(error); }
   }
@@ -554,7 +555,7 @@ function runsTable(runs) {
       h('td', {class: 'nowrap mono', text: duration(r)}),
       h('td', {class: 'num', text: r.kind === 'check' ? '—' : written(r)}),
       h('td', {class: 'mono nowrap', text: r.summary?.readUpTo || '—'}),
-      h('td', {class: 'wide small'}, r.schedule ? 'schedule' : r.triggeredBy, r.agent && h('span', {class: 'agent', text: 'agent'}),
+      h('td', {class: 'wide small'}, r.scheduled ? 'schedule' : r.triggeredBy, r.agent && h('span', {class: 'agent', text: 'agent'}),
         r.fullRefresh && h('span', {class: 'agent', text: 'copy again'})))))));
 }
 
@@ -567,7 +568,7 @@ function secretsCard(p) {
     admin && h('form', {class: 'secret-row', onsubmit: async event => {
       event.preventDefault();
       if (!field.value) return field.focus();
-      try { await send(`/replications/${p.id}/secrets`, 'PUT', {secrets: {password: field.value}}); field.value = ''; go(location.hash, [set ? 'Password replaced.' : 'Password set. Check the source next.']); }
+      try { await send(`/replications/${p.id}/secrets`, 'PATCH', {secrets: {password: field.value}}); field.value = ''; go(location.hash, [set ? 'Password replaced.' : 'Password set. Check the source next.']); }
       catch (error) { failure(error); }
     }}, field, h('button', {type: 'submit', class: 'small', text: set ? 'Replace' : 'Set'})),
     h('p', {class: 'small-print', text: `For ${p.source.username}@${p.source.host}. Stored encrypted and write-only: nobody can read it back, and runs mask it in logs.`}),
@@ -606,7 +607,7 @@ function deleteCard(p) {
       isWriter(p.role) && h('button', {type: 'button', class: 'quiet small', text: 'Copy everything again', onclick: async event => {
         if (!await confirmDialog('Copy everything again?', 'The next run starts without the saved change log position and copies every table again. Rows are upserted on their key, so tables with a key keep one row per key; append-only tables get the rows again.', 'Copy again')) return;
         event.target.disabled = true;
-        try { await send(`/replications/${p.id}/runs`, 'POST', {full_refresh: true}); go(location.hash, ['Started a run that copies everything again.']); }
+        try { await send(`/replications/${p.id}/runs`, 'POST', {fullRefresh: true}); go(location.hash, ['Started a run that copies everything again.']); }
         catch (error) { failure(error); event.target.disabled = false; }
       }}),
       h('button', {type: 'button', class: 'danger small', text: 'Delete', onclick: () => deleteReplication(p)})));
@@ -619,7 +620,7 @@ async function deleteReplication(p) {
     'Delete', true, input, () => input.value === p.name);
   if (!ok) return;
   try {
-    const deleted = await send(`/replications/${p.id}/delete`, 'POST', {confirm_name: input.value});
+    const deleted = await send(`/replications/${p.id}?confirmName=${encodeURIComponent(input.value)}`, 'DELETE');
     if (deleted.dropSlotSql) {
       await confirmDialog(`${p.name} is deleted`, `${deleted.warning} Give the database owner this SQL: ${deleted.dropSlotSql}`, 'Done');
     }
@@ -630,7 +631,7 @@ async function deleteReplication(p) {
 // One run
 async function renderRun(token) {
   const run = await api(`/runs/${route.id}`);
-  const [p, logs] = await Promise.all([api(`/replications/${run.replication}`), api(`/runs/${run.id}/logs?tail=2000`)]);
+  const [p, logs] = await Promise.all([api(`/replications/${run.replication}`), api(`/runs/${run.id}/logs?limit=2000`)]);
   if (token !== renderToken) return;
   crumbs([`${teamName(p.team)} · ${p.name}`, `#/replications/${p.id}`], [run.kind === 'check' ? 'Source check' : 'Run']);
   const active = ACTIVE.has(run.status), summary = run.summary || {};
@@ -638,7 +639,7 @@ async function renderRun(token) {
   const stick = !previous || previous.scrollTop + previous.clientHeight >= previous.scrollHeight - 24;
   const log = h('pre', {id: 'run-log', class: 'log', tabindex: '0', 'aria-label': 'Run log',
     text: logs.lines.length ? logs.lines.join('\n') : active ? 'Waiting for output…' : 'No log for this run.'});
-  const tables = summary.tables || [];
+  const tables = run.results || [];
   fill($('#content'),
     heading(`${run.kind === 'check' ? 'SOURCE CHECK' : 'RUN'} · ${LABELS[run.environment]}`.toUpperCase(), h('h1', {class: 'compact'}, p.name), null,
       active && isWriter(p.role) && h('button', {type: 'button', class: 'danger', text: 'Stop run', onclick: async event => {
@@ -663,7 +664,7 @@ async function renderRun(token) {
             h('dt', {text: 'Started'}), h('dd', {}, time(run.startedAt)),
             h('dt', {text: 'Finished'}), h('dd', {}, active ? '—' : time(run.finishedAt)),
             h('dt', {text: 'Duration'}), h('dd', {text: duration(run)}),
-            h('dt', {text: 'Started by'}), h('dd', {}, run.schedule ? 'schedule' : run.triggeredBy, run.agent && h('span', {class: 'agent', text: run.agent})),
+            h('dt', {text: 'Started by'}), h('dd', {}, run.scheduled ? 'schedule' : run.triggeredBy, run.agent && h('span', {class: 'agent', text: run.agent})),
             summary.recordsRead !== undefined && h('dt', {text: 'Changes read'}), summary.recordsRead !== undefined && h('dd', {text: number.format(summary.recordsRead)}),
             summary.readUpTo && h('dt', {text: 'Read up to'}), summary.readUpTo && h('dd', {class: 'mono', text: summary.readUpTo}),
             summary.firstCopyComplete !== undefined && summary.firstCopyComplete !== null && h('dt', {text: 'First copy'}),

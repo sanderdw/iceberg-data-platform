@@ -14,6 +14,7 @@ the person or agent that starts them.
 
 import asyncio
 import time
+from datetime import UTC, datetime
 
 from croniter import croniter
 
@@ -27,6 +28,12 @@ DLT_TABLES = "dlt adds the columns _dlt_load_id and _dlt_id to each table, and c
              "for nested lists. Its own bookkeeping stays with the run, never in your namespace."
 
 
+def timestamp(value):
+    """A stored time (seconds since 1970) as every response shows it: RFC 3339 in UTC with milliseconds."""
+    if value is None:
+        return None
+    return datetime.fromtimestamp(value, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
 
 def apps(discovery):
     """The Apps menu's entries (Bridge capability `app-directory`); with an older core, just the user portal."""
@@ -36,6 +43,7 @@ def apps(discovery):
     return {"workspace": [{k: str(p.get(k, "")) for k in ("id", "title", "url")} for p in pages],
             "extensions": [{k: str(e.get(k, "")) for k in ("id", "title", "purpose", "origin")}
                            for e in discovery.get("extensions") or []]}
+
 
 class Services:
     def __init__(self, settings, store, bridge, runs, secrets):
@@ -104,8 +112,8 @@ class Services:
             "namespace": pipeline["namespace"], "sourceType": pipeline["source_type"], "source": pipeline["source"],
             "resources": pipeline["resources"], "secretsSet": sorted(stored & needed),
             "secretsMissing": sorted(needed - stored), "revision": pipeline["revision"],
-            "createdAt": pipeline["created_at"], "createdBy": pipeline["created_by"],
-            "updatedAt": pipeline["updated_at"], "updatedBy": pipeline["updated_by"],
+            "createdAt": timestamp(pipeline["created_at"]), "createdBy": pipeline["created_by"],
+            "updatedAt": timestamp(pipeline["updated_at"]), "updatedBy": pipeline["updated_by"],
             "role": role, "url": self.url(pipeline["id"]), "schedule": self.public_schedule(schedule),
             "lastRun": self.public_run(last_run) if last_run else None,
         }
@@ -114,18 +122,50 @@ class Services:
     def public_schedule(schedule):
         if not schedule:
             return None
-        return {"cron": schedule["cron"], "enabled": bool(schedule["enabled"]), "nextRunAt": schedule["next_run_at"],
-                "createdBy": schedule["created_by"], "lastRun": schedule["last_run"] or None}
+        enabled = bool(schedule["enabled"])
+        return {"cron": schedule["cron"], "enabled": enabled,
+                "nextRunAt": timestamp(schedule["next_run_at"]) if enabled else None,
+                "lastRun": schedule["last_run"] or None, "createdBy": schedule["created_by"],
+                "createdAt": timestamp(schedule["created_at"])}
 
     @staticmethod
-    def public_run(run):
-        return {
-            "id": run["id"], "pipeline": run["pipeline"], "status": run["status"], "environment": run["environment"],
-            "revision": run["revision"], "fullRefresh": bool(run["full_refresh"]), "triggeredBy": run["triggered_by"],
-            "agent": run["agent"] or None, "schedule": bool(run["schedule"]), "createdAt": run["created_at"],
-            "startedAt": run["started_at"], "finishedAt": run["finished_at"], "exitCode": run["exit_code"],
-            "summary": {k: v for k, v in run["summary"].items() if k != "principal"}, "error": run["error"] or None,
+    def public_run(run, results=False):
+        """A run as every response shows it. `results` adds the tables it loaded: for one run, never in a list."""
+        summary = run["summary"]
+        # The runner's totals. The account the run acted as is not shown, and the tables are the run's results.
+        hidden = ("principal", "tables")
+        shown = {
+            "id": run["id"], "pipeline": run["pipeline"], "environment": run["environment"], "status": run["status"],
+            "triggeredBy": run["triggered_by"], "agent": run["agent"] or None, "scheduled": bool(run["schedule"]),
+            "revision": run["revision"], "fullRefresh": bool(run["full_refresh"]),
+            "createdAt": timestamp(run["created_at"]), "startedAt": timestamp(run["started_at"]),
+            "finishedAt": timestamp(run["finished_at"]), "exitCode": run["exit_code"],
+            "summary": {k: (v or None) if k == "error" else v for k, v in summary.items() if k not in hidden},
+            "error": run["error"] or None,
         }
+        return {**shown, "results": summary.get("tables") or []} if results else shown
+
+    def public_me(self, me, discovery, enabled):
+        """Who the caller is, built field by field: the Bridge's answer holds more than this API shows."""
+        return {
+            "user": {"id": me["user"]["id"], "name": me["user"]["name"]},
+            "memberships": [{"team": m["team"], "teamName": m["teamName"], "role": m["role"]}
+                            for m in me["memberships"]],
+            "databases": [{k: d[k] for k in ("id", "name", "team", "environment", "status")}
+                          for d in me["databases"]],
+            "extension": self.settings.extension_id, "origin": self.settings.origin,
+            "environments": list(ENVIRONMENTS),
+            "enabledEnvironments": [{"team": team, "environments": envs} for team, envs in enabled.items()],
+            "userPortalUrl": discovery.get("userPortalUrl", ""), "apps": apps(discovery),
+        }
+
+    @staticmethod
+    def public_environment(me, team, environment, principal):
+        """One team environment: whether Ingestion is enabled there, by whom, and the databases it can load into."""
+        return {"team": team, "environment": environment, "enabled": principal is not None,
+                "enabledBy": principal.get("createdBy") if principal else None,
+                "databases": [{"id": d["id"], "name": d["name"]} for d in me["databases"]
+                              if d["team"] == team and d["environment"] == environment]}
 
     # Discovery
 
@@ -140,40 +180,35 @@ class Services:
         me = await self.me(caller)
         discovery = await self.bridge.discovery()
         enabled = await self.enabled(caller, [m["team"] for m in me["memberships"]])
-        return {**me, "extension": self.settings.extension_id, "origin": self.settings.origin,
-                "environments": list(ENVIRONMENTS), "sourceTypes": list(validate.SOURCE_TYPES),
-                "allowPrivateSources": self.settings.allow_private,
-                "enabledEnvironments": [{"team": team, "environments": envs} for team, envs in enabled.items()],
-                "userPortalUrl": discovery.get("userPortalUrl", ""), "apps": apps(discovery)}
+        return {**self.public_me(me, discovery, enabled), "sourceTypes": list(validate.SOURCE_TYPES),
+                "allowPrivateSources": self.settings.allow_private}
 
     async def environments(self, caller, team):
         me = await self.me(caller)
         if not self.role(me, team):
             raise IngestionError(403, "You are not a member of this team.", "not_a_member")
         enabled = {p["environment"]: p for p in await self.bridge.team_automation(caller.token, team)}
-        return [{"environment": env, "enabled": env in enabled,
-                 "databases": [{"id": d["id"], "name": d["name"]} for d in me["databases"]
-                               if d["team"] == team and d["environment"] == env],
-                 **({"principal": enabled[env]["id"], "enabledBy": enabled[env].get("createdBy")}
-                    if env in enabled else {})}
-                for env in ENVIRONMENTS]
+        return {"environments": [self.public_environment(me, team, env, enabled.get(env)) for env in ENVIRONMENTS]}
 
     async def enable_environment(self, caller, team, environment):
         if environment not in ENVIRONMENTS:
             raise IngestionError(422, "Choose development, acceptance or production.", "invalid_request")
+        me = await self.me(caller)
         # The Bridge checks that the caller administers the team.
-        return await self.bridge.enable(caller.token, team, environment)
+        principal = await self.bridge.enable(caller.token, team, environment)
+        return self.public_environment(me, team, environment, principal)
 
     async def disable_environment(self, caller, team, environment):
+        me = await self.me(caller)
         enabled = {p["environment"]: p for p in await self.bridge.team_automation(caller.token, team)}
         if environment not in enabled:
-            raise IngestionError(404, "Ingestion is not enabled for this environment.", "environment_not_enabled")
+            raise IngestionError(409, "Ingestion is not enabled for this environment.", "environment_not_enabled")
         await self.bridge.revoke(caller.token, enabled[environment]["id"])
-        return {"disabled": True, "environment": environment}
+        return self.public_environment(me, team, environment, None)
 
     async def list_templates(self, caller):
         await self.me(caller)
-        return [{**t, "note": DLT_TABLES} for t in templates.TEMPLATES]
+        return {"templates": [{**t, "note": DLT_TABLES} for t in templates.TEMPLATES]}
 
     # Pipelines
 
@@ -183,7 +218,7 @@ class Services:
         pipelines = [p for p in self.store.pipelines(list(roles))
                      if team in (None, p["team"]) and environment in (None, p["environment"])]
         last = self.store.last_runs([p["id"] for p in pipelines])
-        return [self.public(p, me, roles[p["team"]], last.get(p["id"])) for p in pipelines]
+        return {"pipelines": [self.public(p, me, roles[p["team"]], last.get(p["id"])) for p in pipelines]}
 
     async def get_pipeline(self, caller, pipeline_id):
         pipeline, me, role = await self.pipeline_for(caller, pipeline_id)
@@ -227,7 +262,7 @@ class Services:
             if d["team"] == team and d["environment"] == environment and database in (d["id"], d["name"]):
                 return d
         if raise_:
-            raise IngestionError(422, "Choose one of the team's databases in this environment.", "unknown_database")
+            raise IngestionError(422, "Choose one of the team's databases in this environment.", "invalid_database")
         return None
 
     async def create_pipeline(self, caller, data):
@@ -298,13 +333,13 @@ class Services:
     async def delete_pipeline(self, caller, pipeline_id, confirm_name):
         pipeline, _, _ = await self.pipeline_for(caller, pipeline_id, "admin")
         if confirm_name != pipeline["name"]:
-            raise IngestionError(422, "confirm_name must be the pipeline's name.", "confirmation_mismatch")
+            raise IngestionError(422, "The confirmation must be the pipeline's exact name.", "confirmation_mismatch")
         if self.store.active_run(pipeline_id):
             raise IngestionError(409, "The pipeline is running. Stop the run first.", "run_in_progress")
         for run in self.store.runs(pipeline_id, 100_000):
             await self.runs.discard(run["id"])
         self.store.delete_pipeline(pipeline_id)
-        return {"deleted": True, "id": pipeline_id,
+        return {"deleted": True, "pipeline": pipeline_id,
                 "note": "Tables the pipeline loaded stay in the database, with their data and properties."}
 
     async def set_pipeline_secrets(self, caller, pipeline_id, values):
@@ -329,7 +364,7 @@ class Services:
         run = await self.start_run(pipeline, triggered_by=triggered_by, agent=agent, full_refresh=full_refresh)
         if wait:
             run = await self.runs.wait(run["id"], wait)
-        return self.public_run(run)
+        return self.public_run(run, results=True)
 
     async def start_run(self, pipeline, *, triggered_by, agent="", schedule="", full_refresh=False):
         missing = sorted(set(validate.refs(pipeline["source"])) - set(pipeline["secrets"]))
@@ -346,15 +381,18 @@ class Services:
 
     async def list_runs(self, caller, pipeline_id, limit=20):
         await self.pipeline_for(caller, pipeline_id)
-        return [self.public_run(r) for r in self.store.runs(pipeline_id, limit)]
+        return {"runs": [self.public_run(r) for r in self.store.runs(pipeline_id, limit)]}
 
-    async def get_run(self, caller, run_id):
+    async def get_run(self, caller, run_id, wait=0):
+        """The run with its results. `wait` holds the answer until the run is final, for at most that many seconds."""
         run, _, _, _ = await self.run_for(caller, run_id)
-        return self.public_run(run)
+        if wait and run["status"] in ("queued", "running"):
+            run = await self.runs.wait(run_id, wait)
+        return self.public_run(run, results=True)
 
-    async def get_run_logs(self, caller, run_id, tail=500):
+    async def get_run_logs(self, caller, run_id, limit=500):
         run, _, _, _ = await self.run_for(caller, run_id)
-        return {"run": run_id, "status": run["status"], "lines": await self.runs.logs(run_id, tail)}
+        return {"run": run_id, "status": run["status"], "lines": await self.runs.logs(run_id, limit)}
 
     async def cancel_run(self, caller, run_id):
         run, _, _, _ = await self.run_for(caller, run_id, "writer")

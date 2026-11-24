@@ -49,22 +49,22 @@ async function api(path, options = {}) {
 }
 const send = (path, method, body) => api(path, {method, body: body === undefined ? undefined : JSON.stringify(body)});
 
-// Formatting
-function when(seconds) {
-  if (!seconds) return '—';
-  const date = new Date(seconds * 1000), diff = (Date.now() - date) / 1000, ahead = diff < 0, d = Math.abs(diff);
+// Formatting. The API gives every time as an RFC 3339 string in UTC, or null.
+function when(timestamp) {
+  if (!timestamp) return '—';
+  const date = new Date(timestamp), diff = (Date.now() - date) / 1000, ahead = diff < 0, d = Math.abs(diff);
   const text = d < 60 ? (ahead ? 'in a moment' : 'just now') : d < 3600 ? `${Math.round(d / 60)} min` : d < 86400 ? `${Math.round(d / 3600)} h` : null;
   if (!text) return date.toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'});
   return d < 60 ? text : ahead ? `in ${text}` : `${text} ago`;
 }
-function time(seconds) {
-  return h('time', {datetime: seconds ? new Date(seconds * 1000).toISOString() : null,
-                    title: seconds ? new Date(seconds * 1000).toLocaleString(undefined, {dateStyle: 'full', timeStyle: 'long'}) : null,
-                    text: when(seconds)});
+function time(timestamp) {
+  return h('time', {datetime: timestamp || null,
+                    title: timestamp ? new Date(timestamp).toLocaleString(undefined, {dateStyle: 'full', timeStyle: 'long'}) : null,
+                    text: when(timestamp)});
 }
 function duration(run) {
   if (!run.startedAt) return '—';
-  const s = Math.max(0, Math.round((run.finishedAt || Date.now() / 1000) - run.startedAt));
+  const s = Math.max(0, Math.round(((run.finishedAt ? new Date(run.finishedAt) : Date.now()) - new Date(run.startedAt)) / 1000));
   if (s < 60) return `${s} s`;
   if (s < 3600) return `${Math.floor(s / 60)} min ${s % 60} s`;
   return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
@@ -146,7 +146,7 @@ async function renderList() {
   const query = new URLSearchParams();
   if (route.team) query.set('team', route.team);
   if (route.environment) query.set('environment', route.environment);
-  const pipelines = await api(`/pipelines?${query}`);
+  const {pipelines} = await api(`/pipelines?${query}`);
   const adminTeams = me.memberships.filter(m => isAdmin(m.role));
   const setFilter = changes => {
     const next = new URLSearchParams({team: route.team, environment: route.environment, ...changes});
@@ -179,7 +179,7 @@ function pipelineTable(pipelines) {
         p.secretsMissing.length ? h('p', {class: 'error-text', text: `Needs secret ${p.secretsMissing.join(', ')}`}) : null),
       h('td', {}, typeChip(p.sourceType)),
       h('td', {}, target(p)),
-      h('td', {class: 'mono'}, p.schedule ? h('span', {title: `Next run ${new Date(p.schedule.nextRunAt * 1000).toLocaleString()}`},
+      h('td', {class: 'mono'}, p.schedule ? h('span', {title: p.schedule.nextRunAt ? `Next run ${new Date(p.schedule.nextRunAt).toLocaleString()}` : null},
         p.schedule.enabled ? p.schedule.cron : `${p.schedule.cron} (paused)`) : h('span', {class: 'muted', text: '—'})),
       h('td', {class: 'wide'}, p.lastRun ? h('div', {class: 'run-cell'},
         h('a', {href: `#/runs/${p.lastRun.id}`, class: 'plain-link'}, chip(p.lastRun.status)),
@@ -250,7 +250,7 @@ const list = text => text.split(',').map(s => s.trim()).filter(Boolean);
 async function renderEditor(token) {
   const editing = route.page === 'edit';
   const existing = editing ? await api(`/pipelines/${route.id}`) : null;
-  templates = templates || await api('/templates');
+  templates = templates || (await api('/templates')).templates;
   if (token !== renderToken) return;
   const adminTeams = me.memberships.filter(m => isAdmin(m.role));
   if (!editing && !adminTeams.length) {
@@ -376,7 +376,7 @@ async function renderEditor(token) {
     const button = event.submitter; if (button) button.disabled = true;
     try {
       if (editing) {
-        const changed = await send(`/pipelines/${existing.id}`, 'PATCH', {...data, expected_revision: existing.revision});
+        const changed = await send(`/pipelines/${existing.id}`, 'PATCH', {...data, expectedRevision: existing.revision});
         go(`#/pipelines/${existing.id}`, [changed.hint || 'Saved. The next run uses the new definition.']);
       } else {
         const created = await send('/pipelines', 'POST', {...data, team: state.team, environment: state.environment, sourceType: type});
@@ -430,7 +430,7 @@ async function renderPipeline(token) {
     onclick: async event => {
       event.target.disabled = true;
       try {
-        const run = await send(`/pipelines/${p.id}/runs`, 'POST', {full_refresh: fullRefresh.checked});
+        const run = await send(`/pipelines/${p.id}/runs`, 'POST', {fullRefresh: fullRefresh.checked});
         go(location.hash, [`Run started${run.fullRefresh ? ' with a full refresh' : ''}.`]);
       } catch (error) { failure(error); event.target.disabled = false; }
     }});
@@ -459,7 +459,7 @@ function runsTable(runs) {
       h('td', {class: 'nowrap'}, time(r.startedAt || r.createdAt)),
       h('td', {class: 'nowrap mono', text: duration(r)}),
       h('td', {class: 'num', text: rows(r)}),
-      h('td', {class: 'wide small'}, r.schedule ? 'schedule' : r.triggeredBy, r.agent && h('span', {class: 'agent', text: 'agent'}),
+      h('td', {class: 'wide small'}, r.scheduled ? 'schedule' : r.triggeredBy, r.agent && h('span', {class: 'agent', text: 'agent'}),
         r.fullRefresh && h('span', {class: 'agent', text: 'full refresh'})))))));
 }
 
@@ -493,13 +493,13 @@ function secretsCard(p) {
         event.preventDefault();
         if (!input.value) return input.focus();
         try {
-          await send(`/pipelines/${p.id}/secrets`, 'PUT', {secrets: {[name]: input.value}});
+          await send(`/pipelines/${p.id}/secrets`, 'PATCH', {secrets: {[name]: input.value}});
           input.value = ''; go(location.hash, [`${name} is ${set ? 'replaced' : 'set'}.`]);
         } catch (error) { failure(error); }
       }}, input, h('button', {type: 'submit', class: 'small', text: set ? 'Replace' : 'Set'}),
         set && h('button', {type: 'button', class: 'quiet small', text: 'Remove', onclick: async () => {
           if (!await confirmDialog(`Remove ${name}?`, 'Runs fail until it is set again.', 'Remove', true)) return;
-          try { await send(`/pipelines/${p.id}/secrets`, 'PUT', {secrets: {[name]: null}}); go(location.hash, [`${name} is removed.`]); }
+          try { await send(`/pipelines/${p.id}/secrets`, 'PATCH', {secrets: {[name]: null}}); go(location.hash, [`${name} is removed.`]); }
           catch (error) { failure(error); }
         }})));
   });
@@ -550,14 +550,14 @@ async function deletePipeline(p) {
     'Its runs, schedule and secrets go. The tables it loaded stay in the database, with their data. Type the pipeline\'s name to confirm.',
     'Delete', true, input, () => input.value === p.name);
   if (!ok) return;
-  try { await send(`/pipelines/${p.id}/delete`, 'POST', {confirm_name: input.value}); go('#/', [`${p.name} is deleted. Its tables stay.`]); }
+  try { await send(`/pipelines/${p.id}?confirmName=${encodeURIComponent(input.value)}`, 'DELETE'); go('#/', [`${p.name} is deleted. Its tables stay.`]); }
   catch (error) { failure(error); }
 }
 
 // One run
 async function renderRun(token) {
   const run = await api(`/runs/${route.id}`);
-  const [p, logs] = await Promise.all([api(`/pipelines/${run.pipeline}`), api(`/runs/${run.id}/logs?tail=2000`)]);
+  const [p, logs] = await Promise.all([api(`/pipelines/${run.pipeline}`), api(`/runs/${run.id}/logs?limit=2000`)]);
   if (token !== renderToken) return;
   crumbs([`${teamName(p.team)} · ${p.name}`, `#/pipelines/${p.id}`], ['Run']);
   const active = ACTIVE.has(run.status), summary = run.summary || {};
@@ -565,7 +565,7 @@ async function renderRun(token) {
   const stick = !previous || previous.scrollTop + previous.clientHeight >= previous.scrollHeight - 24;
   const log = h('pre', {id: 'run-log', class: 'log', tabindex: '0', 'aria-label': 'Run log',
     text: logs.lines.length ? logs.lines.join('\n') : active ? 'Waiting for output…' : 'No log for this run.'});
-  const tables = summary.tables || [];
+  const tables = run.results || [];
   fill($('#content'),
     heading(`RUN · ${LABELS[run.environment]}`.toUpperCase(), h('h1', {class: 'compact'}, p.name), null,
       active && isWriter(p.role) && h('button', {type: 'button', class: 'danger', text: 'Stop run', onclick: async event => {
@@ -593,7 +593,7 @@ async function renderRun(token) {
             h('dt', {text: 'Started'}), h('dd', {}, time(run.startedAt)),
             h('dt', {text: 'Finished'}), h('dd', {}, active ? '—' : time(run.finishedAt)),
             h('dt', {text: 'Duration'}), h('dd', {text: duration(run)}),
-            h('dt', {text: 'Started by'}), h('dd', {}, run.schedule ? 'schedule' : run.triggeredBy, run.agent && h('span', {class: 'agent', text: run.agent})),
+            h('dt', {text: 'Started by'}), h('dd', {}, run.scheduled ? 'schedule' : run.triggeredBy, run.agent && h('span', {class: 'agent', text: run.agent})),
             h('dt', {text: 'Revision'}), h('dd', {text: String(run.revision)}),
             summary.loadId && h('dt', {text: 'dlt load id'}), summary.loadId && h('dd', {text: summary.loadId}),
             summary.dltVersion && h('dt', {text: 'dlt'}), summary.dltVersion && h('dd', {text: summary.dltVersion}),

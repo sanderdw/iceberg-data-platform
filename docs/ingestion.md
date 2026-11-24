@@ -49,18 +49,29 @@ What each role may do is in [roles and permissions](reference/roles.md#extension
 | --- | --- |
 | `whoami` | Your teams with your role in each, their databases per environment, where Ingestion is enabled, and this extension. |
 | `list_environments` | Where Ingestion is enabled for a team, and the databases of each environment. |
-| `enable_environment` / `disable_environment` | Enables Ingestion for a team environment, where runs act as the team's service account, or disables it (team administrators). Disabling stops its pipelines. |
+| `enable_environment` / `disable_environment` | Enables Ingestion for a team environment, where runs act as the team's service account, or disables it (team administrators). Disabling stops its pipelines. Both return the environment as `list_environments` shows it. |
 | `list_templates` | A complete [pipeline](#pipelines) definition per source type to adapt, with the secrets each needs. |
 | `list_pipelines` | Pipelines of your teams with their schedule and last run, optionally of one team or environment. |
 | `get_pipeline` | A pipeline's definition, which secrets are set or missing (never their values), its schedule and recent runs. |
 | `validate_pipeline` | Checks a definition without saving it: allowed keys, addresses, the secrets it needs and resource hints. |
-| `create_pipeline` / `update_pipeline` | Creates or changes a pipeline (team administrators). A new host removes its secrets; a new database or namespace loads from scratch. |
+| `create_pipeline` / `update_pipeline` | Creates or changes a pipeline (team administrators). An update changes only what you give; `expected_revision` refuses it when someone else changed the pipeline since you read it. A new host removes its secrets; a new database or namespace loads from scratch. |
 | `delete_pipeline` | Deletes a pipeline with its runs, schedule and secrets (team administrators). The tables it loaded stay. `confirm_name` must equal its name. |
 | `set_pipeline_secrets` | Sets, replaces or removes a pipeline's secrets (team administrators). Write-only: no tool returns them. |
-| `run_pipeline` | Runs a pipeline now (writers). `full_refresh` loads everything again; `wait` blocks up to 600 seconds. |
-| `list_runs` / `get_run` / `get_run_logs` | A pipeline's runs; one run's status, loaded tables with row counts and error; the last lines of its log, with secrets masked. |
+| `run_pipeline` | Runs a pipeline now (writers) and returns the run. `full_refresh` loads everything again; `wait` blocks up to 600 seconds for it to finish. |
+| `list_runs` / `get_run` / `get_run_logs` | A pipeline's runs, newest first (`limit`, 20 by default, at most 200); one run's status, totals, error and the tables it loaded with their row counts in `results`, with `wait` to block until it finishes; the last `limit` lines of its log (500 by default, at most 5000), with secrets masked. |
 | `cancel_run` | Stops a queued or running run (writers). |
 | `set_schedule` / `delete_schedule` | Runs a pipeline on a five-field cron schedule in UTC, at most every 5 minutes, or removes it (team administrators). |
+
+### What the tools and the API return
+
+Every tool returns what its REST operation under `/api/v1` returns; the [OpenAPI contract](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/ingestion/contracts/ingestion-api/v1/openapi.yaml) describes each one.
+
+- A list is an object with one key: `{"pipelines": [...]}`, `{"runs": [...]}`, `{"templates": [...]}`, `{"environments": [...]}`.
+- Times are RFC 3339 strings in UTC, such as `2026-11-24T09:15:02.123Z`, or `null`.
+- A run's `status` is `queued`, `running`, `success`, `failed` (dlt reported an error), `error` (the platform could not run it: no start, time limit or restart) or `cancelled`. `scheduled` tells whether a schedule started it; `triggeredBy` is then `schedule`. `summary` holds its totals and `results` the tables it loaded; a list of runs leaves `results` out.
+- A schedule's `nextRunAt` is `null` while it is not enabled.
+- A delete returns `{"deleted": true, "pipeline": "<id>"}`. In REST the name to confirm is a query parameter: `DELETE /api/v1/pipelines/{pipeline}?confirmName=<name>`.
+- An error is `{"error": "<text>", "code": "<code>"}`, sometimes with `detail`; a tool reports it as `<text> [<code>]`. REST request bodies and query parameters are camelCase (`fullRefresh`, `expectedRevision`, `confirmName`); tool parameters are snake_case.
 
 ## Pipelines
 
@@ -76,7 +87,7 @@ Per resource (endpoint, table or file), `writeDisposition` is `append`, `replace
 
 dlt adds the columns `_dlt_load_id` and `_dlt_id` to each table, and child tables named `<table>__<field>` for nested lists. Its own bookkeeping tables stay with the run, never in your namespace. The catalog shows every loaded table as **Produced by dlt**, with a link back to the pipeline, and the next run continues from the last cursor.
 
-Secrets (API keys, tokens, passwords) never go in a definition. Refer to them as `"$secret:<name>"` and set them on the pipeline's page, with `PUT /api/v1/pipelines/{id}/secrets`, or with the MCP tool `set_pipeline_secrets`. They are encrypted, write-only and masked in run logs. Changing where a pipeline connects removes its secrets.
+Secrets (API keys, tokens, passwords) never go in a definition. Refer to them as `"$secret:<name>"` and set them on the pipeline's page, with `PATCH /api/v1/pipelines/{pipeline}/secrets`, or with the MCP tool `set_pipeline_secrets`. They are encrypted, write-only and masked in run logs. Changing where a pipeline connects removes its secrets.
 
 Templates to start from: CBS StatLine open data (REST, paginated OData), a PostgreSQL table incremental on `updated_at`, MySQL or MariaDB tables, and airport codes as CSV over HTTPS.
 

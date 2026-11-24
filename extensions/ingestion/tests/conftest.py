@@ -39,6 +39,10 @@ REST = {
 }
 
 
+class ToolRefused(Exception):
+    """An MCP tool answered with an error."""
+
+
 def settings(tmp_path, **overrides):
     return Settings(bridge_url="http://bridge:3005", extension_id="ingestion", client_id="ext-ingestion",
                     client_secret="s" * 48, mcp_client_id="ext-ingestion-mcp", issuer=ISSUER, internal_issuer=ISSUER,
@@ -196,8 +200,25 @@ def stack(tmp_path, monkeypatch):
                     "resources": {"customers": {"writeDisposition": "merge", "primaryKey": ["id"]}}, **fields}
             return call("POST", "/pipelines", user, json=body)
 
-        yield SimpleNamespace(client=client, call=call, create=create, bridge=bridge, launcher=launcher, app=app,
-                              services=app.state.services, settings=config)
+        def rpc(method, user, **params):
+            response = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                                   headers={"Authorization": f"Bearer {user}",
+                                            "Accept": "application/json, text/event-stream"})
+            return response.json()["result"]
+
+        def tool(name, user="alice", **arguments):
+            """Calls an MCP tool as an agent does. Returns its result; a refusal raises ToolRefused with its text."""
+            result = rpc("tools/call", user, name=name, arguments=arguments)
+            text = "".join(block.get("text", "") for block in result["content"])
+            if result.get("isError"):
+                raise ToolRefused(text)
+            return json.loads(text)
+
+        def tools():
+            return {t["name"]: t for t in rpc("tools/list", "alice")["tools"]}
+
+        yield SimpleNamespace(client=client, call=call, create=create, tool=tool, tools=tools, bridge=bridge,
+                              launcher=launcher, app=app, services=app.state.services, settings=config)
 
 
 def _fast_sleep(original):

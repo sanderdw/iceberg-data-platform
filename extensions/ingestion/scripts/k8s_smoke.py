@@ -37,7 +37,7 @@ async def main():
                                     resources=template["resources"])
         created.append(airports)
         result = await run(writer, airports["id"])
-        rows = {t["name"]: t["rows"] for t in result["summary"]["tables"]}
+        rows = {t["name"]: t["rows"] for t in result["results"]}
         assert rows["airports"] > 1000, rows
         print(f"PASS: a Job loaded {rows['airports']} airports from the internet")
 
@@ -55,7 +55,7 @@ async def main():
             created.append(probe)
             result = await writer.call("run_pipeline", pipeline=probe["id"], wait=600)
             assert result["status"] == "failed", result
-            lines = "\n".join((await reader.call("get_run_logs", run=result["id"], tail=200))["lines"])
+            lines = "\n".join((await reader.call("get_run_logs", run=result["id"], limit=200))["lines"])
             assert re.search(r"(?i)resolve|name or service|getaddrinfo|refused|private|timed out", lines), lines[-2000:]
             print(f"PASS: a run cannot reach {host}")
         for pipeline in created:

@@ -86,7 +86,7 @@ main.initial { display: grid; place-items: center; min-height: calc(100vh - 96px
 .chip { font: .7rem var(--mono); padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border-visible); color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
 .chip.success { border-color: var(--success); color: var(--success); }
 .chip.failed, .chip.error { border-color: var(--fail); color: var(--fail); }
-.chip.running, .chip.queued { border-color: var(--warn); color: var(--warn); }
+.chip.running, .chip.queued, .chip.incomplete, .chip.partial { border-color: var(--warn); color: var(--warn); }
 .agent-hint { background: transparent; }
 .agent-hint + .agent-hint { margin-top: 16px; }
 .agent-hint .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
@@ -110,7 +110,7 @@ dialog ul { margin: 0; padding-left: 18px; font: .75rem var(--mono); }
 .status { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--idle); flex: none; }
 .status.success { background: var(--success); }
 .status.failed, .status.error { background: var(--fail); }
-.status.running, .status.queued { background: var(--warn); }
+.status.running, .status.queued, .status.incomplete, .status.partial { background: var(--warn); }
 .status.cancelled { background: var(--text-disabled); }
 .chip.cancelled { color: var(--text-secondary); }
 .chip.missing { border-color: var(--warn); color: var(--warn); }

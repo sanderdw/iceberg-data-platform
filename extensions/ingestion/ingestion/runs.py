@@ -274,12 +274,13 @@ class RunManager:
         if response.status_code not in (200, 404):
             LOG.warning("The artifacts of %s could not be removed (%s).", id, response.status_code)
 
-    async def logs(self, id, tail=2000):
+    async def logs(self, id, limit=500):
+        """The last `limit` lines of a run's log."""
         path = self.artifacts / id / "out" / "run.log"
         if path.exists():
-            lines = path.read_text(errors="replace").splitlines()[-tail:]
+            lines = path.read_text(errors="replace").splitlines()[-limit:]
         else:
-            response = await self.http.get(f"/runs/{id}/logs", params={"tail": tail})
+            response = await self.http.get(f"/runs/{id}/logs", params={"tail": limit})
             lines = response.text.splitlines() if response.status_code == 200 else []
         # The runner already masks its secrets; this second pass uses the values stored now.
         run = self.store.run(id)

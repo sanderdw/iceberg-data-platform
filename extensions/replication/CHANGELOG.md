@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+The REST API and the MCP tools follow the platform's one set of conventions. Nothing of the old shapes
+is kept: update scripts and agent instructions.
+
+- **Lists** are an object with one key, in REST as in MCP: `{"replications": [...]}`, `{"templates": [...]}`,
+  `{"runs": [...]}` and `{"environments": [...]}` (REST returned bare arrays).
+- **Runs.** Starting a run returns 202 with the run as `get_run` returns it. The tables a run wrote are
+  in `results`, beside `summary` (was `summary.tables`); a list of runs leaves `results` out.
+  `GET /runs/{run}` and `get_run` take `wait` (0 to 600 seconds). A run has `scheduled` (was
+  `schedule`). Run logs take `limit` (was `tail`).
+- **`incomplete`** is the status of a first copy that stopped at the time limit (was `partial`); the
+  next run continues it. Runs that an earlier version stored keep `partial`.
+- **Times** are RFC 3339 strings in UTC with milliseconds, such as `2026-11-24T09:15:02.123Z` (were
+  seconds since 1970). A schedule's `nextRunAt` is `null` while it is not enabled, and a schedule has
+  `createdAt`.
+- **REST bodies are camelCase:** `expectedRevision` (was `expected_revision`) and `fullRefresh` (was
+  `full_refresh`). The tools keep `expected_revision` and `full_refresh`.
+- **Delete** is `DELETE /replications/{replication}?confirmName=<name>` (was `POST /replications/{replication}/delete`
+  with a JSON body) and returns `{"deleted": true, "replication": "<id>"}` (was `id`). `dropSlotSql`
+  and `warning` come with it as before.
+- **Secrets** are set with `PATCH /replications/{replication}/secrets` (was `PUT`): the call merges.
+- **Environments.** `enable_environment` and `disable_environment` return the environment as
+  `list_environments` shows it: `{team, environment, enabled, enabledBy, databases}`. Disabling one that
+  is not enabled is 409 `environment_not_enabled` (was 404). The service account's id is no longer
+  returned.
+- **`whoami`** returns only what this extension shows about you; `sharedDatabases` is gone.
+- **Errors.** A database in the body that is not the team's in that environment is 422
+  `invalid_database` (was `unknown_database`). An unknown path is 404 `not_found`, a wrong method 405
+  `method_not_allowed` and an unexpected error 500 `internal_error`, all as `{"error", "code"}`.
+- `update_replication` and `set_replication_secrets` are marked destructive, so an agent asks first: they can
+  remove secrets and the saved position in the change log.
+- The OpenAPI contract describes every response and the error body.
+
 ## 0.0.1 - 2026-11-19
 
 - First version of Replication (OLake) for the Iceberg Data Platform, a **beta**, on Extension Bridge contract 0.1.

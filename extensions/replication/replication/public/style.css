@@ -274,8 +274,8 @@ dialog h2 { color: var(--text-display); font-size: 1.25rem; }
 .result:empty { display: none; }
 
 /* Replication */
-.chip.partial, .chip.warn { border-color: var(--warn); color: var(--warn); }
-.status.partial, .status.warn { background: var(--warn); }
+.chip.incomplete, .chip.partial, .chip.warn { border-color: var(--warn); color: var(--warn); }
+.status.incomplete, .status.partial, .status.warn { background: var(--warn); }
 .columns.even { grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); align-items: stretch; margin-top: 16px; }
 .columns.even > .card { margin: 0; }
 .segmented.wrap { max-width: 100%; border-radius: 22px; }

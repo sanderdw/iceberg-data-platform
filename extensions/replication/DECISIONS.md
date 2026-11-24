@@ -93,7 +93,7 @@ start-up program stops OLake with SIGTERM 3 minutes before the run's limit. Veri
 
 - **During a first copy**: OLake records the chunks still to copy in its state. An 8,000,000-row
   copy stopped after 20 seconds with 2 chunks left; the next run copied the rest, and DuckDB and
-  PyIceberg counted exactly 8,000,000 rows and as many distinct ids. The run is `partial`.
+  PyIceberg counted exactly 8,000,000 rows and as many distinct ids. The run is `incomplete`.
 - **During change capture**: the position does not advance, so the next run reads those changes
   again. OLake's upserts make that safe.
 

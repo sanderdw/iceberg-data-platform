@@ -70,7 +70,7 @@ A replication slot keeps the source's change log until a run has read it. If run
     Optionally an Iceberg table name and a partition, such as `/{created_at,month}`. A table without a primary key is appended to.
 5. **Run now**, then a schedule such as every 15 minutes (`*/15 * * * *`, UTC).
 
-The first run copies the existing rows (**First run**: *Copy rows, then changes*), or only follows changes from then on (*Only new changes*). A first copy that doesn't fit in one run stops at the time limit with status **partial**; the next run continues where it stopped.
+The first run copies the existing rows (**First run**: *Copy rows, then changes*), or only follows changes from then on (*Only new changes*). A first copy that doesn't fit in one run stops at the time limit with status **incomplete**; the next run continues where it stopped.
 
 **Copy everything again** starts a run without the saved change log position. Tables with a primary key keep one row per key; append-only tables get their rows again.
 
@@ -99,18 +99,29 @@ What each role may do is in [roles and permissions](reference/roles.md#extension
 | --- | --- |
 | `whoami` | Your teams with your role in each, their databases per environment, where Replication is enabled, and this extension. |
 | `list_environments` | Where Replication is enabled for a team, and the databases of each environment. |
-| `enable_environment` / `disable_environment` | Enables Replication for a team environment, where runs act as the team's service account, or disables it (team administrators). |
+| `enable_environment` / `disable_environment` | Enables Replication for a team environment, where runs act as the team's service account, or disables it (team administrators). Both return the environment as `list_environments` shows it. |
 | `list_templates` | A complete replication per kind (change data capture, incremental) to adapt, with the setup SQL. |
 | `list_replications` / `get_replication` | Replications with their schedule and last run; one replication with its tables, whether the password is set (never its value), its last source check, setup SQL, warnings and recent runs. |
 | `validate_replication` | Checks a definition without saving it: allowed keys, addresses, tables, options and the setup SQL. |
-| `create_replication` / `update_replication` | Creates or changes a replication (team administrators). A new host or user removes the password; a new source, slot, database or namespace copies everything again. |
+| `create_replication` / `update_replication` | Creates or changes a replication (team administrators). An update changes only what you give; `expected_revision` refuses it when someone else changed the replication since you read it. A new host or user removes the password; a new source, slot, database or namespace copies everything again. |
 | `delete_replication` | Deletes a replication with its runs, schedule and password (team administrators). Its tables stay. Returns the SQL to drop the replication slot. `confirm_name` must equal its name. |
 | `set_replication_secrets` | Sets, replaces or removes the password (team administrators). Write-only. |
 | `check_source` | Connects with the stored password (writers): OLake's checks and the tables it can replicate. |
-| `run_replication` | Runs now (writers). `full_refresh` copies everything again; `wait` blocks up to 600 seconds. |
-| `list_runs` / `get_run` / `get_run_logs` | Runs and source checks; one run's status, rows written and replaced per table, and the change log position; its log, with secrets masked. |
+| `run_replication` | Runs now (writers) and returns the run. `full_refresh` copies everything again; `wait` blocks up to 600 seconds for it to finish. |
+| `list_runs` / `get_run` / `get_run_logs` | Runs and source checks, newest first (`limit`, 20 by default, at most 200); one run's status, totals and change log position, error, and the rows written and replaced per table in `results`, with `wait` to block until it finishes; the last `limit` lines of its log (500 by default, at most 5000), with secrets masked. |
 | `cancel_run` | Stops a queued or running run (writers). Committed changes stay. |
 | `set_schedule` / `delete_schedule` | Runs on a five-field cron schedule in UTC, at most every 5 minutes, or removes it (team administrators). |
+
+### What the tools and the API return
+
+Every tool returns what its REST operation under `/api/v1` returns; the [OpenAPI contract](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/replication/contracts/replication-api/v1/openapi.yaml) describes each one.
+
+- A list is an object with one key: `{"replications": [...]}`, `{"runs": [...]}`, `{"templates": [...]}`, `{"environments": [...]}`.
+- Times are RFC 3339 strings in UTC, such as `2026-11-24T09:15:02.123Z`, or `null`.
+- A run's `status` is `queued`, `running`, `success`, `incomplete` (the first copy stopped at the time limit; the next run continues it), `failed` (OLake reported an error), `error` (the platform could not run it: no start, time limit or restart) or `cancelled`. Runs that an earlier version stored show `incomplete` as `partial`. `scheduled` tells whether a schedule started it; `triggeredBy` is then `schedule`. `summary` holds its totals and `results` the tables it wrote; a list of runs leaves `results` out.
+- A schedule's `nextRunAt` is `null` while it is not enabled.
+- A delete returns `{"deleted": true, "replication": "<id>"}`, with `dropSlotSql` and `warning` when the source has a replication slot. In REST the name to confirm is a query parameter: `DELETE /api/v1/replications/{replication}?confirmName=<name>`.
+- An error is `{"error": "<text>", "code": "<code>"}`, sometimes with `detail`; a tool reports it as `<text> [<code>]`. REST request bodies and query parameters are camelCase (`fullRefresh`, `expectedRevision`, `confirmName`); tool parameters are snake_case.
 
 ## Isolation and limits
 
