@@ -133,6 +133,12 @@ def test_admin_lifecycle_creates_links_edits_and_deletes(admin, caplog):
     assert overview["health"]["status"] == "online" and overview["teams"] == []
     team = ok(admin, "create_team", {"name": "data-team", "description": "Analytics"})["id"]
     assert ok(admin, "update_team", {"team": team, "name": "data-team", "description": "Data"})["description"] == "Data"
+    # What an update leaves out stays as it is.
+    assert ok(admin, "update_team", {"team": team, "name": "data-renamed"})["description"] == "Data"
+    cleared = ok(admin, "update_team", {"team": team, "description": ""})
+    assert (cleared["name"], cleared["description"]) == ("data-renamed", "")
+    assert ok(admin, "update_team", {"team": team, "name": "data-team"})["name"] == "data-team"
+    refused(admin, "update_team", {"team": team}, "Give a name, a description or both")
     database = ok(admin, "create_database", {"name": "analytics", "team": team, "environment": "acceptance"})
     assert database["environment"] == "acceptance"
     renamed = ok(admin, "rename_database", {"database": database["id"], "name": "analytics_new"})

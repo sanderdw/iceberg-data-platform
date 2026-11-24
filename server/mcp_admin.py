@@ -19,6 +19,7 @@ from .models import (
     ShareId,
     TeamId,
     TeamInput,
+    TeamUpdate,
     identifier_part,
 )
 from .validation import validation_message
@@ -110,9 +111,10 @@ def create_admin_mcp(provider, oidc, *, lock, user_management, overview, users, 
         return await query(provider.save_team, data)
 
     @mcp.tool(annotations=UPDATE)
-    async def update_team(team: TeamId, name: ObjectName, description: Description = "") -> dict[str, Any]:
-        """Rename or describe a team; its id and memberships stay the same."""
-        data = validated(TeamInput, "/api/teams", name=name, description=description)
+    async def update_team(team: TeamId, name: ObjectName | None = None,
+                          description: Description | None = None) -> dict[str, Any]:
+        """Rename or describe a team; its id and memberships stay the same, and so does what you leave out."""
+        data = validated(TeamUpdate, "/api/teams", name=name, description=description)
         return await query(provider.save_team, data, team)
 
     @mcp.tool(annotations=DESTRUCTIVE)

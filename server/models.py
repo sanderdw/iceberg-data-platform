@@ -34,6 +34,18 @@ class TeamInput(Input):
     description: str = Field(default="", max_length=280)
 
 
+class TeamUpdate(Input):
+    """What is left out stays as it is."""
+    name: Name | None = None
+    description: str | None = Field(default=None, max_length=280)
+
+    @model_validator(mode="after")
+    def something_to_change(self):
+        if self.name is None and self.description is None:
+            raise ValueError("Give a name, a description or both.")
+        return self
+
+
 class DatabaseInput(Input):
     name: Name
     team: TeamId

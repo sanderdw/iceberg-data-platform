@@ -28,6 +28,7 @@ from .models import (
     Memberships,
     ServiceError,
     TeamInput,
+    TeamUpdate,
     UserInput,
 )
 from .polaris import PolarisProvider
@@ -374,7 +375,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         return provider.save_team(data)
 
     @app.patch("/api/teams/{id}")
-    def update_team(id: str, data: TeamInput):
+    def update_team(id: str, data: TeamUpdate):
         return provider.save_team(data, id)
 
     @app.delete("/api/teams/{id}")

@@ -328,13 +328,17 @@ class PolarisProvider:
         existing = self.list_teams()
         if id and id not in {t["id"] for t in existing}:
             raise ServiceError(404, "Team not found.")
-        if any(t["name"] == data.name and t["id"] != id for t in existing):
+        # An update keeps what it leaves out (TeamUpdate); a new team has both (TeamInput).
+        current = next((t for t in existing if t["id"] == id), {})
+        name = current.get("name") if data.name is None else data.name
+        description = current.get("description", "") if data.description is None else data.description
+        if any(t["name"] == name and t["id"] != id for t in existing):
             raise ServiceError(409, "This team name already exists.")
         props = {
             "portal.managed-by": MANAGED,
             "portal.kind": "team",
-            "portal.name": data.name,
-            "portal.description": data.description,
+            "portal.name": name,
+            "portal.description": description,
         }
         if id:
             result = self.update_properties(f"/principal-roles/{enc(id)}", props)

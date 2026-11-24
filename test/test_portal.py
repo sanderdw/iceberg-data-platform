@@ -102,6 +102,10 @@ def test_teams_are_independent_and_rename_preserves_relationships(portal):
     assert overview["users"][0]["id"] == u["id"]
     assert overview["databases"][0]["bucket"] == d["bucket"]
     assert p.post("/teams", {"name": "renamed"}).status_code == 409
+    # A rename alone keeps the description, and the other way round.
+    assert p.patch(f"/teams/{owner}", {"name": "renamed-again"}).json()["description"] == "Central team"
+    assert p.patch(f"/teams/{owner}", {"description": "Core"}).json()["name"] == "renamed-again"
+    assert p.patch(f"/teams/{owner}", {}).status_code == 422
 
 
 def test_memberships_required_exist_and_unique(portal):
