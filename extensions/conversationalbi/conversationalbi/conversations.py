@@ -1,11 +1,12 @@
 """The conversation record, kept only for teams that asked for it.
 
-A chat run is recorded when a team administrator enabled the Evaluations extension for the team
-and environment of the semantic model the agent answered from: that is how a team opts in to live
-evaluation. Everything else stays in memory, as before. A record holds the question, the answer,
+A chat run is recorded while a team administrator has live evaluation switched on, in the
+Evaluations extension, for the team and environment of the semantic model the agent answered from.
+Evaluations tells Conversational BI when that starts and stops (evaluation.py); stopping deletes
+what was kept. Everything else stays in memory, as before. A record holds the question, the answer,
 the tool calls with what the agent saw of their results, the LLM, token usage and the trace id. It
 is kept BI_CONVERSATION_RETENTION_DAYS days (30; 0 records nothing) and is readable only by the
-Evaluations extension, for that team (evaluation.py).
+Evaluations extension, for that team.
 """
 
 import json
@@ -27,6 +28,9 @@ CREATE TABLE IF NOT EXISTS conversations (
   trace_id TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS conversations_by_team ON conversations (team, environment, at);
+CREATE TABLE IF NOT EXISTS recording (
+  team TEXT NOT NULL, environment TEXT NOT NULL, since REAL NOT NULL, PRIMARY KEY (team, environment)
+);
 """
 MAX_TEXT = 20_000
 
@@ -69,6 +73,27 @@ class ConversationLog:
                           "there.", self.path.parent, type(exc).__name__)
         return self.db is not None
 
+    def recording(self, team, environment):
+        """Whether this team has live evaluation switched on there."""
+        if not self.enabled:
+            return False
+        with self.lock:
+            return self.db.execute("SELECT 1 FROM recording WHERE team = ? AND environment = ?",
+                                   (team, environment)).fetchone() is not None
+
+    def set_recording(self, team, environment, on):
+        """Start keeping this team's conversations there, or stop and delete the ones that were kept."""
+        if not self.enabled:
+            return
+        with self.lock:
+            if on:
+                self.db.execute("INSERT OR IGNORE INTO recording (team, environment, since) VALUES (?, ?, ?)",
+                                (team, environment, time.time()))
+            else:
+                self.db.execute("DELETE FROM recording WHERE team = ? AND environment = ?", (team, environment))
+                self.db.execute("DELETE FROM conversations WHERE team = ? AND environment = ?",
+                                (team, environment))
+
     def add(self, entry):
         with self.lock:
             self.db.execute(
@@ -105,7 +130,7 @@ class ConversationLog:
 
 
 class Recorder:
-    """Records a finished chat run when its team opted in; never lets the chat fail over it."""
+    """Records a finished chat run while its team has live evaluation on; never lets the chat fail over it."""
 
     def __init__(self, log, services):
         self.log = log
@@ -118,12 +143,15 @@ class Recorder:
         from .evaluation import CAPABILITY, queries, trace_id, transcript
 
         try:
-            bridge = self.services.bridge
-            if CAPABILITY not in await bridge.capabilities():
-                return
             access = await self.services.resolve(caller, state.model, me)
             team, environment = access["readingTeam"], access["database"]["environment"]
-            if "evaluations" not in await bridge.team_extensions(team, environment):
+            if not self.log.recording(team, environment):
+                return
+            bridge = self.services.bridge
+            # Evaluations was disabled for the team without switching live evaluation off first.
+            if (CAPABILITY not in await bridge.capabilities()
+                    or "evaluations" not in await bridge.team_extensions(team, environment)):
+                self.log.set_recording(team, environment, False)
                 return
             question, messages = turn(result.all_messages())
             calls = transcript(messages)

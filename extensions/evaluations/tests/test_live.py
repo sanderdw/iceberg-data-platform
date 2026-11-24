@@ -30,9 +30,29 @@ def test_only_administrators_switch_it_on(stack):
     stack.call("POST", f"/teams/{TEAM}/environments/development")
     assert live(stack, "bob").json()["code"] == "forbidden_role"
     assert live(stack, cron="hourly").json()["code"] == "invalid_cron"
+    assert stack.agent.recording_ == {}
     body = live(stack).json()
     assert body["enabled"] and "keeps this team's conversations" in body["note"]
+    assert stack.agent.recording_ == {(TEAM, "development"): True}
     assert stack.call("GET", f"/teams/{TEAM}/environments/development/live", "carol").json()["openReviews"] == 0
+
+
+def test_conversational_bi_records_only_while_it_is_on(stack):
+    stack.call("POST", f"/teams/{TEAM}/environments/development")
+    live(stack)
+    body = live(stack, enabled=False).json()
+    assert not body["enabled"] and "deleted the ones it kept" in body["note"]
+    assert stack.agent.recording_ == {(TEAM, "development"): False}
+    # A check tells Conversational BI again when it lost its record.
+    live(stack)
+    stack.agent.recording_.clear()
+    tick(stack)
+    assert stack.agent.recording_ == {(TEAM, "development"): True}
+    # Disabling Evaluations ends live evaluation and the record with it.
+    assert stack.call("DELETE", f"/teams/{TEAM}/environments/development").json()["disabled"]
+    assert stack.agent.recording_ == {(TEAM, "development"): False}
+    stack.call("POST", f"/teams/{TEAM}/environments/development")
+    assert not stack.call("GET", f"/teams/{TEAM}/environments/development/live").json()["enabled"]
 
 
 def test_a_check_flags_invented_figures_for_review(stack):

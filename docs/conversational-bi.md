@@ -138,7 +138,7 @@ The [Evaluations](evaluations.md) extension asks Conversational BI questions for
 | `BI_EVAL_SCHEMA_ONLY` | `false` | Allows Evaluations' [control arm](evaluations.md#what-the-semantic-model-adds), where an LLM writes SQL on the tables of a model. Never used by the chat |
 | `BI_CONVERSATION_RETENTION_DAYS` | `30` | How long conversations are kept for live evaluation; `0` keeps none |
 
-For live evaluation, Conversational BI keeps the conversations of a team, in an environment where the team enabled Evaluations: the question, the answer, the tool calls with what the agent saw of their results, the LLM and token usage. A conversation counts for the team of the semantic model the agent answered from. Other teams' conversations stay in memory only, as before. The record is on the volume `cbi-state` (on Kubernetes the PVC `cbi-state`, size `conversationStorage`), and only Evaluations reads it, per team.
+For live evaluation, Conversational BI keeps the conversations of a team, in an environment where a team administrator switched on live evaluation in [Evaluations](evaluations.md#live-evaluation): the question, the answer, the tool calls with what the agent saw of their results, the LLM and token usage. A conversation counts for the team of the semantic model the agent answered from. Other teams' conversations stay in memory only, as before. The record is on the volume `cbi-state` (on Kubernetes the PVC `cbi-state`, size `conversationStorage`), and only Evaluations reads it, per team. Switching live evaluation off, or disabling Evaluations for the environment, deletes that team's conversations there.
 
 ## Limits
 

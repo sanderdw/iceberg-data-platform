@@ -1,9 +1,10 @@
 """Live evaluation: real conversations, scored on a schedule, with the doubtful ones up for review.
 
-A team administrator switches it on per team and environment (set_live). Conversational BI then
-keeps that team's chat runs (its conversation record); on each check this extension reads the new
-ones, scores a sample (`sample_pct`, the same conversations whatever the order) with the checks
-that need no expected answer, and puts every one that fails in the review queue. A reviewer
+A team administrator switches it on per team and environment (set_live). Conversational BI keeps
+that team's chat runs (its conversation record) from then until it is switched off, when it deletes
+them. On each check this extension reads the new ones, scores a sample (`sample_pct`, the same
+conversations whatever the order) with the checks that need no expected answer, and puts every one
+that fails in the review queue. A reviewer
 dismisses it, or promotes it to a case of a question set: a real question becomes a regression test.
 
 Checks: grounded (every figure comes from a result), refusal_explained (a refused query is not
@@ -57,7 +58,11 @@ class LiveEvaluator:
         team, environment = setting["team"], setting["environment"]
         since, found = setting["watermark"], []
         for _ in range(MAX_PAGES):
-            page = (await self.agent.conversations(team, environment, since, PAGE))["conversations"]
+            response = await self.agent.conversations(team, environment, since, PAGE)
+            if not response.get("recording"):
+                # Conversational BI lost its record (a new volume, for example): live evaluation is still on.
+                await self.agent.recording(team, environment, True)
+            page = response["conversations"]
             found += page
             if page:
                 since = page[-1]["at"]

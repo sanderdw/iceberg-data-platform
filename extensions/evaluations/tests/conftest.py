@@ -112,6 +112,7 @@ class FakeAgent:
         self.failing = ()
         # Conversational BI's conversation record of the team (live evaluation).
         self.recorded = []
+        self.recording_ = {}
 
     async def close(self):
         pass
@@ -141,9 +142,14 @@ class FakeAgent:
                     "queries": [{"spec": {}, **refusal}]}
         return {**base, "answer": "Do you mean departure or arrival airports?", "toolCalls": [], "queries": []}
 
+    async def recording(self, team, environment, enabled):
+        self.recording_[(team, environment)] = enabled
+        return {"recording": enabled, "retentionDays": 30}
+
     async def conversations(self, team, environment, since, limit=200):
         found = [c for c in self.recorded if c["at"] > since][:limit]
-        return {"conversations": found, "recording": True, "retentionDays": 30}
+        return {"conversations": found, "recording": self.recording_.get((team, environment), False),
+                "retentionDays": 30}
 
     async def ask_control(self, team, environment, model, question, llm=None):
         """Without the semantic layer: right on the carriers, rounded by its SQL, and no refusal."""

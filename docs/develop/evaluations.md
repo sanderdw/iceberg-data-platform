@@ -21,7 +21,7 @@ flowchart LR
         Store["SQLite<br/>question sets, runs, reviews"]
     end
     subgraph CBI["Conversational BI"]
-        EvalApi["/api/v1/evaluation/*<br/>ask, query, models, conversations"]
+        EvalApi["/api/v1/evaluation/*<br/>ask, query, models, recording, conversations"]
         Record["Conversation record<br/>(opted-in teams)"]
     end
     Bridge["Extension Bridge<br/>team-extensions"]
@@ -36,7 +36,7 @@ flowchart LR
 - **Asking for a team.** Evaluations calls Conversational BI's `/api/v1/evaluation/*` with its own Keycloak service-account token. Conversational BI accepts it only there, only for callers in `BI_AGENT_CALLERS`, and only after the Bridge capability `team-extensions` confirms that the team enabled both extensions in that environment. It then reads with its own automation principal: the scope every team member has.
 - **A run.** `runner.py` builds a pydantic-evals `Dataset` from the question set's version. Its task asks `/evaluation/ask` and computes the expected query with `/evaluation/query`. The scorers in `scorers.py` compare them. Case results go to SQLite; the run then appends `evaluations.runs` and `evaluations.case_results` to the target database with a write token of Evaluations' automation principal (`lakehouse.py`), and publishes the semantic model `evaluation_results`. Only then is the run `done`.
 - **The control arm.** `measure_semantic_model` starts a paired `control` and `semantic` run. The control arm calls `/evaluation/ask-schema-only`: a second Pydantic AI agent (`agent/control.py`) with only table and column names and one `run_sql` tool, guarded by `semantic/sql_guard.py`. Only for this arm does the worker return binder, catalog and parser errors, so the LLM can correct its SQL as the semantic arm reads its error codes. `compare_runs` across arms scores on the checks both have and reports `uplift`.
-- **Live evaluation.** `live.py` pages through `/evaluation/conversations` since its watermark, scores a deterministic sample and queues failures as reviews. Conversational BI records a chat turn only when the team enabled Evaluations for the environment of the model it used (`conversationalbi/conversations.py`).
+- **Live evaluation.** `live.py` pages through `/evaluation/conversations` since its watermark, scores a deterministic sample and queues failures as reviews. Conversational BI records a chat turn only while live evaluation is on for the team and environment of the model it used (`conversationalbi/conversations.py`): `set_live` calls `/evaluation/recording`, and switching it off deletes the record. A check sends it again when Conversational BI reports that it is not recording.
 - **Telemetry.** A run is a span `evaluate <set>` with a span per case; httpx carries the trace into Conversational BI, so its agent run nests under the case. Scores are `gen_ai.evaluation.result` log events on the case span, sent to OpenTelemetry only.
 
 ## Install from source

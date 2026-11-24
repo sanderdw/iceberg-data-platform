@@ -242,7 +242,9 @@ def create_mcp(settings, services, verifier):
                        target_database: Annotated[str, Field(pattern=r"^(db-[a-f0-9]{32})?$")] = ""
                        ) -> dict[str, Any]:
         """Score a sample of the team's real Conversational BI conversations on a schedule (team administrators).
-        Conversational BI keeps the team's conversations while Evaluations is enabled there: ask the user first."""
+        While it is on, Conversational BI keeps the team's conversations in that environment: ask the user first.
+        Switching it off stops that and deletes the kept conversations. Pass sample_pct, cron and target_database
+        again when changing one of them: what is left out returns to its default."""
         return await call(services.set_live, team, environment, enabled, sample_pct, cron, target_database)
 
     @mcp.tool(annotations=READ)

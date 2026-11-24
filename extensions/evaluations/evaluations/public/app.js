@@ -449,7 +449,7 @@ async function livePage(team, environment) {
   const last = setting.last_summary || {};
   $('live-view').replaceChildren(
     el('section', { class: 'card' }, el('h2', {}, 'Settings'),
-      el('p', { class: 'small' }, 'While this is on, Conversational BI keeps this team\'s conversations in this environment for its retention period, and only the Evaluations extension reads them.'),
+      el('p', { class: 'small' }, 'While this is on, Conversational BI keeps this team\'s conversations in this environment for its retention period, and only the Evaluations extension reads them. Switching it off deletes them.'),
       el('label', { class: 'check' }, enabled, 'Score new conversations'),
       el('div', { class: 'form-grid' },
         el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Sample %'), sample),

@@ -57,7 +57,7 @@ Read the number with one thing in mind: the right answer is the semantic model's
 
 ## Live evaluation
 
-A team administrator switches on **Live evaluation** for an environment. From then on Conversational BI keeps that team's conversations in that environment, for its retention period (30 days by default), and only Evaluations reads them. Every check (hourly by default) scores a sample of the new ones:
+A team administrator switches on **Live evaluation** for an environment. From then on Conversational BI keeps that team's conversations in that environment, for its retention period (30 days by default), and only Evaluations reads them. Enabling Evaluations alone keeps nothing, and switching live evaluation off deletes the conversations that were kept. Every check (hourly by default) scores a sample of the new ones:
 
 - `grounded`: every figure comes from a result;
 - `refusal_explained`: a refused query isn't answered around with figures;

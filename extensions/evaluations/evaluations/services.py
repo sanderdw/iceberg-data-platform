@@ -139,6 +139,15 @@ class Services:
         enabled = {p["environment"]: p for p in await self.bridge.team_automation(caller.token, team)}
         if environment not in enabled:
             raise EvalError(404, "Evaluations is not enabled for this environment.", "environment_not_enabled")
+        setting = self.store.live(team, environment)
+        if setting and setting["enabled"]:
+            # Live evaluation ends with it: Conversational BI stops keeping conversations and deletes them. If it
+            # can't be reached now, it does so at the team's next chat, because Evaluations is disabled by then.
+            try:
+                await self.agent.recording(team, environment, False)
+            except EvalError:
+                pass
+            self.store.update_live(team, environment, enabled=0)
         await self.bridge.revoke(caller.token, enabled[environment]["id"])
         return {"disabled": True, "environment": environment}
 
@@ -341,11 +350,16 @@ class Services:
             raise EvalError(422, "Use a five-field cron expression in UTC, such as '0 * * * *'.", "invalid_cron")
         if enabled:
             await self.bridge.principal_for(team, environment)
+        # Conversational BI records only while this is on, so it hears first: no setting says on while it keeps
+        # nothing, or off while it still records.
+        await self.agent.recording(team, environment, enabled)
         setting = self.store.set_live(team, environment, enabled, sample_pct, cron,
                                       croniter(cron, time.time()).get_next(float), target_database or "",
                                       self.by(caller, me))
-        return {**setting, "note": "Conversational BI keeps this team's conversations while Evaluations is enabled "
-                                   "here, for its retention period."}
+        note = ("Conversational BI keeps this team's conversations here from now on, for its retention period."
+                if enabled else
+                "Conversational BI stopped keeping this team's conversations here and deleted the ones it kept.")
+        return {**setting, "note": note}
 
     async def list_reviews(self, caller, team, environment, status=None):
         await self.member(caller, team)

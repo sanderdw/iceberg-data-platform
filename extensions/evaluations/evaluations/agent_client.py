@@ -62,8 +62,12 @@ class AgentClient:
         """The governed query's result, or its refusal: an expected refusal is a valid ground truth too."""
         return await self.post("/query", {"team": team, "environment": environment, "model": model, "spec": spec})
 
+    async def recording(self, team, environment, enabled):
+        """Conversational BI keeps the team's chat runs there from now on, or stops and deletes them."""
+        return await self.checked("/recording", {"team": team, "environment": environment, "enabled": enabled})
+
     async def conversations(self, team, environment, since, limit=200):
-        """Recorded chat runs of a team that enabled Evaluations, oldest first, after `since`."""
+        """Chat runs recorded while the team's live evaluation was on, oldest first, after `since`."""
         return await self.checked("/conversations", {"team": team, "environment": environment, "since": since,
                                                      "limit": limit})
 

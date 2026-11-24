@@ -14,8 +14,10 @@ this way.
 - POST /api/v1/evaluation/ask-schema-only: the control arm, what the same LLM does with only the table
   schemas (agent/control.py); only with BI_EVAL_SCHEMA_ONLY set.
 - POST /api/v1/evaluation/query: a governed query, the ground truth an answer is scored against.
+- POST /api/v1/evaluation/recording: start or stop keeping the team's chat runs there. Evaluations
+  calls it when a team administrator switches live evaluation on or off; stopping deletes them.
 - POST /api/v1/evaluation/conversations: the team's recorded chat runs since a time, for live
-  evaluation (conversations.py); recorded only while the team has Evaluations enabled.
+  evaluation (conversations.py); recorded only while live evaluation is on.
 """
 
 import asyncio
@@ -37,7 +39,7 @@ from .semantic.compiler import ModelRef, QuerySpec
 CAPABILITY = "team-extensions"
 # The REST operations for other extensions; not MCP tools (api.OPERATIONS).
 OPERATIONS = {"evaluationModels", "evaluationAsk", "evaluationAskSchemaOnly", "evaluationQuery",
-              "evaluationConversations"}
+              "evaluationRecording", "evaluationConversations"}
 TEXT_ONLY = ("This question comes from an automated evaluation, not from the chat window: charts, tables and KPI "
              "cards are not available. Answer in text, from the query results.")
 
@@ -65,6 +67,12 @@ class SchemaOnlyAsk(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     # LLM_MODEL by default; otherwise one of BI_EVAL_MODELS.
     llm: str | None = Field(default=None, max_length=200)
+
+
+class Recording(BaseModel):
+    team: Team
+    environment: Environment
+    enabled: bool
 
 
 class Since(BaseModel):
@@ -225,10 +233,21 @@ class Evaluation:
                                             instructions=control.prompt(found))
         return self.report(result, started, data.llm)
 
+    async def recording(self, caller, data: Recording):
+        await self.scoped(caller, data.team, data.environment)
+        if not (self.log and self.log.enabled):
+            if data.enabled:
+                raise CbiError(409, "Conversational BI keeps no conversations here: BI_CONVERSATION_RETENTION_DAYS "
+                                    "is 0 or its state directory is not writable.", "recording_unavailable")
+        else:
+            self.log.set_recording(data.team, data.environment, data.enabled)
+        return {"recording": data.enabled, "retentionDays": self.settings.conversation_retention_days}
+
     async def conversations(self, caller, data: Since):
         await self.scoped(caller, data.team, data.environment)
         found = self.log.since(data.team, data.environment, data.since, data.limit) if self.log else []
-        return {"conversations": found, "recording": bool(self.log and self.log.enabled),
+        return {"conversations": found,
+                "recording": bool(self.log and self.log.recording(data.team, data.environment)),
                 "retentionDays": self.settings.conversation_retention_days}
 
     async def query(self, caller, data: GroundTruth):
@@ -262,8 +281,13 @@ def router(evaluation):
     async def query(data: Annotated[GroundTruth, Body()], caller: Caller):
         return await evaluation.query(caller, data)
 
+    @api.post("/recording", operation_id="evaluationRecording",
+              summary="Start or stop keeping a team's chat runs for live evaluation; stopping deletes them")
+    async def recording(data: Annotated[Recording, Body()], caller: Caller):
+        return await evaluation.recording(caller, data)
+
     @api.post("/conversations", operation_id="evaluationConversations",
-              summary="The team's recorded chat runs, oldest first: for teams that enabled Evaluations only")
+              summary="The team's recorded chat runs, oldest first: only while live evaluation is on")
     async def conversations(data: Annotated[Since, Body()], caller: Caller):
         return await evaluation.conversations(caller, data)
 

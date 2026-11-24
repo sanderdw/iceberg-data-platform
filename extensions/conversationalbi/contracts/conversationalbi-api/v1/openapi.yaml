@@ -495,12 +495,51 @@
         }
       }
     },
+    "/api/v1/evaluation/recording": {
+      "post": {
+        "tags": [
+          "evaluation"
+        ],
+        "summary": "Start or stop keeping a team's chat runs for live evaluation; stopping deletes them",
+        "operationId": "evaluationRecording",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Recording"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/evaluation/conversations": {
       "post": {
         "tags": [
           "evaluation"
         ],
-        "summary": "The team's recorded chat runs, oldest first: for teams that enabled Evaluations only",
+        "summary": "The team's recorded chat runs, oldest first: only while live evaluation is on",
         "operationId": "evaluationConversations",
         "requestBody": {
           "content": {
@@ -940,6 +979,35 @@
           "metrics"
         ],
         "title": "QuerySpec"
+      },
+      "Recording": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "pattern": "^team-[a-f0-9]{32}$",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environment",
+          "enabled"
+        ],
+        "title": "Recording"
       },
       "SchemaOnlyAsk": {
         "properties": {

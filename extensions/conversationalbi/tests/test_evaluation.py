@@ -117,12 +117,15 @@ def chat(stack, question="Which carrier is most delayed?", user="bob"):
         "x-cbi-runtime-key": "k" * 32, "x-cbi-run-ticket": ticket, "accept": "text/event-stream"})
 
 
-def test_conversations_are_kept_only_for_teams_that_enabled_evaluations(stack):
+def test_conversations_are_kept_only_while_live_evaluation_is_on(stack):
     stack.call("POST", f"/teams/{TEAM}/environments/development", "alice")
-    chat(stack)
     since = {"team": TEAM, "environment": "development"}
     stack.bridge.team_extensions_[(TEAM, "development")] = {"evaluations"}
-    assert call(stack, "/conversations", since).json()["conversations"] == []
+    # Enabling Evaluations alone keeps nothing.
+    chat(stack)
+    body = call(stack, "/conversations", since).json()
+    assert body["conversations"] == [] and not body["recording"]
+    assert call(stack, "/recording", {**since, "enabled": True}).json() == {"recording": True, "retentionDays": 30}
     chat(stack, "And which one cancels most?")
     body = call(stack, "/conversations", since).json()
     assert body["recording"] and body["retentionDays"] == 30
@@ -131,10 +134,29 @@ def test_conversations_are_kept_only_for_teams_that_enabled_evaluations(stack):
     assert "highest average departure delay" in found["answer"]
     assert [c["name"] for c in found["tool_calls"]] == ["query"] and found["queries"][0]["rowCount"] == 3
     assert found["llm_model"] == "test:flights" and found["model"] == FLIGHTS
-    # Later ones only, and never for a team that did not enable Evaluations.
     assert call(stack, "/conversations", {**since, "since": found["at"]}).json()["conversations"] == []
+    # Switching live evaluation off stops the record and deletes what was kept.
+    assert call(stack, "/recording", {**since, "enabled": False}).json()["recording"] is False
+    chat(stack)
+    body = call(stack, "/conversations", since).json()
+    assert body["conversations"] == [] and not body["recording"]
+    # Never for a team that did not enable Evaluations.
     stack.bridge.team_extensions_[(TEAM, "development")] = set()
     assert call(stack, "/conversations", since).json()["code"] == "extension_not_enabled"
+    assert call(stack, "/recording", {**since, "enabled": True}).json()["code"] == "extension_not_enabled"
+
+
+def test_recording_ends_when_the_team_disables_evaluations(stack):
+    stack.call("POST", f"/teams/{TEAM}/environments/development", "alice")
+    stack.bridge.team_extensions_[(TEAM, "development")] = {"evaluations"}
+    call(stack, "/recording", {"team": TEAM, "environment": "development", "enabled": True})
+    chat(stack)
+    log = stack.app.state.conversations
+    assert len(log.since(TEAM, "development", 0, 10)) == 1
+    # Disabled without switching live evaluation off first: the next chat ends the record.
+    stack.bridge.team_extensions_[(TEAM, "development")] = set()
+    chat(stack)
+    assert not log.recording(TEAM, "development") and log.since(TEAM, "development", 0, 10) == []
 
 
 def test_old_conversations_are_pruned(stack):
@@ -142,8 +164,10 @@ def test_old_conversations_are_pruned(stack):
 
     stack.call("POST", f"/teams/{TEAM}/environments/development", "alice")
     stack.bridge.team_extensions_[(TEAM, "development")] = {"evaluations"}
+    call(stack, "/recording", {"team": TEAM, "environment": "development", "enabled": True})
     chat(stack)
     log = stack.app.state.conversations
+    assert len(log.since(TEAM, "development", 0, 10)) == 1
     log.pruned = 0
     log.prune(now=time.time() + 31 * 86400)
     assert log.since(TEAM, "development", 0, 10) == []
