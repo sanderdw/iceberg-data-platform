@@ -183,6 +183,7 @@ def test_governed_queries_count_congestion_points_per_substation(contract, produ
     assert rows == expected and sum(rows.values()) == 162
 
 
+@pytest.mark.slow
 def test_publication_writes_documented_partitioned_tables_and_keeps_them_on_rerun(contract, product, catalog):
     report = quality_report(product, contract)
     first = publish_grid_forecast(catalog, dict(product), contract, NAMESPACE, report)
@@ -207,6 +208,7 @@ def test_publication_writes_documented_partitioned_tables_and_keeps_them_on_reru
     assert stored.sort("asset_id", "year", "direction").equals(product["LOAD_FORECAST"])
 
 
+@pytest.mark.slow
 def test_a_changed_contract_recreates_only_that_table(contract, product, catalog):
     report = quality_report(product, contract)
     publish_grid_forecast(catalog, dict(product), contract, NAMESPACE, report)
@@ -256,6 +258,7 @@ def test_polars_gets_the_storage_endpoint_and_renews_vended_credentials_itself(m
     assert polars_storage_options(table) == {}
 
 
+@pytest.mark.slow
 def test_both_notebooks_execute_against_a_local_catalog(tmp_path, monkeypatch, catalog):
     pytest.importorskip("marimo")
     pytest.importorskip("matplotlib")

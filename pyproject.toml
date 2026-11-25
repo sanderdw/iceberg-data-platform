@@ -29,8 +29,15 @@ otel = [
     "opentelemetry-instrumentation-httpx>=0.66b1",
     "opentelemetry-instrumentation-logging>=0.66b1",
 ]
-dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, {include-group = "otel"},
-       "pytest>=9.2.0", "ruff>=0.17.6"]
+dev = [
+    {include-group = "users"},
+    {include-group = "oidc"},
+    {include-group = "mcp"},
+    {include-group = "otel"},
+    "pytest>=9.2.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.17.6",
+]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "numpy>=2.5.4"]
 # The documentation site; see docs/develop/contributing.md.
 docs = ["zensical==0.1.1"]
@@ -55,6 +62,12 @@ notebook = [
 [tool.pytest.ini_options]
 testpaths = ["test"]
 pythonpath = ["."]
+addopts = ["--strict-markers"]
+# `npm test` leaves both out; `npm run verify` and CI run everything (docs/develop/contributing.md).
+markers = [
+    "slow: runs a full example notebook pipeline or builds a release archive",
+    "installer: runs install.sh or install.ps1; CI runs these on Linux, macOS and Windows",
+]
 
 [tool.ruff]
 target-version = "py314"

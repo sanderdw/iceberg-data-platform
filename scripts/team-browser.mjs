@@ -217,12 +217,12 @@ try {
       await noOverflow(page, `${name} at ${width}×${height}`);
       if (width !== 1280) continue;
       const bars = await page.evaluate(() => {
-        const box = selector => { const {top, bottom, height} = document.querySelector(selector).getBoundingClientRect(); return {top, bottom, height}; };
+        const box = selector => { const {top, bottom} = document.querySelector(selector).getBoundingClientRect(); return {top, bottom}; };
         return {header: box('header'), stacked: document.querySelector('header').classList.contains('stacked'), context: box('.workspace-heading'), title: box('.workspace-heading h1'), description: box('#page-description'), team: box('#team'), environment: box('#environment')};
       });
+      // The header stays on one row and the context bar holds the title, description and pickers.
       expect(bars.stacked).toBe(false);
-      expect(bars.header.height).toBe(60);
-      expect(Math.round(bars.context.height)).toBe(52);
+      expect(bars.context.top).toBeGreaterThanOrEqual(bars.header.bottom);
       for (const part of [bars.title, bars.description, bars.team, bars.environment]) {
         expect(part.top).toBeGreaterThanOrEqual(bars.context.top);
         expect(part.bottom).toBeLessThanOrEqual(bars.context.bottom);

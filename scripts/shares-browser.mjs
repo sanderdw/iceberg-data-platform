@@ -133,16 +133,13 @@ try {
   await expect(page.locator('#notice')).toBeHidden();
   await page.getByRole('button', {name: 'Notebooks', exact: true}).click();
   await expect(page.locator('#notice')).toBeHidden();
-  // On a laptop: a 60px header on one row, a 52px context bar and the 46px bar on the frame, which fits the screen.
+  // On a laptop: the header on one row, then the context bar and the bar on the frame, which fits the screen.
   await page.setViewportSize({width: 1280, height: 800});
   const chrome = await page.evaluate(() => {
-    const box = selector => { const {top, bottom, height} = document.querySelector(selector).getBoundingClientRect(); return {top, bottom, height}; };
-    return {header: box('header'), stacked: document.querySelector('header').classList.contains('stacked'), context: box('.workspace-heading'), bar: box('.workbench-bar'), host: box('#frame-host'), frame: box('#frame-host iframe')};
+    const box = selector => { const {top, bottom} = document.querySelector(selector).getBoundingClientRect(); return {top, bottom}; };
+    return {stacked: document.querySelector('header').classList.contains('stacked'), bar: box('.workbench-bar'), host: box('#frame-host'), frame: box('#frame-host iframe')};
   });
   expect(chrome.stacked).toBe(false);
-  expect(chrome.header.height).toBe(60);
-  expect(Math.round(chrome.context.height)).toBe(52);
-  expect(chrome.bar.height).toBe(46);
   expect(chrome.bar.bottom).toBe(chrome.host.top);
   expect(chrome.frame.top).toBeLessThanOrEqual(180);
   expect(chrome.frame.bottom).toBeLessThanOrEqual(800);

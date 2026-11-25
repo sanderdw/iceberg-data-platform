@@ -68,6 +68,7 @@ def test_energy_data_is_reproducible_and_balanced():
     assert all(r["grid_draw_kwh"] >= 0 and r["grid_export_kwh"] >= 0 for r in rows)
 
 
+@pytest.mark.slow
 def test_duckdb_notebook_executes_sql_with_plain_street_setting(monkeypatch):
     pytest.importorskip("marimo")
     pytest.importorskip("pyarrow")
@@ -100,6 +101,7 @@ def test_duckdb_notebook_executes_sql_with_plain_street_setting(monkeypatch):
         assert hourly["generation_kwh"].sum() == pytest.approx(expected["generation_kwh"].sum())
 
 
+@pytest.mark.slow
 def test_plain_writer_runs_without_a_button_and_skips_existing_rows(monkeypatch):
     pytest.importorskip("marimo")
     pytest.importorskip("pyarrow")
@@ -193,6 +195,7 @@ def test_dlt_tables_take_the_catalog_location(monkeypatch):
     assert calls == [None]
 
 
+@pytest.mark.slow
 def test_dlt_notebook_loads_and_merges_without_duplicates(monkeypatch, tmp_path):
     pytest.importorskip("marimo")
     pytest.importorskip("dlt")

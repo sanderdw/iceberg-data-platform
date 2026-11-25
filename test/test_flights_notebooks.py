@@ -99,6 +99,7 @@ def polaris(monkeypatch):
     return store
 
 
+@pytest.mark.slow
 def test_both_notebooks_execute_and_explain_metrics(tmp_path, monkeypatch):
     pytest.importorskip("marimo")
     pytest.importorskip("matplotlib")

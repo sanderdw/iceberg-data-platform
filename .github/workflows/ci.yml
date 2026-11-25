@@ -95,6 +95,9 @@ jobs:
       - run: uv sync --locked --all-groups
       - run: npm ci
       - run: npm run verify
+        env:
+          # The installers job runs these on Linux, macOS and Windows.
+          PYTEST_ADDOPTS: -m "not installer"
       - run: uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
       - run: npm run release:source
       - name: Scan the actual source release for secrets
@@ -111,6 +114,29 @@ jobs:
           uv export --locked --all-groups --no-hashes --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt" > /dev/null
           uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
       - run: npm audit
+  ui:
+    # Browser checks against API fixtures in the page: no stack, so no Docker.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui
+      - name: Preserve browser screenshots
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-failure-screenshots
+          path: test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7
   integration:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -148,11 +174,6 @@ jobs:
               command: ["/app/.venv/bin/uvicorn", "user_portal.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3002", "--no-access-log"]
           YAML
       - run: UV_NO_SYNC=1 npm run test:e2e
-      - run: npm run test:team-ui
-      - run: npm run test:catalog
-      - run: npm run test:shares-ui
-      - run: npm run test:forms-ui
-      - run: npm run test:navigation-ui
       - run: uv run --all-groups python -m scripts.catalog_smoke
       - run: uv run --all-groups python -m scripts.smoke
       - run: uv run --all-groups python -m scripts.data_smoke

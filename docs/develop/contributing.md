@@ -26,10 +26,16 @@ The user portal works the same way: stop `users` and run `uv run --group users p
 ## Tests
 
 ```bash
-npm run verify           # unit and authorization tests, Ruff, JavaScript syntax
+npm test                 # the fast loop: unit and authorization tests, in parallel
+npm run verify           # all tests, Ruff, JavaScript syntax
 npm run check:release    # release allowlist, versions, licenses and Markdown links
 uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
 ```
+
+`npm test` leaves out two pytest markers: `slow` (full example notebook pipelines and release archives)
+and `installer` (`install.sh` and `install.ps1`). Run one group with `uv run --all-groups pytest -m slow`.
+CI runs the installer tests on Linux, macOS and Windows; without `pwsh` the PowerShell cases skip, so
+point `ICEBERG_TEST_POWERSHELL` at a `pwsh` binary to run them.
 
 `test/test_helm_chart.py` renders the Helm chart and is skipped without `helm`. Install the pinned
 tools with `sh dev/kubernetes/tools.sh .local/bin` to run it, and `sh dev/kubernetes/kind_check.sh`
@@ -40,11 +46,7 @@ Browser checks run against fixtures and don't need a running stack:
 
 ```bash
 npx playwright install chromium
-npm run test:team-ui
-npm run test:catalog
-npm run test:shares-ui
-npm run test:forms-ui
-npm run test:navigation-ui
+npm run test:ui          # all five: test:team-ui, test:catalog, test:shares-ui, test:forms-ui and test:navigation-ui
 ```
 
 With both stacks running (each test creates and cleans up its own resources):

@@ -41,9 +41,21 @@ POWERSHELL = os.environ.get("ICEBERG_TEST_POWERSHELL") or shutil.which(
 )
 
 
-@pytest.fixture(params=[("latest", "latest"), ("keycloak-123-1", "keycloak-123-1"), ("v0.2.1", "0.2.1")],
-                ids=lambda tags: tags[0])
-def installer_env(tmp_path, request):
+pytestmark = pytest.mark.installer
+# Release tag -> image tag: the documented latest release, a branch preview and a pinned version.
+CHANNELS = {"latest": "latest", "keycloak-123-1": "keycloak-123-1", "v0.2.1": "0.2.1"}
+# The tag only changes the download URLs and image tags, which assert_started checks. The install and
+# rerun tests run on every channel; the other scenarios on the latest release.
+every_channel = pytest.mark.parametrize("release_tag", CHANNELS, indirect=True)
+
+
+@pytest.fixture
+def release_tag(request):
+    return getattr(request, "param", "latest")
+
+
+@pytest.fixture
+def installer_env(tmp_path, release_tag):
     release = tmp_path / "release"
     release.mkdir()
     archive_name = "iceberg-data-platform-0.2.1-install.tar.gz"
@@ -91,8 +103,8 @@ def installer_env(tmp_path, request):
         "TEST_RELEASE": str(release),
         "TEST_DOCKER_LOG": str(tmp_path / "docker.jsonl"),
         "TEST_DOWNLOAD_LOG": str(tmp_path / "downloads.txt"),
-        "TEST_RELEASE_TAG": request.param[0],
-        "TEST_IMAGE_TAG": request.param[1],
+        "TEST_RELEASE_TAG": release_tag,
+        "TEST_IMAGE_TAG": CHANNELS[release_tag],
         "TEST_PYTHON": sys.executable,
         "TEST_FAKE_RUN": str(fake_run),
         "TEST_FAIL": "",
@@ -223,6 +235,7 @@ def assert_rerun_hides_password(output, target):
     assert password not in output
 
 
+@every_channel
 def test_shell_install_and_rerun_preserve_configuration(shell_installer):
     run, env = shell_installer
     result = run()
@@ -670,6 +683,7 @@ try {
     return run, env
 
 
+@every_channel
 def test_powershell_install_and_rerun_preserve_configuration(powershell_installer):
     run, env = powershell_installer
     result = run()
