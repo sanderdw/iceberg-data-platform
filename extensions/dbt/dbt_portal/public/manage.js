@@ -6,27 +6,26 @@ const COMMANDS = ['build', 'run', 'test', 'seed'];
 const mayManage = environment => (environment === 'development' ? WRITERS : ADMINS).includes(project.role);
 
 async function renderSchedules() {
-  const schedules = await api(`/projects/${project.id}/schedules`);
+  const {schedules} = await api(`/projects/${project.id}/schedules`);
   const status = h('p', {class: 'small', role: 'status'});
   const say = (words, error = false) => { status.textContent = words; status.classList.toggle('error', error); };
-  const change = async (schedule, body, method = 'PUT') => {
+  // A change sends only what changes; the rest of the schedule stays.
+  const change = async (schedule, changes) => {
     try {
-      await api(method === 'DELETE' ? `/schedules/${schedule.id}` : `/projects/${project.id}/schedules/${schedule.id}`,
-        {method, body: JSON.stringify(body || {})});
+      await api(`/schedules/${schedule.id}`, changes ? {method: 'PATCH', body: JSON.stringify(changes)} : {method: 'DELETE'});
       await renderSchedules();
     } catch (error) { say(error.message, true); }
   };
-  const fields = s => ({environment: s.environment, cron: s.cron, command: s.command, select: s.selector || '', ref: s.ref, enabled: Boolean(s.enabled)});
   const table = schedules.length ? h('table', {},
     h('thead', {}, h('tr', {}, ...['Environment', 'Cron (UTC)', 'Command', 'Branch', 'Next run', 'State', ''].map(t => h('th', {text: t})))),
     h('tbody', {}, ...schedules.map(s => h('tr', {},
       h('td', {text: LABELS[s.environment]}), h('td', {class: 'nowrap', text: s.cron}),
-      h('td', {text: `${s.command} ${s.selector || ''}`.trim()}), h('td', {text: s.ref}),
-      h('td', {class: 'nowrap', text: s.enabled ? new Date(s.next_run_at * 1000).toLocaleString() : '—'}),
+      h('td', {text: `${s.command} ${s.select || ''}`.trim()}), h('td', {text: s.ref}),
+      h('td', {class: 'nowrap', text: s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : '—'}),
       h('td', {}, h('span', {class: `chip ${s.enabled ? 'success' : ''}`, text: s.enabled ? 'enabled' : 'paused'})),
       h('td', {class: 'nowrap'}, mayManage(s.environment) ? h('div', {class: 'tabs'},
-        h('button', {type: 'button', class: 'quiet', onclick: () => change(s, {...fields(s), enabled: !s.enabled}), text: s.enabled ? 'Pause' : 'Resume'}),
-        h('button', {type: 'button', class: 'danger', onclick: () => confirm(`Delete the ${s.cron} schedule in ${LABELS[s.environment]}?`) && change(s, null, 'DELETE'), text: 'Delete'})) : null)))))
+        h('button', {type: 'button', class: 'quiet', onclick: () => change(s, {enabled: !s.enabled}), text: s.enabled ? 'Pause' : 'Resume'}),
+        h('button', {type: 'button', class: 'danger', onclick: () => confirm(`Delete the ${s.cron} schedule in ${LABELS[s.environment]}?`) && change(s, null), text: 'Delete'})) : null)))))
     : h('p', {text: 'No schedules yet.'});
   fill($('#schedule-table'), table, status, scheduleForm(say));
 }
@@ -45,7 +44,7 @@ function scheduleForm(say) {
   const create = h('button', {type: 'submit', text: 'Add schedule'});
   const form = h('form', {class: 'card schedule-form'},
     h('h2', {text: 'New schedule'}),
-    h('p', {class: 'small', text: 'Five cron fields in UTC: minute, hour, day of month, month, day of week. "0 6 * * *" runs every day at 06:00 UTC.'}),
+    h('p', {class: 'small', text: 'Five cron fields in UTC: minute, hour, day of month, month, day of week. "0 6 * * *" runs every day at 06:00 UTC. A schedule runs at most every 5 minutes.'}),
     h('div', {class: 'form-grid'},
       h('label', {class: 'field'}, h('span', {class: 'eyebrow', text: 'Environment'}), environment),
       h('label', {class: 'field'}, h('span', {class: 'eyebrow', text: 'Cron (UTC)'}), cron),
@@ -67,7 +66,7 @@ function scheduleForm(say) {
 }
 
 async function renderSettings() {
-  const branches = await api(`/projects/${project.id}/branches`);
+  const {branches} = await api(`/projects/${project.id}/branches`);
   const status = h('p', {class: 'small', role: 'status'});
   const say = (words, error = false) => { status.textContent = words; status.classList.toggle('error', error); };
   const admin = ADMINS.includes(project.role), writer = WRITERS.includes(project.role);
@@ -87,7 +86,7 @@ async function renderSettings() {
       h('tbody', {}, ...project.environments.map(env => h('tr', {},
         h('td', {text: LABELS[env.environment]}),
         h('td', {}, h('span', {class: `chip ${env.enabled ? 'success' : ''}`, text: env.enabled ? 'enabled' : 'off'})),
-        h('td', {text: (env.databases || []).join(', ') || '—'}), h('td', {text: env.enabledBy || '—'}),
+        h('td', {text: env.databases.map(d => d.name).join(', ') || '—'}), h('td', {text: env.enabledBy || '—'}),
         h('td', {class: 'nowrap'}, admin ? h('button', {type: 'button', class: env.enabled ? 'danger' : 'quiet',
           onclick: () => toggle(env, !env.enabled), text: env.enabled ? 'Disable' : 'Enable'}) : null))))));
 

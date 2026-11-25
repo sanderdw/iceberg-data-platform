@@ -125,7 +125,7 @@ class GitRepos:
             head = self.resolve(project, branch)
             if expected and head != expected and not head.startswith(expected):
                 raise DbtError(409, "The branch moved since you read it. Read the files again and retry.",
-                               "stale_branch", {"head": head})
+                               "revision_conflict", {"head": head})
         identity = {"GIT_AUTHOR_NAME": author["name"], "GIT_AUTHOR_EMAIL": author["email"],
                     "GIT_COMMITTER_NAME": author["name"], "GIT_COMMITTER_EMAIL": author["email"]}
         with tempfile.TemporaryDirectory() as tmp:
@@ -157,7 +157,8 @@ class GitRepos:
         old = head or "0" * 40
         result = self.git(project, "update-ref", f"refs/heads/{branch}", revision, old, check=False)
         if result.returncode != 0:
-            raise DbtError(409, "The branch moved while committing. Read the files again and retry.", "stale_branch")
+            raise DbtError(409, "The branch moved while committing. Read the files again and retry.",
+                           "revision_conflict")
         return revision
 
     def create_branch(self, project, name, source="main"):
@@ -165,18 +166,18 @@ class GitRepos:
         revision = self.resolve(project, source)
         result = self.git(project, "update-ref", f"refs/heads/{name}", revision, "0" * 40, check=False)
         if result.returncode != 0:
-            raise DbtError(409, "This branch already exists.", "branch_exists")
+            raise DbtError(409, "This branch already exists.", "name_taken")
         return revision
 
     def delete_branch(self, project, name):
         if valid_branch(name) == "main":
-            raise DbtError(422, "The main branch cannot be deleted.", "protected_branch")
+            raise DbtError(403, "The main branch cannot be deleted.", "protected_branch")
         revision = self.resolve(project, name)
         self.git(project, "update-ref", "-d", f"refs/heads/{name}", revision)
 
     def log(self, project, ref, limit=30):
         revision = self.resolve(project, ref)
-        out = self.git(project, "log", f"--max-count={min(limit, 200)}", "--format=%H%x1f%an%x1f%ct%x1f%s%x1e",
+        out = self.git(project, "log", f"--max-count={limit}", "--format=%H%x1f%an%x1f%ct%x1f%s%x1e",
                        revision).stdout.decode()
         commits = []
         for record in filter(None, (r.strip() for r in out.split("\x1e"))):
@@ -202,7 +203,8 @@ class GitRepos:
         """
         source, target = self.resolve(project, branch), self.resolve(project, "main")
         if revision and self.resolve(project, revision) != source:
-            raise DbtError(409, f"{branch} changed since it was reviewed. Review it again, then merge.", "stale_branch")
+            raise DbtError(409, f"{branch} changed since it was reviewed. Review it again, then merge.",
+                           "revision_conflict")
         if self.git(project, "merge-base", "--is-ancestor", source, target, check=False).returncode == 0:
             return {"revision": target, "merged": False}
         result = self.git(project, "merge-tree", "--write-tree", "--name-only", "--no-messages", target, source,
@@ -219,7 +221,7 @@ class GitRepos:
                             input=(message or f"Merge {branch} into main").encode(), env=identity,
                             ).stdout.decode().strip()
         if self.git(project, "update-ref", "refs/heads/main", revision, target, check=False).returncode != 0:
-            raise DbtError(409, "main moved while merging. Retry.", "stale_branch")
+            raise DbtError(409, "main moved while merging. Retry.", "revision_conflict")
         return {"revision": revision, "merged": True}
 
     def archive(self, project, revision):

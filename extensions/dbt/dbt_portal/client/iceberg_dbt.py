@@ -283,12 +283,12 @@ def write_tree(root, contents, keep=()):
 # Commands.
 
 def cmd_projects(api, args):
-    for project in api.call("GET", "/projects"):
+    for project in api.call("GET", "/projects")["projects"]:
         print(f"{project['name']:<32} {project['role']:<8} {project['id']}  {project.get('description', '')}")
 
 
 def cmd_clone(api, args):
-    projects = api.call("GET", "/projects")
+    projects = api.call("GET", "/projects")["projects"]
     match = [p for p in projects if args.project in (p["name"], p["id"])]
     if len(match) != 1:
         raise Failure(f"No single project named {args.project}. `uv run iceberg_dbt.py projects` lists yours.")
@@ -347,7 +347,7 @@ def cmd_push(api, args):
     if not files:
         print("No local changes to push.")
         return
-    branches = {b["name"] for b in api.call("GET", f"/projects/{state['project']}/branches")}
+    branches = {b["name"] for b in api.call("GET", f"/projects/{state['project']}/branches")["branches"]}
     if args.branch not in branches:
         api.call("POST", f"/projects/{state['project']}/branches",
                  json={"name": args.branch, "source": state["revision"]})
@@ -382,13 +382,13 @@ def fresh(shown, lines):
 def follow(api, run):
     shown = []
     while True:
-        lines = api.call("GET", f"/runs/{run['id']}/logs", params={"tail": 5000})["lines"]
+        lines = api.call("GET", f"/runs/{run['id']}/logs", params={"limit": 5000})["lines"]
         for line in fresh(shown, lines):
             print(line, flush=True)
         shown = lines
         run = api.call("GET", f"/runs/{run['id']}", params={"wait": 5})
         if run["status"] not in ("queued", "running"):
-            for line in fresh(shown, api.call("GET", f"/runs/{run['id']}/logs", params={"tail": 5000})["lines"]):
+            for line in fresh(shown, api.call("GET", f"/runs/{run['id']}/logs", params={"limit": 5000})["lines"]):
                 print(line, flush=True)
             return run
 
@@ -406,12 +406,12 @@ def cmd_run(api, args):
         return 0 if result["status"] == "success" else 1
     run = api.call("POST", f"/projects/{state['project']}/runs", json={
         "command": args.command, "environment": args.target, "ref": ref, "select": select,
-        "full_refresh": bool(getattr(args, "full_refresh", False))})
+        "fullRefresh": bool(getattr(args, "full_refresh", False))})
     print(f"Running {args.command} on {ref} in {args.target} ({run['id']}).", file=sys.stderr, flush=True)
     run = follow(api, run)
     print(f"{run['status']}: {ORIGIN}/#/projects/{state['project']}/pipeline?"
           + urllib.parse.urlencode({"environment": args.target, "ref": ref, "run": run["id"]}), file=sys.stderr)
-    return 0 if run["status"] == "success" else (run.get("exit_code") or 1)
+    return 0 if run["status"] == "success" else (run.get("exitCode") or 1)
 
 
 def cmd_show(api, args):

@@ -267,7 +267,7 @@ instead of hiding it:
 
 - A build of a branch other than `main` in development returns a `hint` that it replaces the
   tables `main` builds.
-- A branch's pipeline (`get_pipeline` with `ref`) carries `overwrittenBy` when another branch built
+- A branch's pipeline (`get_pipeline_graph` with `ref`) carries `overwrittenBy` when another branch built
   development's tables after this branch's last build; the viewer turns it into a notice.
 - `merge_to_main` returns a `hint` while `main` has no successful build of the merged revision in
   development, and the viewer offers **Build main in Development** after a merge.
@@ -306,3 +306,25 @@ not reviewed with the pipeline, not merged by a team administrator, and not rebu
   `describe_semantic_model` shows the result. Dataset and field descriptions a model leaves out
   come from the dbt descriptions of the models it reads, as the user portal's publish fills them
   from table comments and column docs.
+
+## The API follows the extensions' shared contract (2026-11-25)
+
+The REST API and the MCP tools use the names, shapes and error codes the other extensions use, so an
+agent that knows one extension knows this one. `CHANGELOG.md` lists what changed; these are the
+choices that are dbt's own.
+
+- **A run with failing nodes is `failed`, not `partial`.** Nearly every failing dbt run has nodes
+  that succeeded, and alerts and the catalog's quality status key on `failed`. `results` says which
+  nodes failed.
+- **`compile_project` and `preview_model` are not read-only.** They write no table, but each leaves
+  a run a caller can list afterwards, so a client may not repeat them freely.
+- **`run_project` does not wait unless asked.** `wait` is 0 by default, as on every extension; it
+  was 120 seconds. An agent that wants the result passes `wait`, there or on `get_run`.
+- **A scheduled run is `triggeredBy: "schedule"`.** The schedule's id is in `schedule`. Stored runs
+  keep `schedule <id>` in their `triggered_by` column; the projection decides what a response shows.
+- **A schedule runs at most every 5 minutes**, checked when a cron is set. A schedule saved before
+  the minimum existed keeps its cron until someone changes it, so it can still be paused.
+- **Stored rows stay as they are.** Columns keep their names (`selector`, `next_run_at`) and times
+  stay seconds since 1970; `Services` projects every row into its response.
+- **`preview_model(model=…)` keeps `model`:** it takes a dbt model. Only the tool that takes any
+  node was renamed, to `get_node`, because `model` elsewhere on the platform is a semantic model.

@@ -45,6 +45,21 @@ def test_clone_build_and_show_run_main_on_the_platform(terminal, stack, monkeypa
     assert "Running build on main in development" in err and f"ref=main&run={run['id']}" in err
     assert terminal.run("show", "--select", "stg_regions", "--output", "json") == 0
     assert json.loads(capsys.readouterr().out) == {"show": [{"region_id": 1}]}
+    terminal.run("projects")
+    assert capsys.readouterr().out.split()[:3] == ["shop", "writer", terminal.id]
+
+
+def test_full_refresh_and_the_exit_code_of_a_failed_run(terminal, stack, monkeypatch, capsys):
+    terminal.run("clone", "shop")
+    monkeypatch.chdir(terminal.root)
+    assert terminal.run("build", "--full-refresh") == 0
+    run = stack.services.store.runs(terminal.id)[0]
+    assert stack.launcher.started[run["id"]]["job"]["command"] == ["build", "--full-refresh"]
+    # The log the API returned was printed, and a failed run ends with dbt's own exit code.
+    assert "Finished 'build' successfully" in capsys.readouterr().out
+    stack.launcher.exit_code = 2
+    assert terminal.run("build") == 2
+    assert capsys.readouterr().err.splitlines()[-1].startswith("failed: ")
 
 
 def test_local_edits_reach_the_platform_only_through_a_branch(terminal, stack, monkeypatch, capsys):
@@ -120,7 +135,9 @@ def test_following_a_log_keeps_printing_once_it_is_longer_than_one_request(capsy
 
         def call(self, method, path, params=None):
             if path.endswith("/logs"):
-                return {"lines": next(self.windows)}
+                assert params == {"limit": 5000}
+                return {"run": "run-1", "status": "running", "lines": next(self.windows)}
+            assert params == {"wait": 5}
             return {"id": "run-1", "status": next(self.statuses)}
 
     assert cli.follow(Api(), {"id": "run-1"})["status"] == "success"

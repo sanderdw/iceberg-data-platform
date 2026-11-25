@@ -139,4 +139,17 @@ uv run pytest && uv run ruff check .
 uv run python -m scripts.api_contract    # after an API change; review contracts/dbt-api/v1/openapi.yaml
 ```
 
+### API and MCP conventions
+
+The REST API and the MCP server share one service layer (`dbt_portal/services.py`), and a tool returns what its REST operation returns.
+
+- Every response is built by a projection (`public_project`, `public_run`, `public_schedule`, `public_commit`, `public_me`, `public_environment`). No stored row and no Bridge response is passed on as it is.
+- Stored times are seconds since 1970; `timestamp()` turns them into RFC 3339 strings in UTC with milliseconds.
+- REST bodies, query parameters and responses are camelCase; tool names and tool parameters are snake_case.
+- A list is an object with one plural key. A `limit` or `wait` outside its range is refused with 422 `invalid_request`.
+- A run is started with `POST /projects/{project}/runs` (202, the run with `results`), listed without `results`, and read with `GET /runs/{run}?wait=`.
+- A project has several schedules: `POST /projects/{project}/schedules` adds one, `PATCH /schedules/{schedule}` changes what the body holds, and `DELETE /schedules/{schedule}` removes it. A schedule runs at most every 5 minutes.
+- Every error, including an unknown path, a wrong method and an unexpected exception, is `{"error", "code", "detail"}`.
+- `dbt_portal/api.py` declares a response model for the shared shapes (identity, environments, projects, branches, commits, runs, schedules, deletes). Add each new key there: a key the model does not declare is left out of the REST response, and `tests/test_api.py` compares each tool's result with the REST body.
+
 A run ends 15 minutes before its catalog token expires; `RUN_TIMEOUT_SECONDS` can only lower that. With Compose, all runs share the Docker host of the extension. On Kubernetes (`LAUNCHER_BACKEND=kubernetes`, set by the chart) each run is a Job in the namespace `<platform namespace>-dbt-runs`, so capacity grows with the cluster's nodes; see the [design](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/dbt/DECISIONS.md#run-jobs-on-kubernetes-dbt-011-designed-2026-10-07-built-2026-10-17) and [Kubernetes](kubernetes.md).

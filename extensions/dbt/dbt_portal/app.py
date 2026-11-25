@@ -10,12 +10,13 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from starlette.exceptions import HTTPException
 
 from . import api
 from .auth import COOKIE, LOGIN_COOKIE, LOGIN_SECONDS, BrowserLogin, TokenVerifier
 from .bridge_client import BridgeClient
 from .config import VERSION, Settings
-from .errors import DbtError
+from .errors import CODES, DbtError
 from .git_repo import GitRepos
 from .mcp_server import create_mcp, mount
 from .runs import RunManager
@@ -98,13 +99,20 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
     async def invalid(request, exc):
         return JSONResponse({"error": validation_text(exc.errors()), "code": "invalid_request"}, status_code=422)
 
+    @app.exception_handler(HTTPException)
+    async def http_error(request, exc):
+        """An unknown path, a wrong method and anything else the framework refuses, in this API's error shape."""
+        text = {404: "Not found.", 405: "This method is not allowed here."}.get(exc.status_code, str(exc.detail))
+        return JSONResponse({"error": text, "code": CODES.get(exc.status_code, "internal_error")},
+                            status_code=exc.status_code, headers=exc.headers)
+
     @app.middleware("http")
     async def headers(request: Request, call_next):
         try:
             response = await call_next(request)
         except Exception:
             LOG.exception("Request failed")
-            response = JSONResponse({"error": "Something went wrong.", "code": "error"}, status_code=500)
+            response = JSONResponse({"error": "Something went wrong.", "code": "internal_error"}, status_code=500)
         response.headers.setdefault("Content-Security-Policy", CSP)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"

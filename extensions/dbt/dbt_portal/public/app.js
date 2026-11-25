@@ -44,15 +44,16 @@ async function api(path, options = {}) {
   return body;
 }
 
-function when(seconds) {
-  if (!seconds) return '—';
-  const date = new Date(seconds * 1000), diff = (Date.now() - date) / 1000;
+// Times come from the API as RFC 3339 strings in UTC.
+function when(time) {
+  if (!time) return '—';
+  const date = new Date(time), diff = (Date.now() - date) / 1000;
   if (diff < 60) return 'just now';
   if (diff < 3600) return `${Math.round(diff / 60)} min ago`;
   if (diff < 86400) return `${Math.round(diff / 3600)} h ago`;
   return date.toLocaleString();
 }
-function duration(run) { return run.started_at && run.finished_at ? `${Math.max(1, Math.round(run.finished_at - run.started_at))} s` : ''; }
+function duration(run) { return run.startedAt && run.finishedAt ? `${Math.max(1, Math.round((new Date(run.finishedAt) - new Date(run.startedAt)) / 1000))} s` : ''; }
 function chip(status) { return h('span', {class: `chip ${status}`}, h('i', {class: `status ${status}`}), status.replace('_', ' ')); }
 function notice(message, error = false) { const n = $('#notice'); n.hidden = !message; n.textContent = message || ''; n.classList.toggle('error', error); }
 
@@ -130,11 +131,11 @@ async function render() {
 
 async function renderProjects() {
   show('projects');
-  const projects = await api('/projects'), list = $('#project-list');
+  const {projects} = await api('/projects'), list = $('#project-list');
   list.replaceChildren(...projects.map(p => h('a', {class: 'card project-card', href: `#/projects/${p.id}/pipeline`},
     h('p', {class: 'eyebrow', text: teamName(p.team)}), h('h2', {text: p.name}),
-    h('p', {text: p.description || `Models land in ${p.default_database} by default.`}),
-    h('div', {class: 'chips'}, h('span', {class: 'chip', text: p.role}), h('span', {class: 'chip', text: `created by ${p.created_by}`})),
+    h('p', {text: p.description || `Models land in ${p.defaultDatabase} by default.`}),
+    h('div', {class: 'chips'}, h('span', {class: 'chip', text: p.role}), h('span', {class: 'chip', text: `created by ${p.createdBy}`})),
     h('span', {class: 'open', text: 'Open pipeline →'}))));
   if (!projects.length) list.append(h('div', {class: 'card'}, h('h2', {text: 'No pipelines yet'}),
     h('p', {text: 'Ask your AI agent to create a dbt project for your team, or call POST /api/v1/projects. A new project starts empty; the agent adds the models.'})));
@@ -166,7 +167,7 @@ function openNewProject() {
     create.disabled = true; status.className = 'small'; status.textContent = 'Creating…';
     try {
       const created = await api('/projects', {method: 'POST', body: JSON.stringify(
-        {team: team.value, name: name.value.trim(), description: description.value.trim(), default_database: database.value})});
+        {team: team.value, name: name.value.trim(), description: description.value.trim(), defaultDatabase: database.value})});
       location.hash = `#/projects/${created.id}/pipeline`;
     } catch (error) { status.className = 'small error'; status.textContent = error.message; create.disabled = false; }
   };
@@ -193,7 +194,7 @@ function openDelete() {
   remove.onclick = async () => {
     remove.disabled = true; status.className = 'small'; status.textContent = 'Removing the dbt properties from its tables…';
     try {
-      await api(`/projects/${project.id}`, {method: 'DELETE', body: JSON.stringify({confirm_name: confirmName.value, force})});
+      await api(`/projects/${project.id}?${new URLSearchParams({confirmName: confirmName.value, ...(force ? {force: 'true'} : {})})}`, {method: 'DELETE'});
       dialog.close(); project = null; location.hash = '#/';
     } catch (error) {
       status.className = 'small error'; status.textContent = error.message;
@@ -387,7 +388,7 @@ async function renderBranches() {
   const select = $('#branch'), development = route.environment === 'development';
   let names = ['main'];
   if (development) {
-    try { names = (await api(`/projects/${project.id}/branches`)).map(b => b.name); } catch { /* keep main */ }
+    try { names = (await api(`/projects/${project.id}/branches`)).branches.map(b => b.name); } catch { /* keep main */ }
     names = ['main', ...names.filter(n => n !== 'main').sort()];
   }
   // A run of a revision or a deleted branch keeps its own entry, so the route stays visible.
@@ -403,9 +404,9 @@ function renderTimeline() {
   strip.replaceChildren(h('span', {class: 'label', text: 'RUNS'}),
     h('button', {type: 'button', 'aria-pressed': String(!route.run), onclick: () => go({run: null}, true), text: 'Latest status'}),
     ...pipeline.runs.slice(0, 14).map(run => h('button', {
-      type: 'button', 'aria-pressed': String(route.run === run.id), title: `${run.command} ${run.selector || ''} · ${run.ref} · ${run.triggered_by}`,
+      type: 'button', 'aria-pressed': String(route.run === run.id), title: `${run.command} ${run.select || ''} · ${run.ref} · ${run.triggeredBy}`,
       onclick: () => go({run: run.id}, true),
-    }, h('i', {class: `status ${run.status}`}), `${run.command} · ${when(run.created_at)}`)));
+    }, h('i', {class: `status ${run.status}`}), `${run.command} · ${when(run.createdAt)}`)));
 }
 
 async function buildNow(button) {
@@ -526,7 +527,7 @@ const filePath = path => path.split('/').map(encodeURIComponent).join('/');
 async function openEditor(node, box) {
   const id = project.id, token = detailToken;
   let branches;
-  try { branches = new Set((await api(`/projects/${id}/branches`)).map(b => b.name)); }
+  try { branches = new Set((await api(`/projects/${id}/branches`)).branches.map(b => b.name)); }
   catch (error) { return notice(error.message, true); }
   if (token !== detailToken) return;
   const branch = h('input', {type: 'text', list: 'edit-branches', value: savedBranch() || `edit/${node.name}`, spellcheck: 'false', autocomplete: 'off'});
@@ -560,12 +561,12 @@ async function openEditor(node, box) {
         branches.add(name);
       }
       const result = await api(`/projects/${id}/commits`, {method: 'POST', body: JSON.stringify({
-        branch: name, files: {[node.path]: text.value}, message: message.value.trim() || `Edit ${node.name}`, expected_revision: loaded.revision})});
+        branch: name, files: {[node.path]: text.value}, message: message.value.trim() || `Edit ${node.name}`, expectedRevision: loaded.revision})});
       loaded = {revision: result.revision, content: text.value}; rememberBranch(name);
       say(`Saved to ${name} @ ${result.revision.slice(0, 7)}.`);
       afterSave(name);
     } catch (error) {
-      say(error.code === 'stale_branch' ? `${name} changed since you opened it. Copy your edits, then reload the branch.` : error.message, true);
+      say(error.code === 'revision_conflict' ? `${name} changed since you opened it. Copy your edits, then reload the branch.` : error.message, true);
     } finally { save.disabled = !loaded; }
   }
 
@@ -609,7 +610,7 @@ async function openEditor(node, box) {
       if (result.hint && development?.enabled) after.replaceChildren(h('button', {class: 'quiet', type: 'button', onclick: event => buildMain(event.currentTarget), text: 'Build main in Development'}));
     } catch (error) {
       say(error.code === 'merge_conflict' ? `${error.message} Conflicting: ${(error.detail?.files || []).join(', ')}.` : error.message, true);
-      button.disabled = error.code === 'stale_branch';
+      button.disabled = error.code === 'revision_conflict';
     }
   }
 
@@ -638,26 +639,27 @@ async function openEditor(node, box) {
 
 async function renderRuns() {
   clearTimeout(poller);
-  const all = await api(`/projects/${project.id}/runs?environment=${route.environment}&limit=100`);
+  const {runs: all} = await api(`/projects/${project.id}/runs?environment=${route.environment}&limit=100`);
   const runs = includePreviews ? all : all.filter(r => !['show', 'compile', 'parse'].includes(r.command) || r.id === route.run);
   const toggle = h('label', {class: 'check'}, h('input', {type: 'checkbox', checked: includePreviews,
     onchange: event => { includePreviews = event.target.checked; renderRuns(); }}), 'Include previews (show, compile, parse)');
   $('#run-table').replaceChildren(toggle, runs.length ? h('table', {}, h('thead', {}, h('tr', {}, ...['Status', 'Command', 'Revision', 'By', 'Started', 'Duration'].map(t => h('th', {text: t})))),
     h('tbody', {}, ...runs.map(run => h('tr', {class: 'run-row', tabindex: '0', onclick: () => go({run: run.id}, true)},
-      h('td', {}, chip(run.status)), h('td', {text: `${run.command} ${run.selector || ''}`.trim()}),
+      h('td', {}, chip(run.status)), h('td', {text: `${run.command} ${run.select || ''}`.trim()}),
       h('td', {text: `${run.ref} @ ${run.revision.slice(0, 7)}`}),
-      h('td', {}, run.triggered_by, run.agent ? h('span', {class: 'agent', text: 'agent'}) : null),
-      h('td', {class: 'nowrap', text: when(run.created_at)}), h('td', {class: 'nowrap', text: duration(run)}))))) : h('p', {text: 'No runs in this environment yet.'}));
+      h('td', {}, run.triggeredBy, run.agent ? h('span', {class: 'agent', text: 'agent'}) : null),
+      h('td', {class: 'nowrap', text: when(run.createdAt)}), h('td', {class: 'nowrap', text: duration(run)}))))) : h('p', {text: 'No runs in this environment yet.'}));
   const detail = $('#run-detail');
   detail.hidden = !route.run;
   const key = `${project.id}:${route.environment}:${route.run || ''}`;
   const again = () => { poller = setTimeout(() => { if (route.view === 'runs' && `${project.id}:${route.environment}:${route.run || ''}` === key) renderRuns(); }, 3000); };
   if (!route.run) { if (all.some(r => ACTIVE.has(r.status))) again(); return; }
-  const [run, logs] = await Promise.all([api(`/runs/${route.run}`), api(`/runs/${route.run}/logs?tail=400`)]);
+  const [run, logs] = await Promise.all([api(`/runs/${route.run}`), api(`/runs/${route.run}/logs?limit=500`)]);
   const cancel = ACTIVE.has(run.status) && WRITERS.includes(project.role) ? h('button', {type: 'button', class: 'danger', text: 'Stop run', onclick: async event => {
     if (!confirm(`Stop ${run.id}? Tables it already replaced stay replaced.`)) return;
     event.currentTarget.disabled = true;
-    try { await api(`/runs/${run.id}/cancel`, {method: 'POST'}); renderRuns(); } catch (error) { notice(error.message, true); }
+    // A run that finished in the meantime needs no stop: show it as it ended.
+    try { await api(`/runs/${run.id}/cancel`, {method: 'POST'}); renderRuns(); } catch (error) { if (error.code === 'run_finished') renderRuns(); else notice(error.message, true); }
   }}) : null;
   const log = h('pre', {class: 'log', text: logs.lines.join('\n') || 'No log.'});
   fill(detail, h('div', {class: 'chips'}, chip(run.status), h('span', {class: 'chip', text: run.id}), cancel),

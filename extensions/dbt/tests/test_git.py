@@ -26,7 +26,7 @@ def test_commits_are_atomic_and_detect_concurrent_writers(repos):
     assert repos.read("prj-a", "main", "models/a.sql")[1] == b"select 1\n"
     with pytest.raises(DbtError) as stale:
         repos.commit("prj-a", "feature", {"models/c.sql": "select 3\n"}, "Late", AUTHOR, expected=head)
-    assert stale.value.code == "stale_branch"
+    assert stale.value.code == "revision_conflict"
     with pytest.raises(DbtError) as same:
         repos.commit("prj-a", "feature", {"models/b.sql": "select 2\n"}, "Nothing", AUTHOR)
     assert same.value.code == "empty_commit"
@@ -52,7 +52,7 @@ def test_merges_always_commit_and_only_merge_results_become_main_heads(repos):
     head = repos.commit("prj-a", "one", {"models/evil.sql": None, "models/one.sql": "select 1\n"}, "One", AUTHOR)
     with pytest.raises(DbtError) as moved:
         repos.merge("prj-a", "one", "", AUTHOR, revision=hidden)
-    assert moved.value.code == "stale_branch"
+    assert moved.value.code == "revision_conflict"
     merged = repos.merge("prj-a", "one", "", AUTHOR, revision=head)
     # A merge commit even where a fast-forward was possible: the branch's commits never become heads of main.
     assert merged["merged"] is True and merged["revision"] not in (head, hidden)

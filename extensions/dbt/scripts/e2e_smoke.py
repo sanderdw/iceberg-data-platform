@@ -104,10 +104,15 @@ async def main():
         me = await writer.call("whoami")
         team = next(m for m in me["memberships"] if m["role"] == "writer")["team"]
         await writer.refused("enable_environment", "forbidden_role", team=team, environment="development")
-        await admin.call("enable_environment", team=team, environment="development")
+        enabled = await admin.call("enable_environment", team=team, environment="development")
+        assert enabled["enabled"] is True and enabled["environment"] == "development", enabled
+        listed = (await reader.call("list_environments", team=team))["environments"]
+        assert [e["environment"] for e in listed if e["enabled"]].count("development") == 1, listed
         database = next(d["name"] for d in me["databases"] if d["team"] == team and d["environment"] == "development")
         project = await writer.call("create_project", team=team, name=name, default_database=database)
         id = project["id"]
+        assert project["defaultDatabase"] == database, project
+        assert id in {p["id"] for p in (await reader.call("list_projects"))["projects"]}
         print("project", id, "in", database)
 
         await writer.refused("write_files", "protected_branch", project=id, branch="main",
@@ -133,16 +138,20 @@ async def main():
                                         "    columns:\n      - name: orders\n        description: Order count.\n"
                                         "        data_tests: [not_null]\n",
         })
-        compiled = await reader.call("compile", project=id, ref="feature/orders", select="country_orders")
+        compiled = await reader.call("compile_project", project=id, ref="feature/orders", select="country_orders")
         assert compiled["status"] == "success", compiled
         assert any("regions_per_country" in sql for sql in compiled["compiled"].values()), compiled
-        await reader.refused("run", "forbidden_role", project=id, command="build", ref="feature/orders")
+        await reader.refused("run_project", "forbidden_role", project=id, command="build", ref="feature/orders")
 
-        run = await writer.call("run", project=id, command="build", ref="feature/orders", wait=600)
+        run = await writer.call("run_project", project=id, command="build", ref="feature/orders", wait=600)
         if run["status"] != "success":
-            logs = await writer.call("get_run_logs", run=run["id"], tail=80)
+            logs = await writer.call("get_run_logs", run=run["id"], limit=80)
             raise AssertionError(f"Build failed: {run['error']}\n" + "\n".join(logs["lines"]))
+        assert run["triggeredBy"] and run["scheduled"] is False and run["finishedAt"].endswith("Z"), run
         detail = await reader.call("get_run", run=run["id"])
+        assert detail["results"] == run["results"], (detail["results"], run["results"])
+        assert run["id"] in {r["id"] for r in (await reader.call("list_runs", project=id))["runs"]}
+        await writer.refused("cancel_run", "run_finished", run=run["id"])
         statuses = {r["node"]: r["status"] for r in detail["results"]}
         assert statuses[f"model.{name}.country_orders"] == "success", statuses
         assert detail["summary"]["published"]["errors"] == [], detail["summary"]["published"]
@@ -152,24 +161,36 @@ async def main():
         preview = await reader.call("preview_model", project=id, model="country_orders", ref="feature/orders", limit=5)
         assert preview["rows"] and "orders" in preview["rows"][0], preview
 
-        pipeline = await reader.call("get_pipeline", project=id)
+        pipeline = await reader.call("get_pipeline_graph", project=id)
         nodes = {n["id"]: n for n in pipeline["nodes"]}
         orders = nodes[f"model.{name}.country_orders"]
         assert orders["status"] == "success" and orders["tests"]["pass"] >= 1, orders
         lineage = await reader.call("get_lineage", project=id, node=f"model.{name}.country_orders")
         assert f"seed.{name}.regions" in {n["id"] for n in lineage["upstream"]}
+        node = await reader.call("get_node", project=id, node=f"model.{name}.country_orders")
+        assert node["columns"] and node["compiledSql"] and node["lastRunAt"].endswith("Z"), node
 
         await writer.refused("merge_to_main", "forbidden_role", project=id, branch="feature/orders")
         await admin.call("merge_to_main", project=id, branch="feature/orders")
-        await writer.refused("set_schedule", "forbidden_role", project=id, environment="production",
+        await writer.refused("create_schedule", "forbidden_role", project=id, environment="production",
                              cron="0 6 * * *")
-        schedule = await writer.call("set_schedule", project=id, environment="development", cron="0 6 * * *")
+        await writer.refused("create_schedule", "invalid_cron", project=id, environment="development",
+                             cron="* * * * *")
+        schedule = await writer.call("create_schedule", project=id, environment="development", cron="0 6 * * *")
+        assert schedule["enabled"] is True and schedule["nextRunAt"].endswith("Z"), schedule
+        paused = await writer.call("update_schedule", schedule=schedule["id"], enabled=False)
+        assert paused == {**schedule, "enabled": False, "nextRunAt": None}, paused
+        assert (await reader.call("list_schedules", project=id))["schedules"] == [paused]
         await writer.call("delete_schedule", schedule=schedule["id"])
 
         # The REST API gives the same answers.
         async with httpx.AsyncClient(headers={"Authorization": f"Bearer {accounts['reader']}"}) as rest:
-            node = (await rest.get(f"{origin}/api/v1/projects/{id}/nodes/model.{name}.country_orders")).json()
-            assert node["columns"] and node["compiledSql"], node
+            assert (await rest.get(f"{origin}/api/v1/projects/{id}/nodes/model.{name}.country_orders")).json() == node
+            assert (await rest.get(f"{origin}/api/v1/runs/{run['id']}")).json() == detail
+            missing = await rest.get(f"{origin}/api/v1/nothing-here")
+            assert (missing.status_code, missing.json()["code"]) == (404, "not_found"), missing.text
+
+        await admin.refused("delete_project", "confirmation_mismatch", project=id, confirm_name="not-" + name)
 
         await admin.call("delete_project", project=id, confirm_name=name)
     print("dbt e2e passed: roles, branches, compile, build, publish, preview, pipeline, lineage, merge, schedules.")

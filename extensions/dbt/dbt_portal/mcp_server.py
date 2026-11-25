@@ -26,6 +26,7 @@ LOG = logging.getLogger(__name__)
 MAX_BODY = 512 * 1024
 READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
+# Deletes something, changes main or takes access away: clients ask the user first.
 DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
                               open_world_hint=False)
 INSTRUCTIONS = """dbt pipelines on the Iceberg Data Platform (dbt v2 OSS with DuckDB on Apache Iceberg).
@@ -36,11 +37,17 @@ enabledEnvironments, list_environments shows one team, and enable_environment tu
 the user first: runs act for the whole team). Find the tables to build
 on with the platform's user portal MCP server (list_tables, describe_table, preview_rows). A project belongs to one
 team and is a Git repository. main is protected: create_branch, then write_files (one commit per
-call; paths map to full file contents, null deletes), compile to check, run with
+call; paths map to full file contents, null deletes), compile_project to check, run_project with
 command=build in development on your branch, read get_run and get_run_logs, and ask a team
 administrator to merge_to_main. Acceptance and production only build main. Development is one
 shared sandbox per team: every branch builds the same tables, so the newest build wins. After a
 merge, build main in development: the pipeline viewer shows main and draws only main's runs.
+
+run_project starts a run and returns it; pass wait (up to 600 seconds) to block until it finishes,
+on run_project or later on get_run. A run's status is queued, running, success, failed (dbt
+reported errors), error (the platform could not run it) or cancelled; its results list each node
+with its status. get_run_logs gives the last lines of its log. compile_project and preview_model
+also start a run, with a read-only token, and wait for it. Times are RFC 3339 strings in UTC.
 
 Runs have no internet access: they read only the team's Iceberg tables. Data from outside (an
 API, a file, another database) is loaded first, as the user, into a raw namespace with the
@@ -55,13 +62,16 @@ YAML: descriptions become table comments and column docs in the platform catalog
 become the table's quality status. Generic tests take their parameters under `arguments:`
 (dbt v2), for example `- relationships: {arguments: {to: ref('stg_carriers'), field: carrier_code}}`.
 
-get_pipeline returns the DAG with each node's latest status; pass ref to see one branch (the
-pipeline viewer shows main unless the user picks a branch). get_model and get_lineage explain
+get_pipeline_graph returns the DAG with each node's latest status; pass ref to see one branch (the
+pipeline viewer shows main unless the user picks a branch). get_node and get_lineage explain
 one node. When a mart answers business questions, offer a semantic model for it (the platform's
 semantic-model skill), so agents and Conversational BI answer from its agreed metrics. Keep it in
 the project as semantic_models/<database>/<namespace>/<name>.yml (an Apache Ossie document): every
 successful build or run publishes those files to that environment, and get_run reports them under
 summary.semanticModels. The project's file wins over edits made elsewhere.
+
+Schedules: create_schedule adds one to a project (cron in UTC, at most every 5 minutes),
+update_schedule changes only what you pass, delete_schedule removes it.
 
 Runs act for the whole team: ask the user before running in acceptance or production, before
 merge_to_main, and before any tool marked destructive."""
@@ -69,11 +79,17 @@ merge_to_main, and before any tool marked destructive."""
 Environment = Literal["development", "acceptance", "production"]
 ProjectId = Annotated[str, Field(pattern=r"^prj-[a-f0-9]{24}$", description="Project id from list_projects.")]
 RunId = Annotated[str, Field(pattern=r"^run-[a-f0-9]{24}$", description="Run id.")]
+ScheduleId = Annotated[str, Field(pattern=r"^sch-[a-f0-9]{24}$", description="Schedule id from list_schedules.")]
 TeamId = Annotated[str, Field(pattern=r"^team-[a-f0-9]{32}$", description="Team id from whoami.")]
 Ref = Annotated[str, Field(max_length=100, description="Branch name or revision.")]
 RunRef = Annotated[str, Field(max_length=100, description="Only runs of this branch or revision; empty for all.")]
 Select = Annotated[str, Field(max_length=500, description="dbt node selection, such as 'stg_orders+' or 'tag:daily'.")]
-Node = Annotated[str, Field(max_length=300, description="Node id from get_pipeline, such as model.sales.orders.")]
+Node = Annotated[str, Field(max_length=300, description="Node id from get_pipeline_graph, such as "
+                                                        "model.sales.orders.")]
+Cron = Annotated[str, Field(max_length=100, description="Five-field cron expression in UTC, at most every 5 minutes.")]
+Wait = Annotated[int, Field(ge=0, le=600, description="Seconds to wait for the run to finish.")]
+RunCommand = Literal["build", "run", "seed", "test", "compile", "parse", "docs"]
+ScheduleCommand = Literal["build", "run", "seed", "test"]
 
 
 class Verifier:
@@ -121,22 +137,24 @@ def create_mcp(settings, services, verifier):
     @mcp.tool(annotations=READ)
     async def list_environments(team: TeamId) -> dict[str, Any]:
         """Where dbt is enabled for a team, and the databases of each environment."""
-        return {"environments": await call(services.environments, team)}
+        return await call(services.environments, team)
 
     @mcp.tool(annotations=WRITE)
     async def enable_environment(team: TeamId, environment: Environment) -> dict[str, Any]:
-        """Let dbt build in a team environment as the team's service account (team administrators)."""
+        """Let dbt build in a team environment as the team's service account (team administrators). Returns the
+        environment, as list_environments shows it. Ask the user first."""
         return await call(services.enable_environment, team, environment)
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def disable_environment(team: TeamId, environment: Environment) -> dict[str, Any]:
-        """Revoke dbt's service account for a team environment; its runs and schedules stop working."""
+        """Disable dbt for a team environment (team administrators): its runs and schedules stop working. Returns
+        the environment, as list_environments shows it."""
         return await call(services.disable_environment, team, environment)
 
     @mcp.tool(annotations=READ)
     async def list_projects() -> dict[str, Any]:
         """dbt projects of your teams, with your role in each."""
-        return {"projects": await call(services.list_projects)}
+        return await call(services.list_projects)
 
     @mcp.tool(annotations=WRITE)
     async def create_project(team: TeamId, name: str, description: str = "",
@@ -154,10 +172,12 @@ def create_mcp(settings, services, verifier):
         return await call(services.get_project, project)
 
     @mcp.tool(annotations=DESTRUCTIVE)
-    async def delete_project(project: ProjectId, confirm_name: str, force: bool = False) -> dict[str, Any]:
+    async def delete_project(project: ProjectId, confirm_name: Annotated[str, Field(max_length=48)],
+                             force: bool = False) -> dict[str, Any]:
         """Forget a project as if it never existed (team administrators): its Git history, runs, schedules and
         the dbt producer, lineage and quality properties on the tables it built. The tables, their data and docs
-        stay. force deletes even when those properties could not be removed from some tables."""
+        stay. confirm_name must be the project's name. force deletes even when those properties could not be
+        removed from some tables. Ask the user first."""
         return await call(services.delete_project, project, confirm_name, force)
 
     @mcp.tool(annotations=READ)
@@ -183,7 +203,7 @@ def create_mcp(settings, services, verifier):
     @mcp.tool(annotations=READ)
     async def list_branches(project: ProjectId) -> dict[str, Any]:
         """Branches with their latest commit."""
-        return {"branches": await call(services.branches, project)}
+        return await call(services.branches, project)
 
     @mcp.tool(annotations=WRITE)
     async def create_branch(project: ProjectId, name: str, source: Ref = "main") -> dict[str, Any]:
@@ -196,100 +216,115 @@ def create_mcp(settings, services, verifier):
         return await call(services.delete_branch, project, name)
 
     @mcp.tool(annotations=READ)
-    async def get_history(project: ProjectId, ref: Ref = "main", limit: int = 30) -> dict[str, Any]:
-        """Recent commits of a branch."""
-        return {"commits": await call(services.history, project, ref, limit)}
+    async def get_history(project: ProjectId, ref: Ref = "main",
+                          limit: Annotated[int, Field(ge=1, le=200)] = 30) -> dict[str, Any]:
+        """Recent commits of a branch, newest first."""
+        return await call(services.history, project, ref, limit)
 
     @mcp.tool(annotations=READ)
-    async def diff(project: ProjectId, head: Ref, base: Ref = "main") -> dict[str, Any]:
+    async def get_diff(project: ProjectId, head: Ref, base: Ref = "main") -> dict[str, Any]:
         """Changed files and the patch between two branches or revisions."""
         return await call(services.diff, project, base, head)
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def merge_to_main(project: ProjectId, branch: str, message: str = "",
                             revision: Annotated[str | None, Field(pattern=r"^[0-9a-f]{7,40}$", description=(
-                                "The branch head you reviewed with diff; the merge is refused if the branch moved."))]
-                            = None) -> dict[str, Any]:
+                                "The branch head you reviewed with get_diff; the merge is refused if the branch "
+                                "moved."))] = None) -> dict[str, Any]:
         """Merge a branch into main (team administrators). Acceptance and production build main; the hint
         says when main still needs a build in development for the pipeline viewer."""
         return await call(services.merge_to_main, project, branch, message, revision)
 
-    @mcp.tool(annotations=READ)
-    async def compile(project: ProjectId, environment: Environment = "development", ref: Ref = "main",
-                      select: Select = "", sql: str = "") -> dict[str, Any]:
-        """Compile selected models (or inline SQL) with a read-only token; returns compiled SQL and output."""
-        return await call(services.compile, project, environment, ref, select, sql)
-
-    @mcp.tool(annotations=READ)
-    async def preview_model(project: ProjectId, model: str, environment: Environment = "development",
-                            ref: Ref = "main", limit: int = 20) -> dict[str, Any]:
-        """Run one model's query without writing and return up to 100 rows (read-only token)."""
-        return await call(services.preview, project, model, environment, ref, limit)
+    @mcp.tool(annotations=WRITE)
+    async def compile_project(project: ProjectId, environment: Environment = "development", ref: Ref = "main",
+                              select: Select = "", sql: str = "") -> dict[str, Any]:
+        """Compile selected models (or inline SQL) with a read-only token; returns compiled SQL and output. It
+        writes no tables; the compile is recorded as a run."""
+        return await call(services.compile_project, project, environment, ref, select, sql)
 
     @mcp.tool(annotations=WRITE)
-    async def run(project: ProjectId,
-                  command: Literal["build", "run", "seed", "test", "compile", "parse", "docs"] = "build",
-                  environment: Environment = "development", ref: Ref = "main", select: Select = "",
-                  full_refresh: bool = False, wait: int = 120) -> dict[str, Any]:
+    async def preview_model(project: ProjectId, model: str, environment: Environment = "development",
+                            ref: Ref = "main", limit: Annotated[int, Field(ge=1, le=100)] = 20) -> dict[str, Any]:
+        """Run one model's query without writing and return up to 100 rows (read-only token). It writes no
+        tables; the preview is recorded as a run."""
+        return await call(services.preview_model, project, model, environment, ref, limit)
+
+    @mcp.tool(annotations=WRITE)
+    async def run_project(project: ProjectId, command: RunCommand = "build",
+                          environment: Environment = "development", ref: Ref = "main", select: Select = "",
+                          full_refresh: bool = False, wait: Wait = 0) -> dict[str, Any]:
         """Run dbt as the team's service account. build, run and seed write tables (writers).
 
-        Waits up to `wait` seconds (max 600) and returns the run; poll get_run for longer runs.
-        full_refresh recreates tables whose columns changed.
+        Returns the run as get_run does. wait blocks up to that many seconds for the run to finish; the
+        answer is the run as it is then, so poll get_run for longer runs. full_refresh recreates tables
+        whose columns changed.
         """
-        return await call(services.run, project, command, environment, ref, select, full_refresh, min(wait, 600))
+        return await call(services.run_project, project, command, environment, ref, select, full_refresh, wait)
 
     @mcp.tool(annotations=READ)
-    async def list_runs(project: ProjectId, environment: Environment | None = None, limit: int = 30) -> dict[str, Any]:
-        """Recent runs, newest first."""
-        return {"runs": await call(services.list_runs, project, environment, limit)}
+    async def list_runs(project: ProjectId, environment: Environment | None = None,
+                        limit: Annotated[int, Field(ge=1, le=200)] = 20) -> dict[str, Any]:
+        """A project's runs, newest first; optionally of one environment."""
+        return await call(services.list_runs, project, environment, limit)
 
     @mcp.tool(annotations=READ)
-    async def get_run(run: RunId, wait: int = 0) -> dict[str, Any]:
-        """A run with per-node results; wait up to `wait` seconds (max 600) for it to finish."""
+    async def get_run(run: RunId, wait: Wait = 0) -> dict[str, Any]:
+        """A run's status, dbt's totals in summary, each node's result in results, and its error. wait blocks
+        up to that many seconds for the run to finish."""
         return await call(services.get_run, run, wait)
 
     @mcp.tool(annotations=READ)
-    async def get_run_logs(run: RunId, tail: int = 400) -> dict[str, Any]:
-        """The last lines of a run's dbt log, with compiler and database errors."""
-        return await call(services.run_logs, run, tail)
+    async def get_run_logs(run: RunId, limit: Annotated[int, Field(ge=1, le=5000)] = 500) -> dict[str, Any]:
+        """The last limit lines of a run's dbt log, with compiler and database errors."""
+        return await call(services.get_run_logs, run, limit)
 
-    @mcp.tool(annotations=DESTRUCTIVE)
+    @mcp.tool(annotations=WRITE)
     async def cancel_run(run: RunId) -> dict[str, Any]:
-        """Stop a running run (writers)."""
+        """Stop a queued or running run (writers). Tables it already replaced stay replaced."""
         return await call(services.cancel_run, run)
 
     @mcp.tool(annotations=READ)
     async def list_schedules(project: ProjectId) -> dict[str, Any]:
         """Schedules of a project."""
-        return {"schedules": await call(services.list_schedules, project)}
+        return await call(services.list_schedules, project)
 
     @mcp.tool(annotations=WRITE)
-    async def set_schedule(project: ProjectId, environment: Environment, cron: str,
-                           command: Literal["build", "run", "seed", "test"] = "build", select: Select = "",
-                           ref: Ref = "main", enabled: bool = True, schedule: str | None = None) -> dict[str, Any]:
-        """Create or change a schedule (cron in UTC). Development needs writers, other environments administrators."""
-        return await call(services.set_schedule, project, environment, cron, command, select, ref, enabled, schedule)
+    async def create_schedule(project: ProjectId, environment: Environment, cron: Cron,
+                              command: ScheduleCommand = "build", select: Select = "", ref: Ref = "main",
+                              enabled: bool = True) -> dict[str, Any]:
+        """Add a schedule to a project. Development needs writers, other environments administrators, and they
+        run main. A due run is skipped while the schedule's previous run is still going."""
+        return await call(services.create_schedule, project, environment, cron, command, select, ref, enabled)
+
+    @mcp.tool(annotations=WRITE)
+    async def update_schedule(schedule: ScheduleId, environment: Environment | None = None, cron: Cron | None = None,
+                              command: ScheduleCommand | None = None, select: Select | None = None,
+                              ref: Ref | None = None, enabled: bool | None = None) -> dict[str, Any]:
+        """Change a schedule: give only what changes, the rest stays. enabled=false pauses it."""
+        changes = {"environment": environment, "cron": cron, "command": command, "select": select, "ref": ref,
+                   "enabled": enabled}
+        return await call(services.update_schedule, schedule, {k: v for k, v in changes.items() if v is not None})
 
     @mcp.tool(annotations=DESTRUCTIVE)
-    async def delete_schedule(schedule: str) -> dict[str, Any]:
+    async def delete_schedule(schedule: ScheduleId) -> dict[str, Any]:
         """Delete a schedule."""
         return await call(services.delete_schedule, schedule)
 
     @mcp.tool(annotations=READ)
-    async def get_pipeline(project: ProjectId, environment: Environment = "development",
-                           ref: RunRef = "") -> dict[str, Any]:
+    async def get_pipeline_graph(project: ProjectId, environment: Environment = "development",
+                                 ref: RunRef = "") -> dict[str, Any]:
         """The pipeline DAG: nodes with type, table, latest status and test counts, and edges."""
-        return await call(services.pipeline, project, environment, None, ref or None)
+        return await call(services.get_pipeline_graph, project, environment, None, ref or None)
 
     @mcp.tool(annotations=READ)
-    async def get_model(project: ProjectId, node: Node, environment: Environment = "development",
-                        ref: RunRef = "") -> dict[str, Any]:
+    async def get_node(project: ProjectId, node: Node, environment: Environment = "development",
+                       ref: RunRef = "") -> dict[str, Any]:
         """One node: description, columns with docs, SQL and compiled SQL, tests and latest result."""
-        return await call(services.model, project, node, environment, ref or None)
+        return await call(services.get_node, project, node, environment, ref or None)
 
     @mcp.tool(annotations=READ)
     async def get_lineage(project: ProjectId, node: Node, environment: Environment = "development",
-                          depth: int = 3, ref: RunRef = "") -> dict[str, Any]:
+                          depth: Annotated[int, Field(ge=1, le=20)] = 3, ref: RunRef = "") -> dict[str, Any]:
         """Upstream and downstream nodes of a node, up to `depth` steps."""
         return await call(services.lineage, project, node, environment, depth, ref or None)
 
@@ -304,7 +339,8 @@ class Endpoint:
 
     async def __call__(self, scope, receive, send):
         if self.app is None:
-            await JSONResponse({"error": "The MCP transport is not running."}, status_code=503)(scope, receive, send)
+            await JSONResponse({"error": "The MCP transport is not running.", "code": "unavailable"},
+                               status_code=503)(scope, receive, send)
             return
         body, more = bytearray(), True
         while more:
@@ -314,7 +350,8 @@ class Endpoint:
             body.extend(message.get("body", b""))
             more = message.get("more_body", False)
             if len(body) > MAX_BODY:
-                await JSONResponse({"error": "Request is too large."}, status_code=413)(scope, receive, send)
+                await JSONResponse({"error": "Request is too large.", "code": "too_large"},
+                                   status_code=413)(scope, receive, send)
                 return
         replayed = False
 
