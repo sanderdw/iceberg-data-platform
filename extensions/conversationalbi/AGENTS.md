@@ -9,6 +9,20 @@
   reaches the same methods through the `SemanticLayer` capability (`agent/capability.py`).
   `tests/test_api.py` fails when they diverge or when `contracts/conversationalbi-api/v1/openapi.yaml`
   is stale: regenerate it with `uv run python -m scripts.api_contract`.
+- A tool returns what its REST operation returns; only `query_semantic_model` and `get_result`
+  answer with the sample for an LLM (`Services.for_llm`) instead of every row. Build every response
+  with a projection (`public_me`, `public_environment`, `list_semantic_models`,
+  `conversations.public_conversation`), never from a Bridge response or a stored row as it is, and
+  pass every time through `timestamp()`. Declare each key in the response model in `api.py` or
+  `evaluation.py`: a key the model does not declare is dropped from the REST response.
+- REST is camelCase, tool names and parameters are snake_case, a list is an object with one plural
+  key, and a resource is named by its noun (`model`, `result`, `team`), never `id` or `name`. The
+  one exception is a governed query (`QuerySpec`), a document format that keeps `order_by`. `model`
+  is always a semantic model, `llmModel` an LLM. Errors are `CbiError` with a stable code.
+- The chat agent's own tools (`list_models`, `select_model`, `describe_model`, `query` in
+  `agent/capability.py`) keep their names: the agent's prompt and the Evaluations scorers use them.
+  `/api/v1/evaluation/*` (`evaluation.py`) is the contract with the Evaluations extension; change
+  both sides together.
 - Authorization lives in `Services` and is re-checked on every call from the Bridge's `/me`. Data
   is only read with read tokens; never ask the Bridge for `write`.
 - In the chat the LLM never writes SQL and never supplies numbers to the UI (the only SQL an LLM writes is the

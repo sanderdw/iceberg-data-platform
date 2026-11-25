@@ -104,24 +104,32 @@ async def main():
         me = await reader.call("whoami")
         team = next(m for m in me["memberships"] if m["teamName"] == env.get("E2E_TEAM", "demo-team"))["team"]
         await reader.refused("enable_environment", "forbidden_role", team=team, environment="development")
-        await admin.call("enable_environment", team=team, environment="development")
+        enabled = await admin.call("enable_environment", team=team, environment="development")
+        assert enabled["enabled"] and enabled["team"] == team and "principal" not in enabled, enabled
+        environments = (await reader.call("list_environments", team=team))["environments"]
+        assert enabled in environments, environments
+        assert "development" in next(e["environments"] for e in (await reader.call("whoami"))["enabledEnvironments"]
+                                     if e["team"] == team)
 
-        listed = (await reader.call("list_models"))["models"]
-        flights = [m for m in listed if m["name"] == "flights" and m["environment"] == "development"]
+        listed = (await reader.call("list_semantic_models"))["semanticModels"]
+        flights = [m for m in listed if m["model"]["name"] == "flights" and m["environment"] == "development"]
         own = next(m for m in flights if not m["shared"])
         shared = next((m for m in flights if m["shared"]), None)
         if me["sharedData"]:
             assert shared, f"The shared flights model is missing: {listed}"
         print("models:", [(m["databaseName"], m["shared"]) for m in flights])
 
-        described = await reader.call("describe_model", **own["model"])
+        ref = own["model"]
+        described = await reader.call("describe_semantic_model", database=ref["database"],
+                                      namespace=ref["namespace"], model=ref["name"])
         assert {m["name"] for m in described["metrics"]} >= {"average_departure_delay", "on_time_arrival_pct"}
         answers = {}
         for entry in [own, shared] if shared else [own]:
             ref = entry["model"]
-            result = await reader.call("query", database=ref["database"], namespace=ref["namespace"],
+            result = await reader.call("query_semantic_model", database=ref["database"], namespace=ref["namespace"],
                                        model=ref["name"], **QUESTION)
             assert result["rowCount"] == 3 and result["joinPaths"] == {"CARRIER.name": ["flight_carrier"]}, result
+            assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z", result["dataAsOf"]), result["dataAsOf"]
             answers[entry["shared"]] = result["rows"]
             print("query", "shared" if entry["shared"] else "own", result["resultId"], result["rows"][0])
         if shared:
@@ -129,17 +137,19 @@ async def main():
 
         ref = (shared or own)["model"]
         where = {"database": ref["database"], "namespace": ref["namespace"], "model": ref["name"]}
-        await reader.refused("query", "ambiguous_join", **where, metrics=["average_departure_delay"],
+        await reader.refused("query_semantic_model", "ambiguous_join", **where, metrics=["average_departure_delay"],
                              dimensions=[{"field": "AIRPORT.name"}])
-        await reader.refused("query", "fan_out", **where, metrics=["average_departure_delay"],
+        await reader.refused("query_semantic_model", "fan_out", **where, metrics=["average_departure_delay"],
                              dimensions=[{"field": "RUNWAY.length"}])
-        weekly = await reader.call("query", **where, metrics=["on_time_arrival_pct"],
+        weekly = await reader.call("query_semantic_model", **where, metrics=["on_time_arrival_pct"],
                                    dimensions=[{"field": "FLIGHT.date", "grain": "week"},
                                                {"field": "AIRPORT.code", "via": ["route_departure_airport"]}],
                                    filters=[{"field": "FLIGHT.date", "op": "between",
                                              "value": ["2026-01-01", "2026-01-14"]}], limit=500)
         assert weekly["rowCount"] > 0 and not weekly["truncated"], weekly
         assert weekly["joinPaths"]["AIRPORT.code"] == ["flight_route", "route_departure_airport"], weekly
+        page = await reader.call("get_result", result=weekly["resultId"], offset=1, limit=1)
+        assert page["rows"] == weekly["rows"][1:2] and page["offset"] == 1, page
 
         # Results are the asker's: the REST API returns every row to them, and nothing to anyone else.
         async with httpx.AsyncClient(timeout=30) as rest:
@@ -148,6 +158,12 @@ async def main():
             assert mine["rowCount"] == weekly["rowCount"] and len(mine["rows"]) == weekly["rowCount"], mine
             other = (await rest.get(url, headers={"Authorization": f"Bearer {tokens['admin']}"})).json()
             assert other["code"] == "unknown_result", other
+            # An MCP tool gives what its REST operation gives.
+            listed_rest = (await rest.get(f"{origin}/api/v1/semantic-models",
+                                          headers={"Authorization": f"Bearer {tokens['reader']}"})).json()
+            assert listed_rest["semanticModels"] == listed, listed_rest
+            missing = await rest.get(f"{origin}/api/v1/models", headers={"Authorization": f"Bearer {tokens['reader']}"})
+            assert missing.status_code == 404 and missing.json()["code"] == "not_found", missing.text
     print("Conversational BI e2e passed: roles, own and shared models, governed queries, join rules, results.")
 
 

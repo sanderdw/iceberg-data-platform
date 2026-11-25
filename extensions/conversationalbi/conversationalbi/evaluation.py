@@ -8,7 +8,8 @@ principal for that team and environment reads, the team's databases there and th
 received: the scope every member of the team has. What people asked in the chat is not reachable
 this way.
 
-- POST /api/v1/evaluation/models: the semantic models the team can ask about there.
+- POST /api/v1/evaluation/models: the semantic models the team can ask about there, and the LLMs
+  an evaluation may choose.
 - POST /api/v1/evaluation/ask: the chat agent answers one question, in text, and reports its tool
   calls, the governed queries it ran, token usage and the trace id.
 - POST /api/v1/evaluation/ask-schema-only: the control arm, what the same LLM does with only the table
@@ -18,21 +19,27 @@ this way.
   calls it when a team administrator switches live evaluation on or off; stopping deletes them.
 - POST /api/v1/evaluation/conversations: the team's recorded chat runs since a time, for live
   evaluation (conversations.py); recorded only while live evaluation is on.
+
+In every request and response `model` is a semantic model, by its reference {database, namespace,
+name}, and `llmModel` names an LLM. `toolCalls[].args` and `queries[].spec` are the chat agent's
+own tool arguments, as the agent sent them.
 """
 
 import asyncio
 import dataclasses
 import time
-from typing import Annotated, Literal
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_core import to_jsonable_python
 
 from .agent import control
 from .agent.deps import CbiDeps, CbiState
 from .agent.models import resolve_model
+from .api import ERRORS, SemanticModelRef, Timestamp
 from .errors import CbiError
 from .semantic.compiler import ModelRef, QuerySpec
 
@@ -47,46 +54,145 @@ Team = Annotated[str, Field(pattern=r"^team-[a-f0-9]{32}$")]
 Environment = Literal["development", "acceptance", "production"]
 
 
-class Scope(BaseModel):
+EPOCH = datetime.fromtimestamp(0, UTC)
+
+
+def instant(value):
+    """An RFC 3339 time in whole milliseconds since 1970, the precision of every time this API returns."""
+    try:
+        found = datetime.fromisoformat(value)
+    except ValueError:
+        found = None
+    if found is None or found.tzinfo is None:
+        raise ValueError("expected an RFC 3339 time with its offset, such as 2026-11-24T09:15:02.123Z")
+    return (found - EPOCH) // timedelta(milliseconds=1)
+
+
+def rfc3339(value):
+    instant(value)
+    return value
+
+
+LlmModel = Annotated[str | None, Field(max_length=200, description="The LLM that answers: LLM_MODEL when left out, "
+                                                                   "otherwise one of llmModels in /models.")]
+
+
+class Input(BaseModel):
+    """What every operation needs: the team and environment to answer for. Unknown fields are refused."""
+    model_config = {"extra": "forbid"}
+
     team: Team
     environment: Environment
 
 
-class Ask(BaseModel):
-    team: Team
-    environment: Environment
+class Scope(Input):
+    pass
+
+
+class Ask(Input):
     question: str = Field(min_length=1, max_length=2000)
-    # LLM_MODEL by default; otherwise one of BI_EVAL_MODELS.
-    model: str | None = Field(default=None, max_length=200)
+    llmModel: LlmModel = None
 
 
-class SchemaOnlyAsk(BaseModel):
-    team: Team
-    environment: Environment
+class SchemaOnlyAsk(Input):
     model: ModelRef
     question: str = Field(min_length=1, max_length=2000)
-    # LLM_MODEL by default; otherwise one of BI_EVAL_MODELS.
-    llm: str | None = Field(default=None, max_length=200)
+    llmModel: LlmModel = None
 
 
-class Recording(BaseModel):
-    team: Team
-    environment: Environment
+class Recording(Input):
     enabled: bool
 
 
-class Since(BaseModel):
-    team: Team
-    environment: Environment
-    since: float = Field(default=0, ge=0, description="Unix time; conversations after it, oldest first.")
+class Since(Input):
+    since: Annotated[str, Field(max_length=40), AfterValidator(rfc3339)] | None = Field(
+        default=None, description="RFC 3339, the `at` of the last conversation you read: only later ones are "
+                                  "returned, oldest first. Leave it out to start with the oldest.")
     limit: int = Field(default=100, ge=1, le=500)
 
 
-class GroundTruth(BaseModel):
-    team: Team
-    environment: Environment
+class GroundTruth(Input):
     model: ModelRef
     spec: QuerySpec
+
+
+# Responses.
+
+class EvaluationSemanticModel(BaseModel):
+    model: SemanticModelRef
+    name: str
+    databaseName: str
+    environment: Environment
+    shared: bool
+
+
+class EvaluationModels(BaseModel):
+    semanticModels: list[EvaluationSemanticModel]
+    llmModels: list[str] = Field(description="LLM_MODEL first, then the others an evaluation may choose.")
+    schemaOnly: bool = Field(description="Whether the control arm (ask-schema-only) is switched on.")
+
+
+class ToolCall(BaseModel):
+    name: str = Field(description="The chat agent's own tool, such as list_models or query.")
+    args: dict[str, Any]
+    result: Any = Field(description="What the agent got back; null when the call had no return.")
+
+
+class Usage(BaseModel):
+    inputTokens: int
+    outputTokens: int
+    requests: int
+
+
+class EvaluationAnswer(BaseModel):
+    answer: str
+    llmModel: str = Field(description="The LLM that answered.")
+    toolCalls: list[ToolCall]
+    queries: list[dict[str, Any]] = Field(description="The governed queries the agent ran: spec with resultId, "
+                                                      "columns, rowCount, rowsShown, rows and joinPaths, or with "
+                                                      "error and code when it was refused.")
+    usage: Usage
+    durationMs: int
+    traceId: str | None
+
+
+class EvaluationQueryResult(BaseModel):
+    modelName: str
+    query: dict[str, Any]
+    columns: list[dict[str, Any]]
+    rows: list[list[Any]]
+    rowCount: int
+    truncated: bool
+    joinPaths: dict[str, list[str]]
+    sql: str
+    dataAsOf: Timestamp | None = Field(description="When the metrics' dataset was last committed.")
+
+
+class EvaluationRecording(BaseModel):
+    recording: bool
+    retentionDays: int
+
+
+class EvaluationConversation(BaseModel):
+    id: str
+    at: Timestamp
+    team: str
+    environment: Environment
+    model: SemanticModelRef
+    question: str
+    answer: str
+    toolCalls: list[ToolCall]
+    queries: list[dict[str, Any]]
+    llmModel: str = Field(description="The LLM that answered.")
+    inputTokens: int
+    outputTokens: int
+    traceId: str | None
+
+
+class EvaluationConversations(BaseModel):
+    conversations: list[EvaluationConversation]
+    recording: bool = Field(description="Whether the team's chat runs are being kept there now.")
+    retentionDays: int
 
 
 def trace_id():
@@ -164,14 +270,14 @@ class Evaluation:
         }
         return dataclasses.replace(caller, team=team, environment=environment, context=context)
 
-    def model(self, name):
-        """None for the agent's own LLM_MODEL; another model only from BI_EVAL_MODELS."""
+    def llm_model(self, name):
+        """None for the agent's own LLM_MODEL; another LLM only from BI_EVAL_MODELS."""
         if not name or name == self.settings.model:
             if self.llm is not None and self.llm.status != "ready":
                 raise CbiError(503, f"The chat has no working LLM: {self.llm.problem}", "model_unavailable")
             return None
         if name not in self.settings.eval_models:
-            raise CbiError(422, "This model is not in BI_EVAL_MODELS.", "unknown_model_choice")
+            raise CbiError(422, "This LLM is not in BI_EVAL_MODELS.", "unknown_llm_model")
         if name not in self.models:
             choice = resolve_model(dataclasses.replace(self.settings, model=name, model_configured=True))
             if choice.status != "ready":
@@ -182,19 +288,19 @@ class Evaluation:
     async def list_models(self, caller, data: Scope):
         scoped = await self.scoped(caller, data.team, data.environment)
         found = await self.services.list_models(scoped)
-        return {"models": [{k: m[k] for k in ("model", "name", "databaseName", "environment", "shared")}
-                           for m in found["models"]],
+        return {"semanticModels": [{k: m[k] for k in ("model", "name", "databaseName", "environment", "shared")}
+                                   for m in found["models"]],
                 "llmModels": [self.settings.model, *self.settings.eval_models],
                 "schemaOnly": self.settings.eval_schema_only}
 
     async def ask(self, caller, data: Ask):
         scoped = await self.scoped(caller, data.team, data.environment)
-        model = self.model(data.model)
+        model = self.llm_model(data.llmModel)
         deps = CbiDeps(state=CbiState(), caller=scoped, services=self.services, me=scoped.context)
         started = time.monotonic()
         async with self.slots:
             result = await self.agent.run(data.question, deps=deps, model=model, instructions=TEXT_ONLY)
-        return self.report(result, started, data.model)
+        return self.report(result, started, data.llmModel)
 
     def report(self, result, started, asked):
         messages = result.all_messages()
@@ -203,7 +309,7 @@ class Evaluation:
         responses = [m for m in messages if isinstance(m, ModelResponse)]
         return {
             "answer": result.output if isinstance(result.output, str) else str(result.output),
-            "model": (responses[-1].model_name if responses else None) or asked or self.settings.model,
+            "llmModel": (responses[-1].model_name if responses else None) or asked or self.settings.model,
             "toolCalls": calls, "queries": queries(calls),
             "usage": {"inputTokens": usage.input_tokens, "outputTokens": usage.output_tokens,
                       "requests": usage.requests},
@@ -212,10 +318,10 @@ class Evaluation:
 
     async def ask_schema_only(self, caller, data: SchemaOnlyAsk):
         if not self.settings.eval_schema_only:
-            raise CbiError(403, "The control arm is off: a platform administrator sets BI_EVAL_SCHEMA_ONLY=true in "
+            raise CbiError(409, "The control arm is off: a platform administrator sets BI_EVAL_SCHEMA_ONLY=true in "
                                 "Conversational BI, because there an LLM writes SQL.", "schema_only_disabled")
         scoped = await self.scoped(caller, data.team, data.environment)
-        llm = self.model(data.llm)
+        llm = self.llm_model(data.llmModel)
         access, model, schemas, unreadable = await self.services.load(scoped, data.model, scoped.context)
         if unreadable:
             raise CbiError(403, "A table of this model is missing or not readable.", "table_not_readable",
@@ -231,7 +337,7 @@ class Evaluation:
         async with self.slots:
             result = await self.control.run(data.question, deps=deps, model=llm or self.agent.model,
                                             instructions=control.prompt(found))
-        return self.report(result, started, data.llm)
+        return self.report(result, started, data.llmModel)
 
     async def recording(self, caller, data: Recording):
         await self.scoped(caller, data.team, data.environment)
@@ -245,7 +351,8 @@ class Evaluation:
 
     async def conversations(self, caller, data: Since):
         await self.scoped(caller, data.team, data.environment)
-        found = self.log.since(data.team, data.environment, data.since, data.limit) if self.log else []
+        after = None if data.since is None else instant(data.since)
+        found = self.log.since(data.team, data.environment, after, data.limit) if self.log else []
         return {"conversations": found,
                 "recording": bool(self.log and self.log.recording(data.team, data.environment)),
                 "retentionDays": self.settings.conversation_retention_days}
@@ -258,35 +365,35 @@ class Evaluation:
 
 
 def router(evaluation):
-    api = APIRouter(prefix="/api/v1/evaluation", tags=["evaluation"])
+    api = APIRouter(prefix="/api/v1/evaluation", tags=["evaluation"], responses=ERRORS)
     Caller = Annotated[object, Depends(evaluation.caller)]
 
-    @api.post("/models", operation_id="evaluationModels",
+    @api.post("/models", operation_id="evaluationModels", response_model=EvaluationModels,
               summary="The semantic models a team can ask about, and the LLMs an evaluation may choose")
     async def models(data: Annotated[Scope, Body()], caller: Caller):
         return await evaluation.list_models(caller, data)
 
-    @api.post("/ask", operation_id="evaluationAsk",
+    @api.post("/ask", operation_id="evaluationAsk", response_model=EvaluationAnswer,
               summary="The chat agent answers one question for a team (service accounts in BI_AGENT_CALLERS)")
     async def ask(data: Annotated[Ask, Body()], caller: Caller):
         return await evaluation.ask(caller, data)
 
-    @api.post("/ask-schema-only", operation_id="evaluationAskSchemaOnly",
+    @api.post("/ask-schema-only", operation_id="evaluationAskSchemaOnly", response_model=EvaluationAnswer,
               summary="The control arm: the same LLM with only the table schemas (with BI_EVAL_SCHEMA_ONLY)")
     async def ask_schema_only(data: Annotated[SchemaOnlyAsk, Body()], caller: Caller):
         return await evaluation.ask_schema_only(caller, data)
 
-    @api.post("/query", operation_id="evaluationQuery",
+    @api.post("/query", operation_id="evaluationQuery", response_model=EvaluationQueryResult,
               summary="A governed query for a team: the ground truth to score an answer against")
     async def query(data: Annotated[GroundTruth, Body()], caller: Caller):
         return await evaluation.query(caller, data)
 
-    @api.post("/recording", operation_id="evaluationRecording",
+    @api.post("/recording", operation_id="evaluationRecording", response_model=EvaluationRecording,
               summary="Start or stop keeping a team's chat runs for live evaluation; stopping deletes them")
     async def recording(data: Annotated[Recording, Body()], caller: Caller):
         return await evaluation.recording(caller, data)
 
-    @api.post("/conversations", operation_id="evaluationConversations",
+    @api.post("/conversations", operation_id="evaluationConversations", response_model=EvaluationConversations,
               summary="The team's recorded chat runs, oldest first: only while live evaluation is on")
     async def conversations(data: Annotated[Since, Body()], caller: Caller):
         return await evaluation.conversations(caller, data)

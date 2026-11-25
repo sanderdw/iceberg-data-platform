@@ -15,9 +15,9 @@ their own teams.
 """
 
 import asyncio
-import datetime
 import json
 import time
+from datetime import UTC, datetime
 
 from . import charts
 from .config import ENVIRONMENTS
@@ -28,7 +28,22 @@ from .semantic.compiler import ModelRef, QuerySpec
 ADMINS = ("admin", "bucket-admin")
 # Catalog requests in flight for one model's table schemas.
 SCHEMA_FETCHES = 8
+# What a list of semantic models shows of each one; the chat agent's own list also names it (`name`).
+MODEL_KEYS = ("model", "key", "databaseName", "environment", "team", "teamName", "shared", "readingTeam",
+              "readingTeamName")
 
+
+def milliseconds(value):
+    """A stored time (seconds since 1970) in whole milliseconds, rounded as SQLite's `at * 1000 + 0.5` cast does."""
+    return int(value * 1000 + 0.5)
+
+
+def timestamp(value):
+    """A stored time (seconds since 1970) as every response shows it: RFC 3339 in UTC with milliseconds."""
+    if value is None:
+        return None
+    return datetime.fromtimestamp(milliseconds(value) / 1000, UTC).isoformat(timespec="milliseconds").replace(
+        "+00:00", "Z")
 
 
 def apps(discovery):
@@ -39,6 +54,7 @@ def apps(discovery):
     return {"workspace": [{k: str(p.get(k, "")) for k in ("id", "title", "url")} for p in pages],
             "extensions": [{k: str(e.get(k, "")) for k in ("id", "title", "purpose", "origin")}
                            for e in discovery.get("extensions") or []]}
+
 
 class Services:
     def __init__(self, settings, bridge, catalog, executor, results):
@@ -87,40 +103,70 @@ class Services:
                               "objects": {(o["kind"], tuple(o["namespace"]), o["name"]) for o in objects}})
         return found
 
+    def public_me(self, me, discovery, enabled):
+        """Who the caller is, built field by field: the Bridge's answer holds more than this API shows."""
+        return {
+            "user": {"id": me["user"]["id"], "name": me["user"]["name"]},
+            "memberships": [{"team": m["team"], "teamName": m["teamName"], "role": m["role"]}
+                            for m in me["memberships"]],
+            "databases": [{k: d[k] for k in ("id", "name", "team", "environment", "status")}
+                          for d in me["databases"]],
+            "extension": self.settings.extension_id, "origin": self.settings.origin,
+            "environments": list(ENVIRONMENTS),
+            "enabledEnvironments": [{"team": team, "environments": envs} for team, envs in enabled.items()],
+            "userPortalUrl": discovery.get("userPortalUrl", ""), "apps": apps(discovery),
+            "sharedData": "shared-data" in discovery.get("capabilities", []),
+            # Without what each share holds (sharedObjects): list_semantic_models names the models to ask about.
+            "sharedDatabases": [{"id": d["id"], "name": d["name"], "team": d["team"],
+                                 "ownerTeamName": d.get("ownerTeamName", ""), "environment": d["environment"],
+                                 "recipientTeams": self.recipients(d)} for d in me.get("sharedDatabases", [])],
+        }
+
+    def public_environment(self, me, team, environment, principal):
+        """One team environment: whether Conversational BI is enabled there, by whom, and what it can read."""
+        return {"team": team, "environment": environment, "enabled": principal is not None,
+                "enabledBy": principal.get("createdBy") if principal else None,
+                "databases": [{"id": d["id"], "name": d["name"]} for d in me["databases"]
+                              if d["team"] == team and d["environment"] == environment],
+                "sharedDatabases": [{"id": d["id"], "name": d["name"]} for d in me.get("sharedDatabases", [])
+                                    if team in self.recipients(d) and d["environment"] == environment]}
+
+    async def enabled(self, caller, teams):
+        found = {}
+        for team in teams:
+            envs = {p["environment"] for p in await self.bridge.team_automation(caller.token, team)}
+            found[team] = [env for env in ENVIRONMENTS if env in envs]
+        return found
+
     async def whoami(self, caller):
         me = await self.me(caller)
         discovery = await self.bridge.discovery()
-        return {**me, "extension": self.settings.extension_id, "origin": self.settings.origin,
-                "environments": list(ENVIRONMENTS), "userPortalUrl": discovery.get("userPortalUrl", ""),
-                "apps": apps(discovery),
-                "sharedData": "shared-data" in discovery.get("capabilities", [])}
+        enabled = await self.enabled(caller, [m["team"] for m in me["memberships"]])
+        return self.public_me(me, discovery, enabled)
 
     async def environments(self, caller, team):
         me = await self.me(caller)
         if not self.role(me, team):
             raise CbiError(403, "You are not a member of this team.", "not_a_member")
         enabled = {p["environment"]: p for p in await self.bridge.team_automation(caller.token, team)}
-        return [{"environment": env, "enabled": env in enabled,
-                 "databases": [d["name"] for d in me["databases"] if d["team"] == team and d["environment"] == env],
-                 "sharedDatabases": [d["name"] for d in me.get("sharedDatabases", [])
-                                     if team in (d.get("recipientTeams") or [d.get("sharedWithTeam")])
-                                     and d["environment"] == env],
-                 **({"principal": enabled[env]["id"], "enabledBy": enabled[env]["createdBy"]}
-                    if env in enabled else {})}
-                for env in ENVIRONMENTS]
+        return {"environments": [self.public_environment(me, team, env, enabled.get(env)) for env in ENVIRONMENTS]}
 
     async def enable_environment(self, caller, team, environment):
         if environment not in ENVIRONMENTS:
             raise CbiError(422, "Choose development, acceptance or production.", "invalid_request")
-        return await self.bridge.enable(caller.token, team, environment)
+        me = await self.me(caller)
+        # The Bridge checks that the caller administers the team.
+        principal = await self.bridge.enable(caller.token, team, environment)
+        return self.public_environment(me, team, environment, principal)
 
     async def disable_environment(self, caller, team, environment):
+        me = await self.me(caller)
         enabled = {p["environment"]: p for p in await self.bridge.team_automation(caller.token, team)}
         if environment not in enabled:
-            raise CbiError(404, "Conversational BI is not enabled for this environment.", "environment_not_enabled")
+            raise CbiError(409, "Conversational BI is not enabled for this environment.", "environment_not_enabled")
         await self.bridge.revoke(caller.token, enabled[environment]["id"])
         self.catalog.forget(enabled[environment]["id"])
-        return {"disabled": True, "environment": environment}
+        return self.public_environment(me, team, environment, None)
 
     async def resolve(self, caller, ref, me=None):
         """Which principal reads this model for this person, or why they cannot."""
@@ -185,13 +231,19 @@ class Services:
 
     def entry(self, me, database, namespace, name, *, shared, reading_team):
         ref = ModelRef(database=database["id"], namespace=namespace, name=name)
-        return {"model": ref.model_dump(), "key": ref.key, "name": name, "namespace": namespace,
-                "database": database["id"], "databaseName": database["name"], "environment": database["environment"],
-                "team": database["team"], "teamName": database.get("ownerTeamName") or self.team_name(
-                    me, database["team"]), "shared": shared, "readingTeam": reading_team,
-                "readingTeamName": self.team_name(me, reading_team)}
+        return {"model": ref.model_dump(), "key": ref.key, "name": name, "databaseName": database["name"],
+                "environment": database["environment"], "team": database["team"],
+                "teamName": database.get("ownerTeamName") or self.team_name(me, database["team"]),
+                "shared": shared, "readingTeam": reading_team, "readingTeamName": self.team_name(me, reading_team)}
+
+    async def list_semantic_models(self, caller):
+        """The list as the REST API and the MCP server show it; a model's name is in its reference, `model`."""
+        found = await self.list_models(caller)
+        return {"semanticModels": [{k: m[k] for k in MODEL_KEYS} for m in found["models"]],
+                "notEnabled": found["notEnabled"]}
 
     async def list_models(self, caller):
+        """Every model the caller can ask about, for the chat agent's own tool and the evaluation API."""
         me = await self.me(caller)
         principals = await self.principals()
         found, not_enabled = [], {}
@@ -258,7 +310,7 @@ class Services:
         return {
             "model": ref.model_dump(), "name": model.name or ref.name, "description": model.description,
             "instructions": model.instructions, "synonyms": model.synonyms, "examples": list(model.examples),
-            "database": access["database"]["name"], "environment": access["database"]["environment"],
+            "databaseName": access["database"]["name"], "environment": access["database"]["environment"],
             "shared": access["shared"], "unreadableTables": unreadable,
             "datasets": [{
                 "name": d.name, "description": d.description, "table": ".".join([*d.namespace, d.table]),
@@ -312,9 +364,12 @@ class Services:
             "sql": compiled.pretty, "params": compiled.params, "joinPaths": compiled.join_paths,
             "columns": [{**c, "sqlType": types.get(c["name"])} for c in compiled.columns],
             "metrics": compiled.metrics, "rows": out["rows"], "rowCount": len(out["rows"]),
-            "truncated": out["truncated"], "snapshots": snapshots,
-            "dataAsOf": datetime.datetime.fromtimestamp(committed / 1000, datetime.UTC).isoformat(
-                timespec="seconds").replace("+00:00", "Z") if committed else None,
+            "truncated": out["truncated"],
+            # Iceberg dates a snapshot in milliseconds since 1970.
+            "snapshots": {dataset: {"id": s.get("id"),
+                                    "committedAt": timestamp(s["committedAt"] / 1000) if s.get("committedAt")
+                                    else None} for dataset, s in snapshots.items()},
+            "dataAsOf": timestamp(committed / 1000) if committed else None,
             "recommended": charts.recommend(compiled.columns, out["rows"]),
             "elapsedMs": round((time.monotonic() - started) * 1000),
             "query": spec.model_dump(exclude_defaults=True),

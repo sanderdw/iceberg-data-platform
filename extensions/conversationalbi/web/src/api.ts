@@ -20,15 +20,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export type ModelRef = { database: string; namespace: string[]; name: string };
 
+// An item of GET /api/v1/semantic-models; the model's name and namespace are in its reference, `model`.
 export type ModelEntry = {
   model: ModelRef;
   key: string;
-  name: string;
-  namespace: string[];
   databaseName: string;
   environment: string;
-  shared: boolean;
+  team: string;
   teamName: string;
+  shared: boolean;
+  readingTeam: string;
   readingTeamName: string;
 };
 
@@ -60,7 +61,7 @@ export type Result = {
   dataAsOf?: string | null;
 };
 
-// GET /api/v1/models/describe: the model as its owner wrote it, and what each metric can be split by.
+// GET /api/v1/semantic-models/describe: the model as its owner wrote it, and what each metric can be split by.
 export type ModelField = {
   name: string;
   description: string;
@@ -90,10 +91,10 @@ export type ModelDescription = {
 };
 
 export function describeModel(ref: ModelRef): Promise<ModelDescription> {
-  const query = new URLSearchParams({ database: ref.database, name: ref.name });
+  const query = new URLSearchParams({ database: ref.database, model: ref.name });
   for (const level of ref.namespace) query.append("namespace", level);
-  return api<ModelDescription>(`/api/v1/models/describe?${query}`);
+  return api<ModelDescription>(`/api/v1/semantic-models/describe?${query}`);
 }
 
-export const sameRef =(a?: ModelRef | null, b?: ModelRef | null) =>
+export const sameRef = (a?: ModelRef | null, b?: ModelRef | null) =>
   !!a && !!b && a.database === b.database && a.name === b.name && a.namespace.join("\u001f") === b.namespace.join("\u001f");

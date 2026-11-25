@@ -16,6 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
+from starlette.exceptions import HTTPException
 
 from . import api, evaluation
 from .agent.agui import create_agent, create_agent_app
@@ -25,7 +26,7 @@ from .bridge_client import BridgeClient
 from .catalog import Catalog
 from .config import VERSION, Settings
 from .conversations import ConversationLog, Recorder
-from .errors import CbiError
+from .errors import CODES, CbiError
 from .mcp_server import create_mcp, mount
 from .results import ResultStore
 from .semantic.executor import Executor
@@ -113,13 +114,20 @@ def create_app(settings=None, *, bridge=None, verifier=None, catalog=None, execu
     async def invalid(request, exc):
         return JSONResponse({"error": validation_text(exc.errors()), "code": "invalid_request"}, status_code=422)
 
+    @app.exception_handler(HTTPException)
+    async def http_error(request, exc):
+        """An unknown path, a wrong method and anything else the framework refuses, in this API's error shape."""
+        text = {404: "Not found.", 405: "This method is not allowed here."}.get(exc.status_code, str(exc.detail))
+        return JSONResponse({"error": text, "code": CODES.get(exc.status_code, "internal_error")},
+                            status_code=exc.status_code, headers=exc.headers)
+
     @app.middleware("http")
     async def headers(request: Request, call_next):
         try:
             response = await call_next(request)
         except Exception:
             LOG.exception("Request failed")
-            response = JSONResponse({"error": "Something went wrong.", "code": "error"}, status_code=500)
+            response = JSONResponse({"error": "Something went wrong.", "code": "internal_error"}, status_code=500)
         response.headers.setdefault("Content-Security-Policy", CSP)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"

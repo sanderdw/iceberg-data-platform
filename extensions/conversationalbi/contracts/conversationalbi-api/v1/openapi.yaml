@@ -15,7 +15,89 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -24,7 +106,7 @@
     },
     "/api/v1/teams/{team}/environments": {
       "get": {
-        "summary": "Where Conversational BI is enabled for a team",
+        "summary": "Where Conversational BI is enabled for a team, with what it can read in each environment",
         "operationId": "listEnvironments",
         "parameters": [
           {
@@ -43,16 +125,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -95,16 +249,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -145,16 +371,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -162,26 +460,108 @@
         }
       }
     },
-    "/api/v1/models": {
+    "/api/v1/semantic-models": {
       "get": {
         "summary": "Semantic models of your teams and of data shares your teams received",
-        "operationId": "listModels",
+        "operationId": "listSemanticModels",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticModelList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
         }
       }
     },
-    "/api/v1/models/describe": {
+    "/api/v1/semantic-models/describe": {
       "get": {
         "summary": "A model's datasets, fields, metrics and the dimensions each metric can be split by",
-        "operationId": "describeModel",
+        "operationId": "describeSemanticModel",
         "parameters": [
           {
             "name": "database",
@@ -210,14 +590,16 @@
             "description": "Namespace levels in order; repeat the parameter for nested levels."
           },
           {
-            "name": "name",
+            "name": "model",
             "in": "query",
             "required": true,
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,256}$",
-              "title": "Name"
-            }
+              "description": "The semantic model's name.",
+              "title": "Model"
+            },
+            "description": "The semantic model's name."
           }
         ],
         "responses": {
@@ -229,12 +611,82 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No, invalid or expired sign-in",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -245,7 +697,7 @@
     "/api/v1/queries": {
       "post": {
         "summary": "Run a governed query: metrics by dimensions, compiled from the semantic model",
-        "operationId": "runQuery",
+        "operationId": "querySemanticModel",
         "requestBody": {
           "content": {
             "application/json": {
@@ -265,12 +717,82 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No, invalid or expired sign-in",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -326,12 +848,82 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No, invalid or expired sign-in",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -361,16 +953,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationModels"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -400,16 +1064,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationAnswer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -439,16 +1175,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationAnswer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -478,16 +1286,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationQueryResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -517,16 +1397,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationRecording"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -556,16 +1508,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationConversations"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -576,6 +1600,30 @@
   },
   "components": {
     "schemas": {
+      "Apps": {
+        "properties": {
+          "workspace": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspacePage"
+            },
+            "type": "array",
+            "title": "Workspace"
+          },
+          "extensions": {
+            "items": {
+              "$ref": "#/components/schemas/ExtensionLink"
+            },
+            "type": "array",
+            "title": "Extensions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace",
+          "extensions"
+        ],
+        "title": "Apps"
+      },
       "Ask": {
         "properties": {
           "team": {
@@ -598,7 +1646,7 @@
             "minLength": 1,
             "title": "Question"
           },
-          "model": {
+          "llmModel": {
             "anyOf": [
               {
                 "type": "string",
@@ -608,9 +1656,11 @@
                 "type": "null"
               }
             ],
-            "title": "Model"
+            "title": "Llmmodel",
+            "description": "The LLM that answers: LLM_MODEL when left out, otherwise one of llmModels in /models."
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "team",
@@ -619,13 +1669,64 @@
         ],
         "title": "Ask"
       },
+      "Database": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "team",
+          "environment",
+          "status"
+        ],
+        "title": "Database"
+      },
+      "DatabaseName": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "DatabaseName"
+      },
       "Dimension": {
         "properties": {
           "field": {
             "type": "string",
             "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}\\.[A-Za-z_][A-Za-z0-9_]{0,127}$",
             "title": "Field",
-            "description": "DATASET.field, as listed by describe_model."
+            "description": "DATASET.field, as the model's description lists it."
           },
           "via": {
             "items": {
@@ -665,6 +1766,507 @@
         ],
         "title": "Dimension"
       },
+      "EnabledEnvironments": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environments": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "development",
+                "acceptance",
+                "production"
+              ]
+            },
+            "type": "array",
+            "title": "Environments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environments"
+        ],
+        "title": "EnabledEnvironments"
+      },
+      "Environment": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "enabledBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabledby",
+            "description": "Who enabled it; null when it is not enabled."
+          },
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/DatabaseName"
+            },
+            "type": "array",
+            "title": "Databases"
+          },
+          "sharedDatabases": {
+            "items": {
+              "$ref": "#/components/schemas/DatabaseName"
+            },
+            "type": "array",
+            "title": "Shareddatabases",
+            "description": "Databases the team received a share of there."
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environment",
+          "enabled",
+          "enabledBy",
+          "databases",
+          "sharedDatabases"
+        ],
+        "title": "Environment"
+      },
+      "EnvironmentList": {
+        "properties": {
+          "environments": {
+            "items": {
+              "$ref": "#/components/schemas/Environment"
+            },
+            "type": "array",
+            "title": "Environments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "environments"
+        ],
+        "title": "EnvironmentList"
+      },
+      "Error": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "description": "What went wrong, for a person."
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "A stable code for programs, such as unknown_model."
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error",
+          "code"
+        ],
+        "title": "Error"
+      },
+      "EvaluationAnswer": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "llmModel": {
+            "type": "string",
+            "title": "Llmmodel",
+            "description": "The LLM that answered."
+          },
+          "toolCalls": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCall"
+            },
+            "type": "array",
+            "title": "Toolcalls"
+          },
+          "queries": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Queries",
+            "description": "The governed queries the agent ran: spec with resultId, columns, rowCount, rowsShown, rows and joinPaths, or with error and code when it was refused."
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "durationMs": {
+            "type": "integer",
+            "title": "Durationms"
+          },
+          "traceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traceid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "llmModel",
+          "toolCalls",
+          "queries",
+          "usage",
+          "durationMs",
+          "traceId"
+        ],
+        "title": "EvaluationAnswer"
+      },
+      "EvaluationConversation": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "at": {
+            "type": "string",
+            "title": "At",
+            "description": "RFC 3339 in UTC with milliseconds, such as 2026-11-24T09:15:02.123Z."
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "model": {
+            "$ref": "#/components/schemas/SemanticModelRef"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "toolCalls": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCall"
+            },
+            "type": "array",
+            "title": "Toolcalls"
+          },
+          "queries": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Queries"
+          },
+          "llmModel": {
+            "type": "string",
+            "title": "Llmmodel",
+            "description": "The LLM that answered."
+          },
+          "inputTokens": {
+            "type": "integer",
+            "title": "Inputtokens"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "title": "Outputtokens"
+          },
+          "traceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traceid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "at",
+          "team",
+          "environment",
+          "model",
+          "question",
+          "answer",
+          "toolCalls",
+          "queries",
+          "llmModel",
+          "inputTokens",
+          "outputTokens",
+          "traceId"
+        ],
+        "title": "EvaluationConversation"
+      },
+      "EvaluationConversations": {
+        "properties": {
+          "conversations": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationConversation"
+            },
+            "type": "array",
+            "title": "Conversations"
+          },
+          "recording": {
+            "type": "boolean",
+            "title": "Recording",
+            "description": "Whether the team's chat runs are being kept there now."
+          },
+          "retentionDays": {
+            "type": "integer",
+            "title": "Retentiondays"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversations",
+          "recording",
+          "retentionDays"
+        ],
+        "title": "EvaluationConversations"
+      },
+      "EvaluationModels": {
+        "properties": {
+          "semanticModels": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationSemanticModel"
+            },
+            "type": "array",
+            "title": "Semanticmodels"
+          },
+          "llmModels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Llmmodels",
+            "description": "LLM_MODEL first, then the others an evaluation may choose."
+          },
+          "schemaOnly": {
+            "type": "boolean",
+            "title": "Schemaonly",
+            "description": "Whether the control arm (ask-schema-only) is switched on."
+          }
+        },
+        "type": "object",
+        "required": [
+          "semanticModels",
+          "llmModels",
+          "schemaOnly"
+        ],
+        "title": "EvaluationModels"
+      },
+      "EvaluationQueryResult": {
+        "properties": {
+          "modelName": {
+            "type": "string",
+            "title": "Modelname"
+          },
+          "query": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Query"
+          },
+          "columns": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "rows": {
+            "items": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "rowCount": {
+            "type": "integer",
+            "title": "Rowcount"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          },
+          "joinPaths": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Joinpaths"
+          },
+          "sql": {
+            "type": "string",
+            "title": "Sql"
+          },
+          "dataAsOf": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339 in UTC with milliseconds, such as 2026-11-24T09:15:02.123Z."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataasof",
+            "description": "When the metrics' dataset was last committed."
+          }
+        },
+        "type": "object",
+        "required": [
+          "modelName",
+          "query",
+          "columns",
+          "rows",
+          "rowCount",
+          "truncated",
+          "joinPaths",
+          "sql",
+          "dataAsOf"
+        ],
+        "title": "EvaluationQueryResult"
+      },
+      "EvaluationRecording": {
+        "properties": {
+          "recording": {
+            "type": "boolean",
+            "title": "Recording"
+          },
+          "retentionDays": {
+            "type": "integer",
+            "title": "Retentiondays"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recording",
+          "retentionDays"
+        ],
+        "title": "EvaluationRecording"
+      },
+      "EvaluationSemanticModel": {
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/SemanticModelRef"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "databaseName": {
+            "type": "string",
+            "title": "Databasename"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "shared": {
+            "type": "boolean",
+            "title": "Shared"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "name",
+          "databaseName",
+          "environment",
+          "shared"
+        ],
+        "title": "EvaluationSemanticModel"
+      },
+      "ExtensionLink": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "purpose",
+          "origin"
+        ],
+        "title": "ExtensionLink"
+      },
       "Filter": {
         "properties": {
           "field": {
@@ -672,7 +2274,7 @@
               {
                 "type": "string",
                 "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}\\.[A-Za-z_][A-Za-z0-9_]{0,127}$",
-                "description": "DATASET.field, as listed by describe_model."
+                "description": "DATASET.field, as the model's description lists it."
               },
               {
                 "type": "null"
@@ -789,6 +2391,7 @@
             "$ref": "#/components/schemas/QuerySpec"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "team",
@@ -798,18 +2401,110 @@
         ],
         "title": "GroundTruth"
       },
-      "HTTPValidationError": {
+      "Me": {
         "properties": {
-          "detail": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "memberships": {
             "items": {
-              "$ref": "#/components/schemas/ValidationError"
+              "$ref": "#/components/schemas/Membership"
             },
             "type": "array",
-            "title": "Detail"
+            "title": "Memberships"
+          },
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/Database"
+            },
+            "type": "array",
+            "title": "Databases"
+          },
+          "extension": {
+            "type": "string",
+            "title": "Extension"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin"
+          },
+          "environments": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "development",
+                "acceptance",
+                "production"
+              ]
+            },
+            "type": "array",
+            "title": "Environments"
+          },
+          "enabledEnvironments": {
+            "items": {
+              "$ref": "#/components/schemas/EnabledEnvironments"
+            },
+            "type": "array",
+            "title": "Enabledenvironments"
+          },
+          "userPortalUrl": {
+            "type": "string",
+            "title": "Userportalurl"
+          },
+          "apps": {
+            "$ref": "#/components/schemas/Apps"
+          },
+          "sharedData": {
+            "type": "boolean",
+            "title": "Shareddata",
+            "description": "Whether the platform supports asking about shared semantic models."
+          },
+          "sharedDatabases": {
+            "items": {
+              "$ref": "#/components/schemas/SharedDatabase"
+            },
+            "type": "array",
+            "title": "Shareddatabases"
           }
         },
         "type": "object",
-        "title": "HTTPValidationError"
+        "required": [
+          "user",
+          "memberships",
+          "databases",
+          "extension",
+          "origin",
+          "environments",
+          "enabledEnvironments",
+          "userPortalUrl",
+          "apps",
+          "sharedData",
+          "sharedDatabases"
+        ],
+        "title": "Me"
+      },
+      "Membership": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "teamName": {
+            "type": "string",
+            "title": "Teamname"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "teamName",
+          "role"
+        ],
+        "title": "Membership"
       },
       "ModelRef": {
         "properties": {
@@ -817,7 +2512,7 @@
             "type": "string",
             "pattern": "^db-[a-f0-9]{32}$",
             "title": "Database",
-            "description": "Database id, from list_models."
+            "description": "Database id, from the list of semantic models."
           },
           "namespace": {
             "items": {
@@ -846,6 +2541,40 @@
           "name"
         ],
         "title": "ModelRef"
+      },
+      "NotEnabled": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "teamName": {
+            "type": "string",
+            "title": "Teamname"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "canEnable": {
+            "type": "boolean",
+            "title": "Canenable",
+            "description": "Whether you administer the team, so you can enable it there."
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "teamName",
+          "environment",
+          "canEnable"
+        ],
+        "title": "NotEnabled"
       },
       "Order": {
         "properties": {
@@ -1001,6 +2730,7 @@
             "title": "Enabled"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "team",
@@ -1034,7 +2764,7 @@
             "minLength": 1,
             "title": "Question"
           },
-          "llm": {
+          "llmModel": {
             "anyOf": [
               {
                 "type": "string",
@@ -1044,9 +2774,11 @@
                 "type": "null"
               }
             ],
-            "title": "Llm"
+            "title": "Llmmodel",
+            "description": "The LLM that answers: LLM_MODEL when left out, otherwise one of llmModels in /models."
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "team",
@@ -1073,12 +2805,169 @@
             "title": "Environment"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "team",
           "environment"
         ],
         "title": "Scope"
+      },
+      "SemanticModel": {
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/SemanticModelRef",
+            "description": "The reference to pass to describe and to a query."
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "databaseName": {
+            "type": "string",
+            "title": "Databasename"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team",
+            "description": "The team that owns the model."
+          },
+          "teamName": {
+            "type": "string",
+            "title": "Teamname"
+          },
+          "shared": {
+            "type": "boolean",
+            "title": "Shared",
+            "description": "True when one of your teams received the model through a data share."
+          },
+          "readingTeam": {
+            "type": "string",
+            "title": "Readingteam",
+            "description": "Your team whose access reads the data."
+          },
+          "readingTeamName": {
+            "type": "string",
+            "title": "Readingteamname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "key",
+          "databaseName",
+          "environment",
+          "team",
+          "teamName",
+          "shared",
+          "readingTeam",
+          "readingTeamName"
+        ],
+        "title": "SemanticModel"
+      },
+      "SemanticModelList": {
+        "properties": {
+          "semanticModels": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticModel"
+            },
+            "type": "array",
+            "title": "Semanticmodels"
+          },
+          "notEnabled": {
+            "items": {
+              "$ref": "#/components/schemas/NotEnabled"
+            },
+            "type": "array",
+            "title": "Notenabled",
+            "description": "Team environments with models to ask about once Conversational BI is enabled there."
+          }
+        },
+        "type": "object",
+        "required": [
+          "semanticModels",
+          "notEnabled"
+        ],
+        "title": "SemanticModelList"
+      },
+      "SemanticModelRef": {
+        "properties": {
+          "database": {
+            "type": "string",
+            "title": "Database",
+            "description": "Database id."
+          },
+          "namespace": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Namespace"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database",
+          "namespace",
+          "name"
+        ],
+        "title": "SemanticModelRef"
+      },
+      "SharedDatabase": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team",
+            "description": "The team that owns the database and shares from it."
+          },
+          "ownerTeamName": {
+            "type": "string",
+            "title": "Ownerteamname"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "recipientTeams": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recipientteams",
+            "description": "Your teams that received the share."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "team",
+          "ownerTeamName",
+          "environment",
+          "recipientTeams"
+        ],
+        "title": "SharedDatabase"
       },
       "Since": {
         "properties": {
@@ -1097,11 +2986,17 @@
             "title": "Environment"
           },
           "since": {
-            "type": "number",
-            "minimum": 0.0,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Since",
-            "description": "Unix time; conversations after it, oldest first.",
-            "default": 0
+            "description": "RFC 3339, the `at` of the last conversation you read: only later ones are returned, oldest first. Leave it out to start with the oldest."
           },
           "limit": {
             "type": "integer",
@@ -1111,6 +3006,7 @@
             "default": 100
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "team",
@@ -1118,45 +3014,94 @@
         ],
         "title": "Since"
       },
-      "ValidationError": {
+      "ToolCall": {
         "properties": {
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "type": "array",
-            "title": "Location"
-          },
-          "msg": {
+          "name": {
             "type": "string",
-            "title": "Message"
+            "title": "Name",
+            "description": "The chat agent's own tool, such as list_models or query."
           },
-          "type": {
-            "type": "string",
-            "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
+          "args": {
+            "additionalProperties": true,
             "type": "object",
-            "title": "Context"
+            "title": "Args"
+          },
+          "result": {
+            "title": "Result",
+            "description": "What the agent got back; null when the call had no return."
           }
         },
         "type": "object",
         "required": [
-          "loc",
-          "msg",
-          "type"
+          "name",
+          "args",
+          "result"
         ],
-        "title": "ValidationError"
+        "title": "ToolCall"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "type": "integer",
+            "title": "Inputtokens"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "title": "Outputtokens"
+          },
+          "requests": {
+            "type": "integer",
+            "title": "Requests"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inputTokens",
+          "outputTokens",
+          "requests"
+        ],
+        "title": "Usage"
+      },
+      "User": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "User"
+      },
+      "WorkspacePage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "url"
+        ],
+        "title": "WorkspacePage"
       }
     }
   }

@@ -10,7 +10,7 @@ import { starterQuestions } from "./guide";
 import { useTheme } from "./theme";
 
 type Session = { authenticated: boolean; user?: string };
-type Models = { models: ModelEntry[]; notEnabled: NotEnabled[] };
+type Models = { semanticModels: ModelEntry[]; notEnabled: NotEnabled[] };
 const RETURN_KEY = "cbi-return-hash";
 const GUIDE_KEY = "cbi-guide";
 // Below this width the guide covers the chat instead of standing next to it.
@@ -153,7 +153,7 @@ function Workspace({ user }: { user: string }) {
   const [problem, setProblem] = useState<string>();
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const selected = (agent.state as { model?: ModelRef } | undefined)?.model ?? null;
-  const current = models?.models.find((m) => sameRef(m.model, selected));
+  const current = models?.semanticModels.find((m) => sameRef(m.model, selected));
   // The full heading introduces a model; once the conversation starts it shrinks to one line.
   const started = (agent.messages?.length ?? 0) > 0;
   const [guideOpen, setGuideOpen] = useGuideOpen();
@@ -195,12 +195,12 @@ function Workspace({ user }: { user: string }) {
     [agent],
   );
   const load = useCallback(() => {
-    api<Models>("/api/v1/models").then(
+    api<Models>("/api/v1/semantic-models").then(
       (found) => {
         setModels(found);
         setProblem(undefined);
         const linked = deepLink();
-        const match = linked && found.models.find((m) => sameRef(m.model, linked));
+        const match = linked && found.semanticModels.find((m) => sameRef(m.model, linked));
         if (match) select(match);
         else if (linked) setProblem("The linked model is not available to your teams, or Conversational BI is not enabled for its environment.");
       },
@@ -296,14 +296,14 @@ function Workspace({ user }: { user: string }) {
         <section className={`workspace-heading${started ? " compact" : ""}`}>
           <div>
             <div className="eyebrow">{current ? (current.shared ? "SHARED SEMANTIC MODEL" : "TEAM SEMANTIC MODEL") : "CONVERSATIONAL BI"}</div>
-            <h1>{current ? current.name : "Ask"}<span className="dot-accent">.</span></h1>
+            <h1>{current ? current.model.name : "Ask"}<span className="dot-accent">.</span></h1>
             <p>{current
               ? "Ask about its metrics in plain language. Every answer shows the query, the join path and the metric definitions."
               : "Pick a semantic model of your team, or one shared with your team, and ask about its metrics."}</p>
           </div>
           {current && (
             <div className="workspace-context">
-              <Fact label="Database" value={`${current.databaseName} · ${current.namespace.join(".")}`} />
+              <Fact label="Database" value={`${current.databaseName} · ${current.model.namespace.join(".")}`} />
               <Fact label="Environment" value={current.environment} />
               <Fact label="Owner" value={current.teamName} />
             </div>
@@ -316,7 +316,7 @@ function Workspace({ user }: { user: string }) {
               <button type="button" id="refresh" className="quiet" aria-label="Refresh models" onClick={load}><Icon kind="refresh" /></button>
             </div>
             {models ? (
-              <ModelPicker models={models.models} notEnabled={models.notEnabled} selected={selected} onSelect={pick} onEnabled={load} />
+              <ModelPicker models={models.semanticModels} notEnabled={models.notEnabled} selected={selected} onSelect={pick} onEnabled={load} />
             ) : (
               <p className="hint">[ LOADING ]</p>
             )}
@@ -344,7 +344,7 @@ function Workspace({ user }: { user: string }) {
             </div>
             <CopilotChat key={threadId} threadId={threadId} agentId="analyst"
               labels={{
-                chatInputPlaceholder: current ? `Ask about ${current.name}…` : "Select a model, or ask which data you can explore…",
+                chatInputPlaceholder: current ? `Ask about ${current.model.name}…` : "Select a model, or ask which data you can explore…",
                 chatDisclaimerText: "Answers come from governed queries on the selected model. Check the query card for definitions and SQL.",
               }} />
           </section>

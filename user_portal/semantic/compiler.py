@@ -28,7 +28,7 @@ Operator = Literal["=", "!=", "<", "<=", ">", ">=", "in", "not_in", "between", "
 Scalar = str | int | float | bool
 Name = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")]
 FieldRef = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}\.[A-Za-z_][A-Za-z0-9_]{0,127}$",
-                                description="DATASET.field, as listed by describe_semantic_model.")]
+                                description="DATASET.field, as the model's description lists it.")]
 TIME_TYPES = ("date", "timestamp", "timestamptz", "timestamp_ns", "timestamptz_ns")
 DUCKDB_TYPES = {"string": "VARCHAR", "int": "INTEGER", "long": "BIGINT", "float": "FLOAT", "double": "DOUBLE",
                 "boolean": "BOOLEAN", "date": "DATE", "timestamp": "TIMESTAMP", "timestamptz": "TIMESTAMPTZ",
@@ -46,7 +46,7 @@ class Input(BaseModel):
 
 
 class ModelRef(Input):
-    database: str = Field(pattern=r"^db-[a-f0-9]{32}$", description="Database id, from list_models.")
+    database: str = Field(pattern=r"^db-[a-f0-9]{32}$", description="Database id, from the list of semantic models.")
     namespace: list[Annotated[str, Field(min_length=1, max_length=256, pattern=r"^[^\x00-\x1f\x7f]+$")]] = Field(
         min_length=1, max_length=20)
     name: str = Field(pattern=r"^[A-Za-z0-9_-]{1,256}$", description="Semantic model name.")

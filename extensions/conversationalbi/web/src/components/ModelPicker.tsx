@@ -41,9 +41,9 @@ export function ModelPicker({ models, notEnabled, selected, onSelect, onEnabled 
               <button key={m.key} type="button" className={`db${active ? " selected" : ""}`} aria-pressed={active} onClick={() => onSelect(m)}>
                 <Icon kind="semantic-model" />
                 <span className="database-label">
-                  <strong>{m.name}</strong>
+                  <strong>{m.model.name}</strong>
                   {m.shared && <span className="shared-badge">Shared · Read-only</span>}
-                  <small>{m.databaseName} · {m.namespace.join(".")}</small>
+                  <small>{m.databaseName} · {m.model.namespace.join(".")}</small>
                   {m.shared && <small>Owner: {m.teamName}</small>}
                   <small>{m.environment[0].toUpperCase() + m.environment.slice(1)}</small>
                 </span>

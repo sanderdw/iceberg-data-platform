@@ -96,10 +96,10 @@ class Catalog:
         async def load():
             url = f"{self.models_url(await self.uri(), database, namespace)}/{quote(name, safe='')}"
             response = await self.get(principal, url)
-            if response.status_code in (403, 404):
-                raise CbiError(404 if response.status_code == 404 else 403,
-                               "This semantic model does not exist or is not readable for your team.",
-                               "model_not_readable")
+            if response.status_code == 404:
+                raise CbiError(404, "This semantic model does not exist.", "unknown_model")
+            if response.status_code == 403:
+                raise CbiError(403, "This semantic model is not readable for your team.", "model_not_readable")
             if response.status_code == 406:
                 raise CbiError(503, "Semantic models are switched off on this platform.", "models_disabled")
             if response.is_error:

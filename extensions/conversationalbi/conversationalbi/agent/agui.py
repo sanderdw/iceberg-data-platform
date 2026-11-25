@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic_ai import Agent
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 
-from ..errors import CbiError
+from ..errors import CODES, CbiError
 from .capability import SemanticLayer
 from .deps import CbiDeps, CbiState
 from .models import resolve_model
@@ -34,8 +34,9 @@ def create_agent_app(settings, services, login, tickets, agent=None, model=None,
     agent = agent or create_agent(settings, model=model)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-    def refuse(status, message):
-        return JSONResponse({"error": message}, status_code=status)
+    def refuse(status, message, code=None):
+        return JSONResponse({"error": message, "code": code or CODES.get(status, "internal_error")},
+                            status_code=status)
 
     @app.get("/health")
     def health():
@@ -58,7 +59,7 @@ def create_agent_app(settings, services, login, tickets, agent=None, model=None,
                 return refuse(401, "The run ticket belongs to another session.")
             me = await services.me(caller, fresh=True)
         except CbiError as exc:
-            return refuse(exc.status, str(exc))
+            return refuse(exc.status, str(exc), exc.code)
         deps = CbiDeps(state=CbiState(), caller=caller, services=services, me=me)
 
         async def record(result):

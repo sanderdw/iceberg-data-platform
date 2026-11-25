@@ -1,5 +1,56 @@
 # Changelog
 
+## Unreleased
+
+The REST API and the MCP tools follow the platform's one set of conventions. Nothing of the old shapes
+is kept: update scripts and agent instructions.
+
+- **Semantic models have the user portal's names.** The tools are `list_semantic_models`,
+  `describe_semantic_model` and `query_semantic_model` (were `list_models`, `describe_model` and
+  `query`). REST is `GET /semantic-models` and `GET /semantic-models/describe` (were `/models` and
+  `/models/describe`); `POST /queries` keeps its path and body. The chat agent's own tools keep their
+  names.
+- **The list** is `{"semanticModels": [...], "notEnabled": [...]}` (was `models`). An entry names its
+  model once, in `model` (`database`, `namespace`, `name`): the separate `name`, `namespace` and
+  `database` are gone.
+- **A model is `model`**, beside `database` and `namespace`: `describe_semantic_model(database,
+  namespace, model)` and `?model=` in REST (was `name`). `get_result` takes `result` (was
+  `result_id`). In what the tools return, `model` is that reference too: a description has the
+  database's name in `databaseName` (was `database`), and the results of `query_semantic_model` and
+  `get_result` have the model's own name in `modelName` (was `model`).
+- A semantic model that does not exist is 404 `unknown_model` (was `model_not_readable`, which is now
+  only the 403 for a model the team's service account may not read).
+- **Environments.** `list_environments` and `GET /teams/{team}/environments` return
+  `{"environments": [...]}` (REST returned a bare array). `enable_environment` and
+  `disable_environment` return the environment as that list shows it: `{team, environment, enabled,
+  enabledBy, databases, sharedDatabases}`, with databases as `{id, name}` (were names). Disabling one
+  that is not enabled is 409 `environment_not_enabled` (was 404). The service account's id is no
+  longer returned.
+- **`whoami`** returns only what this extension shows about you, and now `enabledEnvironments`.
+  `sharedDatabases` lists `{id, name, team, ownerTeamName, environment, recipientTeams}`, without what
+  each share holds.
+- **Times** are RFC 3339 strings in UTC with milliseconds, such as `2026-11-24T09:15:02.123Z`:
+  `dataAsOf` (was to the second) and `committedAt` of a result's `snapshots` (was milliseconds since
+  1970).
+- **Errors.** An unknown path is 404 `not_found`, a wrong method 405 `method_not_allowed` and an
+  unexpected error 500 `internal_error`, all as `{"error", "code"}`.
+- The OpenAPI contract describes `whoami`, the environments, the list of semantic models, every
+  operation of the evaluation API and the error body.
+- **Evaluation API** (`/api/v1/evaluation/*`, for the Evaluations extension; both are updated together):
+    - An LLM is `llmModel` everywhere: in the request of `ask` (was `model`) and `ask-schema-only` (was
+      `llm`), and in the answer (was `model`). `model` is always a semantic model. A field the
+      operation does not know is refused with 422 `invalid_request`.
+    - `models` returns `semanticModels` (was `models`).
+    - `conversations` returns `id, at, team, environment, model, question, answer, toolCalls, queries,
+      llmModel, inputTokens, outputTokens, traceId` (were the stored column names). `at` is an RFC 3339
+      string, and `since` takes the same string (were seconds since 1970).
+    - A conversation no longer holds who asked: the person's id is neither returned nor recorded.
+    - An LLM that is not allowed is 422 `unknown_llm_model` (was `unknown_model_choice`), and a
+      switched-off control arm is 409 `schema_only_disabled` (was 403).
+- Conversations are kept for live evaluation only while a team administrator has it switched on in
+  Evaluations (`POST /api/v1/evaluation/recording`); switching it off, or disabling Evaluations for the
+  environment, deletes them.
+
 ## 0.1.6 - 2026-11-18
 
 - Updated dependencies, including FastAPI 0.162.4, sqlglot 30.33, Vite 8.3.8 and uv 0.13.8.
