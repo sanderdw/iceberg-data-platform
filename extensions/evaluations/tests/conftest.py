@@ -1,6 +1,9 @@
 """Fakes for the platform side: the Bridge (contract 0.1.3), Keycloak tokens and the agent (Conversational BI)."""
 
+import json
+import re
 import time
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -18,6 +21,27 @@ MODEL = {"database": DB, "namespace": ["ai_flights"], "name": "flights"}
 DELAYS = [["Example Cloudline", 16.923885187083545], ["Example Jetways", 12.5], ["Example Air", 9.25]]
 QUERY = {"metrics": ["average_departure_delay"], "dimensions": [{"field": "CARRIER.name"}],
          "order_by": [{"name": "average_departure_delay", "desc": True}]}
+LLM_MODELS = ["test:flights", "openai:gpt-test"]
+# Every time in a response, and every time Conversational BI takes or gives.
+TIMESTAMP = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
+
+
+def seconds(timestamp):
+    assert isinstance(timestamp, str) and TIMESTAMP.match(timestamp), timestamp
+    return datetime.fromisoformat(timestamp).timestamp()
+
+
+def conversation(number, at, question, answer, **fields):
+    """A chat run as Conversational BI's evaluation API gives it: never the person who asked."""
+    return {"id": "conv-" + str(number) * 24, "at": at, "team": TEAM, "environment": "development", "model": MODEL,
+            "question": question, "answer": answer,
+            "toolCalls": [{"name": "query", "args": QUERY, "result": {"rowCount": 3}}],
+            "queries": [{"spec": {**QUERY, "limit": 100}, "rowCount": 3, "rowsShown": 3, "rows": DELAYS}],
+            "llmModel": "google:gemini", "inputTokens": 900, "outputTokens": 80, "traceId": "ab" * 16, **fields}
+
+
+class ToolRefused(Exception):
+    """An MCP tool answered with an error."""
 
 YAML = """cases:
 - name: delay_by_carrier
@@ -63,9 +87,13 @@ class FakeBridge:
         return "svc"
 
     async def me(self, token):
-        return {"user": {"id": "portal-" + token, "name": token},
-                "memberships": [{"team": t, "teamName": t[:9], "role": r} for t, r in self.roles[token].items()],
-                "databases": [], "sharedDatabases": []}
+        """More than Evaluations shows: the Bridge also tells where a database is stored and what is shared."""
+        teams = self.roles[token]
+        return {"user": {"id": "portal-" + token, "name": token, "keycloakId": "kc-" + token},
+                "memberships": [{"team": t, "teamName": t[:9], "role": r, "joinedAt": 1} for t, r in teams.items()],
+                "databases": [{"id": DB, "name": "sales", "team": TEAM, "environment": "development", "status": "ready",
+                               "storageLocation": "s3://sales"}] if TEAM in teams else [],
+                "sharedDatabases": [{"id": "db-" + "9" * 32, "name": "shared", "team": OTHER}]}
 
     async def team_automation(self, token, team):
         return [a for a in self.automation_ if a["team"] == team]
@@ -113,21 +141,25 @@ class FakeAgent:
         # Conversational BI's conversation record of the team (live evaluation).
         self.recorded = []
         self.recording_ = {}
+        # Every `since` a check asked for.
+        self.since = []
 
     async def close(self):
         pass
 
     async def models(self, team, environment):
-        return {"models": [{"model": MODEL, "name": "flights", "databaseName": "sales", "environment": environment,
-                            "shared": False}], "llmModels": ["test:flights", "openai:gpt-test"],
-                "schemaOnly": self.schema_only}
+        return {"semanticModels": [{"model": MODEL, "name": "flights", "databaseName": "sales",
+                                    "environment": environment, "shared": False}],
+                "llmModels": list(LLM_MODELS), "schemaOnly": self.schema_only}
 
-    async def ask(self, team, environment, question, model=None):
-        self.asked.append((team, environment, question, model))
+    async def ask(self, team, environment, question, llm_model=None):
+        self.asked.append((team, environment, question, llm_model))
+        if llm_model and llm_model not in LLM_MODELS:
+            raise EvalError(422, "This LLM is not one the platform allows for evaluation.", "unknown_llm_model")
         if self.failing and any(word in question for word in self.failing):
             raise EvalError(502, "The LLM is rate limited.", "agent_error")
         usage = {"inputTokens": 1000, "outputTokens": 100, "requests": 3}
-        base = {"model": model or "test:flights", "usage": usage, "durationMs": 1200, "traceId": "ab" * 16}
+        base = {"llmModel": llm_model or "test:flights", "usage": usage, "durationMs": 1200, "traceId": "ab" * 16}
         if "carrier" in question:
             rows = DELAYS if self.behaviour == "good" else [["Example Air", 9.25]]
             figure = "16.9" if self.behaviour == "good" else "42.0"
@@ -147,15 +179,19 @@ class FakeAgent:
         return {"recording": enabled, "retentionDays": 30}
 
     async def conversations(self, team, environment, since, limit=200):
-        found = [c for c in self.recorded if c["at"] > since][:limit]
+        self.since.append(since)
+        found = [c for c in self.recorded if seconds(c["at"]) > seconds(since)][:limit]
         return {"conversations": found, "recording": self.recording_.get((team, environment), False),
                 "retentionDays": 30}
 
-    async def ask_control(self, team, environment, model, question, llm=None):
+    async def ask_control(self, team, environment, model, question, llm_model=None):
         """Without the semantic layer: right on the carriers, rounded by its SQL, and no refusal."""
-        self.control_asked.append((team, environment, model, question, llm))
-        base = {"model": llm or "test:flights", "usage": {"inputTokens": 500, "outputTokens": 50, "requests": 2},
-                "durationMs": 800, "traceId": "cd" * 16}
+        if not self.schema_only:
+            raise EvalError(409, "The control arm is off.", "schema_only_disabled")
+        self.control_asked.append((team, environment, model, question, llm_model))
+        base = {"llmModel": llm_model or "test:flights",
+                "usage": {"inputTokens": 500, "outputTokens": 50, "requests": 2}, "durationMs": 800,
+                "traceId": "cd" * 16}
         if "carrier" in question:
             rows = [[n, round(v, 2)] for n, v in DELAYS]
             call = {"name": "run_sql", "args": {"sql": "SELECT 1"}, "result": {"rowCount": 3}}
@@ -167,20 +203,25 @@ class FakeAgent:
                 "queries": [{"spec": {"sql": "SELECT 2"}, "rowCount": 1, "rowsShown": 1, "rows": rows}]}
 
     async def truth(self, team, environment, model, spec):
-        return {"rows": DELAYS, "rowCount": 3, "columns": [], "query": spec}
+        return {"modelName": model["name"], "query": spec, "columns": [], "rows": DELAYS, "rowCount": 3,
+                "truncated": False, "joinPaths": {}, "sql": "SELECT 1", "dataAsOf": "2026-11-24T09:15:02Z"}
 
 
 class FakeVerifier:
+    def __init__(self):
+        # The Keycloak client the token was issued to: the MCP client for an agent, the other for a script.
+        self.client = "ext-evaluations-mcp"
+
     async def verify(self, token):
         if token not in ("alice", "bob", "carol", "dave"):
             raise EvalError(401, "Sign in again.", "unauthorized")
-        return Caller(token, "sub-" + token, token, "ext-evaluations-mcp", 4102444800.0)
+        return Caller(token, "sub-" + token, token, self.client, 4102444800.0)
 
 
 @pytest.fixture
 def stack(tmp_path):
-    bridge, agent = FakeBridge(), FakeAgent()
-    app = create_app(settings(tmp_path), bridge=bridge, verifier=FakeVerifier(), agent=agent)
+    bridge, agent, verifier = FakeBridge(), FakeAgent(), FakeVerifier()
+    app = create_app(settings(tmp_path), bridge=bridge, verifier=verifier, agent=agent)
     with TestClient(app) as client:
         def call(method, path, user="alice", **kwargs):
             return client.request(method, "/api/v1" + path, headers={"Authorization": f"Bearer {user}"}, **kwargs)
@@ -193,8 +234,26 @@ def stack(tmp_path):
                 time.sleep(0.02)
             raise AssertionError("The run did not finish")
 
-        def create(user="alice", environment="development", yaml=YAML, name="flights_checks"):
+        def create(user="alice", environment="development", yaml=YAML, name="flights_checks", **fields):
             return call("POST", "/question-sets", user, json={
-                "team": TEAM, "environment": environment, "name": name, "model": MODEL, "yaml": yaml})
+                "team": TEAM, "environment": environment, "name": name, "model": MODEL, "yaml": yaml, **fields})
 
-        yield SimpleNamespace(client=client, call=call, bridge=bridge, agent=agent, app=app, wait=wait, create=create)
+        def rpc(method, user, **params):
+            response = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                                   headers={"Authorization": f"Bearer {user}",
+                                            "Accept": "application/json, text/event-stream"})
+            return response.json()["result"]
+
+        def tool(tool, user="alice", /, **arguments):
+            """Calls an MCP tool as an agent does. Returns its result; a refusal raises ToolRefused with its text."""
+            result = rpc("tools/call", user, name=tool, arguments=arguments)
+            text = "".join(block.get("text", "") for block in result["content"])
+            if result.get("isError"):
+                raise ToolRefused(text)
+            return json.loads(text)
+
+        def tools():
+            return {t["name"]: t for t in rpc("tools/list", "alice")["tools"]}
+
+        yield SimpleNamespace(client=client, call=call, bridge=bridge, agent=agent, verifier=verifier, app=app,
+                              wait=wait, create=create, tool=tool, tools=tools, services=app.state.services)

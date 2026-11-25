@@ -78,13 +78,15 @@ function databaseOptions(team, environment, selected) {
     ...found.map((d) => el('option', { value: d.id, selected: d.id === selected }, d.name))];
 }
 
-const when = (t) => (t ? new Date(t * 1000).toLocaleString() : '');
+// Times from the API are RFC 3339 strings in UTC.
+const when = (t) => (t ? new Date(t).toLocaleString() : '');
 const pct = (r) => (r === null || r === undefined ? '–' : `${Math.round(r * 100)}%`);
 const rateClass = (r) => (r === null || r === undefined ? '' : r >= 0.9 ? 'high' : r >= 0.6 ? 'mid' : 'low');
 const teamName = (team) => (state.me.memberships.find((m) => m.team === team) || {}).teamName || team;
 
-// A done run with too many unanswered questions has no pass rate: it measured the outage, not the agent.
-const unreliable = (run) => run.status === 'done' && run.summary.reliable === false;
+// A finished run with too many unanswered questions has no pass rate: it measured the outage, not the agent.
+const unreliable = (run) => run.status === 'success' && run.summary.reliable === false;
+const startedBy = (run) => [run.triggeredBy, run.agent ? el('span', { class: 'agent' }, 'through an AI agent') : null];
 
 function statusChip(run) {
   return unreliable(run) ? el('span', { class: 'chip failed' }, 'not reliable')
@@ -105,9 +107,9 @@ async function home() {
     return el('a', { class: 'card set-card', href: `#/sets/${s.id}` },
       el('p', { class: 'eyebrow' }, `${teamName(s.team)} · ${s.environment}`),
       el('h2', {}, s.name),
-      el('div', { class: `rate ${last && last.status === 'done' ? rateClass(rate) : ''}` },
-        last && last.status === 'done' ? pct(rate) : '–'),
-      el('p', { class: 'small' }, last ? `Last run ${when(last.created_at)} · ${unreliable(last) ? 'not reliable' : last.status}` : 'Not run yet'));
+      el('div', { class: `rate ${last && last.status === 'success' ? rateClass(rate) : ''}` },
+        last && last.status === 'success' ? pct(rate) : '–'),
+      el('p', { class: 'small' }, last ? `Last run ${when(last.createdAt)} · ${unreliable(last) ? 'not reliable' : last.status}` : 'Not run yet'));
   }) : [el('p', {}, 'No question sets yet.')]));
   $('live-links').replaceChildren(...state.me.memberships.flatMap((m) => ['development', 'acceptance', 'production']
     .map((e) => el('a', { class: 'button quiet', href: `#/live/${m.team}/${e}` }, `${m.teamName} · ${e}`))));
@@ -129,7 +131,7 @@ async function newSetForm() {
   async function loadModels() {
     model.replaceChildren(el('option', { value: '' }, 'Loading…'));
     try {
-      ({ models } = await api('GET', `/teams/${team.value}/environments/${environment.value}/agent-models`));
+      ({ semanticModels: models } = await api('GET', `/teams/${team.value}/environments/${environment.value}/agent-models`));
       model.replaceChildren(...(models.length ? models.map((m, i) => el('option', { value: i },
         `${m.databaseName} / ${m.model.namespace.join('.')} / ${m.name}${m.shared ? ' (shared)' : ''}`))
         : [el('option', { value: '' }, 'No semantic models here')]));
@@ -170,7 +172,7 @@ async function newSetForm() {
     try {
       const created = await api('POST', '/question-sets', {
         team: team.value, environment: environment.value, name: name.value, model: chosen.model, yaml: yaml.value,
-        target_database: target.value,
+        targetDatabase: target.value,
       });
       location.hash = `#/sets/${created.id}`;
     } catch (e) { error.textContent = e.message; }
@@ -194,14 +196,14 @@ async function questionSet(id, view) {
   const model = el('input', { type: 'text', placeholder: 'LLM: the agent\'s default', size: 28 });
   $('set-actions').replaceChildren(...(mayRun ? [model, el('button', { type: 'button', onclick: async () => {
     try {
-      const run = await api('POST', `/question-sets/${id}/runs`, { llm_model: model.value.trim() });
+      const run = await api('POST', `/question-sets/${id}/runs`, { llmModel: model.value.trim() });
       state.view = 'runs';
       await questionSet(id);
       notice(`Run ${run.id} started.`);
     } catch (e) { notice(e.message, true); }
   } }, 'Run now'), el('button', { type: 'button', class: 'quiet', title: 'One run with the semantic model and one where the same LLM has only the table schemas', onclick: async () => {
     try {
-      await api('POST', `/question-sets/${id}/measure-semantic-model`, { llm_model: model.value.trim() });
+      await api('POST', `/question-sets/${id}/measure-semantic-model`, { llmModel: model.value.trim() });
       state.view = 'runs';
       await questionSet(id);
       notice('Measuring: one run with the semantic model and one with only the table schemas.');
@@ -251,18 +253,18 @@ function runsView(set) {
     } });
     const s = run.summary || {};
     const partner = run.pair && set.runs.find((r) => r.pair === run.pair && r.arm !== run.arm);
-    const measured = run.arm === 'control' && partner && partner.status === 'done' && run.status === 'done';
+    const measured = run.arm === 'control' && partner && partner.status === 'success' && run.status === 'success';
     return el('tr', { class: 'run-row' },
       el('td', {}, pick),
-      el('td', { class: 'nowrap' }, el('a', { href: `#/runs/${run.id}` }, when(run.created_at))),
+      el('td', { class: 'nowrap' }, el('a', { href: `#/runs/${run.id}` }, when(run.createdAt))),
       el('td', {}, statusChip(run)),
       el('td', { class: 'nowrap' }, unreliable(run) ? `${s.errors} of ${s.cases} got no answer`
-        : run.status === 'done' ? `${pct(s.passRate)} (${s.passed}/${s.answered ?? s.cases})` : run.error || ''),
-      el('td', {}, run.llm_model || 'default',
+        : run.status === 'success' ? `${pct(s.passRate)} (${s.passed}/${s.answered ?? s.cases})` : run.error || ''),
+      el('td', {}, run.llmModel || 'default',
         run.arm === 'control' ? el('span', { class: 'agent' }, 'schemas only') : null,
         measured ? el('a', { class: 'agent', href: `#/compare/${run.id}/${partner.id}` }, 'what the model adds') : null),
       el('td', { class: 'nowrap' }, s.inputTokens !== undefined ? `${s.inputTokens + s.outputTokens} tokens` : ''),
-      el('td', {}, run.triggered_by));
+      el('td', {}, startedBy(run)));
   });
   return [el('div', { class: 'actions' }, compare),
     el('table', {}, el('thead', {}, el('tr', {}, ['', 'Started', 'Status', 'Passed', 'LLM', 'Usage', 'By'].map((h) => el('th', {}, h)))),
@@ -276,7 +278,7 @@ function casesView(set) {
   const sql = el('textarea', { class: 'code editor', spellcheck: 'false', placeholder: '-- Q: …\n-- query_semantic_model: {…}' });
   const save = async () => {
     try {
-      await api('POST', '/question-sets', { id: set.id, yaml: yaml.value, note: note.value || null });
+      await api('PATCH', `/question-sets/${set.id}`, { yaml: yaml.value, note: note.value || null });
       state.view = 'cases';
       await questionSet(set.id);
       notice('Saved as a new version.');
@@ -284,7 +286,7 @@ function casesView(set) {
   };
   const importSql = async () => {
     try {
-      const result = await api('POST', `/question-sets/${set.id}/import`, { questions_sql: sql.value });
+      const result = await api('POST', `/question-sets/${set.id}/import`, { questionsSql: sql.value });
       state.view = 'cases';
       await questionSet(set.id);
       notice(`Imported ${result.imported} questions.`);
@@ -300,7 +302,7 @@ function casesView(set) {
     el('section', { class: 'card' }, el('h2', {}, 'Versions'),
       el('table', {}, el('tbody', {}, set.versions.map((v) => el('tr', {},
         el('td', { class: 'nowrap' }, `v${v.version}`), el('td', {}, `${v.cases} cases`), el('td', {}, v.note),
-        el('td', { class: 'nowrap' }, when(v.created_at)), el('td', {}, v.created_by)))))),
+        el('td', { class: 'nowrap' }, when(v.createdAt)), el('td', {}, v.createdBy)))))),
   ];
 }
 
@@ -308,21 +310,27 @@ function schedulesView(set) {
   const admin = ADMINS.includes(set.role);
   const cron = el('input', { type: 'text', placeholder: '0 6 * * 1 (UTC)' });
   const model = el('input', { type: 'text', placeholder: 'LLM: default' });
-  const rows = set.schedules.map((s) => el('tr', {},
-    el('td', {}, el('code', {}, s.cron)), el('td', {}, s.llm_model || 'default'),
-    el('td', {}, s.enabled ? 'on' : 'off'), el('td', { class: 'nowrap' }, `next ${when(s.next_run_at)}`),
-    el('td', {}, admin ? el('button', { type: 'button', class: 'quiet', onclick: async () => {
-      await api('DELETE', `/question-sets/${set.id}/schedules/${s.id}`);
+  const change = async (call) => {
+    try {
+      await call();
       state.view = 'schedules';
       await questionSet(set.id);
-    } }, 'Delete') : '')));
+    } catch (e) { notice(e.message, true); }
+  };
+  // A schedule that is off has no next run.
+  const rows = set.schedules.map((s) => el('tr', {},
+    el('td', {}, el('code', {}, s.cron)), el('td', {}, s.llmModel || 'default'),
+    el('td', {}, s.enabled ? 'on' : 'off'), el('td', { class: 'nowrap' }, s.nextRunAt ? `next ${when(s.nextRunAt)}` : ''),
+    el('td', {}, admin ? el('div', { class: 'actions' },
+      el('button', { type: 'button', class: 'quiet', onclick: () => change(() => api('PATCH', `/schedules/${s.id}`, { enabled: !s.enabled })) }, s.enabled ? 'Turn off' : 'Turn on'),
+      el('button', { type: 'button', class: 'quiet', onclick: () => change(() => api('DELETE', `/schedules/${s.id}`)) }, 'Delete')) : '')));
   return [
     rows.length ? el('table', {}, el('tbody', {}, rows)) : el('p', {}, 'No schedules.'),
     admin ? el('section', { class: 'card' }, el('h2', {}, 'Add a schedule'),
       el('div', { class: 'form-grid' }, cron, model),
       el('div', { class: 'actions' }, el('button', { type: 'button', onclick: async () => {
         try {
-          await api('POST', `/question-sets/${set.id}/schedules`, { cron: cron.value.trim(), llm_model: model.value.trim() });
+          await api('POST', `/question-sets/${set.id}/schedules`, { cron: cron.value.trim(), llmModel: model.value.trim() });
           state.view = 'schedules';
           await questionSet(set.id);
         } catch (e) { notice(e.message, true); }
@@ -334,28 +342,30 @@ function settingsView(set) {
   const editable = set.role && (set.environment === 'development' ? WRITERS : ADMINS).includes(set.role);
   const description = el('input', { type: 'text', value: set.description || '' });
   const rubric = el('textarea', { rows: 4 }, set.rubric || '');
-  const target = el('select', {}, databaseOptions(set.team, set.environment, set.target_database));
+  const target = el('select', {}, databaseOptions(set.team, set.environment, set.targetDatabase));
   return [el('section', { class: 'card' },
     el('dl', { class: 'facts' },
       el('dt', {}, 'Agent'), el('dd', {}, set.agent),
       el('dt', {}, 'Model'), el('dd', {}, `${set.model.database} / ${set.model.namespace.join('.')} / ${set.model.name}`),
-      el('dt', {}, 'Created'), el('dd', {}, `${when(set.created_at)} by ${set.created_by}`)),
+      el('dt', {}, 'Created'), el('dd', {}, `${when(set.createdAt)} by ${set.createdBy}`)),
     el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Description'), description),
     el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Judge rubric (with an LLM judge configured)'), rubric),
     el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Results to this team database (Iceberg)'), target),
     editable ? el('div', { class: 'actions' },
       el('button', { type: 'button', onclick: async () => {
         try {
-          await api('POST', '/question-sets', { id: set.id, description: description.value, rubric: rubric.value,
-            target_database: target.value.trim() });
+          await api('PATCH', `/question-sets/${set.id}`, { description: description.value, rubric: rubric.value,
+            targetDatabase: target.value.trim() });
           state.view = 'settings';
           await questionSet(set.id);
           notice('Saved.');
         } catch (e) { notice(e.message, true); }
       } }, 'Save'),
       el('button', { type: 'button', class: 'danger', onclick: async () => {
-        if (!confirm(`Delete ${set.name} with its runs and schedules? Results in Iceberg stay.`)) return;
-        try { await api('DELETE', `/question-sets/${set.id}`); location.hash = '#/'; } catch (e) { notice(e.message, true); }
+        // The API wants the exact name back, so a slip of the hand deletes nothing.
+        const typed = prompt(`Delete ${set.name} with its versions, runs and schedules? Results in Iceberg stay. Type the question set's name to confirm.`);
+        if (typed === null) return;
+        try { await api('DELETE', `/question-sets/${set.id}?confirmName=${encodeURIComponent(typed)}`); location.hash = '#/'; } catch (e) { notice(e.message, true); }
       } }, 'Delete')) : null)];
 }
 
@@ -369,11 +379,11 @@ function scoreChips(scores) {
 async function runPage(id) {
   show('run');
   const run = await api('GET', `/runs/${id}`);
-  crumbs({ label: 'Question sets', href: '#/' }, { label: run.questionSetName, href: `#/sets/${run.question_set}` },
+  crumbs({ label: 'Question sets', href: '#/' }, { label: run.questionSetName, href: `#/sets/${run.questionSet}` },
     { label: 'Run' });
-  $('run-eyebrow').textContent = `${run.questionSetName} · version ${run.version} · ${run.llm_model || 'default LLM'}`;
+  $('run-eyebrow').textContent = `${run.questionSetName} · version ${run.version} · ${run.llmModel || 'default LLM'}`;
   $('run-title').textContent = unreliable(run) ? 'Not reliable'
-    : run.status === 'done' ? `${pct(run.summary.passRate)} passed` : run.status;
+    : run.status === 'success' ? `${pct(run.summary.passRate)} passed` : run.status;
   const s = run.summary || {};
   const view = $('run-view');
   view.replaceChildren(
@@ -381,8 +391,8 @@ async function runPage(id) {
       el('div', {}, el('span', { class: 'eyebrow' }, 'Cases'), `${s.passed ?? '–'} / ${s.cases ?? '–'}`),
       el('div', {}, el('span', { class: 'eyebrow' }, 'Median'), s.medianSeconds !== undefined ? `${s.medianSeconds} s` : '–'),
       el('div', {}, el('span', { class: 'eyebrow' }, 'Tokens'), s.inputTokens !== undefined ? `${s.inputTokens} in · ${s.outputTokens} out` : '–'),
-      el('div', {}, el('span', { class: 'eyebrow' }, 'Results'), run.published || '–'),
-      el('div', {}, el('span', { class: 'eyebrow' }, 'Started by'), run.triggered_by)),
+      el('div', {}, el('span', { class: 'eyebrow' }, 'Results'), s.published || '–'),
+      el('div', {}, el('span', { class: 'eyebrow' }, 'Started by'), startedBy(run))),
     run.error ? el('p', { class: 'small error' }, run.error) : '',
     unreliable(run) ? el('p', { class: 'small error' }, `${s.errors} of ${s.cases} questions got no answer, so this run has no pass rate. It says nothing about the agent: see the errors below, fix the cause and run it again.`) : '',
     el('table', { class: 'stacked' }, el('thead', {}, el('tr', {}, ['Case', 'Expected', 'Result', 'Scores', 'Answer'].map((h) => el('th', {}, h)))),
@@ -393,9 +403,9 @@ async function runPage(id) {
         el('td', { 'data-label': 'Scores' }, scoreChips(c.scores), ...Object.entries(c.scores || {}).filter(([, v]) => !v.value)
           .map(([k, v]) => el('div', { class: 'reason' }, `${k}: ${v.reason}`))),
         el('td', { 'data-label': 'Answer' }, c.error ? el('span', { class: 'small error' }, c.error) : el('details', {},
-          el('summary', {}, `${(c.duration_ms / 1000).toFixed(1)} s · ${c.input_tokens + c.output_tokens} tokens`),
+          el('summary', {}, `${(c.durationMs / 1000).toFixed(1)} s · ${c.inputTokens + c.outputTokens} tokens`),
           el('p', { class: 'answer' }, c.answer),
-          c.trace_id ? el('p', { class: 'reason' }, `trace ${c.trace_id}`) : null)))))));
+          c.traceId ? el('p', { class: 'reason' }, `trace ${c.traceId}`) : null)))))));
   if (run.status === 'queued' || run.status === 'running') setTimeout(() => route(), 3000);
 }
 
@@ -403,7 +413,7 @@ async function comparePage(a, b) {
   show('run');
   const result = await api('GET', `/runs/${a}/compare/${b}`);
   crumbs({ label: 'Question sets', href: '#/' }, { label: 'Compare' });
-  $('run-eyebrow').textContent = `${result.baseline.llm_model || 'default'} → ${result.candidate.llm_model || 'default'}`;
+  $('run-eyebrow').textContent = `${result.baseline.llmModel || 'default'} → ${result.candidate.llmModel || 'default'}`;
   $('run-title').textContent = result.reliable ? `${result.change.fixed} fixed · ${result.change.broken} broken`
     : 'Not reliable';
   if (!result.reliable) $('run-eyebrow').textContent += ' · one of these runs got too few answers to compare';
@@ -443,10 +453,10 @@ async function livePage(team, environment) {
   const admin = ADMINS.includes(state.roles[team]);
   const writer = WRITERS.includes(state.roles[team]);
   const enabled = el('input', { type: 'checkbox', checked: setting.enabled });
-  const sample = el('input', { type: 'number', min: 1, max: 100, value: setting.sample_pct });
+  const sample = el('input', { type: 'number', min: 1, max: 100, value: setting.samplePct });
   const cron = el('input', { type: 'text', value: setting.cron });
-  const target = el('select', {}, databaseOptions(team, environment, setting.target_database));
-  const last = setting.last_summary || {};
+  const target = el('select', {}, databaseOptions(team, environment, setting.targetDatabase));
+  const last = setting.lastSummary || {};
   $('live-view').replaceChildren(
     el('section', { class: 'card' }, el('h2', {}, 'Settings'),
       el('p', { class: 'small' }, 'While this is on, Conversational BI keeps this team\'s conversations in this environment for its retention period, and only the Evaluations extension reads them. Switching it off deletes them.'),
@@ -457,31 +467,31 @@ async function livePage(team, environment) {
         el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Scores to database'), target)),
       admin ? el('div', { class: 'actions' }, el('button', { type: 'button', onclick: async () => {
         try {
-          await api('PUT', `/teams/${team}/environments/${environment}/live`, { enabled: enabled.checked,
-            sample_pct: Number(sample.value), cron: cron.value.trim(), target_database: target.value.trim() });
+          await api('PATCH', `/teams/${team}/environments/${environment}/live`, { enabled: enabled.checked,
+            samplePct: Number(sample.value), cron: cron.value.trim(), targetDatabase: target.value.trim() });
           await livePage(team, environment);
           say('Saved.');
         } catch (e) { say(e.message, true); }
       } }, 'Save')) : el('p', { class: 'small' }, 'Team administrators change these settings.'),
-      el('p', { class: 'reason' }, setting.last_checked ? `Last check ${when(setting.last_checked)}: ${last.error
+      el('p', { class: 'reason' }, setting.lastChecked ? `Last check ${when(setting.lastChecked)}: ${last.error
         || `${last.checked} of ${last.conversations} conversations scored, ${last.flagged} flagged`}` : 'Not checked yet.')),
     el('section', { class: 'card' }, el('h2', {}, `To review (${reviews.length})`),
       reviews.length ? el('table', {}, el('tbody', {}, reviews.map((r) => {
         const into = el('select', {}, targets.map((s) => el('option', { value: s.id }, s.name)));
         return el('tr', {},
           el('td', {}, el('strong', {}, r.question), el('p', { class: 'answer' }, r.answer),
-            el('div', { class: 'reason' }, `${when(r.asked_at)} · ${r.llm_model}`)),
+            el('div', { class: 'reason' }, `${when(r.askedAt)} · ${r.llmModel || 'default LLM'}`)),
           el('td', {}, scoreChips(r.scores), ...Object.entries(r.scores).filter(([, v]) => !v.value)
             .map(([k, v]) => el('div', { class: 'reason' }, `${k}: ${v.reason}`))),
           el('td', {}, writer ? el('div', { class: 'actions' },
             el('button', { type: 'button', class: 'quiet', onclick: async () => {
-              await api('POST', `/reviews/${r.id}`, { action: 'dismiss' });
+              await api('PATCH', `/reviews/${r.id}`, { status: 'dismissed' });
               await livePage(team, environment);
             } }, 'Dismiss'),
             targets.length ? into : null,
             targets.length ? el('button', { type: 'button', onclick: async () => {
               try {
-                const done = await api('POST', `/reviews/${r.id}/promote`, { question_set: into.value });
+                const done = await api('POST', `/reviews/${r.id}/promote`, { questionSet: into.value });
                 await livePage(team, environment);
                 say(`Added as case ${done.case}.`);
               } catch (e) { say(e.message, true); }

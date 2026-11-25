@@ -184,12 +184,16 @@ class Store:
     def run(self, id):
         return self.one("SELECT * FROM runs WHERE id = ?", (id,))
 
-    def runs(self, question_set, limit=50):
+    def runs(self, question_set, limit=20):
         return self.all("SELECT * FROM runs WHERE question_set = ? ORDER BY created_at DESC LIMIT ?",
                         (question_set, limit))
 
     def active_runs(self):
         return self.all("SELECT * FROM runs WHERE status IN ('queued', 'running') ORDER BY created_at")
+
+    def active_run(self, question_set):
+        return self.one("SELECT * FROM runs WHERE question_set = ? AND status IN ('queued', 'running') LIMIT 1",
+                        (question_set,))
 
     def update_run(self, id, **fields):
         values = {k: json.dumps(v) if k in JSON else v for k, v in fields.items()}
@@ -213,10 +217,11 @@ class Store:
 
     # Schedules
 
-    def create_schedule(self, question_set, cron, llm_model, next_run_at, by):
+    def create_schedule(self, question_set, cron, llm_model, next_run_at, by, enabled=True):
         id = new_id("sch")
-        self.write("INSERT INTO schedules (id, question_set, cron, llm_model, next_run_at, created_by, created_at) "
-                   "VALUES (?, ?, ?, ?, ?, ?, ?)", (id, question_set, cron, llm_model, next_run_at, by, time.time()))
+        self.write("INSERT INTO schedules (id, question_set, cron, llm_model, enabled, next_run_at, created_by, "
+                   "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                   (id, question_set, cron, llm_model, int(enabled), next_run_at, by, time.time()))
         return self.schedule(id)
 
     def schedule(self, id):
@@ -257,14 +262,15 @@ class Store:
         sets = ", ".join(f"{k} = ?" for k in values)
         self.write(f"UPDATE live SET {sets} WHERE team = ? AND environment = ?", (*values.values(), team, environment))
 
-    def add_review(self, team, environment, conversation, scores):
+    def add_review(self, team, environment, conversation, asked_at, scores):
+        """A conversation as Conversational BI's evaluation API gives it, asked at `asked_at` (seconds since 1970)."""
         id = new_id("rev")
         self.write("INSERT OR IGNORE INTO reviews (id, team, environment, conversation, asked_at, question, answer, "
                    "model, queries, llm_model, trace_id, scores, status, created_at) "
                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)",
-                   (id, team, environment, conversation["id"], conversation["at"], conversation["question"],
+                   (id, team, environment, conversation["id"], asked_at, conversation["question"],
                     conversation["answer"], json.dumps(conversation["model"]), json.dumps(conversation["queries"]),
-                    conversation["llm_model"], conversation.get("trace_id") or "", json.dumps(scores), time.time()))
+                    conversation["llmModel"] or "", conversation["traceId"] or "", json.dumps(scores), time.time()))
 
     def review(self, id):
         return self.one("SELECT * FROM reviews WHERE id = ?", (id,))

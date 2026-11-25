@@ -1,6 +1,6 @@
 """Live evaluation: real conversations, scored on a schedule, with the doubtful ones up for review.
 
-A team administrator switches it on per team and environment (set_live). Conversational BI keeps
+A team administrator switches it on per team and environment (update_live_evaluation). Conversational BI keeps
 that team's chat runs (its conversation record) from then until it is switched off, when it deletes
 them. On each check this extension reads the new ones, scores a sample (`sample_pct`, the same
 conversations whatever the order) with the checks that need no expected answer, and puts every one
@@ -20,6 +20,7 @@ from croniter import croniter
 
 from .errors import EvalError
 from .scorers import failed_queries_check, grounded_check
+from .services import seconds, timestamp
 
 LOG = logging.getLogger(__name__)
 PAGE = 200
@@ -41,7 +42,7 @@ class LiveEvaluator:
 
     async def score(self, conversation):
         view = {"answer": conversation["answer"], "queries": conversation["queries"],
-                "toolCalls": conversation["tool_calls"]}
+                "toolCalls": conversation["toolCalls"]}
         scores = {}
         for name, (value, reason) in (("grounded", grounded_check(view, conversation["question"])),
                                       ("refusal_explained", failed_queries_check(view))):
@@ -56,35 +57,38 @@ class LiveEvaluator:
 
     async def check(self, setting):
         team, environment = setting["team"], setting["environment"]
-        since, found = setting["watermark"], []
+        # The watermark is stored in seconds; Conversational BI takes and gives times as RFC 3339 strings.
+        since, found = timestamp(setting["watermark"]), {}
         for _ in range(MAX_PAGES):
             response = await self.agent.conversations(team, environment, since, PAGE)
             if not response.get("recording"):
                 # Conversational BI lost its record (a new volume, for example): live evaluation is still on.
                 await self.agent.recording(team, environment, True)
             page = response["conversations"]
-            found += page
+            found.update({conversation["id"]: conversation for conversation in page})
             if page:
                 since = page[-1]["at"]
             if len(page) < PAGE:
                 break
         rows, flagged = [], 0
-        for conversation in found:
+        for conversation in found.values():
             if not sampled(conversation["id"], setting["sample_pct"]):
                 continue
             scores = await self.score(conversation)
             passed = all(s["value"] for s in scores.values())
+            asked_at = seconds(conversation["at"])
             if not passed:
-                self.store.add_review(team, environment, conversation, scores)
+                self.store.add_review(team, environment, conversation, asked_at, scores)
                 flagged += 1
-            rows.append({**conversation, "scores": scores, "passed": passed})
+            rows.append({**conversation, "askedAt": asked_at, "scores": scores, "passed": passed})
         published = ""
         if rows and setting["target_database"] and self.lakehouse:
             try:
                 published = await self.lakehouse.publish_live(team, environment, setting["target_database"], rows)
             except EvalError as exc:
                 published = f"not published: {exc}"
-        return {"conversations": len(found), "checked": len(rows), "flagged": flagged, "published": published}, since
+        summary = {"conversations": len(found), "checked": len(rows), "flagged": flagged, "published": published}
+        return summary, seconds(since)
 
     async def tick(self, now=None):
         now = now or time.time()

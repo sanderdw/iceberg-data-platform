@@ -1,7 +1,7 @@
 # Evaluations extension for the Iceberg Data Platform
 
 Question sets with known answers for the platform's AI agent (Conversational BI), scored runs,
-model comparisons, schedules and live checks of real conversations. It is **API and MCP first**:
+LLM comparisons, schedules and live checks of real conversations. It is **API and MCP first**:
 AI agents write and run question sets, and people follow the scores on a page.
 
 A case says what a good answer is: the governed query that answers the question (computed again

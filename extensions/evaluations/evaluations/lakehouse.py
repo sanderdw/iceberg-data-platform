@@ -232,14 +232,17 @@ class Lakehouse:
                                            ENDPOINT: discovery["storage"]["internalEndpoint"]})
 
     async def publish_live(self, team, environment, database_id, rows):
+        """`rows` are conversations as Conversational BI gives them, each with `askedAt` (seconds), `scores` and
+        `passed`."""
         database, token, discovery = await self.target(team, environment, database_id, "live evaluation scores")
         now = datetime.datetime.now(datetime.UTC)
-        records = [{"conversation_id": r["id"], "team": team, "environment": environment, "asked_at": at(r["at"]),
-                    "checked_at": now, "llm_model": r.get("llm_model", ""), "question": r["question"],
+        records = [{"conversation_id": r["id"], "team": team, "environment": environment,
+                    "asked_at": at(r["askedAt"]), "checked_at": now, "llm_model": r.get("llmModel") or "",
+                    "question": r["question"],
                     "passed": r["passed"], **{k: r["scores"].get(k, {}).get("value") for k in
                                               ("grounded", "refusal_explained", "judge")},
                     "reasons": json.dumps({k: v["reason"] for k, v in r["scores"].items()}),
-                    "trace_id": r.get("trace_id") or ""} for r in rows]
+                    "trace_id": r.get("traceId") or ""} for r in rows]
         properties = {PREFIX + "producer": "evaluations", PREFIX + "producer.version": f"evaluations {VERSION}",
                       PREFIX + "producer.run-at": now.isoformat(timespec="seconds")}
 
