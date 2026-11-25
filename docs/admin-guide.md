@@ -142,7 +142,7 @@ Every call requires the `platform-admin` role. The tools are the administration 
 
 ## API
 
-Interactive documentation is at `/docs` on the portal (http://localhost:3000/docs with Compose) after sign-in. **Try it out** uses your session and adds the write headers. From a script, send the `iceberg_admin` cookie from your browser:
+Interactive documentation is at `/docs` on the portal (http://localhost:3000/docs with Compose) after sign-in. This API serves the portal's own pages and changes with them; for an AI agent, use the [MCP server](#connect-an-mcp-client). **Try it out** uses your session and adds the write headers. From a script, send the `iceberg_admin` cookie from your browser:
 
 ```bash
 curl -b 'iceberg_admin=<cookie>' -H 'Content-Type: application/json' -H 'X-Portal-Request: 1' \

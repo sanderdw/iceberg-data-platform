@@ -18,4 +18,4 @@ The top menu has six sections. The bar under it names the page you are on and ho
 
 **Apps** in the top menu lists the registered [extensions](extensions.md), such as Pipelines and Conversational BI, each with a line on what it is for. Each opens in a new tab and has the same menu, with the portal's pages in the order of the top menu and the other extensions. Your username opens the account menu, with the theme switch and **Sign out**.
 
-The API is documented at `/docs` on the portal (http://localhost:3002/docs with Compose), and **Try it out** works with your session and permissions.
+The API is documented at `/docs` on the portal (http://localhost:3002/docs with Compose), and **Try it out** works with your session and permissions. This API serves the portal's own pages and changes with them; for a script or an AI agent, use the [MCP server](mcp.md) or an extension's API.
