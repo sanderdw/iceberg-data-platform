@@ -105,7 +105,10 @@ def test_opentelemetry_is_off_until_an_endpoint_is_set():
         assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env(docs, "Deployment", name)
     assert env(docs, "Deployment", "polaris", "polaris")["QUARKUS_OTEL_SDK_DISABLED"] == "true"
 
-    docs = render("otel.endpoint=http://collector:4318", "otel.headersSecret=otel")
+    # Polaris's traces are opt-in, as POLARIS_OTEL_DISABLED is in Compose.
+    assert env(render("otel.endpoint=http://collector:4318"), "Deployment", "polaris",
+               "polaris")["QUARKUS_OTEL_SDK_DISABLED"] == "true"
+    docs = render("otel.endpoint=http://collector:4318", "otel.headersSecret=otel", "otel.polaris=true")
     for name in ("portal", "bridge", "users", "monitor"):
         found = env(docs, "Deployment", name)
         assert found["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://collector:4318"
@@ -116,8 +119,6 @@ def test_opentelemetry_is_off_until_an_endpoint_is_set():
     assert polaris["QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://collector:4318"
     # The bootstrap is a one-off command: never traced.
     assert env(docs, "Deployment", "polaris", "bootstrap")["QUARKUS_OTEL_SDK_DISABLED"] == "true"
-    assert env(render("otel.endpoint=http://collector:4318", "otel.polaris=false"), "Deployment", "polaris",
-               "polaris")["QUARKUS_OTEL_SDK_DISABLED"] == "true"
 
 
 def test_each_extension_chart_finds_its_handshake():

@@ -20,7 +20,7 @@ def version_tuple(value):
 
 
 def in_range(version, spec):
-    """`version` against a comma-separated range such as `>=0.1.1,<0.2`."""
+    """`version` against a comma-separated range such as `>=1.0,<2`."""
     current = (*version_tuple(version), 0, 0, 0)[:3]
     for clause in (c.strip() for c in spec.split(",") if c.strip()):
         for op in (">=", "<=", "==", ">", "<"):
@@ -101,12 +101,13 @@ class BridgeClient:
                 body = response.json()
             except ValueError:
                 body = {}
-            status = response.status_code if response.status_code in (401, 403, 404, 409, 422) else 502
+            # A Bridge error keeps its status and code; any other failure is the platform's.
+            status = response.status_code if body.get("code") else 502
             raise SyncError(status, body.get("error", "The platform refused the request."), body.get("code") or None)
         return response
 
     async def listings(self):
-        """[{id, version, databaseId, environment}] of every listed data share."""
+        """[{id, version, database, environment}] of every listed data share."""
         return (await self.get("/listings")).json()["listings"]
 
     async def listing(self, id, etag=None):

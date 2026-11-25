@@ -1,7 +1,8 @@
 name: OpenMetadata extension CI
 # The OpenMetadata extension (extensions/openmetadata) is tested and released on its own. It runs when the
 # extension, the Bridge contract it depends on, or the Bridge's listings change. The end-to-end job starts a
-# real OpenMetadata server (about 4 GB of memory), so it runs on main and on demand, not on every pull request.
+# real OpenMetadata server (about 4 GB of memory, a few minutes), on pull requests too: a contract change
+# should fail before it is merged.
 on:
   push:
     branches: [main]
@@ -14,6 +15,7 @@ on:
       - 'extensions/openmetadata/README.md'
       - 'contracts/bridge/**'
       - 'server/bridge.py'
+      - 'scripts/bridge_compat.py'
       - 'server/listings.py'
       - 'server/catalog_metadata.py'
       - 'server/polaris.py'
@@ -38,9 +40,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
-          version: '0.13.8'
+          version: '0.13.10'
           enable-cache: true
           cache-dependency-glob: extensions/openmetadata/uv.lock
       - run: uv sync --locked
@@ -53,8 +55,7 @@ jobs:
           uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
 
   integration:
-    # The platform from this commit, a local OpenMetadata 2.0.7 and this extension, end to end.
-    if: github.event_name != 'pull_request'
+    # The platform from this commit, a local OpenMetadata 2.0.10 and this extension, end to end.
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -64,9 +65,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
-          version: '0.13.8'
+          version: '0.13.10'
           enable-cache: true
       - run: uv sync --locked --all-groups
       - run: uv run python -m scripts.setup --demo --extension openmetadata --origin http://localhost:3011 --handshake extensions/openmetadata/.env.bridge --listing
@@ -128,8 +129,8 @@ jobs:
           docker compose down --remove-orphans --volumes || true
 
   compat:
-    # The source checks against the newest platform release with the `listings` capability. The first
-    # is v0.9.1; until it exists the integration job covers this commit.
+    # The newest platform release, when its Bridge contract is in this extension's range: the extension's
+    # own version check must accept it. Skipped, with the reason in the summary, when it is outside.
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -140,32 +141,26 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Find the newest platform release with listings
+      - name: Find the newest platform release, if its Bridge contract is in this extension's range
         id: core
-        run: |
-          for tag in $(git tag --list 'v*' --sort=-version:refname); do
-            if git show "$tag:contracts/bridge/v1/openapi.yaml" 2>/dev/null | grep -q '"/bridge/v1/listings"'; then
-              echo "tag=$tag" >> "$GITHUB_OUTPUT"; exit 0
-            fi
-          done
-          echo "No platform release offers listings yet; the integration job covers this commit." >> "$GITHUB_STEP_SUMMARY"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        run: python3 scripts/bridge_compat.py openmetadata
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         if: steps.core.outputs.tag
         with:
-          version: '0.13.8'
-      - name: Its Bridge contract version is in this extension's range
+          version: '0.13.10'
+      - name: The extension accepts its Bridge contract version
         if: steps.core.outputs.tag
         env:
           TAG: ${{ steps.core.outputs.tag }}
+          VERSION: ${{ steps.core.outputs.version }}
         run: |
-          git show "$TAG:contracts/bridge/v1/openapi.yaml" > "$RUNNER_TEMP/core-openapi.json"
           cd extensions/openmetadata
           uv sync --locked
           uv run python - <<'PY'
-          import json, os, sys, tomllib
+          import os, sys
           from openmetadata_sync.bridge_client import in_range
-          version = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "core-openapi.json")))["info"]["version"]
-          spec = tomllib.load(open("pyproject.toml", "rb"))["tool"]["iceberg-openmetadata"]["bridge-contract"]
+          from openmetadata_sync.config import contract_range
+          version, spec = os.environ["VERSION"], contract_range()
           if not in_range(version, spec):
               sys.exit(f"{os.environ['TAG']} offers Bridge contract {version}, outside {spec}")
           print(f"{os.environ['TAG']}: Bridge contract {version} is within {spec}")

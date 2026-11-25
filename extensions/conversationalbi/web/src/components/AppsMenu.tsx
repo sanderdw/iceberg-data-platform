@@ -1,17 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 // The Apps menu every extension shows (contracts/bridge/v1/apps-menu in the platform): the user portal's
 // pages and the platform's extensions, from the Bridge's discovery (capability `app-directory`). Same
-// markup and stylesheet (apps-menu.css) as the reference script, in React.
+// markup and stylesheet (apps-menu.css) as the reference script, in React. The document listeners exist only
+// while the menu is open, and each menu has its own id, so several menus can share a page.
 export type Apps = {
   workspace: { id: string; title: string; url: string }[];
-  extensions: { id: string; title: string; purpose: string; origin: string }[];
+  extensions: { id: string; title: string; purpose: string | null; origin: string }[];
 };
 
 export function AppsMenu({ apps, current }: { apps?: Apps; current: string }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
+  const menu = useId();
   useEffect(() => {
     if (!open) return;
     const outside = (event: MouseEvent) => {
@@ -27,9 +29,9 @@ export function AppsMenu({ apps, current }: { apps?: Apps; current: string }) {
   if (!apps || (!apps.workspace.length && !apps.extensions.length)) return null;
   return (
     <div className="apps-anchor" ref={anchor}>
-      <button ref={toggle} type="button" className="apps-toggle" aria-expanded={open} aria-controls="apps-menu"
+      <button ref={toggle} type="button" className="apps-toggle" aria-expanded={open} aria-controls={menu}
         onClick={() => setOpen(!open)}>Apps</button>
-      <div id="apps-menu" className="apps-menu" hidden={!open} onClick={(e) => { if ((e.target as Element).closest("a")) setOpen(false); }}>
+      <div id={menu} className="apps-menu" hidden={!open} onClick={(e) => { if ((e.target as Element).closest("a")) setOpen(false); }}>
         {apps.workspace.length > 0 && <>
           <p className="apps-group">Workspace</p>
           <div className="apps-grid compact">

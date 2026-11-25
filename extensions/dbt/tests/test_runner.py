@@ -261,3 +261,101 @@ datasets:
     region = stored["datasets"][0]
     assert region["description"] == "Cleaned regions"
     assert [f.get("description") for f in region["fields"]] == ["Stable id", None]
+
+
+class ConflictingTable:
+    """A table whose first metadata commits lose a race with a concurrent writer (409)."""
+
+    def __init__(self, catalog):
+        self.catalog = catalog
+        self.properties = dict(catalog.committed)
+
+    def schema(self):
+        from pyiceberg.schema import Schema
+        from pyiceberg.types import NestedField, StringType
+
+        return Schema(NestedField(1, "region", StringType(), doc=self.catalog.doc))
+
+    def transaction(self):
+        table = self
+
+        class Transaction:
+            def __init__(self):
+                self.values, self.removed, self.docs = {}, [], {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, kind, *rest):
+                if kind is None:
+                    if table.catalog.conflicts:
+                        table.catalog.conflicts -= 1
+                        from pyiceberg.exceptions import CommitFailedException
+
+                        raise CommitFailedException("409: the table changed")
+                    table.catalog.commits.append((self.values, self.removed, self.docs))
+                return False
+
+            def set_properties(self, values):
+                self.values.update(values)
+
+            def remove_properties(self, *keys):
+                self.removed += keys
+
+            def update_schema(self):
+                transaction = self
+
+                class Update:
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *exc):
+                        return False
+
+                    def update_column(self, name, doc):
+                        transaction.docs[name] = doc
+
+                return Update()
+
+        return Transaction()
+
+
+class ConflictingCatalog:
+    def __init__(self, conflicts):
+        self.conflicts, self.loads, self.commits = conflicts, 0, []
+        self.committed, self.doc = {"iceberg-data-platform.quality.status": "pass"}, ""
+
+    def load_table(self, identifier):
+        self.loads += 1
+        return ConflictingTable(self)
+
+
+def test_a_metadata_commit_that_conflicts_is_worked_out_again_on_the_fresh_table():
+    catalog, waits = ConflictingCatalog(conflicts=2), []
+    change_calls = []
+
+    def change(table):
+        change_calls.append(table)
+        publish.stamp(table, {"iceberg-data-platform.producer": "dbt"}, {"region": "Sales region"},
+                      "model.shop.untested", {})
+
+    publish.commit_with_retry(lambda: catalog.load_table(("sales", "regions")), change, sleep=waits.append)
+    assert catalog.loads == 3 and len(change_calls) == 3 and len(waits) == 2 and waits[0] <= 0.2
+    ((values, removed, docs),) = catalog.commits
+    assert values == {"iceberg-data-platform.producer": "dbt"}
+    assert removed == ["iceberg-data-platform.quality.status"] and docs == {"region": "Sales region"}
+
+
+def test_metadata_commits_retry_a_bounded_number_of_times_and_only_on_conflicts():
+    from pyiceberg.exceptions import CommitFailedException
+
+    catalog = ConflictingCatalog(conflicts=99)
+    with pytest.raises(CommitFailedException):
+        publish.commit_with_retry(lambda: catalog.load_table(("sales", "regions")),
+                                  lambda table: publish.stamp(table, {}, {}, "model.shop.x", {}), sleep=lambda s: None)
+    assert catalog.loads == 5
+    calls = []
+    with pytest.raises(PermissionError):
+        publish.commit_with_retry(lambda: calls.append(1), lambda table: (_ for _ in ()).throw(PermissionError("403")),
+                                  sleep=lambda s: pytest.fail("no retry"))
+    assert calls == [1]

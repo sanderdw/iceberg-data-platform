@@ -106,7 +106,7 @@ def main():
     namespace = "bridge_smoke_" + str(int(time.time()))
 
     discovery = httpx.get(bridge, timeout=15).raise_for_status().json()
-    assert discovery["contractVersion"].startswith("0.1.") and "automation-tokens" in discovery["capabilities"]
+    assert discovery["contractVersion"].startswith("1.") and "automation-tokens" in discovery["capabilities"]
     # The smoke extension is not registered with --listing, so it may not read listings.
     assert any((e["id"], e["origin"], e["listing"]) == (extension, origin, False) for e in discovery["extensions"])
     # Every refusal has the error shape, also where no operation answers.
@@ -188,10 +188,11 @@ def main():
             finally:
                 provider.close()
     finally:
-        httpx.delete(f"{bridge}/automation-principals/{item['id']}", headers=as_service, timeout=30)
+        deleted = httpx.delete(f"{bridge}/automation-principals/{item['id']}", headers=as_service, timeout=30)
+    assert deleted.json() == {"deleted": True, "automationPrincipal": item["id"]}, deleted.text
     revoked = httpx.post(f"{bridge}/automation-principals/{item['id']}/tokens", headers=as_service,
                          json={"access": "read"}, timeout=15)
-    assert revoked.status_code == 404
+    assert (revoked.status_code, revoked.json()["code"]) == (404, "unknown_automation_principal"), revoked.text
     print("Bridge smoke passed: discovery, user context, roles, scoped tokens, vended storage, shared data "
           "and revocation.")
 

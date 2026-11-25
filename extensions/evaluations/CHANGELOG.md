@@ -6,6 +6,9 @@ The REST API and the MCP tools follow the platform's one set of conventions. Not
 is kept: update scripts and agent instructions. It needs the Conversational BI release with the same
 conventions in its evaluation API.
 
+- **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
+  starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
+- **Apps menu.** Drawing the menu again no longer leaves the previous menu's listeners on the page.
 - **Tools renamed:** `save_question_set` is now `create_question_set` and `update_question_set`;
   `compare_models` is `compare_llm_models`; `set_schedule` is `create_schedule` and `update_schedule`,
   with the new `list_schedules`; `get_live` and `set_live` are `get_live_evaluation` and

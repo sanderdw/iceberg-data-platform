@@ -1,4 +1,4 @@
-"""Fakes for the platform side: the Bridge (contract 0.1.3), Keycloak tokens and the agent (Conversational BI)."""
+"""Fakes for the platform side: the Bridge (contract 1.0), Keycloak tokens and the agent (Conversational BI)."""
 
 import json
 import re
@@ -77,7 +77,7 @@ class FakeBridge:
         self.tokens = []
 
     async def discovery(self, refresh=False):
-        return {"contractVersion": "0.1.3", "capabilities": ["team-extensions"], "userPortalUrl": "http://localhost:3002",
+        return {"contractVersion": "1.0.0", "capabilities": ["team-extensions"], "userPortalUrl": "http://localhost:3002",
                 "storage": {"internalEndpoint": "http://rustfs:9000"}}
 
     async def close(self):
@@ -108,7 +108,7 @@ class FakeBridge:
 
     async def revoke(self, token, id):
         self.automation_ = [a for a in self.automation_ if a["id"] != id]
-        return {"revoked": True}
+        return {"deleted": True, "automationPrincipal": id}
 
     async def scope(self, id):
         item = next(a for a in self.automation_ if a["id"] == id)

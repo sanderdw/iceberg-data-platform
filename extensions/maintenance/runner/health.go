@@ -47,7 +47,7 @@ type Health struct {
 	SortOrder           bool   `json:"sortOrder"`
 	PartitionFields     int    `json:"partitionFields"`
 	Producer            string `json:"producer"`
-	// Table properties that override the policy's snapshot retention, as Iceberg defines them.
+	// Table properties that override the policy's snapshot expiry, as Iceberg defines them.
 	ExpiryOverrides map[string]string `json:"expiryOverrides"`
 	Location        string            `json:"location"`
 }
@@ -90,8 +90,9 @@ func bucket(size int64) int {
 	return len(SizeBuckets)
 }
 
-// Inspect reads a table's health. tasks are the current snapshot's scan tasks (nil plans them here).
-func Inspect(ctx context.Context, tbl *table.Table, policy Policy, tasks []table.FileScanTask) (*Health, []table.FileScanTask, error) {
+// Inspect reads a table's health, judged by the settings of its policies whether they are on or not. tasks
+// are the current snapshot's scan tasks (nil plans them here).
+func Inspect(ctx context.Context, tbl *table.Table, policies Policies, tasks []table.FileScanTask) (*Health, []table.FileScanTask, error) {
 	meta := tbl.Metadata()
 	props := tbl.Properties()
 	spec := meta.PartitionSpec()
@@ -139,7 +140,7 @@ func Inspect(ctx context.Context, tbl *table.Table, policy Policy, tasks []table
 			return nil, nil, fmt.Errorf("plan files: %w", err)
 		}
 	}
-	config := compactionConfig(policy.Compaction)
+	config := compactionConfig(policies.DataCompaction)
 	h.SmallFileThreshold = config.MinFileSizeBytes
 	deletes := map[string]iceberg.ManifestEntryContent{}
 	for _, task := range tasks {
@@ -178,7 +179,7 @@ func Inspect(ctx context.Context, tbl *table.Table, policy Policy, tasks []table
 		}
 		h.EstimatedFilesAfter = plan.EstOutputFiles
 	}
-	if expired, err := expirable(tbl, policy.ExpireSnapshots); err == nil {
+	if expired, err := expirable(tbl, policies.SnapshotExpiry); err == nil {
 		h.ExpirableSnapshots = len(expired)
 	}
 	return h, tasks, nil

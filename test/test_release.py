@@ -281,6 +281,23 @@ def test_known_local_secret_in_public_source_is_rejected(release_tree, env_file)
     assert secret not in str(exc.value)
 
 
+@pytest.mark.skipif(shutil.which("docker") is None, reason="Docker Compose is required to render the bundle")
+@pytest.mark.parametrize("extension,key", [
+    ("conversationalbi", "ANTHROPIC_API_KEY"), ("dbt", "LAUNCHER_TOKEN"), ("ingestion", "ING_SECRET_KEY"),
+    ("maintenance", "LAUNCHER_TOKEN"), ("replication", "REP_SECRET_KEY"), ("replication", "LAUNCHER_TOKEN"),
+    ("evaluations", "LAUNCHER_TOKEN"),
+])
+def test_install_bundle_refuses_an_extensions_local_secret(release_tree, extension, key):
+    secret = secrets.token_hex(24)
+    folder = release_tree / "extensions" / extension
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / ".env").write_text(f"{key}={secret}\n")
+    (folder / "compose.yaml").write_text((folder / "compose.yaml").read_text() + f"# {secret}\n")
+    with pytest.raises(ValueError, match="Local credential") as exc:
+        build_install(release_tree)
+    assert secret not in str(exc.value)
+
+
 def test_symlink_and_unexpected_private_file_are_rejected(release_tree, tmp_path):
     private = release_tree / "user_portal" / "key.json"
     private.write_text("{}")

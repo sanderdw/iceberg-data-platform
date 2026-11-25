@@ -313,6 +313,166 @@ class Deleted(BaseModel):
                                                                     "that failed.")
 
 
+class FileEntry(BaseModel):
+    path: str
+    size: int = Field(description="Bytes.")
+
+
+class FileList(BaseModel):
+    ref: str
+    revision: str
+    files: list[FileEntry]
+
+
+class FileContent(BaseModel):
+    path: str
+    ref: str
+    revision: str
+    content: str
+
+
+class CommitResult(BaseModel):
+    branch: str
+    revision: str = Field(description="The new commit.")
+    files: list[str] = Field(description="The paths written or deleted.")
+
+
+class BranchCreated(BaseModel):
+    branch: str
+    revision: str
+
+
+class DiffFile(BaseModel):
+    path: str
+    added: int | None = Field(description="Lines added; null for a binary file.")
+    removed: int | None = Field(description="Lines removed; null for a binary file.")
+
+
+class Diff(BaseModel):
+    base: str = Field(description="The base revision.")
+    head: str = Field(description="The head revision.")
+    files: list[DiffFile]
+    patch: str = Field(description="The unified diff, at most 200,000 characters.")
+    truncated: bool
+
+
+class MergeResult(BaseModel):
+    revision: str = Field(description="main's head after the merge.")
+    merged: bool = Field(description="False when main already contained the branch.")
+    hint: str | None = None
+
+
+class CompileResult(BaseModel):
+    run: str
+    status: RunStatus
+    compiled: dict[str, str] = Field(description="Compiled SQL per selected model; empty for inline SQL.")
+    output: str = Field(description="The last lines of dbt's log, with inline SQL's compiled result.")
+    error: str | None
+
+
+class PreviewResult(BaseModel):
+    run: str
+    status: RunStatus
+    rows: list[dict[str, Any]] | None = Field(description="Null when dbt returned no rows; see output.")
+    output: str | None = Field(description="The last lines of dbt's log when there are no rows.")
+
+
+class Column(BaseModel):
+    name: str
+    type: str | None
+    description: str
+    index: int | None
+
+
+class TestCounts(BaseModel):
+    pass_: int = Field(alias="pass")
+    warn: int
+    fail: int
+    unknown: int
+
+
+class TestResult(BaseModel):
+    id: str
+    name: str
+    node: str
+    column: str | None
+    test: str | None
+    severity: str | None
+    status: str
+
+
+class PipelineNode(BaseModel):
+    id: str
+    name: str
+    type: str = Field(description="model, seed, snapshot or source.")
+    database: str | None
+    databaseId: str | None = Field(description="The platform database the node's catalog is.")
+    namespace: str | None
+    table: str
+    materialized: str | None
+    description: str
+    tags: list[str]
+    path: str | None
+    own: bool = Field(description="False for nodes of installed packages.")
+    status: str = Field(description="The latest result, never_run, or external for a source.")
+    lastRun: str | None
+    lastRunAt: Timestamp | None
+    executionTime: float | None
+    rowsAffected: int | None
+    message: str | None
+    tests: TestCounts
+
+
+class NodeDetail(PipelineNode):
+    sql: str
+    compiledSql: str
+    columns: list[Column]
+    testResults: list[TestResult]
+    environment: EnvironmentName
+    structureRun: str
+
+
+class Edge(BaseModel):
+    from_: str = Field(alias="from")
+    to: str
+
+
+class Overwritten(BaseModel):
+    ref: str
+    run: str
+    at: Timestamp
+
+
+class PipelineGraph(BaseModel):
+    project: str
+    environment: EnvironmentName
+    ref: str | None
+    structureRun: str | None = Field(description="The run whose project structure is drawn.")
+    revision: str | None = None
+    runs: list[RunItem] = Field(description="The latest runs that changed or checked tables.")
+    nodes: list[PipelineNode]
+    edges: list[Edge]
+    dbtVersion: str | None = None
+    overwrittenBy: Overwritten | None = Field(
+        default=None, description="In development: the newer build of another branch that wrote these tables.")
+    hint: str | None = None
+    refsWithPipeline: list[str] | None = None
+
+
+class LineageNode(BaseModel):
+    id: str
+    distance: int
+    type: str
+
+
+class Lineage(BaseModel):
+    environment: EnvironmentName
+    structureRun: str
+    node: str
+    upstream: list[LineageNode]
+    downstream: list[LineageNode]
+
+
 ERRORS = {status: {"model": Error, "description": description} for status, description in {
     401: "No, invalid or expired sign-in", 403: "Not allowed", 404: "No such resource in your teams",
     409: "Not possible in the current state", 422: "The request is not valid", 500: "Unexpected error",
@@ -372,15 +532,18 @@ def router(services, caller_dependency):
             force: Annotated[bool, Query(description="Delete even when dbt properties stay on some tables.")] = False):
         return await services.delete_project(caller, project, confirm_name, force)
 
-    @api.get("/projects/{project}/files", operation_id="listFiles", summary="Files at a branch or revision")
+    @api.get("/projects/{project}/files", operation_id="listFiles", response_model=FileList, **shape,
+             summary="Files at a branch or revision")
     async def files(project: ProjectId, caller: Caller, ref: Ref = "main"):
         return await services.list_files(caller, project, ref)
 
-    @api.get("/projects/{project}/files/{path:path}", operation_id="readFile", summary="One file's content")
+    @api.get("/projects/{project}/files/{path:path}", operation_id="readFile", response_model=FileContent, **shape,
+             summary="One file's content")
     async def read_file(project: ProjectId, path: str, caller: Caller, ref: Ref = "main"):
         return await services.read_file(caller, project, path, ref)
 
     @api.post("/projects/{project}/commits", operation_id="commitFiles", status_code=201,
+              response_model=CommitResult, **shape,
               summary="Write, change or delete files as one commit on a branch (writers; never main)")
     async def commit(project: ProjectId, data: Annotated[CommitInput, Body()], caller: Caller):
         return await services.write_files(caller, project, data.branch, data.files, data.message,
@@ -392,6 +555,7 @@ def router(services, caller_dependency):
         return await services.branches(caller, project)
 
     @api.post("/projects/{project}/branches", operation_id="createBranch", status_code=201,
+              response_model=BranchCreated, **shape,
               summary="Create a branch (writers)")
     async def create_branch(project: ProjectId, data: Annotated[BranchInput, Body()], caller: Caller):
         return await services.create_branch(caller, project, data.name, data.source)
@@ -407,21 +571,22 @@ def router(services, caller_dependency):
                       limit: Annotated[int, Query(ge=1, le=200)] = 30):
         return await services.history(caller, project, ref, limit)
 
-    @api.get("/projects/{project}/diff", operation_id="getDiff", summary="Changes between two branches or revisions")
+    @api.get("/projects/{project}/diff", operation_id="getDiff", response_model=Diff, **shape,
+             summary="Changes between two branches or revisions")
     async def diff(project: ProjectId, caller: Caller, head: Ref, base: Ref = "main"):
         return await services.diff(caller, project, base, head)
 
-    @api.post("/projects/{project}/merge", operation_id="mergeToMain",
+    @api.post("/projects/{project}/merge", operation_id="mergeToMain", response_model=MergeResult, **shape,
               summary="Merge a branch into main (team administrators)")
     async def merge(project: ProjectId, data: Annotated[MergeInput, Body()], caller: Caller):
         return await services.merge_to_main(caller, project, data.branch, data.message, data.revision)
 
-    @api.post("/projects/{project}/compile", operation_id="compileProject",
+    @api.post("/projects/{project}/compile", operation_id="compileProject", response_model=CompileResult, **shape,
               summary="Compile selected models or inline SQL with a read-only token")
     async def compile(project: ProjectId, data: Annotated[CompileInput, Body()], caller: Caller):
         return await services.compile_project(caller, project, data.environment, data.ref, data.select, data.sql)
 
-    @api.post("/projects/{project}/preview", operation_id="previewModel",
+    @api.post("/projects/{project}/preview", operation_id="previewModel", response_model=PreviewResult, **shape,
               summary="Up to 100 rows of a model's query with a read-only token")
     async def preview(project: ProjectId, data: Annotated[PreviewInput, Body()], caller: Caller):
         return await services.preview_model(caller, project, data.model, data.environment, data.ref, data.limit)
@@ -477,19 +642,19 @@ def router(services, caller_dependency):
     async def delete_schedule(schedule: ScheduleId, caller: Caller):
         return await services.delete_schedule(caller, schedule)
 
-    @api.get("/projects/{project}/pipeline", operation_id="getPipelineGraph",
+    @api.get("/projects/{project}/pipeline", operation_id="getPipelineGraph", response_model=PipelineGraph, **shape,
              summary="The pipeline graph with each node's latest status and tests")
     async def pipeline(project: ProjectId, caller: Caller, environment: EnvironmentName = "development",
                        ref: RunRef = None):
         return await services.get_pipeline_graph(caller, project, environment, ref=ref)
 
-    @api.get("/projects/{project}/nodes/{node}", operation_id="getNode",
+    @api.get("/projects/{project}/nodes/{node}", operation_id="getNode", response_model=NodeDetail, **shape,
              summary="One node: description, columns, SQL, compiled SQL, tests and latest result")
     async def node(project: ProjectId, node: str, caller: Caller, environment: EnvironmentName = "development",
                    ref: RunRef = None):
         return await services.get_node(caller, project, node, environment, ref)
 
-    @api.get("/projects/{project}/lineage/{node}", operation_id="getLineage",
+    @api.get("/projects/{project}/lineage/{node}", operation_id="getLineage", response_model=Lineage, **shape,
              summary="Upstream and downstream nodes of a node")
     async def node_lineage(project: ProjectId, node: str, caller: Caller,
                            environment: EnvironmentName = "development",

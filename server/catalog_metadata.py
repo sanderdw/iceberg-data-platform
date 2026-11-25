@@ -5,6 +5,7 @@ The user portal shows them to signed-in users; the Bridge publishes listings wit
 
 import json
 import re
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 SENSITIVE = re.compile(
@@ -12,6 +13,30 @@ SENSITIVE = re.compile(
 )
 PRODUCER = "iceberg-data-platform."
 QUALITY = {"pass", "warn", "fail"}
+
+
+def utc_time(value):
+    """An RFC 3339 UTC time with milliseconds, such as `2026-11-24T09:15:02.123Z`, or None.
+
+    Takes epoch milliseconds, as Polaris and Iceberg metadata store them, or ISO-8601 text, as
+    producers write it. A time without a zone is UTC; text that is not a time is None.
+    """
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        if isinstance(value, int | float):
+            moment = datetime.fromtimestamp(value / 1000, UTC)
+        else:
+            moment = datetime.fromisoformat(str(value).strip())
+            moment = moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
+    except (ValueError, OverflowError, OSError):
+        return None
+    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def text_or_none(value, limit=2000):
+    """Absent is None, not an empty string."""
+    return str(value)[:limit] if value not in (None, "") else None
 
 
 def properties(values):
@@ -387,7 +412,7 @@ def column_tree(fields):
         result.append({
             "id": field["id"], "name": field["name"],
             "type": kind if isinstance(kind, str) else type_name(kind),
-            "required": field.get("required", False), "doc": str(field.get("doc", ""))[:2000],
+            "required": field.get("required", False), "doc": text_or_none(field.get("doc")),
             "children": children,
         })
     return result
@@ -412,6 +437,9 @@ def listed_producer(values, extensions, database, listed):
     if found:
         found["inputs"] = [i for i in found["inputs"]
                            if i["database"] == database and (tuple(i["namespace"]), i["name"]) in listed]
+        found["runAt"] = utc_time(found["runAt"])
+        if found["quality"]:
+            found["quality"]["checkedAt"] = utc_time(found["quality"]["checkedAt"])
     return found
 
 
@@ -427,14 +455,14 @@ def listed_table(namespace, name, loaded, *, database, listed, extensions=None):
     values = metadata.get("properties", {})
     return {
         "kind": "table", "namespace": list(namespace), "name": name, "uuid": metadata.get("table-uuid"),
-        "comment": str(values.get("comment", ""))[:2000],
+        "comment": text_or_none(values.get("comment")),
         "columns": column_tree(schema.get("fields", [])),
         "partitionFields": [
-            {"name": f["name"], "sourceColumn": by_id.get(f.get("source-id"), ""), "transform": f["transform"]}
+            {"name": f["name"], "sourceColumn": by_id.get(f.get("source-id")), "transform": f["transform"]}
             for f in spec.get("fields", [])
         ],
         "rowCount": int(rows) if str(rows).isdigit() else None,
-        "updatedAt": metadata.get("last-updated-ms"),
+        "updatedAt": utc_time(metadata.get("last-updated-ms")),
         "producer": listed_producer(values, extensions or {}, database, listed),
     }
 
@@ -446,9 +474,9 @@ def listed_view(namespace, name, loaded):
     schema = next((s for s in metadata.get("schemas", []) if s["schema-id"] == version.get("schema-id")), {})
     return {
         "kind": "view", "namespace": list(namespace), "name": name, "uuid": metadata.get("view-uuid"),
-        "comment": str(metadata.get("properties", {}).get("comment", ""))[:2000],
+        "comment": text_or_none(metadata.get("properties", {}).get("comment")),
         "columns": column_tree(schema.get("fields", [])),
-        "updatedAt": version.get("timestamp-ms"),
+        "updatedAt": utc_time(version.get("timestamp-ms")),
     }
 
 

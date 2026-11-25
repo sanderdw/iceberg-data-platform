@@ -69,6 +69,13 @@ def marimo():
     return fake, workspace, files
 
 
+def test_notebook_links_encode_names_with_spaces_and_url_characters(marimo):
+    fake, workspace, files = marimo
+    fake.files["/work/Q1 #2 & more?.py"] = b"x"
+    fake.modified["/work/Q1 #2 & more?.py"] = 9
+    assert files.files(workspace)["notebooks"][0]["url"] == "/workspaces/w1/?file=Q1%20%232%20%26%20more%3F.py"
+
+
 def test_the_list_shows_the_teams_notebooks_and_the_examples(marimo):
     _, workspace, files = marimo
     listing = files.files(workspace)

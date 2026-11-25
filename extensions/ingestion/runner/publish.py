@@ -6,6 +6,8 @@ producer, run and quality properties itself: a metadata-only commit with the run
 
 from datetime import UTC, datetime
 
+from runner.iceberg_io import commit_with_retry
+
 PREFIX = "iceberg-data-platform."
 
 
@@ -43,10 +45,14 @@ def main(job, catalog, tables, load_id, version, state, roots):
     for name, rows in tables.items():
         identifier = (job["namespace"], name)
         try:
-            table = catalog.load_table(identifier)
-            cursor = revision(state, roots.get(name, name))
-            with table.transaction() as transaction:
-                transaction.set_properties(properties(job, name, rows, load_id, version, cursor, now))
+            values = properties(job, name, rows, load_id, version, revision(state, roots.get(name, name)), now)
+
+            def stamp(table, values=values):
+                with table.transaction() as transaction:
+                    transaction.set_properties(values)
+
+            # A concurrent commit makes this one fail with 409; the same properties are set again.
+            commit_with_retry(lambda identifier=identifier: catalog.load_table(identifier), stamp)
             published.append(".".join(identifier))
         except Exception as exc:  # noqa: BLE001 - One table's metadata never blocks the others.
             errors.append({"table": ".".join(identifier), "error": type(exc).__name__})

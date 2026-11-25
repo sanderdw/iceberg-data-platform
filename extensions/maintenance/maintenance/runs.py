@@ -1,8 +1,10 @@
-"""Run orchestration: stage a job, launch the runner in isolation, keep its results and the tables' health.
+"""Run orchestration: resolve the policies, stage a job, launch the runner in isolation, keep its results and the
+tables' health.
 
 A run always executes as the team's automation principal for the database's environment. Inspections and
-dry runs get a `read` catalog token from the Bridge, maintenance a `write` token. The platform sets the
-token's lifetime (POLARIS_TOKEN_LIFETIME, one hour by default), and a run ends well within it.
+dry runs get a `read` catalog token from the Bridge, maintenance a `write` token. With it the gateway lists the
+database's tables and asks Polaris which policies apply to each (`polaris.resolve`); the job carries them. The
+platform sets the token's lifetime (POLARIS_TOKEN_LIFETIME, one hour by default), and a run ends well within it.
 """
 
 import asyncio
@@ -17,6 +19,7 @@ from pathlib import Path
 
 import httpx
 
+from . import polaris as catalogs
 from .config import VERSION
 from .errors import MaintenanceError
 
@@ -70,6 +73,16 @@ def read_result(directory):
     return result if isinstance(result, dict) else None
 
 
+def applied_by(value):
+    """The policy an action followed, as the runner reports it from the job."""
+    if not isinstance(value, dict):
+        return None
+    applied = str(value.get("appliedAt", ""))
+    return {"name": str(value.get("name", ""))[:256], "namespace": str(value.get("namespace", ""))[:256],
+            "version": value["version"] if isinstance(value.get("version"), int) else 0,
+            "appliedAt": applied if applied in ("catalog", "namespace", "table") else "catalog"}
+
+
 def summarize(result):
     """What the API keeps of a run: totals and each table's status and actions. Health goes to the tables."""
     if not result:
@@ -82,7 +95,8 @@ def summarize(result):
         actions = [{"operation": str(a.get("operation", ""))[:40], "status": str(a.get("status", ""))[:20],
                     "detail": str(a.get("detail", ""))[:1000],
                     "metrics": {k: v for k, v in (a.get("metrics") or {}).items()
-                                if isinstance(v, (int, float, str)) and not isinstance(v, bool)}}
+                                if isinstance(v, (int, float, str)) and not isinstance(v, bool)},
+                    "policy": applied_by(a.get("policy"))}
                    for a in (item.get("actions") or [])[:20] if isinstance(a, dict)]
         tables.append({"name": str(item.get("name", ""))[:300], "status": str(item.get("status", ""))[:20],
                        "error": str(item.get("error") or "")[:2000], "actions": actions})
@@ -91,23 +105,31 @@ def summarize(result):
             "icebergGo": str(result.get("icebergGo", ""))[:80], "error": str(result.get("error") or "")[:2000]}
 
 
-def healths(result):
-    """Each table's name, status, error, actions and health, for the tables store."""
+def healths(result, resolved):
+    """Each table's name, status, error, actions, health and the policies that applied, for the tables store."""
     found = []
     for item in (result or {}).get("tables") or []:
         if isinstance(item, dict) and isinstance(item.get("name"), str):
             health = item.get("health") if isinstance(item.get("health"), dict) else None
             found.append({"name": item["name"][:300], "status": str(item.get("status", ""))[:20],
                           "error": str(item.get("error") or "")[:2000], "health": health,
+                          "policies": resolved.get(item["name"], {}),
                           "actions": summarize({"tables": [item]})["tables"][0]["actions"]})
     return found
 
 
+def job_policies(applied):
+    """A table's policies as the runner reads them: per type the settings, the policy and why it is not applied."""
+    return {key: {**entry["settings"], "policy": entry["policy"], "problem": entry["problem"] or ""}
+            for key, entry in applied.items()}
+
+
 class RunManager:
-    def __init__(self, settings, store, bridge, http=None):
+    def __init__(self, settings, store, bridge, polaris, http=None):
         self.settings = settings
         self.store = store
         self.bridge = bridge
+        self.polaris = polaris
         self.http = http or httpx.AsyncClient(base_url=settings.launcher_url, timeout=60, trust_env=False,
                                               headers={"X-Launcher-Token": settings.launcher_token})
         self.slots = asyncio.Semaphore(settings.max_runs)
@@ -128,13 +150,12 @@ class RunManager:
             self.store.update_run(run["id"], status="error", finished_at=time.time(),
                                   error="The Maintenance extension restarted while this run was in progress.")
 
-    def start(self, *, database, team, environment, kind, dry_run, tables, settings, exclude, principal,
-              triggered_by, agent="", schedule=""):
+    def start(self, *, database, team, environment, kind, dry_run, tables, principal, triggered_by, agent="",
+              schedule=""):
         """Queue a run. One database never has two runs at once: the store refuses a second (409)."""
         run = self.store.create_run(database=database, team=team, environment=environment, kind=kind,
-                                    dry_run=int(dry_run), tables=tables, settings={"policy": settings,
-                                                                                   "exclude": exclude},
-                                    triggered_by=triggered_by, agent=agent, schedule=schedule)
+                                    dry_run=int(dry_run), tables=tables, triggered_by=triggered_by, agent=agent,
+                                    schedule=schedule)
         if run is None:
             raise MaintenanceError(409, "This database already has a run in progress.", "run_in_progress")
         self.phase[run["id"]] = "waiting"
@@ -180,12 +201,13 @@ class RunManager:
                                   error=f"The run failed unexpectedly ({type(exc).__name__}).")
         self.finished(run["database"])
 
-    def job(self, run, discovery, deadline):
+    def job(self, run, discovery, deadline, tables):
         return {
             "runId": run["id"], "kind": run["kind"], "dryRun": bool(run["dry_run"]),
             "catalogUri": discovery["catalog"]["internalUri"], "warehouse": run["database"],
-            "storageEndpoint": discovery["storage"]["internalEndpoint"], "tables": run["tables"],
-            "exclude": run["settings"].get("exclude") or [], "policy": run["settings"]["policy"],
+            "storageEndpoint": discovery["storage"]["internalEndpoint"],
+            "tables": [{"name": t["name"], "identifier": t["identifier"], "policies": job_policies(t["policies"])}
+                       for t in tables],
             "deadline": int(deadline), "url": f"{self.settings.origin}/#/runs/{run['id']}",
             "extensionVersion": VERSION,
         }
@@ -198,10 +220,16 @@ class RunManager:
             raise MaintenanceError(409, "The database is not in this team and environment any more.", "database_gone")
         access = "write" if run["kind"] == "maintain" and not run["dry_run"] else "read"
         issued = await self.bridge.catalog_token(principal["id"], access, f"maintenance {run['kind']} {id}"[:120])
+        began = time.time()
         limit = time_limit(self.settings, issued)
+        self.store.update_run(id, status="running", started_at=began, summary={"principal": principal["id"]})
+        # Polaris says which policies apply to each table now, including ones other tools attached.
+        catalog = self.polaris.catalog(run["database"], token=issued["accessToken"])
+        tables = await catalogs.resolve(catalog, run["tables"])
+        resolved = {t["name"]: t["policies"] for t in tables}
+        limit = max(60, limit - int(time.time() - began))
         # The runner starts no new table after its deadline, and leaves a minute to report.
-        staged = await asyncio.to_thread(stage, self.job(run, discovery, time.time() + limit - 60))
-        self.store.update_run(id, status="running", started_at=time.time(), summary={"principal": principal["id"]})
+        staged = await asyncio.to_thread(stage, self.job(run, discovery, time.time() + limit - 60, tables))
         self.phase[id] = "launching"
         response = await self.http.post("/runs", json={
             "id": id, "archive": base64.b64encode(staged).decode(), "token": issued["accessToken"], "timeout": limit,
@@ -233,7 +261,7 @@ class RunManager:
         else:
             status, error = "failed", summary.get("error") or "The runner reported an error. Read the run log."
         if result is not None:
-            await asyncio.to_thread(self.store.record_tables, run["database"], run, healths(result),
+            await asyncio.to_thread(self.store.record_tables, run["database"], run, healths(result, resolved),
                                     "dry run" if run["dry_run"] else run["kind"], not run["tables"])
         self.store.update_run(id, status=status, finished_at=time.time(), exit_code=launched.get("exitCode"),
                               summary=summary, error=error[:2000])

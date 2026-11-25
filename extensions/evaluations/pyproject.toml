@@ -7,13 +7,13 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.162.4",
+  "fastapi==0.165.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
-  "joserfc>=1.7.7",
+  "joserfc>=1.8.0",
   "mcp>=2.3.0,<3",
-  "croniter>=6.2.4",
-  "pydantic-evals>=2.63.0,<3",
+  "croniter>=7.0.0",
+  "pydantic-evals>=2.74.0,<3",
   "pydantic-ai-slim[google,openai,anthropic,bedrock,openrouter]>=2.63.0,<3",
   "pyyaml>=6.0.3",
   "pyiceberg[pyarrow]>=0.12.0",
@@ -28,11 +28,11 @@ otel = [
   "opentelemetry-instrumentation-httpx>=0.66b1",
   "opentelemetry-instrumentation-logging>=0.66b1",
 ]
-dev = [{include-group = "otel"}, "pytest>=9.1.1", "ruff>=0.17.3", "pyiceberg[sql-sqlite]>=0.12.0"]
+dev = [{include-group = "otel"}, "pytest>=9.2.0", "ruff>=0.17.6", "pyiceberg[sql-sqlite]>=0.12.0"]
 
 [tool.iceberg-evaluations]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
-bridge-contract = ">=0.1.3,<0.2"
+bridge-contract = ">=1.0,<2"
 
 [tool.uv]
 package = false

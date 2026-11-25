@@ -1,5 +1,6 @@
 'use strict';
-// The Maintenance page over the REST API: table health of your teams' databases, their policies and runs.
+// The Maintenance page over the REST API: table health of your teams' databases, their Apache Polaris policies
+// and runs.
 // Agents do the same through the MCP server; the server checks every permission again.
 const $ = selector => document.querySelector(selector);
 const ENVIRONMENTS = ['development', 'acceptance', 'production'];
@@ -16,8 +17,17 @@ const STATE_CLASS = {healthy: 'healthy', attention: 'attention', failed: 'failed
 const MODES = {inspect: 'Health check', 'dry-run': 'Dry run', maintain: 'Maintenance'};
 const OPERATIONS = {
   compaction: 'Compact data files', danglingDeletes: 'Remove dangling deletes', rewriteManifests: 'Rewrite manifests',
-  orphanFiles: 'Remove orphan files', expireSnapshots: 'Expire snapshots', excluded: 'Excluded', deadline: 'Time limit',
+  orphanFiles: 'Remove orphan files', expireSnapshots: 'Expire snapshots', deadline: 'Time limit',
 };
+// The four Polaris system policy types, in the order a run applies them.
+const TYPES = {
+  dataCompaction: 'Compact data files', metadataCompaction: 'Rewrite manifests', orphanFileRemoval: 'Remove orphan files',
+  snapshotExpiry: 'Expire snapshots',
+};
+const POLARIS_TYPES = {dataCompaction: 'system.data-compaction', metadataCompaction: 'system.metadata-compaction',
+  orphanFileRemoval: 'system.orphan-file-removal', snapshotExpiry: 'system.snapshot-expiry'};
+const ATTACHED = {catalog: 'the database', namespace: 'its namespace', table: 'the table'};
+const MB = 1048576;
 const ACTION_CLASS = {done: 'done', planned: 'planned', skipped: 'idle', off: 'idle', failed: 'failed'};
 const SEEN_BY = {inspect: 'health check', 'dry run': 'dry run', maintain: 'maintenance'};
 const BUCKETS = ['<1 MB', '1–4', '4–16', '16–64', '64–128', '128–256', '>256 MB'];
@@ -87,9 +97,7 @@ function bytes(b) {
   const i = Math.min(units.length - 1, Math.floor(Math.log(b) / Math.log(1024)));
   return `${(b / 1024 ** i).toFixed(i ? 1 : 0)} ${units[i]}`;
 }
-function hours(value) {
-  return value % 24 === 0 ? (value === 24 ? '1 day' : `${value / 24} days`) : `${value} hours`;
-}
+function days(value) { return value === 1 ? '1 day' : `${value} days`; }
 function chip(status, label) { return h('span', {class: `chip ${status}`}, h('i', {class: `status ${status}`, 'aria-hidden': 'true'}), label || status); }
 function runChip(status) { return chip(RUN_STATUSES.has(status) ? status : 'idle', status); }
 function stateChip(state) { return chip(STATE_CLASS[state] || 'idle', STATES[state] || state); }
@@ -271,12 +279,12 @@ function emptyState(databases) {
 function databasesCard(databases) {
   if (!databases.length) return null;
   return h('section', {class: 'card table-wrap spaced-top'},
-    h('div', {class: 'section-title'}, h('h2', {text: 'Databases'}), h('span', {class: 'small-print', text: 'One policy per database'})),
+    h('div', {class: 'section-title'}, h('h2', {text: 'Databases'}), h('span', {class: 'small-print', text: 'Policies live in Apache Polaris'})),
     h('table', {class: 'responsive'},
       h('thead', {}, h('tr', {}, ['Database', 'Policy', 'Schedule (UTC)', 'Tables', 'Last run'].map((t, i) => h('th', {scope: 'col', class: i === 3 ? 'num' : null, text: t})))),
       h('tbody', {}, databases.map(d => h('tr', {},
         h('td', {class: 'name-cell wide'}, h('a', {href: `#/databases/${d.id}`, text: d.name}), h('p', {text: `${d.teamName} · ${LABELS[d.environment]}`})),
-        h('td', {}, d.policy ? chip('success', 'Policy') : chip('idle', 'Defaults')),
+        h('td', {}, d.policy ? chip('success', 'Policy') : d.policy === false ? chip('idle', 'No policy') : h('span', {class: 'muted small', title: 'Maintenance is not enabled here, so it cannot read the policies.', text: '—'})),
         h('td', {class: 'mono'}, d.schedule ? (d.schedule.enabled ? d.schedule.cron : `${d.schedule.cron} (paused)`) : h('span', {class: 'muted', text: '—'})),
         h('td', {class: 'num'}, number.format(d.tables), d.attention ? h('div', {class: 'reasons', text: `${d.attention} need attention`}) : null),
         h('td', {class: 'wide'}, d.lastRun ? h('div', {class: 'run-cell'}, h('a', {href: `#/runs/${d.lastRun.id}`}, runChip(d.lastRun.status)),
@@ -322,7 +330,7 @@ function agentCard() {
 // One database: its tables, policy and runs
 async function renderDatabase(token) {
   const [{databases}, {tables, total}, policy, {runs}] = await Promise.all([api('/databases'), api(`/tables?database=${route.id}&limit=${TABLE_LIMIT}`),
-    api(`/databases/${route.id}/policy`), api(`/databases/${route.id}/runs?limit=10`)]);
+    readPolicy(route.id), api(`/databases/${route.id}/runs?limit=10`)]);
   if (token !== renderToken) return;
   const d = databases.find(x => x.id === route.id);
   if (!d) throw new Error('No such database in your teams.');
@@ -331,14 +339,14 @@ async function renderDatabase(token) {
   const enabled = enabledIn(d.team).includes(d.environment);
   const blocked = !enabled ? 'Maintenance is not enabled in this environment.' : active ? 'A run is in progress.' : '';
   const writer = isWriter(d.role);
-  const button = (mode, label, cls) => writer && h('button', {type: 'button', class: cls, text: label, disabled: Boolean(blocked) || (mode === 'maintain' && !policy.exists),
-    title: blocked || (mode === 'maintain' && !policy.exists ? 'Set a policy first.' : null), onclick: () => startRun(d, mode)});
+  const button = (mode, label, cls) => writer && h('button', {type: 'button', class: cls, text: label, disabled: Boolean(blocked) || (mode === 'maintain' && !policy?.exists),
+    title: blocked || (mode === 'maintain' && !policy?.exists ? 'Set a policy first.' : null), onclick: () => startRun(d, mode)});
   fill($('#content'),
     heading(`${d.teamName} · ${LABELS[d.environment]}`.toUpperCase(), h('h1', {class: 'compact', text: d.name}), null,
       button('inspect', 'Check health', 'quiet'), button('dry-run', 'Dry run', 'quiet'), button('maintain', 'Run maintenance'),
       h('a', {class: 'button quiet', href: `#/databases/${d.id}/policy`, text: isAdmin(d.role) ? 'Edit policy' : 'Policy'})),
-    h('div', {class: 'status-line spaced'}, policy.exists ? chip('success', 'Policy') : chip('idle', 'No policy: defaults'),
-      policy.schedule && h('span', {class: 'chip', text: policy.schedule.enabled ? `Every ${policy.schedule.cron} UTC` : 'Schedule paused'}),
+    h('div', {class: 'status-line spaced'}, policy?.exists ? chip('success', 'Policy') : chip('idle', policy ? 'No policy' : 'Policies unknown'),
+      policy?.schedule && h('span', {class: 'chip', text: policy.schedule.enabled ? `Every ${policy.schedule.cron} UTC` : 'Schedule paused'}),
       blocked && !active ? h('span', {class: 'small-print', text: blocked}) : null),
     total > tables.length && h('div', {class: 'notice', text: `Showing the first ${number.format(tables.length)} of ${number.format(total)} tables.`}),
     tables.length ? tableList(tables, false) : h('section', {class: 'card'},
@@ -346,7 +354,7 @@ async function renderDatabase(token) {
     h('div', {class: 'columns spaced-top'},
       h('div', {class: 'stack'},
         h('section', {class: 'card'}, h('div', {class: 'section-title'}, h('h2', {text: 'Runs'}), h('span', {class: 'small-print', text: 'Newest first'})), runsTable(runs))),
-      h('div', {class: 'stack'}, policySummary(policy, d), scheduleCard(policy, d))));
+      h('div', {class: 'stack'}, policySummary(policy, d), policy && scheduleCard(policy, d))));
   if (active) schedulePoll(() => render(true), 3000);
 }
 
@@ -362,23 +370,49 @@ function runsTable(runs) {
       h('td', {class: 'wide small'}, r.scheduled ? 'schedule' : r.triggeredBy, r.agent && h('span', {class: 'agent', text: 'agent'})))))));
 }
 
-function policyFacts(s) {
-  const fact = (on, text) => on ? text : 'off';
-  return h('dl', {class: 'facts'},
-    h('dt', {text: 'Expire snapshots'}), h('dd', {text: fact(s.expireSnapshots.enabled, `older than ${hours(s.expireSnapshots.olderThanHours)} · keep last ${s.expireSnapshots.retainLast}`)}),
-    h('dt', {text: 'Compact'}), h('dd', {text: fact(s.compaction.enabled, `${s.compaction.targetFileSizeMb} MB files · ≥ ${s.compaction.minInputFiles} inputs · ${bytes(s.compaction.maxInputMbPerRun * 1048576)} per table and run`)}),
-    h('dt', {text: 'Dangling deletes'}), h('dd', {text: fact(s.danglingDeletes.enabled, 'removed')}),
-    h('dt', {text: 'Manifests'}), h('dd', {text: fact(s.rewriteManifests.enabled, `merged above ${s.rewriteManifests.minManifests}`)}),
-    h('dt', {text: 'Orphan files'}), h('dd', {text: fact(s.orphanFiles.enabled, `older than ${hours(s.orphanFiles.olderThanHours)}`)}));
+// A database's policies are read as the team's service account: without one (Maintenance not enabled), null.
+function readPolicy(id) {
+  return api(`/databases/${id}/policy`).catch(error => { if (error.code === 'environment_not_enabled') return null; throw error; });
+}
+
+function describe(key, s) {
+  if (!s.enabled) return 'off';
+  if (key === 'snapshotExpiry') return `older than ${days(s.maxSnapshotAgeDays)} · keep last ${s.minSnapshotsToKeep}`;
+  if (key === 'dataCompaction') return `${bytes(s.targetFileSizeBytes)} files · ≥ ${s.minInputFiles} inputs · ${bytes(s.maxInputBytesPerRun)} per table and run${s.removeDanglingDeletes ? ' · dangling deletes removed' : ''}`;
+  if (key === 'metadataCompaction') return `merged above ${s.minCountToMerge} manifests`;
+  return `older than ${days(s.maxOrphanFileAgeInDays)}`;
+}
+
+function policyFacts(settings) {
+  return h('dl', {class: 'facts'}, Object.entries(TYPES).flatMap(([key, title]) => [h('dt', {text: title}), h('dd', {text: describe(key, settings[key])})]));
+}
+
+// What Polaris resolved for one table at its last run: per type the settings and where its policy is attached.
+function appliedFacts(policies) {
+  return h('dl', {class: 'facts'}, Object.entries(TYPES).flatMap(([key, title]) => {
+    const p = policies[key];
+    return [h('dt', {text: title}), h('dd', {},
+      p.policy ? describe(key, p.settings) : 'no policy',
+      p.policy && h('div', {class: 'small-print', text: `${p.policy.namespace}.${p.policy.name}, on ${ATTACHED[p.policy.appliedAt]}`}),
+      p.problem && h('div', {class: 'error-text', text: `Not applied: ${p.problem}`}))];
+  }));
+}
+
+function exclusionText(e) {
+  const all = e.types.length === Object.keys(TYPES).length;
+  return `${e.target}${e.level === 'namespace' ? ' (namespace)' : ''}${all ? '' : `: ${e.types.map(t => TYPES[t].toLowerCase()).join(', ')}`}`;
 }
 
 function policySummary(policy, d) {
+  if (!policy) return h('section', {class: 'card'}, h('h2', {text: 'Policy'}),
+    h('p', {class: 'small', text: 'Maintenance is not enabled in this environment, so it cannot read the database\'s policies. A team administrator enables it on the start page.'}));
+  const foreign = Object.values(policy.policies).filter(p => p && !p.managed);
   return h('section', {class: 'card'},
-    h('div', {class: 'section-title'}, h('h2', {text: 'Policy'}), policy.exists ? h('span', {class: 'small-print', text: `Revision ${policy.revision}`}) : chip('idle', 'Defaults')),
+    h('div', {class: 'section-title'}, h('h2', {text: 'Policy'}), policy.exists ? h('span', {class: 'small-print', text: 'Apache Polaris'}) : chip('idle', 'Defaults')),
     policyFacts(policy.settings),
-    policy.exclude.length ? h('p', {class: 'small-print', text: `Excluded: ${policy.exclude.join(', ')}`}) : null,
-    policy.exists ? h('p', {class: 'small-print'}, `Changed by ${policy.updatedBy}, `, time(policy.updatedAt))
-      : h('p', {class: 'small-print', text: 'No policy yet: health checks and dry runs use these defaults. Maintenance and schedules need a policy.'}),
+    policy.exclusions.length ? h('p', {class: 'small-print', text: `Excluded: ${policy.exclusions.map(exclusionText).join(', ')}`}) : null,
+    foreign.length ? h('p', {class: 'small-print', text: `Set by another tool: ${foreign.map(p => `${p.namespace}.${p.name}`).join(', ')}`}) : null,
+    !policy.exists && h('p', {class: 'small-print', text: 'No policy yet. These are the defaults a new policy starts with; a type without a policy is not maintained.'}),
     h('a', {class: 'button quiet small', href: `#/databases/${d.id}/policy`, text: isAdmin(d.role) ? (policy.exists ? 'Edit policy' : 'Create policy') : 'Open policy'}));
 }
 
@@ -415,7 +449,7 @@ function scheduleCard(policy, d) {
         s && h('button', {type: 'button', class: 'quiet small', text: 'Remove', onclick: remove}))),
     !policy.exists && h('p', {class: 'small-print', text: admin ? 'A schedule applies the policy: create the policy first.' : 'A schedule needs a policy, which a team administrator creates.'}),
     policy.exists && !admin && h('p', {class: 'small-print', text: 'A team administrator sets the schedule.'}),
-    h('p', {class: 'small-print', text: 'A scheduled run applies the policy to every table that is not excluded, and is skipped while another run of the database is in progress.'}));
+    h('p', {class: 'small-print', text: 'A scheduled run applies the policies that apply to each table when it starts, and is skipped while another run of the database is in progress.'}));
 }
 
 // The policy editor
@@ -435,96 +469,119 @@ function numberInput(value, label, min, max, disabled, onchange) {
 function field(label, control, help) { return h('label', {class: 'field'}, h('span', {text: label}), control, help && h('span', {class: 'help', text: help})); }
 
 async function renderPolicy(token) {
-  const [{databases}, {tables}, policy] = await Promise.all([api('/databases'), api(`/tables?database=${route.id}&limit=${TABLE_LIMIT}`), api(`/databases/${route.id}/policy`)]);
+  const [{databases}, {tables}, policy] = await Promise.all([api('/databases'), api(`/tables?database=${route.id}&limit=${TABLE_LIMIT}`), readPolicy(route.id)]);
   if (token !== renderToken) return;
   const d = databases.find(x => x.id === route.id);
   if (!d) throw new Error('No such database in your teams.');
   crumbs([`${d.teamName} · ${d.name}`, `#/databases/${d.id}`], ['Policy']);
+  if (!policy) {
+    fill($('#content'), heading(`${d.teamName} · ${LABELS[d.environment]}`.toUpperCase(), h('h1', {class: 'compact', text: `${d.name} · policy`}), null),
+      h('section', {class: 'card'}, h('p', {class: 'small', text: 'Maintenance is not enabled in this environment. Its policies are Apache Polaris policies that Maintenance reads and writes as the team\'s service account, so a team administrator enables it first, on the start page.'})));
+    return;
+  }
   const admin = isAdmin(d.role), locked = !admin;
   const s = structuredClone(policy.settings);
-  let exclude = [...policy.exclude];
-  const ops = [];
-  const op = (key, title, text, fields) => {
+  let exclusions = policy.exclusions.map(({target, level, types}) => ({target, level, types: [...types]}));
+  const source = key => {
+    const p = policy.policies[key];
+    if (!p) return h('p', {class: 'small-print', text: `No ${POLARIS_TYPES[key]} policy yet: saving creates one and attaches it to the database.`});
+    return h('p', {class: 'small-print'}, p.managed ? `Polaris policy ${p.name}, version ${p.version}.`
+      : `Set by another tool: ${p.namespace}.${p.name}, version ${p.version}. Saving updates it in place and keeps its other settings.`,
+      p.problem ? h('span', {class: 'error-text', text: ` Not applied: ${p.problem}`}) : null);
+  };
+  const op = (key, text, fields) => {
     const section = h('div', {class: `op ${s[key].enabled ? '' : 'off'}`},
-      h('div', {class: 'op-head'}, h('div', {}, h('h3', {text: title}), h('p', {text})),
-        sw(s[key].enabled, title, locked, on => { s[key].enabled = on; section.classList.toggle('off', !on); update(); })),
+      h('div', {class: 'op-head'}, h('div', {}, h('h3', {text: TYPES[key]}), h('p', {text}), source(key)),
+        sw(s[key].enabled, TYPES[key], locked, on => { s[key].enabled = on; section.classList.toggle('off', !on); update(); })),
       fields && h('div', {class: 'form-grid'}, fields));
-    ops.push(section);
     return section;
   };
   const set = (key, name) => value => { s[key][name] = value; update(); };
-  const DAYS = [[24, '1 day'], [48, '2 days'], [120, '5 days'], [168, '7 days'], [720, '30 days'], [2160, '90 days']];
+  const sizes = mb => mb.map(m => [m * MB, m >= 1024 ? `${m / 1024} GB` : `${m} MB`]);
   const sections = [
-    op('expireSnapshots', 'Expire snapshots', 'Removes old snapshots from each table\'s history. Time travel to an expired snapshot stops working. Branch and tag heads, their own retention and the table properties history.expire.* always win.', [
-      field('Older than', select(s.expireSnapshots.olderThanHours, DAYS, 'Expire snapshots older than', locked, set('expireSnapshots', 'olderThanHours')), 'The time travel window'),
-      field('Always keep the last', numberInput(s.expireSnapshots.retainLast, 'Snapshots to keep', 1, 10000, locked, set('expireSnapshots', 'retainLast')), 'snapshots, however old')]),
-    op('compaction', 'Compact data files', 'Rewrites small files, and files with many deleted rows, into fewer, larger ones per partition. Sorted when the table has a sort order. Rows don\'t change; the old files leave with snapshot expiry.', [
-      field('Target file size', select(s.compaction.targetFileSizeMb, [[64, '64 MB'], [128, '128 MB'], [256, '256 MB'], [512, '512 MB']], 'Target file size', locked, set('compaction', 'targetFileSizeMb')), 'files below 75% of it count as small'),
-      field('At least', numberInput(s.compaction.minInputFiles, 'Minimum input files', 1, 1000, locked, set('compaction', 'minInputFiles')), 'input files per group'),
-      field('Deleted rows', select(Math.round(s.compaction.deleteRatio * 100), [[10, '10%'], [20, '20%'], [30, '30%'], [50, '50%']], 'Deleted rows threshold', locked, v => { s.compaction.deleteRatio = v / 100; update(); }), 'rewrites a file whose deletes reach this'),
-      field('Per table and run', select(s.compaction.maxInputMbPerRun, [[512, '512 MB'], [1024, '1 GB'], [2048, '2 GB'], [8192, '8 GB']], 'Input per table and run', locked, set('compaction', 'maxInputMbPerRun')), 'the rest waits for the next run')]),
-    op('danglingDeletes', 'Remove dangling deletes', 'Drops delete files that no live data file needs any more, for example after compaction. Metadata only.'),
-    op('rewriteManifests', 'Rewrite manifests', 'Merges small manifests so planning a query reads less metadata.', [
-      field('When more than', numberInput(s.rewriteManifests.minManifests, 'Manifest threshold', 2, 100000, locked, set('rewriteManifests', 'minManifests')), 'manifests in the current snapshot')]),
-    op('orphanFiles', 'Remove orphan files', 'Deletes files under a table\'s location that no snapshot references: leftovers of failed writes and the files of expired snapshots. Runs before expiry, so what one run expires stays until the next run.', [
-      field('Older than', select(s.orphanFiles.olderThanHours, [[24, '1 day'], [72, '3 days'], [168, '7 days'], [336, '14 days']], 'Remove orphan files older than', locked, set('orphanFiles', 'olderThanHours')), 'never younger than a day, so running writes are safe')]),
+    op('dataCompaction', 'Rewrites small files, and files with many deleted rows, into fewer, larger ones per partition. Sorted when the table has a sort order. Rows don\'t change; the old files leave with snapshot expiry.', [
+      field('Target file size', select(s.dataCompaction.targetFileSizeBytes, sizes([64, 128, 256, 512]), 'Target file size', locked, set('dataCompaction', 'targetFileSizeBytes')), 'files below 75% of it count as small'),
+      field('At least', numberInput(s.dataCompaction.minInputFiles, 'Minimum input files', 1, 1000, locked, set('dataCompaction', 'minInputFiles')), 'input files per group'),
+      field('Deleted rows', select(Math.round(s.dataCompaction.deleteRatioThreshold * 100), [[10, '10%'], [20, '20%'], [30, '30%'], [50, '50%']], 'Deleted rows threshold', locked, v => { s.dataCompaction.deleteRatioThreshold = v / 100; update(); }), 'rewrites a file whose deletes reach this'),
+      field('Per table and run', select(s.dataCompaction.maxInputBytesPerRun, sizes([512, 1024, 2048, 8192]), 'Input per table and run', locked, set('dataCompaction', 'maxInputBytesPerRun')), 'the rest waits for the next run'),
+      field('Dangling deletes', sw(s.dataCompaction.removeDanglingDeletes, 'Remove dangling delete files', locked, set('dataCompaction', 'removeDanglingDeletes')), 'drops delete files no data file needs any more')]),
+    op('metadataCompaction', 'Merges small manifests so planning a query reads less metadata.', [
+      field('When more than', numberInput(s.metadataCompaction.minCountToMerge, 'Manifest threshold', 2, 100000, locked, set('metadataCompaction', 'minCountToMerge')), 'manifests in the current snapshot')]),
+    op('orphanFileRemoval', 'Deletes files under a table\'s location that no snapshot references: leftovers of failed writes and the files of expired snapshots. Runs before expiry, so what one run expires stays until the next run.', [
+      field('Older than', select(s.orphanFileRemoval.maxOrphanFileAgeInDays, [[1, '1 day'], [3, '3 days'], [7, '7 days'], [14, '14 days']], 'Remove orphan files older than', locked, set('orphanFileRemoval', 'maxOrphanFileAgeInDays')), 'never younger than a day, so running writes are safe')]),
+    op('snapshotExpiry', 'Removes old snapshots from each table\'s history. Time travel to an expired snapshot stops working. Branch and tag heads, their own retention and the table properties history.expire.* always win.', [
+      field('Older than', select(s.snapshotExpiry.maxSnapshotAgeDays, [[1, '1 day'], [2, '2 days'], [5, '5 days'], [7, '7 days'], [30, '30 days'], [90, '90 days']], 'Expire snapshots older than', locked, set('snapshotExpiry', 'maxSnapshotAgeDays')), 'the time travel window'),
+      field('Always keep the last', numberInput(s.snapshotExpiry.minSnapshotsToKeep, 'Snapshots to keep', 1, 10000, locked, set('snapshotExpiry', 'minSnapshotsToKeep')), 'snapshots, however old')]),
   ];
-  // Excluded tables
+  // Exclusions: a disabled policy per type, attached to a namespace or a table, which overrides the database's.
   const known = tables.map(t => t.name);
-  const chips = h('div', {class: 'chips'});
-  const addInput = h('input', {class: 'inline', list: 'known-tables', placeholder: 'namespace.table', 'aria-label': 'Table to exclude', disabled: locked});
-  const drawChips = () => fill(chips, exclude.length ? exclude.map(name => h('span', {class: 'chip'}, name,
-    !locked && h('button', {type: 'button', 'aria-label': `Stop excluding ${name}`, text: '×', onclick: () => { exclude = exclude.filter(n => n !== name); drawChips(); }})))
-    : h('span', {class: 'small-print', text: 'No table is excluded.'}));
-  drawChips();
-  const excludeSection = h('div', {class: 'op'}, h('h3', {text: 'Excluded tables'}),
-    h('p', {class: 'small', text: `Maintenance reads their health but never changes them. ${known.length} tables were seen in the last run.`}), chips,
-    !locked && h('form', {class: 'cron-row', onsubmit: event => {
+  const namespaces = [...new Set(known.map(n => n.split('.').slice(0, -1).join('.')))].sort();
+  const rows = h('div', {class: 'chips'});
+  const drawRows = () => fill(rows, exclusions.length ? exclusions.map(e => h('span', {class: 'chip'}, exclusionText(e),
+    !locked && h('button', {type: 'button', 'aria-label': `Stop excluding ${e.target}`, text: '×', onclick: () => { exclusions = exclusions.filter(x => x !== e); drawRows(); update(); }})))
+    : h('span', {class: 'small-print', text: 'Nothing is excluded.'}));
+  drawRows();
+  const addInput = h('input', {class: 'inline', list: 'known-targets', placeholder: 'namespace or namespace.table', 'aria-label': 'Namespace or table to exclude', disabled: locked});
+  const checks = Object.entries(TYPES).map(([key, title]) => h('label', {class: 'check'}, h('input', {type: 'checkbox', value: key, checked: true, disabled: locked}), title));
+  const excludeSection = h('div', {class: 'op'}, h('h3', {text: 'Exclusions'}),
+    h('p', {class: 'small', text: `Switch policy types off for a namespace or a table. Maintenance still reads their health. ${known.length} tables were seen in the last run.`}), rows,
+    !locked && h('form', {class: 'stack', onsubmit: event => {
       event.preventDefault();
-      const name = addInput.value.trim();
-      if (name && name.includes('.') && !exclude.includes(name)) { exclude = [...exclude, name].sort(); drawChips(); }
+      const target = addInput.value.trim();
+      const types = checks.map(c => c.querySelector('input')).filter(i => i.checked).map(i => i.value);
+      if (!target || !types.length) return;
+      const level = known.includes(target) ? 'table' : namespaces.includes(target) || !target.includes('.') ? 'namespace' : 'table';
+      exclusions = [...exclusions.filter(e => !(e.target === target && e.level === level)), {target, level, types}]
+        .sort((a, b) => a.target.localeCompare(b.target));
       addInput.value = '';
-    }}, addInput, h('button', {type: 'submit', class: 'quiet small', text: 'Exclude'})),
-    h('datalist', {id: 'known-tables'}, known.map(n => h('option', {value: n}))));
+      drawRows(); update();
+    }}, h('div', {class: 'cron-row'}, addInput, h('button', {type: 'submit', class: 'quiet small', text: 'Exclude'})),
+      h('div', {class: 'presets', role: 'group', 'aria-label': 'Policy types to switch off'}, checks)),
+    h('datalist', {id: 'known-targets'}, [...namespaces, ...known].map(n => h('option', {value: n}))));
   // Estimate from the last inspection
   const estimate = h('ul', {});
   function update() {
-    const live = tables.filter(t => !exclude.includes(t.name) && t.health);
+    const excluded = name => exclusions.some(e => e.types.length === Object.keys(TYPES).length && (e.target === name || name.startsWith(`${e.target}.`)));
+    const live = tables.filter(t => !excluded(t.name) && t.health);
     const sum = key => live.reduce((n, t) => n + (t.health[key] || 0), 0);
-    const target = s.compaction.targetFileSizeMb * 1048576, small = target * 0.75;
+    const c = s.dataCompaction, small = c.targetFileSizeBytes * 0.75;
     let files = 0, inputBytes = 0;
     for (const t of live) {
       // Small files only: a rough view; the dry run plans exactly.
       const smallFiles = t.health.smallFiles || 0;
-      if (smallFiles >= s.compaction.minInputFiles) { files += smallFiles; inputBytes += Math.min(smallFiles * small, s.compaction.maxInputMbPerRun * 1048576); }
+      if (smallFiles >= c.minInputFiles) { files += smallFiles; inputBytes += Math.min(smallFiles * small, c.maxInputBytesPerRun); }
     }
     const row = (label, value, on) => h('li', {}, h('span', {text: label}), on ? h('b', {text: value}) : h('span', {class: 'muted', text: 'off'}));
     fill(estimate,
-      row('Expire snapshots', `${number.format(sum('expirableSnapshots'))} at the last check`, s.expireSnapshots.enabled),
-      row('Compact', files ? `${number.format(files)} small files · ${bytes(inputBytes)}` : 'nothing yet', s.compaction.enabled),
-      row('Delete files', number.format(sum('positionDeleteFiles') + sum('equalityDeleteFiles') + sum('deletionVectors')), s.danglingDeletes.enabled || s.compaction.enabled),
-      row('Manifests above threshold', `${live.filter(t => t.health.manifests > s.rewriteManifests.minManifests).length} tables`, s.rewriteManifests.enabled),
-      row('Orphan files', `older than ${hours(s.orphanFiles.olderThanHours)}`, s.orphanFiles.enabled));
+      row('Compact', files ? `${number.format(files)} small files · ${bytes(inputBytes)}` : 'nothing yet', c.enabled),
+      row('Delete files', number.format(sum('positionDeleteFiles') + sum('equalityDeleteFiles') + sum('deletionVectors')), c.enabled),
+      row('Manifests above threshold', `${live.filter(t => t.health.manifests > s.metadataCompaction.minCountToMerge).length} tables`, s.metadataCompaction.enabled),
+      row('Orphan files', `older than ${days(s.orphanFileRemoval.maxOrphanFileAgeInDays)}`, s.orphanFileRemoval.enabled),
+      row('Expire snapshots', `${number.format(sum('expirableSnapshots'))} at the last check`, s.snapshotExpiry.enabled));
   }
   update();
   const save = async () => {
-    // The schedule is not part of the policy: the database's page sets it.
-    const body = {settings: s, exclude, expectedRevision: policy.revision};
-    try { await send(`/databases/${d.id}/policy`, 'PATCH', body); go(`#/databases/${d.id}`, [policy.exists ? 'Policy saved.' : 'Policy created. Set a schedule to maintain this database regularly.']); }
-    catch (error) { failure(error); }
+    // The versions read: Polaris refuses a type someone changed since. The schedule is set on the database's page.
+    const expectedVersions = Object.fromEntries(Object.entries(policy.policies).map(([key, p]) => [key, p ? p.version : null]));
+    try {
+      await send(`/databases/${d.id}/policy`, 'PATCH', {settings: s, exclusions, expectedVersions});
+      go(`#/databases/${d.id}`, [policy.exists ? 'Policy saved.' : 'Policy created. Set a schedule to maintain this database regularly.']);
+    } catch (error) {
+      failure(error.code === 'revision_conflict' ? Object.assign(error, {message: `${error.message} Reload the page to see the changes.`}) : error);
+    }
   };
   const remove = async () => {
-    if (!await confirmDialog(`Remove the policy of ${d.name}?`, 'Its schedule goes with it, so scheduled maintenance stops. Table health and past runs stay.', 'Remove policy', true)) return;
+    if (!await confirmDialog(`Remove the policy of ${d.name}?`, 'Its Polaris policies are detached from the database, the ones Maintenance created are deleted with its exclusions, and the schedule goes too. Policies other tools attached to namespaces or tables stay. Table health and past runs stay.', 'Remove policy', true)) return;
     try { await send(`/databases/${d.id}/policy`, 'DELETE'); go(`#/databases/${d.id}`, ['Policy removed.']); } catch (error) { failure(error); }
   };
   const enabled = enabledIn(d.team).includes(d.environment);
   fill($('#content'),
     heading(`${d.teamName} · ${LABELS[d.environment]}`.toUpperCase(), h('h1', {class: 'compact', text: `${d.name} · policy`}),
-      admin ? 'Applies to every table in the database except the excluded ones.' : 'Only a team administrator changes the policy.',
-      isWriter(d.role) && h('button', {type: 'button', class: 'quiet', text: 'Dry run', disabled: !enabled, title: enabled ? 'Plans the saved policy, or the defaults' : 'Maintenance is not enabled in this environment.', onclick: () => startRun(d, 'dry-run')}),
+      admin ? 'Applies to every table in the database, except where an exclusion or a policy on a namespace or table overrides it.' : 'Only a team administrator changes the policy.',
+      isWriter(d.role) && h('button', {type: 'button', class: 'quiet', text: 'Dry run', disabled: !enabled, title: enabled ? 'Plans the saved policies' : 'Maintenance is not enabled in this environment.', onclick: () => startRun(d, 'dry-run')}),
       admin && policy.exists && h('button', {type: 'button', class: 'danger', text: 'Remove', onclick: remove}),
       admin && h('button', {type: 'button', text: policy.exists ? 'Save policy' : 'Create policy', onclick: save})),
-    !policy.exists && h('div', {class: 'notice', text: 'No policy yet. These are the defaults, as in Apache Iceberg and Amazon S3 Tables: saving creates the policy.'}),
+    !policy.exists && h('div', {class: 'notice', text: 'No policy yet. These are the defaults, as in Apache Iceberg and Amazon S3 Tables. Saving creates one Apache Polaris policy per type and attaches it to the database.'}),
     h('div', {class: 'columns'},
       h('section', {class: 'card'}, sections, excludeSection),
       h('div', {class: 'stack'},
@@ -533,14 +590,15 @@ async function renderPolicy(token) {
           h('a', {class: 'button quiet small', href: `#/databases/${d.id}`, text: !admin || !policy.exists ? 'Back to database' : policy.schedule ? 'Change the schedule' : 'Set the schedule'})),
         h('section', {class: 'card estimate'}, h('div', {class: 'section-title'}, h('h2', {text: 'From the last check'}),
           h('span', {class: 'small-print', text: tables.length ? 'estimated' : 'no health yet'})), estimate,
-          h('p', {class: 'small-print', text: 'A dry run plans the saved policy exactly and changes nothing.'})),
+          h('p', {class: 'small-print', text: 'A dry run plans the saved policies exactly and changes nothing.'})),
         h('section', {class: 'card agent-hint'}, h('h2', {text: 'How a run behaves'}),
           h('ul', {class: 'plain'},
             h('li', {text: `Runs as ${d.teamName}'s ${LABELS[d.environment]} service account, in its own container`}),
+            h('li', {text: 'Asks Polaris which policies apply to each table, so policies other tools attached count too'}),
             h('li', {text: 'Order: compaction, dangling deletes, manifests, orphan files, then snapshot expiry'}),
             h('li', {text: 'Never expires branch or tag heads; tables with gc.enabled=false keep their history'}),
             h('li', {text: 'Files of expired snapshots are deleted by orphan cleanup in a later run'}),
-            h('li', {text: 'A commit conflict with a writer fails that table only; it is retried next run'}),
+            h('li', {text: 'A commit that conflicts with a writer is planned and tried again; if it keeps conflicting, that table fails and the next run tries again'}),
             h('li', {text: 'Ends 15 minutes before its catalog token expires'}))))));
 }
 
@@ -557,7 +615,7 @@ async function renderTable(token) {
       health.producer ? `Produced by ${health.producer}.` : null,
       writer && h('button', {type: 'button', class: 'quiet', text: 'Check health', disabled: !enabled, onclick: () => startRun(d, 'inspect', [t.name])}),
       writer && h('button', {type: 'button', class: 'quiet', text: 'Dry run', disabled: !enabled, onclick: () => startRun(d, 'dry-run', [t.name])}),
-      writer && t.policy.exists && h('button', {type: 'button', text: 'Maintain table', disabled: !enabled || t.state === 'excluded', onclick: () => startRun(d, 'maintain', [t.name])})),
+      writer && t.state !== 'no-policy' && h('button', {type: 'button', text: 'Maintain table', disabled: !enabled || t.state === 'excluded', onclick: () => startRun(d, 'maintain', [t.name])})),
     h('div', {class: 'status-line spaced'}, stateChip(t.state), h('span', {class: 'small-print'}, 'Seen ', time(t.inspectedAt), ` by a ${SEEN_BY[t.inspectedBy] || t.inspectedBy}`)),
     t.reasons.length ? h('div', {class: 'notice warn', text: `Needs attention: ${t.reasons.join(', ')}.`}) : null,
     t.lastError ? h('div', {class: 'notice error', text: t.lastError}) : null,
@@ -565,9 +623,10 @@ async function renderTable(token) {
       h('div', {class: 'stack'}, sizesCard(health), snapshotsCard(health), lastActionsCard(t),
         h('section', {class: 'card'}, h('h2', {text: 'Recent runs'}), runsTable(t.recentRuns))),
       h('div', {class: 'stack'}, tableFacts(health),
-        h('section', {class: 'card'}, h('div', {class: 'section-title'}, h('h2', {text: 'Effective policy'}),
-          t.state === 'excluded' ? chip('idle', 'Excluded') : t.policy.exists ? chip('success', 'Database policy') : chip('idle', 'Defaults')),
-          policyFacts(t.policy.settings),
+        h('section', {class: 'card'}, h('div', {class: 'section-title'}, h('h2', {text: 'Policies that applied'}),
+          t.state === 'excluded' ? chip('idle', 'Excluded') : t.state === 'no-policy' ? chip('idle', 'None') : h('span', {class: 'small-print', text: 'at the last run'})),
+          appliedFacts(t.policies),
+          h('p', {class: 'small-print', text: 'Polaris resolves them per table: a policy on the table wins over its namespace\'s, which wins over the database\'s.'}),
           Object.keys(health.expiryOverrides || {}).length ? h('p', {class: 'small-print', text: `Table properties override the expiry: ${Object.entries(health.expiryOverrides).map(([k, v]) => `${k}=${v}`).join(', ')}`}) : null,
           h('a', {class: 'button quiet small', href: `#/databases/${t.database}/policy`, text: 'Open policy'})))));
 }
@@ -607,7 +666,8 @@ function actionsList(actions) {
   if (!actions?.length) return h('p', {class: 'small muted', text: 'No actions.'});
   return h('ul', {class: 'actions-list'}, actions.map(a => h('li', {},
     h('span', {text: OPERATIONS[a.operation] || a.operation}), chip(ACTION_CLASS[a.status] || 'idle', a.status),
-    a.detail ? h('p', {text: a.detail}) : null)));
+    a.detail ? h('p', {text: a.detail}) : null,
+    a.policy ? h('p', {class: 'small-print', text: `Policy ${a.policy.namespace}.${a.policy.name} (version ${a.policy.version}), on ${ATTACHED[a.policy.appliedAt]}`}) : null)));
 }
 
 function lastActionsCard(t) {
@@ -690,7 +750,7 @@ async function renderRun(token) {
           run.exitCode !== null && run.exitCode !== undefined && h('dt', {text: 'Exit code'}),
           run.exitCode !== null && run.exitCode !== undefined && h('dd', {text: String(run.exitCode)}))),
         h('section', {class: 'card'}, h('h2', {text: 'What a run changes'}),
-          h('p', {class: 'small', text: run.mode === 'maintain' ? 'Compaction and manifest rewrites add snapshots that keep every row. Expiry removes snapshots older than the policy\'s age; their files go with a later orphan cleanup.' : 'Nothing: health checks and dry runs only read the catalog and storage, with a read-only token.'})))));
+          h('p', {class: 'small', text: run.mode === 'maintain' ? 'Compaction and manifest rewrites add snapshots that keep every row. Expiry removes snapshots older than the policy\'s age; their files go with a later orphan cleanup. A commit that conflicts with another writer is planned and tried again.' : 'Nothing: health checks and dry runs only read the catalog and storage, with a read-only token.'})))));
   if (stick) log.scrollTop = log.scrollHeight; else log.scrollTop = previous.scrollTop;
   if (active) schedulePoll(() => render(true), 2000);
 }

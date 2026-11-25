@@ -3,7 +3,8 @@
     uv run python -m tests.dev_server          # http://localhost:3013
 
 Open http://localhost:3013/dev/login?user=alice (admin), bob (writer) or carol (reader). The Bridge,
-Keycloak and the launcher are the test fakes: runs take a few seconds and write each table's health.
+Keycloak, Apache Polaris and the launcher are the test fakes: runs take a few seconds and write each table's
+health. The development database has a policy, an excluded table and a namespace policy set by another tool.
 """
 
 import asyncio
@@ -17,7 +18,7 @@ from fastapi.responses import RedirectResponse
 import maintenance.app
 from maintenance.app import create_app
 from maintenance.auth import COOKIE, Caller, Session
-from tests.conftest import DATABASES, TEAM, FakeBridge, FakeLauncher, FakeVerifier, settings
+from tests.conftest import DATABASES, TEAM, FakeBridge, FakeLauncher, FakePolaris, FakeVerifier, settings, wire
 
 LOGINS = []
 
@@ -58,14 +59,20 @@ class SlowLauncher(FakeLauncher):
         return super().handler(request)
 
 
-async def seed(app, bridge, launcher):
+async def seed(app, bridge, polaris, launcher):
     services = app.state.services
     await bridge.enable("alice", TEAM, "development")
     await bridge.enable("alice", TEAM, "production")
     alice = Caller("alice", "sub-alice", "alice", "ext-maintenance", 4102444800.0)
     dev = DATABASES[("grid-capacity", "development")]
-    await services.update_policy(alice, dev, {"settings": {"orphanFiles": {"enabled": True}},
-                                              "exclude": ["raw.transformer_register"]})
+    await services.update_policy(alice, dev, {
+        "settings": {"orphanFileRemoval": {"enabled": True}},
+        "exclusions": [{"target": "raw.transformer_register", "level": "table"},
+                       {"target": "marts", "level": "namespace", "types": ["orphanFileRemoval"]}]})
+    # A policy another tool attached to a namespace: Maintenance honours it.
+    polaris.put_policy(dev, ["raw"], "raw-compaction", "system.data-compaction", {
+        "version": "2025-02-03", "enable": True, "config": {"target-file-size-bytes": 268435456}},
+        {"type": "namespace", "path": ["raw"]})
     await services.set_schedule(alice, dev, "0 2 * * *")
     launcher.seconds = 0
     await services.run_maintenance(alice, dev, "inspect", wait=10)
@@ -78,9 +85,8 @@ async def main():
     maintenance.app.BrowserLogin = RecordingLogin
     config = settings(tempfile.mkdtemp(prefix="maintenance-dev-"))
     app = create_app(config, bridge=bridge, verifier=BrowserVerifier())
-    launcher = SlowLauncher(config.state_dir / "artifacts")
-    app.state.services.runs.http = httpx.AsyncClient(base_url="http://launcher",
-                                                     transport=httpx.MockTransport(launcher.handler))
+    polaris, launcher = FakePolaris(), SlowLauncher(config.state_dir / "artifacts")
+    wire(app, polaris, launcher)
 
     @app.get("/dev/login")
     def dev_login(user: str = "alice"):
@@ -97,7 +103,7 @@ async def main():
     async def seeded():
         while not server.started:
             await asyncio.sleep(0.1)
-        await seed(app, bridge, launcher)
+        await seed(app, bridge, polaris, launcher)
 
     await asyncio.gather(server.serve(), seeded())
 

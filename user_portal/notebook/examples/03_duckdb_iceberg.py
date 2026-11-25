@@ -130,8 +130,9 @@ def _(columns, lakehouse, mo, plain_table):
 def _(mo):
     mo.md("""
     ### Refresh and explore
-    Rerun the connection cell after another notebook changes the table,
-    or when temporary credentials expire. Credentials stay in this process's memory.
+    Rerun the connection cell after another notebook changes the table. The catalog
+    sign-in and the storage credentials renew themselves while your portal session
+    lasts, and stay in this process's memory.
     Reconnect for another table to obtain its scoped storage credentials.
 
     To inspect history, use a snapshot ID from the snapshot cell in a SQL query:

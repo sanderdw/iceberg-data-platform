@@ -58,6 +58,28 @@ catalog configuration uses it directly. Vended storage credentials last as long 
 before the token expires. A custom PyIceberg `AuthManager` that renews the token is not needed for
 runs that short.
 
+Vended storage credentials can still expire during a run: Polaris may serve them from its credential
+cache with less than their full lifetime left, and dlt keeps a table loaded for its whole load
+(merges commit every 1,000 rows on the same table). PyIceberg 0.12 does not renew a FileIO's
+credentials, so the runner's `InternalS3FileIO` (`runner/iceberg_io.py`) does. Shortly before
+`s3.session-token-expires-at-ms`, it asks Polaris's credentials endpoint
+(`GET .../tables/{table}/credentials`, listed in `/v1/config` since Polaris 1.9), or loads the table
+again where the catalog lacks it. dlt builds its catalog itself, so the FileIO is bound to its table
+where PyIceberg's REST catalog builds tables. Credentials without a stated expiry are not renewed.
+
+## Conflicting commits (Polaris 1.8 and later)
+
+Polaris answers a commit that lost a race with a concurrent one with 409, PyIceberg's
+`CommitFailedException`; such a commit did not land.
+
+- dlt's appends, overwrites and upserts add snapshots. PyIceberg 0.12 retries those itself, with
+  exponential backoff and jitter (`commit.retry.*` table properties, 4 retries by default), so the
+  runner does not wrap them.
+- The run's property commit (`runner/publish.py`) is metadata-only, which PyIceberg does not retry.
+  The runner loads the table again and sets the same properties, up to 5 tries.
+- dlt's schema evolution before a merge (`update_schema`) is metadata-only too, and dlt does not retry
+  it. A conflict there fails the run; the next run applies it.
+
 ## Isolation and the network
 
 Runs use a launcher forked from the dbt extension's: the only container with the Docker socket, fixed image,

@@ -18,55 +18,80 @@ const (
 	MinOrphanAge = 24 * time.Hour
 )
 
-type ExpirePolicy struct {
-	Enabled        bool `json:"enabled"`
-	OlderThanHours int  `json:"olderThanHours"`
-	RetainLast     int  `json:"retainLast"`
+// Applied names the Apache Polaris policy a setting comes from, as the gateway resolved it for the table.
+type Applied struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Version   int    `json:"version"`
+	AppliedAt string `json:"appliedAt"` // catalog, namespace or table
 }
 
-type CompactionPolicy struct {
-	Enabled          bool    `json:"enabled"`
-	TargetFileSizeMB int64   `json:"targetFileSizeMb"`
-	MinInputFiles    uint    `json:"minInputFiles"`
-	DeleteRatio      float64 `json:"deleteRatio"`
-	MaxInputMBPerRun int64   `json:"maxInputMbPerRun"`
+// Source is what every policy type carries: the policy (nil when none applies) and, when the gateway did not
+// apply it, why.
+type Source struct {
+	Policy  *Applied `json:"policy"`
+	Problem string   `json:"problem"`
 }
 
-type OrphanPolicy struct {
-	Enabled        bool `json:"enabled"`
-	OlderThanHours int  `json:"olderThanHours"`
+// SnapshotExpiry is system.snapshot-expiry.
+type SnapshotExpiry struct {
+	Source
+	Enabled            bool `json:"enabled"`
+	MaxSnapshotAgeDays int  `json:"maxSnapshotAgeDays"`
+	MinSnapshotsToKeep int  `json:"minSnapshotsToKeep"`
 }
 
-type ManifestPolicy struct {
-	Enabled      bool `json:"enabled"`
-	MinManifests int  `json:"minManifests"`
+// DataCompaction is system.data-compaction, which includes removing dangling delete files.
+type DataCompaction struct {
+	Source
+	Enabled               bool    `json:"enabled"`
+	TargetFileSizeBytes   int64   `json:"targetFileSizeBytes"`
+	MinInputFiles         uint    `json:"minInputFiles"`
+	DeleteRatioThreshold  float64 `json:"deleteRatioThreshold"`
+	RemoveDanglingDeletes bool    `json:"removeDanglingDeletes"`
+	MaxInputBytesPerRun   int64   `json:"maxInputBytesPerRun"`
 }
 
-type DeletesPolicy struct {
-	Enabled bool `json:"enabled"`
+// MetadataCompaction is system.metadata-compaction: rewriting manifests.
+type MetadataCompaction struct {
+	Source
+	Enabled         bool `json:"enabled"`
+	MinCountToMerge int  `json:"minCountToMerge"`
 }
 
-type Policy struct {
-	ExpireSnapshots  ExpirePolicy     `json:"expireSnapshots"`
-	Compaction       CompactionPolicy `json:"compaction"`
-	OrphanFiles      OrphanPolicy     `json:"orphanFiles"`
-	RewriteManifests ManifestPolicy   `json:"rewriteManifests"`
-	DanglingDeletes  DeletesPolicy    `json:"danglingDeletes"`
+// OrphanFileRemoval is system.orphan-file-removal.
+type OrphanFileRemoval struct {
+	Source
+	Enabled                bool `json:"enabled"`
+	MaxOrphanFileAgeInDays int  `json:"maxOrphanFileAgeInDays"`
+}
+
+// Policies are the policies that apply to one table.
+type Policies struct {
+	SnapshotExpiry     SnapshotExpiry     `json:"snapshotExpiry"`
+	DataCompaction     DataCompaction     `json:"dataCompaction"`
+	MetadataCompaction MetadataCompaction `json:"metadataCompaction"`
+	OrphanFileRemoval  OrphanFileRemoval  `json:"orphanFileRemoval"`
+}
+
+// JobTable is one table of the run, with the policies Polaris resolved for it.
+type JobTable struct {
+	Name       string   `json:"name"`
+	Identifier []string `json:"identifier"`
+	Policies   Policies `json:"policies"`
 }
 
 type Job struct {
-	RunID            string   `json:"runId"`
-	Kind             string   `json:"kind"`
-	DryRun           bool     `json:"dryRun"`
-	CatalogURI       string   `json:"catalogUri"`
-	Warehouse        string   `json:"warehouse"`
-	StorageEndpoint  string   `json:"storageEndpoint"`
-	Tables           []string `json:"tables"`
-	Exclude          []string `json:"exclude"`
-	Policy           Policy   `json:"policy"`
-	Deadline         int64    `json:"deadline"`
-	URL              string   `json:"url"`
-	ExtensionVersion string   `json:"extensionVersion"`
+	RunID            string     `json:"runId"`
+	Kind             string     `json:"kind"`
+	DryRun           bool       `json:"dryRun"`
+	CatalogURI       string     `json:"catalogUri"`
+	Warehouse        string     `json:"warehouse"`
+	StorageEndpoint  string     `json:"storageEndpoint"`
+	Tables           []JobTable `json:"tables"`
+	Deadline         int64      `json:"deadline"`
+	URL              string     `json:"url"`
+	ExtensionVersion string     `json:"extensionVersion"`
 }
 
 func LoadJob(path string) (Job, error) {
@@ -89,43 +114,43 @@ func (j Job) Validate() error {
 	if j.CatalogURI == "" || j.Warehouse == "" || j.StorageEndpoint == "" {
 		return errors.New("the job needs catalogUri, warehouse and storageEndpoint")
 	}
-	p := j.Policy
-	if p.ExpireSnapshots.Enabled && (p.ExpireSnapshots.OlderThanHours < 1 || p.ExpireSnapshots.RetainLast < 1) {
-		return errors.New("expireSnapshots needs olderThanHours and retainLast of at least 1")
+	if len(j.Tables) > maxTables {
+		return fmt.Errorf("the job names more than %d tables", maxTables)
 	}
-	if p.OrphanFiles.Enabled && time.Duration(p.OrphanFiles.OlderThanHours)*time.Hour < MinOrphanAge {
-		return errors.New("orphanFiles.olderThanHours must be at least 24")
-	}
-	if p.Compaction.Enabled && (p.Compaction.TargetFileSizeMB < 1 || p.Compaction.MaxInputMBPerRun < p.Compaction.TargetFileSizeMB) {
-		return errors.New("compaction needs a target file size and a budget of at least one target file")
-	}
-	if p.Compaction.DeleteRatio < 0 || p.Compaction.DeleteRatio > 1 {
-		return errors.New("compaction.deleteRatio must be between 0 and 1")
+	for _, t := range j.Tables {
+		if len(t.Identifier) < 2 || strings.Join(t.Identifier, ".") != t.Name {
+			return fmt.Errorf("table %q needs an identifier of a namespace and a name", t.Name)
+		}
+		if err := t.Policies.Validate(); err != nil {
+			return fmt.Errorf("%s: %w", t.Name, err)
+		}
 	}
 	return nil
 }
 
-// Selected reports whether a table (namespace.table) is part of this job.
-func (j Job) Selected(name string) bool {
-	if len(j.Tables) == 0 {
-		return true
-	}
-	for _, wanted := range j.Tables {
-		if strings.EqualFold(wanted, name) {
-			return true
-		}
-	}
-	return false
+// AnyEnabled reports whether a policy of any type runs on the table.
+func (p Policies) AnyEnabled() bool {
+	return p.SnapshotExpiry.Enabled && p.SnapshotExpiry.Problem == "" ||
+		p.DataCompaction.Enabled && p.DataCompaction.Problem == "" ||
+		p.MetadataCompaction.Enabled && p.MetadataCompaction.Problem == "" ||
+		p.OrphanFileRemoval.Enabled && p.OrphanFileRemoval.Problem == ""
 }
 
-// Excluded reports whether the policy leaves a table alone: its health is read, nothing is changed.
-func (j Job) Excluded(name string) bool {
-	for _, excluded := range j.Exclude {
-		if strings.EqualFold(excluded, name) {
-			return true
-		}
+// Validate checks the settings of every enabled type.
+func (p Policies) Validate() error {
+	if e := p.SnapshotExpiry; e.Enabled && (e.MaxSnapshotAgeDays < 1 || e.MinSnapshotsToKeep < 1) {
+		return errors.New("snapshotExpiry needs maxSnapshotAgeDays and minSnapshotsToKeep of at least 1")
 	}
-	return false
+	if o := p.OrphanFileRemoval; o.Enabled && time.Duration(o.MaxOrphanFileAgeInDays)*24*time.Hour < MinOrphanAge {
+		return errors.New("orphanFileRemoval.maxOrphanFileAgeInDays must be at least 1")
+	}
+	if c := p.DataCompaction; c.Enabled && (c.TargetFileSizeBytes < 1 || c.MaxInputBytesPerRun < c.TargetFileSizeBytes) {
+		return errors.New("dataCompaction needs a target file size and a budget of at least one target file")
+	}
+	if r := p.DataCompaction.DeleteRatioThreshold; r < 0 || r > 1 {
+		return errors.New("dataCompaction.deleteRatioThreshold must be between 0 and 1")
+	}
+	return nil
 }
 
 // Action is one operation on one table.
@@ -134,6 +159,10 @@ type Action struct {
 	Status    string         `json:"status"` // done, planned, skipped, off, failed
 	Detail    string         `json:"detail"`
 	Metrics   map[string]any `json:"metrics,omitempty"`
+	// The policy that decided this action; absent when no policy of its type applies.
+	Policy *Applied `json:"policy,omitempty"`
+	// Retries counts the commits Polaris refused as conflicts that the runner planned and tried again (retry.go).
+	Retries int `json:"retries,omitempty"`
 }
 
 type TableResult struct {
@@ -148,6 +177,7 @@ type TableResult struct {
 type Totals struct {
 	Tables             int   `json:"tables"`
 	Failed             int   `json:"failed"`
+	CommitRetries      int   `json:"commitRetries"`
 	SnapshotsExpired   int   `json:"snapshotsExpired"`
 	FilesCompacted     int   `json:"filesCompacted"`
 	FilesWritten       int   `json:"filesWritten"`

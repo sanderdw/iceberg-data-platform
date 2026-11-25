@@ -6,9 +6,9 @@ description: Keep a team's Iceberg tables healthy on the Iceberg Data Platform w
 # Maintenance on the Iceberg Data Platform (beta)
 
 The Maintenance extension's MCP server (`iceberg-maintenance`, at `http://localhost:3013/mcp`) keeps
-a team's Apache Iceberg tables tidy, one policy per database. Every tool acts with the signed-in
-user's team role; runs execute as the team's service account. People follow it at
-`http://localhost:3013`.
+a team's Apache Iceberg tables tidy by Apache Polaris policies. Every tool acts with the signed-in
+user's team role; runs, and reading and writing policies, act as the team's service account. People
+follow it at `http://localhost:3013`.
 
 ## Connect
 
@@ -25,20 +25,28 @@ the extension is not installed: stop and tell the user to run the installer agai
 
 ## Workflow
 
-1. `whoami`: teams, your role, databases per environment, `enabledEnvironments` and the policy
-   `defaults`. Nothing runs where Maintenance is not enabled; a team administrator enables it with
-   `enable_environment` (ask the user first: runs act for the whole team).
+1. `whoami`: teams, your role, databases per environment, `enabledEnvironments`, the `policyTypes` and
+   their `defaults`. Nothing runs, and no policy can be read, where Maintenance is not enabled; a team
+   administrator enables it with `enable_environment` (ask the user first: runs act for the whole team).
 2. `list_databases`, then `list_table_health` with `attention=true`. It returns at most `limit` tables
    (500 by default) and `total`, the number that match: narrow by `database` when there are more.
    Health comes from the last run that saw a table; if a database has none or it is old,
    `inspect_database` with `wait=120` refreshes it. It only reads.
 3. Explain what you found in plain words: small files slow queries down, snapshots keep old files and
    time travel, delete files are applied by compaction. `get_table_health` shows one table in detail.
-4. `get_policy`. Propose changes and `inspect_database` with `mode="dry-run"` and `wait=120`: its
-   `results` show per table what would happen. Nothing changes in a dry run.
+4. `get_policy`: per type (`snapshotExpiry`, `dataCompaction`, `metadataCompaction`,
+   `orphanFileRemoval`) the settings, the Polaris policy behind them with its `version`, and the
+   `exclusions`. `get_table_health` shows which policies applied to a table at its last run and where
+   each is attached (`appliedAt`: catalog, namespace or table). Propose changes and `inspect_database`
+   with `mode="dry-run"` and `wait=120`: its `results` show per table what would happen and which policy
+   decided it. Nothing changes in a dry run, and a type without a policy does nothing.
 5. With the user's agreement, a team administrator changes the policy with `update_policy` (only the
-   settings that change; without a policy it creates one from the defaults). Exclude tables that must
-   keep their full history, or set the table properties `history.expire.*` on them.
+   settings that change; a type without a policy is created from the defaults). Pass the versions you read
+   as `expected_versions`; `revision_conflict` means someone changed it: read it again. Ages are in days.
+   To leave a namespace or table alone, add it to `exclusions` (`{target, level, types}`; all types when
+   `types` is left out; the list replaces the old one). For tables that must keep their full history you
+   can also set the table properties `history.expire.*`. Policies another tool attached in Polaris count
+   too; `exclusion_conflict` means a table already has its own policy of that type.
 6. A schedule is separate from the policy and needs one: `set_schedule` with a five-field `cron` in
    UTC, at most once an hour (`enabled=false` pauses it), and `delete_schedule` to remove it.
    `get_policy` and `list_databases` show it as `schedule`, with `nextRunAt` and `lastRun`.
@@ -57,6 +65,7 @@ the extension is not installed: stop and tell the user to run the installer agai
   returns the last `limit` lines. `cancel_run` stops a run; a finished one answers `run_finished`.
 - Times are RFC 3339 strings in UTC, such as `2026-11-24T09:15:02.123Z`.
 - Without a policy, `run_maintenance` and `set_schedule` answer `policy_required`.
+- A commit that conflicts with another writer is planned and retried; an action's `retries` says how often.
 
 ## Rules
 

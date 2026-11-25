@@ -86,7 +86,7 @@ Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic mode
 - **Access:** the Reader role of a new database gets `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ`. Writers and administrators already have `CATALOG_MANAGE_CONTENT`, which covers creating, replacing and dropping models.
 - **Deleting a database** removes its semantic models first. Polaris refuses to drop a namespace that still holds one.
 - **Where users find them:** **Catalog** in the user portal (the administration portal's **Catalog** lists their names only), the MCP tools `list_semantic_models`, `describe_semantic_model`, `query_semantic_model` and `list_dimension_values` (writers also `publish_semantic_model` and `delete_semantic_model`), the installation's `semantic-model` agent skill, and the example notebook pairs 06 and 07 (DuckDB) and 09 and 10 (Polars), which publish and read one.
-- **Beta:** the Polaris API may change in a later release. Check the [release notes](https://polaris.apache.org/releases/1.8.0/) before upgrading Polaris.
+- **Beta:** the Polaris API may change in a later release. Check the [release notes](https://polaris.apache.org/releases/1.9.0/) before upgrading Polaris.
 
 ## Infrastructure
 
@@ -131,7 +131,7 @@ Any other MCP client needs:
 
 Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env` (the chart's `mcpCallbackPort` on Kubernetes). Sign in with your platform administrator account.
 
-Every call requires the `platform-admin` role. The tools are the administration API's operations:
+Every call requires the `platform-admin` role, the read tools too: a team Administrator's [read-only access](#read-only-access-for-team-administrators) covers the portal and its API, not this server. The tools are the administration API's operations:
 
 - **Read:** `get_overview`, `list_teams`, `list_databases`, `get_database_connection`, `browse_catalog`, `list_users`, `find_accounts`, `list_shares`, `list_automation_principals`
 - **Change:** `create_team`, `update_team`, `create_database`, `rename_database`, `create_user`, `link_user`, `retry_user_setup`

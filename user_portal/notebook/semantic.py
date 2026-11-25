@@ -74,7 +74,7 @@ class SemanticModels:
     @classmethod
     def connect(cls, namespace, spec_version=SPEC_VERSION):
         with httpx.Client(timeout=30) as discovery:
-            token, endpoint, warehouse, _ = _catalog(discovery)
+            token, endpoint, warehouse, *_ = _catalog(discovery)
         client = httpx.Client(timeout=30, auth=NotebookAuth(token))
         base = (
             f"{endpoint}/polaris/v1/{quote(warehouse, safe='')}"

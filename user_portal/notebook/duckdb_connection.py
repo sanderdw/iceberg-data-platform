@@ -1,12 +1,17 @@
 """Native DuckDB on Iceberg with user-scoped Polaris credentials and internal S3 routing."""
 
+import logging
 import os
+import threading
+import time
+import weakref
 from urllib.parse import quote, urlsplit
 from weakref import WeakKeyDictionary
 
 import duckdb
 import httpx
 
+from user_portal.notebook import catalog_proxy
 from user_portal.notebook.credentials import access_token
 
 READ_ERROR = (
@@ -22,6 +27,16 @@ EXAMPLE_PROPERTY = "iceberg-data-platform.example"
 # Per connection, track which table each currently installed secret can read.
 # Weak keys release this bookkeeping when a notebook releases its connection.
 _discovery_tables = WeakKeyDictionary()
+# Per connection, the storage secrets that renew themselves before Polaris's credentials expire.
+_renewals = WeakKeyDictionary()
+# Polaris lists this in /v1/config `endpoints` when it vends credentials without a full loadTable.
+CREDENTIALS_ENDPOINT = "GET /v1/{prefix}/namespaces/{namespace}/tables/{table}/credentials"
+# Storage secrets are renewed this long before they expire; a failed renewal is tried again after RETRY.
+RENEW_BEFORE_SECONDS = 300
+RENEW_RETRY_SECONDS = 30
+logger = logging.getLogger(__name__)
+_clock = time.time
+_Timer = threading.Timer
 
 
 def _configure_marimo_discovery():
@@ -65,23 +80,34 @@ def table_reference(namespace, table):
     return schema_reference(namespace) + '."' + table.replace('"', '""') + '"'
 
 
+def _sign_in(client):
+    """The notebook owner's current catalog token, or a client-credentials token in password mode."""
+    token = access_token()
+    if token:
+        return token
+    response = client.post(
+        os.environ["ICEBERG_TOKEN_URI"],
+        data={
+            "grant_type": "client_credentials",
+            "client_id": os.environ["ICEBERG_CLIENT_ID"],
+            "client_secret": os.environ["ICEBERG_CLIENT_SECRET"],
+            "scope": "PRINCIPAL_ROLE:ALL",
+        },
+    )
+    response.raise_for_status()
+    return response.json()["access_token"]
+
+
+def _proxy_token():
+    with httpx.Client(timeout=30, trust_env=False) as client:
+        return _sign_in(client)
+
+
 def _catalog(client):
     """Authenticate this user and resolve the catalog's REST prefix."""
     endpoint = os.environ["ICEBERG_CATALOG_URI"].rstrip("/")
     warehouse = os.environ["ICEBERG_DATABASE"]
-    token = access_token()
-    if not token:
-        response = client.post(
-            os.environ["ICEBERG_TOKEN_URI"],
-            data={
-                "grant_type": "client_credentials",
-                "client_id": os.environ["ICEBERG_CLIENT_ID"],
-                "client_secret": os.environ["ICEBERG_CLIENT_SECRET"],
-                "scope": "PRINCIPAL_ROLE:ALL",
-            },
-        )
-        response.raise_for_status()
-        token = response.json()["access_token"]
+    token = _sign_in(client)
     client.headers.update({"Authorization": f"Bearer {token}"})
     response = client.get(f"{endpoint}/v1/config", params={"warehouse": warehouse})
     response.raise_for_status()
@@ -89,20 +115,47 @@ def _catalog(client):
     properties = {**config.get("defaults", {}), **config.get("overrides", {})}
     prefix = properties.get("prefix", "")
     base = f"{endpoint}/v1" + (f"/{quote(prefix, safe='/')}" if prefix else "")
-    return token, endpoint, warehouse, base
+    return token, endpoint, warehouse, base, CREDENTIALS_ENDPOINT in config.get("endpoints", [])
+
+
+def _table_url(base, namespace, table):
+    return f"{base}/namespaces/{quote(chr(31).join(namespace), safe='')}/tables/{quote(table, safe='')}"
+
+
+def _matching_credentials(storage_credentials, location):
+    """The `storage-credentials` entry with the longest prefix of `location`, as Iceberg REST specifies."""
+    matches = [c for c in storage_credentials or [] if location.startswith(c.get("prefix", "\0"))]
+    return max(matches, key=lambda c: len(c["prefix"]))["config"] if matches else {}
 
 
 def _vended(client, base, namespace, table, missing_ok=False):
-    """Temporary S3 credentials and location that Polaris vends for one table."""
+    """Temporary S3 credentials and location that Polaris vends for one table, from a full loadTable."""
     response = client.get(
-        f"{base}/namespaces/{quote(chr(31).join(namespace), safe='')}/tables/{quote(table, safe='')}",
-        headers={"X-Iceberg-Access-Delegation": "vended-credentials"},
+        _table_url(base, namespace, table), headers={"X-Iceberg-Access-Delegation": "vended-credentials"},
     )
     if response.status_code == 404 and missing_ok:
         return None
     response.raise_for_status()
     loaded = response.json()
-    return loaded["config"], loaded["metadata"]["location"].rstrip("/") + "/"
+    location = loaded["metadata"]["location"].rstrip("/") + "/"
+    return {**loaded["config"], **_matching_credentials(loaded.get("storage-credentials"), location)}, location
+
+
+def _credentials(client, base, namespace, table, location):
+    """Only new S3 credentials for a table, from Polaris's credentials endpoint; {} if it vends none here."""
+    response = client.get(
+        _table_url(base, namespace, table) + "/credentials",
+        headers={"X-Iceberg-Access-Delegation": "vended-credentials"},
+    )
+    response.raise_for_status()
+    return _matching_credentials(response.json().get("storage-credentials"), location)
+
+
+def _expires_at(storage):
+    """When vended S3 credentials expire (`s3.session-token-expires-at-ms`), in epoch seconds; None if not stated."""
+    expiries = [int(v) for k, v in storage.items()
+                if k.startswith("s3.") and k.endswith("expires-at-ms") and str(v).isdigit()]
+    return min(expiries) / 1000 if expiries else None
 
 
 def _storage_secret(connection, storage, location, *, secret_name="table_storage"):
@@ -124,11 +177,114 @@ def _storage_secret(connection, storage, location, *, secret_name="table_storage
     """)
 
 
+class _Renewal:
+    """Re-creates a connection's storage secrets shortly before Polaris's credentials expire.
+
+    A timer thread does it through its own cursor: temporary secrets belong to the database
+    instance, so the connection and all its cursors see the new ones.
+    """
+
+    def __init__(self, connection):
+        self.connection = weakref.ref(connection)
+        self.lock = threading.Lock()
+        self.secrets = {}  # name -> (namespace, table, location, expires_at, renew_at)
+        self.timer = None
+
+    def install(self, connection, name, namespace, table, storage, location):
+        with self.lock:
+            _storage_secret(connection, storage, location, secret_name=name)
+            self._track(name, namespace, table, location, _expires_at(storage))
+
+    def _track(self, name, namespace, table, location, expires_at):
+        if expires_at is None:
+            self.secrets.pop(name, None)  # Polaris did not say when they expire: nothing to plan.
+        else:
+            # Credentials vended this close to their expiry are renewed after a pause, not in a loop.
+            renew_at = max(expires_at - RENEW_BEFORE_SECONDS, _clock() + RENEW_RETRY_SECONDS)
+            self.secrets[name] = (tuple(namespace), table, location, expires_at, renew_at)
+        self._schedule()
+
+    def _schedule(self):
+        if self.timer is not None:
+            self.timer.cancel()
+            self.timer = None
+        if self.secrets:
+            due = min(entry[4] for entry in self.secrets.values())
+            self.timer = _Timer(max(1.0, due - _clock()), self.renew)
+            self.timer.daemon = True
+            self.timer.start()
+
+    def renew(self):
+        connection = self.connection()
+        if connection is None:
+            return
+        try:
+            cursor = connection.cursor()
+        except duckdb.Error:
+            return  # The connection was closed.
+        due = {}
+        try:
+            with self.lock:
+                due = {name: entry for name, entry in self.secrets.items() if entry[4] <= _clock()}
+            if due:
+                with httpx.Client(timeout=30, trust_env=False) as client:
+                    _, _, _, base, endpoint = _catalog(client)
+                    for name, entry in due.items():
+                        self._renew_one(cursor, client, base, endpoint, name, entry)
+            with self.lock:
+                self._schedule()
+        except Exception as exc:  # noqa: BLE001 - The session token may be gone; try again later.
+            self._failed(due, exc)
+        finally:
+            cursor.close()
+
+    def _renew_one(self, cursor, client, base, endpoint, name, entry):
+        namespace, table, location, *_ = entry
+        try:
+            storage = _credentials(client, base, namespace, table, location) if endpoint else {}
+            if not storage.get("s3.access-key-id"):
+                storage, location = _vended(client, base, namespace, table)
+            with self.lock:
+                if self.secrets.get(name) != entry:
+                    return  # Replaced meanwhile, perhaps for another table.
+                _storage_secret(cursor, storage, location, secret_name=name)
+                self._track(name, namespace, table, location, _expires_at(storage))
+        except Exception as exc:  # noqa: BLE001 - One table's renewal never stops the others.
+            self._failed({name: entry}, exc)
+
+    def _failed(self, entries, exc):
+        # Only the error's type: provider messages and SQL can contain credentials.
+        now = _clock()
+        with self.lock:
+            for name, entry in entries.items():
+                if self.secrets.get(name) != entry:
+                    continue  # Renewed or replaced meanwhile.
+                namespace, table, location, expires_at, _ = entry
+                logger.warning("Could not renew the storage credentials of %s (%s).",
+                               ".".join([*namespace, table]), type(exc).__name__)
+                if now >= expires_at:
+                    self.secrets.pop(name, None)  # Expired: reconnect, or call refresh_table_credentials.
+                else:
+                    self.secrets[name] = (namespace, table, location, expires_at, now + RENEW_RETRY_SECONDS)
+            self._schedule()
+
+
+def _install_secret(connection, namespace, table, storage, location, secret_name="table_storage"):
+    renewal = _renewals.get(connection)
+    if renewal is None:
+        renewal = _renewals[connection] = _Renewal(connection)
+    renewal.install(connection, secret_name, namespace, table, storage, location)
+
+
 def connect_duckdb(namespace, table, *, read_only=True, missing_ok=False):
-    """Attach Polaris as `lakehouse`; refresh this connection to renew temporary credentials.
+    """Attach Polaris as `lakehouse`, with storage credentials for one table that renew themselves.
 
     Only credential/config metadata goes through HTTPX. DuckDB's Iceberg extension
     resolves snapshots, scans manifests and reads or writes Parquet directly on RustFS.
+    Shortly before Polaris's storage credentials expire, a background thread replaces
+    them. DuckDB talks to the catalog through this kernel's loopback proxy
+    (`catalog_proxy`), which signs every request with the owner's current token, so
+    the attachment outlives the 15-minute notebook token.
 
     The attach is read-only unless `read_only=False`. Polaris grants remain the
     boundary either way: a reader who attaches writable is refused on the first write.
@@ -140,8 +296,11 @@ def connect_duckdb(namespace, table, *, read_only=True, missing_ok=False):
         if missing_ok and read_only:
             raise ValueError("missing_ok requires a writable connection")
         with httpx.Client(timeout=30, trust_env=False) as client:
-            token, endpoint, warehouse, base = _catalog(client)
+            _, endpoint, warehouse, base, _ = _catalog(client)
             vended = _vended(client, base, namespace, table, missing_ok)
+        # DuckDB keeps the token it attached with, so it attaches to a loopback proxy that
+        # replaces this process's random secret by the owner's current token.
+        proxy = catalog_proxy.shared(endpoint, _proxy_token)
         # Explicit extension directory works with the runtime's temporary HOME
         # and read-only root filesystem. Extensions are installed at image build.
         settings = {"threads": 2, "memory_limit": "512MB"}
@@ -151,15 +310,15 @@ def connect_duckdb(namespace, table, *, read_only=True, missing_ok=False):
         connection.execute("LOAD httpfs; LOAD iceberg;")
         # Semantic models state their dates in UTC; CAST(timestamptz AS DATE) follows the session's zone.
         connection.execute("SET TimeZone = 'UTC'")
-        connection.execute(f"CREATE SECRET polaris (TYPE iceberg, TOKEN {sql_literal(token)})")
+        connection.execute(f"CREATE SECRET polaris (TYPE iceberg, TOKEN {sql_literal(proxy.secret)})")
         if vended:
-            _storage_secret(connection, *vended)
+            _install_secret(connection, namespace, table, *vended)
         # Disable automatic vending so it cannot replace the internal S3 endpoint
         # with Polaris's host-facing address. The credentials above are still
         # vended by Polaris for this user and this table; no static S3 keys are used.
         connection.execute(f"""
             ATTACH {sql_literal(warehouse)} AS lakehouse (
-                TYPE iceberg, ENDPOINT {sql_literal(endpoint)}, SECRET polaris,
+                TYPE iceberg, ENDPOINT {sql_literal(proxy.endpoint)}, SECRET polaris,
                 ACCESS_DELEGATION_MODE 'none', SUPPORT_NESTED_NAMESPACES true{", READ_ONLY" if read_only else ""}
             )
         """)
@@ -167,7 +326,7 @@ def connect_duckdb(namespace, table, *, read_only=True, missing_ok=False):
             {"table_storage": table_reference(namespace, table)} if vended else {}
         )
         return connection
-    except duckdb.Error, httpx.HTTPError, KeyError, ValueError:
+    except duckdb.Error, httpx.HTTPError, KeyError, ValueError, OSError:
         if connection is not None:
             connection.close()
         # Provider/SQL errors can include tokens and generated CREATE SECRET SQL.
@@ -196,11 +355,15 @@ def drop_example_table(connection, namespace, table, example):
 
 
 def refresh_table_credentials(connection, namespace, table, *, secret_name="table_storage"):
-    """Vend scoped S3 credentials; distinct secret names retain access for multi-table joins."""
+    """Vend scoped S3 credentials for a table, renewed before they expire.
+
+    Distinct secret names retain access for multi-table joins. Call it after creating a table
+    that `connect_duckdb` had no credentials for, or to read another table.
+    """
     try:
         with httpx.Client(timeout=30, trust_env=False) as client:
-            _, _, _, base = _catalog(client)
-            _storage_secret(connection, *_vended(client, base, namespace, table), secret_name=secret_name)
+            _, _, _, base, _ = _catalog(client)
+            _install_secret(connection, namespace, table, *_vended(client, base, namespace, table), secret_name)
         _discovery_tables.setdefault(connection, {})[secret_name] = table_reference(namespace, table)
     except duckdb.Error, httpx.HTTPError, KeyError, ValueError:
         raise RuntimeError(

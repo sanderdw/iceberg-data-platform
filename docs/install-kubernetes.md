@@ -168,7 +168,7 @@ helm install iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --versi
   --create-namespace --set baseDomain=data.example.com --set tls.clusterIssuer=letsencrypt-prod \
   --set polaris.external.enabled=true --wait --timeout 15m
 kubectl -n iceberg get configmap iceberg-polaris-values -o jsonpath='{.data.values\.yaml}' > polaris-values.yaml
-helm install catalog polaris --repo https://downloads.apache.org/polaris/helm-chart --version 1.8.0 \
+helm install catalog polaris --repo https://downloads.apache.org/polaris/helm-chart --version 1.9.0 \
   -n iceberg -f polaris-values.yaml --wait --timeout 10m
 # Optional, now that Polaris runs: demo accounts and data.
 helm upgrade iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform --version 0.9.12 -n iceberg \

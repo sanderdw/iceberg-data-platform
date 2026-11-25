@@ -4,9 +4,10 @@ Needs three linked Keycloak accounts of one team: an administrator, a writer and
 (E2E_{ADMIN,WRITER,READER}_{USER,PASSWORD}; the platform's demo accounts by default).
 
 It writes a table with small files into the team's development database as the team's automation
-principal (a Bridge write token), checks its health, sets a policy and a schedule, dry-runs the policy,
-maintains the database, and reads the table back: every row is still there, in fewer files, behind a
-`replace` snapshot of the run. The table is dropped at the end.
+principal (a Bridge write token), checks its health, sets a policy (Apache Polaris policies on the catalog) and
+a schedule, dry-runs the policy, maintains the database, and reads the table back: every row is still there, in
+fewer files, behind a `replace` snapshot of the run whose action names the Polaris policy. The table is dropped
+at the end, and so are the policies.
 """
 
 import asyncio
@@ -172,8 +173,12 @@ async def main():
             await writer.refused("run_maintenance", "policy_required", database=database["id"])
             await admin.refused("set_schedule", "policy_required", database=database["id"], cron="0 2 * * *")
             await writer.refused("update_policy", "forbidden_role", database=database["id"], settings={})
-            await admin.call("update_policy", database=database["id"],
-                             settings={"compaction": {"minInputFiles": 2}})
+            created = await admin.call("update_policy", database=database["id"],
+                                       settings={"dataCompaction": {"minInputFiles": 2}})
+            assert created["policies"]["dataCompaction"]["namespace"] == "_maintenance", created["policies"]
+            stale = {"dataCompaction": created["policies"]["dataCompaction"]["version"] - 1}
+            await admin.refused("update_policy", "revision_conflict", database=database["id"],
+                                settings={"dataCompaction": {"minInputFiles": 3}}, expected_versions=stale)
             await admin.refused("set_schedule", "invalid_cron", database=database["id"], cron="*/30 * * * *")
             scheduled = await admin.call("set_schedule", database=database["id"], cron="0 2 * * *", enabled=False)
             assert scheduled == {"cron": "0 2 * * *", "enabled": False, "nextRunAt": None,
@@ -190,6 +195,8 @@ async def main():
             done = await run(writer, database["id"], "maintain", tables=[full])
             actions = {a["operation"]: a for a in done["results"][0]["actions"]}
             assert actions["compaction"]["status"] == "done", actions
+            assert actions["compaction"]["policy"]["name"] == "data-compaction", actions["compaction"]
+            assert actions["compaction"]["policy"]["appliedAt"] == "catalog", actions["compaction"]
             reloaded = tables.load_table((namespace, name))
             rows = reloaded.scan().to_arrow()
             assert rows.num_rows == 80 and len(set(rows["id"].to_pylist())) == 80, rows.num_rows

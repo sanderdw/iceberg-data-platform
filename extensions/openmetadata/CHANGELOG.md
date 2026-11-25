@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
+  starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
+
 ## 0.1.4 - 2026-11-18
 
 - Updated dependencies, including FastAPI 0.162.4 and uv 0.13.8.

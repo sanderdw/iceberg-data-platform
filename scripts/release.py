@@ -406,6 +406,7 @@ def build_install(root=ROOT, output=None, *, release_tag="latest", image_tag="la
              *local_secrets((root / DBT).glob(".env*"), words=("TOKEN", "HEADERS")),
              *local_secrets((root / ING).glob(".env*"), words=("TOKEN", "HEADERS")),
              *local_secrets((root / MNT).glob(".env*"), words=("TOKEN", "HEADERS")),
+             *local_secrets((root / REP).glob(".env*"), words=("TOKEN", "HEADERS")),
              *local_secrets([*(root / EVAL).glob(".env*"), root / EVAL / "llm.env"], words=("KEY", "TOKEN", "HEADERS"))]
     for filename, data in contents.items():
         if any(secret.encode() in data for secret in found):

@@ -37,7 +37,8 @@ Put the header in a Secret, then set the endpoint with `helm upgrade ... --reset
 kubectl -n iceberg create secret generic otel \
   --from-literal=OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your API key>'
 helm upgrade iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform -n iceberg --reset-then-reuse-values \
-  --set otel.endpoint=http://otel-collector.observability:4318 --set otel.headersSecret=otel
+  --set otel.endpoint=http://otel-collector.observability:4318 --set otel.headersSecret=otel \
+  --set otel.polaris=true
 ```
 
 | Setting | Default | Meaning |
@@ -45,7 +46,7 @@ helm upgrade iceberg oci://ghcr.io/sanderdw/charts/iceberg-data-platform -n iceb
 | `otel.endpoint` | (none) | The OTLP/HTTP receiver. Without it, nothing is exported |
 | `otel.headersSecret` | (none) | A Secret with the key `OTEL_EXPORTER_OTLP_HEADERS`, for a backend that needs an API key |
 | `otel.resourceAttributes` | (none) | Added to every record, such as `deployment.environment.name=production` |
-| `otel.polaris` | `true` | Polaris's own traces too |
+| `otel.polaris` | `false` | Polaris's own traces too, as `POLARIS_OTEL_DISABLED=false` in Compose |
 
 The extension charts have the same `otel.endpoint`, `otel.headersSecret` and `otel.resourceAttributes`.
 

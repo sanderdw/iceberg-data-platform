@@ -940,7 +940,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FileList"
+                }
               }
             }
           },
@@ -1070,7 +1072,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FileContent"
+                }
               }
             }
           },
@@ -1188,7 +1192,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CommitResult"
+                }
               }
             }
           },
@@ -1414,7 +1420,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BranchCreated"
+                }
               }
             }
           },
@@ -1801,7 +1809,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Diff"
+                }
               }
             }
           },
@@ -1919,7 +1929,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MergeResult"
+                }
               }
             }
           },
@@ -2037,7 +2049,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CompileResult"
+                }
               }
             }
           },
@@ -2155,7 +2169,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResult"
+                }
               }
             }
           },
@@ -3377,7 +3393,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineGraph"
+                }
               }
             }
           },
@@ -3528,7 +3546,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NodeDetail"
+                }
               }
             }
           },
@@ -3691,7 +3711,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Lineage"
+                }
               }
             }
           },
@@ -3834,6 +3856,24 @@
         ],
         "title": "Branch"
       },
+      "BranchCreated": {
+        "properties": {
+          "branch": {
+            "type": "string",
+            "title": "Branch"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "branch",
+          "revision"
+        ],
+        "title": "BranchCreated"
+      },
       "BranchInput": {
         "properties": {
           "name": {
@@ -3888,6 +3928,48 @@
           "cancelling"
         ],
         "title": "CancelResult"
+      },
+      "Column": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "description",
+          "index"
+        ],
+        "title": "Column"
       },
       "Commit": {
         "properties": {
@@ -3984,6 +4066,34 @@
         ],
         "title": "CommitList"
       },
+      "CommitResult": {
+        "properties": {
+          "branch": {
+            "type": "string",
+            "title": "Branch"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision",
+            "description": "The new commit."
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "The paths written or deleted."
+          }
+        },
+        "type": "object",
+        "required": [
+          "branch",
+          "revision",
+          "files"
+        ],
+        "title": "CommitResult"
+      },
       "CompileInput": {
         "properties": {
           "environment": {
@@ -4019,6 +4129,61 @@
         "additionalProperties": false,
         "type": "object",
         "title": "CompileInput"
+      },
+      "CompileResult": {
+        "properties": {
+          "run": {
+            "type": "string",
+            "title": "Run"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "success",
+              "incomplete",
+              "partial",
+              "failed",
+              "error",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "compiled": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Compiled",
+            "description": "Compiled SQL per selected model; empty for inline SQL."
+          },
+          "output": {
+            "type": "string",
+            "title": "Output",
+            "description": "The last lines of dbt's log, with inline SQL's compiled result."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run",
+          "status",
+          "compiled",
+          "output",
+          "error"
+        ],
+        "title": "CompileResult"
       },
       "Database": {
         "properties": {
@@ -4129,6 +4294,102 @@
           "deleted"
         ],
         "title": "Deleted"
+      },
+      "Diff": {
+        "properties": {
+          "base": {
+            "type": "string",
+            "title": "Base",
+            "description": "The base revision."
+          },
+          "head": {
+            "type": "string",
+            "title": "Head",
+            "description": "The head revision."
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/DiffFile"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "patch": {
+            "type": "string",
+            "title": "Patch",
+            "description": "The unified diff, at most 200,000 characters."
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "base",
+          "head",
+          "files",
+          "patch",
+          "truncated"
+        ],
+        "title": "Diff"
+      },
+      "DiffFile": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "added": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added",
+            "description": "Lines added; null for a binary file."
+          },
+          "removed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed",
+            "description": "Lines removed; null for a binary file."
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "added",
+          "removed"
+        ],
+        "title": "DiffFile"
+      },
+      "Edge": {
+        "properties": {
+          "from": {
+            "type": "string",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "title": "To"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from",
+          "to"
+        ],
+        "title": "Edge"
       },
       "EnabledEnvironments": {
         "properties": {
@@ -4281,6 +4542,146 @@
         ],
         "title": "ExtensionLink"
       },
+      "FileContent": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "ref",
+          "revision",
+          "content"
+        ],
+        "title": "FileContent"
+      },
+      "FileEntry": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Bytes."
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "size"
+        ],
+        "title": "FileEntry"
+      },
+      "FileList": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileEntry"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref",
+          "revision",
+          "files"
+        ],
+        "title": "FileList"
+      },
+      "Lineage": {
+        "properties": {
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "structureRun": {
+            "type": "string",
+            "title": "Structurerun"
+          },
+          "node": {
+            "type": "string",
+            "title": "Node"
+          },
+          "upstream": {
+            "items": {
+              "$ref": "#/components/schemas/LineageNode"
+            },
+            "type": "array",
+            "title": "Upstream"
+          },
+          "downstream": {
+            "items": {
+              "$ref": "#/components/schemas/LineageNode"
+            },
+            "type": "array",
+            "title": "Downstream"
+          }
+        },
+        "type": "object",
+        "required": [
+          "environment",
+          "structureRun",
+          "node",
+          "upstream",
+          "downstream"
+        ],
+        "title": "Lineage"
+      },
+      "LineageNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "distance": {
+            "type": "integer",
+            "title": "Distance"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "distance",
+          "type"
+        ],
+        "title": "LineageNode"
+      },
       "Me": {
         "properties": {
           "user": {
@@ -4406,6 +4807,593 @@
         ],
         "title": "MergeInput"
       },
+      "MergeResult": {
+        "properties": {
+          "revision": {
+            "type": "string",
+            "title": "Revision",
+            "description": "main's head after the merge."
+          },
+          "merged": {
+            "type": "boolean",
+            "title": "Merged",
+            "description": "False when main already contained the branch."
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "merged"
+        ],
+        "title": "MergeResult"
+      },
+      "NodeDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "model, seed, snapshot or source."
+          },
+          "database": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database"
+          },
+          "databaseId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Databaseid",
+            "description": "The platform database the node's catalog is."
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "materialized": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialized"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "own": {
+            "type": "boolean",
+            "title": "Own",
+            "description": "False for nodes of installed packages."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "The latest result, never_run, or external for a source."
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrun"
+          },
+          "lastRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339 in UTC with milliseconds, such as 2026-11-24T09:15:02.123Z."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunat"
+          },
+          "executionTime": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executiontime"
+          },
+          "rowsAffected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rowsaffected"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "tests": {
+            "$ref": "#/components/schemas/TestCounts"
+          },
+          "sql": {
+            "type": "string",
+            "title": "Sql"
+          },
+          "compiledSql": {
+            "type": "string",
+            "title": "Compiledsql"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "testResults": {
+            "items": {
+              "$ref": "#/components/schemas/TestResult"
+            },
+            "type": "array",
+            "title": "Testresults"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "structureRun": {
+            "type": "string",
+            "title": "Structurerun"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "database",
+          "databaseId",
+          "namespace",
+          "table",
+          "materialized",
+          "description",
+          "tags",
+          "path",
+          "own",
+          "status",
+          "lastRun",
+          "lastRunAt",
+          "executionTime",
+          "rowsAffected",
+          "message",
+          "tests",
+          "sql",
+          "compiledSql",
+          "columns",
+          "testResults",
+          "environment",
+          "structureRun"
+        ],
+        "title": "NodeDetail"
+      },
+      "Overwritten": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          },
+          "run": {
+            "type": "string",
+            "title": "Run"
+          },
+          "at": {
+            "type": "string",
+            "title": "At",
+            "description": "RFC 3339 in UTC with milliseconds, such as 2026-11-24T09:15:02.123Z."
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref",
+          "run",
+          "at"
+        ],
+        "title": "Overwritten"
+      },
+      "PipelineGraph": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "structureRun": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structurerun",
+            "description": "The run whose project structure is drawn."
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunItem"
+            },
+            "type": "array",
+            "title": "Runs",
+            "description": "The latest runs that changed or checked tables."
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/PipelineNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/Edge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "dbtVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dbtversion"
+          },
+          "overwrittenBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Overwritten"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "In development: the newer build of another branch that wrote these tables."
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "refsWithPipeline": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refswithpipeline"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "environment",
+          "ref",
+          "structureRun",
+          "runs",
+          "nodes",
+          "edges"
+        ],
+        "title": "PipelineGraph"
+      },
+      "PipelineNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "model, seed, snapshot or source."
+          },
+          "database": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database"
+          },
+          "databaseId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Databaseid",
+            "description": "The platform database the node's catalog is."
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "materialized": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialized"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "own": {
+            "type": "boolean",
+            "title": "Own",
+            "description": "False for nodes of installed packages."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "The latest result, never_run, or external for a source."
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrun"
+          },
+          "lastRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339 in UTC with milliseconds, such as 2026-11-24T09:15:02.123Z."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunat"
+          },
+          "executionTime": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executiontime"
+          },
+          "rowsAffected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rowsaffected"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "tests": {
+            "$ref": "#/components/schemas/TestCounts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "database",
+          "databaseId",
+          "namespace",
+          "table",
+          "materialized",
+          "description",
+          "tags",
+          "path",
+          "own",
+          "status",
+          "lastRun",
+          "lastRunAt",
+          "executionTime",
+          "rowsAffected",
+          "message",
+          "tests"
+        ],
+        "title": "PipelineNode"
+      },
       "PreviewInput": {
         "properties": {
           "model": {
@@ -4443,6 +5431,64 @@
           "model"
         ],
         "title": "PreviewInput"
+      },
+      "PreviewResult": {
+        "properties": {
+          "run": {
+            "type": "string",
+            "title": "Run"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "success",
+              "incomplete",
+              "partial",
+              "failed",
+              "error",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows",
+            "description": "Null when dbt returned no rows; see output."
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output",
+            "description": "The last lines of dbt's log when there are no rows."
+          }
+        },
+        "type": "object",
+        "required": [
+          "run",
+          "status",
+          "rows",
+          "output"
+        ],
+        "title": "PreviewResult"
       },
       "Project": {
         "properties": {
@@ -5401,6 +6447,98 @@
           "schedules"
         ],
         "title": "ScheduleList"
+      },
+      "TestCounts": {
+        "properties": {
+          "pass": {
+            "type": "integer",
+            "title": "Pass"
+          },
+          "warn": {
+            "type": "integer",
+            "title": "Warn"
+          },
+          "fail": {
+            "type": "integer",
+            "title": "Fail"
+          },
+          "unknown": {
+            "type": "integer",
+            "title": "Unknown"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pass",
+          "warn",
+          "fail",
+          "unknown"
+        ],
+        "title": "TestCounts"
+      },
+      "TestResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "node": {
+            "type": "string",
+            "title": "Node"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "test": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "node",
+          "column",
+          "test",
+          "severity",
+          "status"
+        ],
+        "title": "TestResult"
       },
       "User": {
         "properties": {

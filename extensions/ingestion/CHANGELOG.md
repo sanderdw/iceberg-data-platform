@@ -5,6 +5,9 @@
 The REST API and the MCP tools follow the platform's one set of conventions. Nothing of the old shapes
 is kept: update scripts and agent instructions.
 
+- **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
+  starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
+- **Apps menu.** Drawing the menu again no longer leaves the previous menu's listeners on the page.
 - **Lists** are an object with one key, in REST as in MCP: `{"pipelines": [...]}`, `{"templates": [...]}`,
   `{"runs": [...]}` and `{"environments": [...]}` (REST returned bare arrays).
 - **Runs.** Starting a run returns 202 with the run as `get_run` returns it. The tables a run wrote are
@@ -30,6 +33,13 @@ is kept: update scripts and agent instructions.
 - `update_pipeline` and `set_pipeline_secrets` are marked destructive, so an agent asks first: they can
   remove secrets and the load state.
 - The OpenAPI contract describes every response and the error body.
+
+Apache Polaris 1.9:
+
+- **Long loads keep their storage access.** A run renews a table's storage credentials shortly before
+  they expire, through Polaris's credentials endpoint.
+- A run sets its table properties again when a concurrent commit got there first (409), instead of
+  reporting the table under `published.errors`.
 
 ## 0.1.4 - 2026-11-18
 

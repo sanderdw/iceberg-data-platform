@@ -1,3157 +1,2144 @@
-{
-  "openapi": "3.1.0",
-  "info": {
-    "title": "Iceberg Platform Bridge",
-    "description": "The stable interface for extensions. Authenticate with a Keycloak access token for the `iceberg-bridge` audience: a user token issued to the extension's clients, or the service-account token of the extension's confidential client. See contracts/bridge for the compatibility policy.",
-    "version": "0.1.4"
-  },
-  "paths": {
-    "/bridge/v1": {
-      "get": {
-        "summary": "Discover the platform",
-        "operationId": "discovery_bridge_v1_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Discovery"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/bridge/v1/me": {
-      "get": {
-        "summary": "The signed-in user's teams, roles and databases",
-        "operationId": "me_bridge_v1_me_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserContext"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "405": {
-            "description": "Method Not Allowed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Content",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Bad Gateway",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      }
-    },
-    "/bridge/v1/teams/{teamId}/automation-principals": {
-      "get": {
-        "summary": "This extension's automation principals of a team",
-        "operationId": "team_automation_bridge_v1_teams__teamId__automation_principals_get",
-        "parameters": [
-          {
-            "name": "teamId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^team-[a-f0-9]{32}$",
-              "title": "Teamid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutomationList"
-                }
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "405": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Method Not Allowed"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unprocessable Content"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      },
-      "post": {
-        "summary": "Enable this extension for a team environment (team administrators)",
-        "operationId": "enable_bridge_v1_teams__teamId__automation_principals_post",
-        "parameters": [
-          {
-            "name": "teamId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^team-[a-f0-9]{32}$",
-              "title": "Teamid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutomationInput"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutomationPrincipal"
-                }
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "405": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Method Not Allowed"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unprocessable Content"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          },
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutomationPrincipal"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      }
-    },
-    "/bridge/v1/automation-principals/{id}": {
-      "delete": {
-        "summary": "Revoke an automation principal (team administrators or the extension)",
-        "operationId": "revoke_bridge_v1_automation_principals__id__delete",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^svc-[a-f0-9]{32}$",
-              "title": "Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Revoked"
-                }
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "405": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Method Not Allowed"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unprocessable Content"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      },
-      "get": {
-        "summary": "An automation principal and the databases it can reach",
-        "operationId": "scope_bridge_v1_automation_principals__id__get",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^svc-[a-f0-9]{32}$",
-              "title": "Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutomationScope"
-                }
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "405": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Method Not Allowed"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unprocessable Content"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      }
-    },
-    "/bridge/v1/automation-principals": {
-      "get": {
-        "summary": "All automation principals of this extension",
-        "operationId": "all_automation_bridge_v1_automation_principals_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutomationList"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "405": {
-            "description": "Method Not Allowed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Content",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Bad Gateway",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      }
-    },
-    "/bridge/v1/teams/{teamId}/extensions": {
-      "get": {
-        "summary": "The extensions a team has enabled, per environment (extensions of that team only)",
-        "operationId": "team_extensions_bridge_v1_teams__teamId__extensions_get",
-        "parameters": [
-          {
-            "name": "teamId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^team-[a-f0-9]{32}$",
-              "title": "Teamid"
-            }
-          },
-          {
-            "name": "environment",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "development",
-                    "acceptance",
-                    "production"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Environment"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeamExtensionList"
-                }
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "405": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Method Not Allowed"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unprocessable Content"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      }
-    },
-    "/bridge/v1/automation-principals/{id}/tokens": {
-      "post": {
-        "summary": "A short-lived catalog token for an automation principal",
-        "operationId": "token_bridge_v1_automation_principals__id__tokens_post",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^svc-[a-f0-9]{32}$",
-              "title": "Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TokenRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TokenResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "405": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Method Not Allowed"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unprocessable Content"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      }
-    },
-    "/bridge/v1/listings": {
-      "get": {
-        "summary": "Data shares listed in a data catalog (listing extensions)",
-        "operationId": "all_listings_bridge_v1_listings_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ListingList"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "405": {
-            "description": "Method Not Allowed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Content",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Bad Gateway",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      }
-    },
-    "/bridge/v1/listings/{shareId}": {
-      "get": {
-        "summary": "One listing with the metadata of its objects (listing extensions)",
-        "operationId": "one_listing_bridge_v1_listings__shareId__get",
-        "parameters": [
-          {
-            "name": "shareId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^share-[a-f0-9]{32}$",
-              "title": "Shareid"
-            }
-          },
-          {
-            "name": "if-none-match",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "If-None-Match"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Listing"
-                }
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "405": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Method Not Allowed"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unprocessable Content"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          },
-          "304": {
-            "description": "Not Modified"
-          }
-        },
-        "security": [
-          {
-            "KeycloakBearer": []
-          }
-        ]
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "AutomationInput": {
-        "properties": {
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "environment"
-        ],
-        "title": "AutomationInput"
-      },
-      "AutomationList": {
-        "properties": {
-          "automationPrincipals": {
-            "items": {
-              "$ref": "#/components/schemas/AutomationPrincipal"
-            },
-            "type": "array",
-            "title": "Automationprincipals"
-          }
-        },
-        "type": "object",
-        "required": [
-          "automationPrincipals"
-        ],
-        "title": "AutomationList"
-      },
-      "AutomationPrincipal": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "team": {
-            "type": "string",
-            "title": "Team"
-          },
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          },
-          "extension": {
-            "type": "string",
-            "title": "Extension"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "active",
-              "revoking"
-            ],
-            "title": "Status"
-          },
-          "createdAt": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Createdat"
-          },
-          "createdBy": {
-            "type": "string",
-            "title": "Createdby"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "team",
-          "environment",
-          "extension",
-          "status",
-          "createdBy"
-        ],
-        "title": "AutomationPrincipal"
-      },
-      "AutomationScope": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "team": {
-            "type": "string",
-            "title": "Team"
-          },
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          },
-          "extension": {
-            "type": "string",
-            "title": "Extension"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "active",
-              "revoking"
-            ],
-            "title": "Status"
-          },
-          "createdAt": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Createdat"
-          },
-          "createdBy": {
-            "type": "string",
-            "title": "Createdby"
-          },
-          "databases": {
-            "items": {
-              "$ref": "#/components/schemas/ScopedDatabase"
-            },
-            "type": "array",
-            "title": "Databases"
-          },
-          "sharedDatabases": {
-            "items": {
-              "$ref": "#/components/schemas/ScopedSharedDatabase"
-            },
-            "type": "array",
-            "title": "Shareddatabases",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "team",
-          "environment",
-          "extension",
-          "status",
-          "createdBy",
-          "databases"
-        ],
-        "title": "AutomationScope"
-      },
-      "CatalogEndpoints": {
-        "properties": {
-          "uri": {
-            "type": "string",
-            "title": "Uri"
-          },
-          "internalUri": {
-            "type": "string",
-            "title": "Internaluri"
-          },
-          "tokenUri": {
-            "type": "string",
-            "title": "Tokenuri"
-          }
-        },
-        "type": "object",
-        "required": [
-          "uri",
-          "internalUri",
-          "tokenUri"
-        ],
-        "title": "CatalogEndpoints"
-      },
-      "Column": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "type": {
-            "type": "string",
-            "title": "Type"
-          },
-          "required": {
-            "type": "boolean",
-            "title": "Required"
-          },
-          "doc": {
-            "type": "string",
-            "title": "Doc"
-          },
-          "children": {
-            "items": {
-              "$ref": "#/components/schemas/Column"
-            },
-            "type": "array",
-            "title": "Children",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "type",
-          "required",
-          "doc"
-        ],
-        "title": "Column"
-      },
-      "ContextRow": {
-        "properties": {
-          "label": {
-            "type": "string",
-            "title": "Label"
-          },
-          "value": {
-            "type": "string",
-            "title": "Value"
-          }
-        },
-        "type": "object",
-        "required": [
-          "label",
-          "value"
-        ],
-        "title": "ContextRow"
-      },
-      "Database": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "team": {
-            "type": "string",
-            "title": "Team"
-          },
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "team",
-          "environment",
-          "status"
-        ],
-        "title": "Database"
-      },
-      "Discovery": {
-        "properties": {
-          "contractVersion": {
-            "type": "string",
-            "title": "Contractversion"
-          },
-          "capabilities": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Capabilities"
-          },
-          "catalog": {
-            "$ref": "#/components/schemas/CatalogEndpoints"
-          },
-          "storage": {
-            "$ref": "#/components/schemas/StorageEndpoints"
-          },
-          "oidc": {
-            "$ref": "#/components/schemas/OIDCEndpoints"
-          },
-          "environments": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Environments"
-          },
-          "network": {
-            "$ref": "#/components/schemas/Network"
-          },
-          "userPortalUrl": {
-            "type": "string",
-            "title": "Userportalurl"
-          },
-          "userPortalPages": {
-            "items": {
-              "$ref": "#/components/schemas/PortalPage"
-            },
-            "type": "array",
-            "title": "Userportalpages",
-            "default": []
-          },
-          "extensions": {
-            "items": {
-              "$ref": "#/components/schemas/Extension"
-            },
-            "type": "array",
-            "title": "Extensions"
-          }
-        },
-        "type": "object",
-        "required": [
-          "contractVersion",
-          "capabilities",
-          "catalog",
-          "storage",
-          "oidc",
-          "environments",
-          "network",
-          "userPortalUrl",
-          "extensions"
-        ],
-        "title": "Discovery"
-      },
-      "Error": {
-        "properties": {
-          "error": {
-            "type": "string",
-            "title": "Error"
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "invalid_request",
-              "unauthorized",
-              "forbidden",
-              "not_found",
-              "method_not_allowed",
-              "conflict",
-              "provider_error",
-              "unavailable",
-              "internal_error",
-              "unknown_extension",
-              "not_linked",
-              "user_required",
-              "service_required",
-              "listing_not_enabled",
-              "not_a_member",
-              "forbidden_role",
-              "no_teams",
-              "extension_not_enabled"
-            ],
-            "title": "Code"
-          }
-        },
-        "type": "object",
-        "required": [
-          "error",
-          "code"
-        ],
-        "title": "Error"
-      },
-      "Expression": {
-        "properties": {
-          "dialect": {
-            "type": "string",
-            "title": "Dialect"
-          },
-          "expression": {
-            "type": "string",
-            "title": "Expression"
-          }
-        },
-        "type": "object",
-        "required": [
-          "dialect",
-          "expression"
-        ],
-        "title": "Expression"
-      },
-      "Extension": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "origin": {
-            "type": "string",
-            "title": "Origin"
-          },
-          "listing": {
-            "type": "boolean",
-            "title": "Listing",
-            "default": false
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "default": ""
-          },
-          "purpose": {
-            "type": "string",
-            "title": "Purpose",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "origin"
-        ],
-        "title": "Extension"
-      },
-      "LineageInput": {
-        "properties": {
-          "database": {
-            "type": "string",
-            "title": "Database"
-          },
-          "namespace": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Namespace"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "database",
-          "namespace",
-          "name"
-        ],
-        "title": "LineageInput"
-      },
-      "ListedSemanticModel": {
-        "properties": {
-          "kind": {
-            "type": "string",
-            "const": "semantic-model",
-            "title": "Kind"
-          },
-          "namespace": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Namespace"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "specVersion": {
-            "type": "string",
-            "title": "Specversion"
-          },
-          "entityVersion": {
-            "type": "string",
-            "title": "Entityversion"
-          },
-          "models": {
-            "items": {
-              "$ref": "#/components/schemas/SemanticModel"
-            },
-            "type": "array",
-            "title": "Models"
-          }
-        },
-        "type": "object",
-        "required": [
-          "kind",
-          "namespace",
-          "name",
-          "specVersion",
-          "entityVersion",
-          "models"
-        ],
-        "title": "ListedSemanticModel"
-      },
-      "ListedTable": {
-        "properties": {
-          "kind": {
-            "type": "string",
-            "const": "table",
-            "title": "Kind"
-          },
-          "namespace": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Namespace"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "uuid": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Uuid"
-          },
-          "comment": {
-            "type": "string",
-            "title": "Comment"
-          },
-          "columns": {
-            "items": {
-              "$ref": "#/components/schemas/Column"
-            },
-            "type": "array",
-            "title": "Columns"
-          },
-          "partitionFields": {
-            "items": {
-              "$ref": "#/components/schemas/PartitionField"
-            },
-            "type": "array",
-            "title": "Partitionfields"
-          },
-          "rowCount": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rowcount"
-          },
-          "updatedAt": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updatedat"
-          },
-          "producer": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Producer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "kind",
-          "namespace",
-          "name",
-          "comment",
-          "columns",
-          "partitionFields"
-        ],
-        "title": "ListedTable"
-      },
-      "ListedView": {
-        "properties": {
-          "kind": {
-            "type": "string",
-            "const": "view",
-            "title": "Kind"
-          },
-          "namespace": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Namespace"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "uuid": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Uuid"
-          },
-          "comment": {
-            "type": "string",
-            "title": "Comment"
-          },
-          "columns": {
-            "items": {
-              "$ref": "#/components/schemas/Column"
-            },
-            "type": "array",
-            "title": "Columns"
-          },
-          "updatedAt": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updatedat"
-          }
-        },
-        "type": "object",
-        "required": [
-          "kind",
-          "namespace",
-          "name",
-          "comment",
-          "columns"
-        ],
-        "title": "ListedView"
-      },
-      "Listing": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "contact": {
-            "type": "string",
-            "title": "Contact"
-          },
-          "expiresAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expiresat"
-          },
-          "version": {
-            "type": "string",
-            "title": "Version"
-          },
-          "owner": {
-            "$ref": "#/components/schemas/ListingOwner"
-          },
-          "database": {
-            "$ref": "#/components/schemas/ListingDatabase"
-          },
-          "objects": {
-            "items": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/ListedTable"
-                },
-                {
-                  "$ref": "#/components/schemas/ListedView"
-                },
-                {
-                  "$ref": "#/components/schemas/ListedSemanticModel"
-                }
-              ],
-              "discriminator": {
-                "propertyName": "kind",
-                "mapping": {
-                  "semantic-model": "#/components/schemas/ListedSemanticModel",
-                  "table": "#/components/schemas/ListedTable",
-                  "view": "#/components/schemas/ListedView"
-                }
-              }
-            },
-            "type": "array",
-            "title": "Objects"
-          },
-          "unavailable": {
-            "items": {
-              "$ref": "#/components/schemas/SharedObject"
-            },
-            "type": "array",
-            "title": "Unavailable"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "description",
-          "contact",
-          "version",
-          "owner",
-          "database",
-          "objects",
-          "unavailable"
-        ],
-        "title": "Listing"
-      },
-      "ListingDatabase": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "environment"
-        ],
-        "title": "ListingDatabase"
-      },
-      "ListingList": {
-        "properties": {
-          "listings": {
-            "items": {
-              "$ref": "#/components/schemas/ListingSummary"
-            },
-            "type": "array",
-            "title": "Listings"
-          }
-        },
-        "type": "object",
-        "required": [
-          "listings"
-        ],
-        "title": "ListingList"
-      },
-      "ListingOwner": {
-        "properties": {
-          "team": {
-            "type": "string",
-            "title": "Team"
-          },
-          "teamName": {
-            "type": "string",
-            "title": "Teamname"
-          }
-        },
-        "type": "object",
-        "required": [
-          "team",
-          "teamName"
-        ],
-        "title": "ListingOwner"
-      },
-      "ListingSummary": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "version": {
-            "type": "string",
-            "title": "Version"
-          },
-          "databaseId": {
-            "type": "string",
-            "title": "Databaseid"
-          },
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "version",
-          "databaseId",
-          "environment"
-        ],
-        "title": "ListingSummary"
-      },
-      "Membership": {
-        "properties": {
-          "team": {
-            "type": "string",
-            "title": "Team"
-          },
-          "teamName": {
-            "type": "string",
-            "title": "Teamname"
-          },
-          "role": {
-            "type": "string",
-            "enum": [
-              "reader",
-              "writer",
-              "admin",
-              "bucket-admin"
-            ],
-            "title": "Role"
-          }
-        },
-        "type": "object",
-        "required": [
-          "team",
-          "teamName",
-          "role"
-        ],
-        "title": "Membership"
-      },
-      "ModelDataset": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "source": {
-            "type": "string",
-            "title": "Source"
-          },
-          "table": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelTable"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "primaryKey": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Primarykey"
-          },
-          "aiContext": {
-            "items": {
-              "$ref": "#/components/schemas/ContextRow"
-            },
-            "type": "array",
-            "title": "Aicontext"
-          },
-          "fields": {
-            "items": {
-              "$ref": "#/components/schemas/ModelField"
-            },
-            "type": "array",
-            "title": "Fields"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "description",
-          "source",
-          "primaryKey",
-          "aiContext",
-          "fields"
-        ],
-        "title": "ModelDataset"
-      },
-      "ModelField": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "datatype": {
-            "type": "string",
-            "title": "Datatype"
-          },
-          "dimension": {
-            "type": "boolean",
-            "title": "Dimension"
-          },
-          "timeDimension": {
-            "type": "boolean",
-            "title": "Timedimension"
-          },
-          "synonyms": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Synonyms"
-          },
-          "aiContext": {
-            "items": {
-              "$ref": "#/components/schemas/ContextRow"
-            },
-            "type": "array",
-            "title": "Aicontext"
-          },
-          "expressions": {
-            "items": {
-              "$ref": "#/components/schemas/Expression"
-            },
-            "type": "array",
-            "title": "Expressions"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "label",
-          "description",
-          "datatype",
-          "dimension",
-          "timeDimension",
-          "synonyms",
-          "aiContext",
-          "expressions"
-        ],
-        "title": "ModelField"
-      },
-      "ModelMetric": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "datatype": {
-            "type": "string",
-            "title": "Datatype"
-          },
-          "synonyms": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Synonyms"
-          },
-          "aiContext": {
-            "items": {
-              "$ref": "#/components/schemas/ContextRow"
-            },
-            "type": "array",
-            "title": "Aicontext"
-          },
-          "expressions": {
-            "items": {
-              "$ref": "#/components/schemas/Expression"
-            },
-            "type": "array",
-            "title": "Expressions"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "description",
-          "datatype",
-          "synonyms",
-          "aiContext",
-          "expressions"
-        ],
-        "title": "ModelMetric"
-      },
-      "ModelRelationship": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "from": {
-            "type": "string",
-            "title": "From"
-          },
-          "to": {
-            "type": "string",
-            "title": "To"
-          },
-          "fromColumns": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Fromcolumns"
-          },
-          "toColumns": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Tocolumns"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "from",
-          "to",
-          "fromColumns",
-          "toColumns"
-        ],
-        "title": "ModelRelationship"
-      },
-      "ModelTable": {
-        "properties": {
-          "namespace": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Namespace"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "namespace",
-          "name"
-        ],
-        "title": "ModelTable"
-      },
-      "Network": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "aliases": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Aliases"
-          },
-          "roleLabel": {
-            "type": "string",
-            "title": "Rolelabel"
-          },
-          "extensionLabel": {
-            "type": "string",
-            "title": "Extensionlabel"
-          },
-          "platform": {
-            "type": "string",
-            "enum": [
-              "docker",
-              "kubernetes"
-            ],
-            "title": "Platform",
-            "default": "docker"
-          },
-          "namespace": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Namespace"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "aliases",
-          "roleLabel",
-          "extensionLabel"
-        ],
-        "title": "Network"
-      },
-      "OIDCEndpoints": {
-        "properties": {
-          "issuer": {
-            "type": "string",
-            "title": "Issuer"
-          },
-          "internalIssuer": {
-            "type": "string",
-            "title": "Internalissuer"
-          },
-          "bridgeAudience": {
-            "type": "string",
-            "title": "Bridgeaudience"
-          }
-        },
-        "type": "object",
-        "required": [
-          "issuer",
-          "internalIssuer",
-          "bridgeAudience"
-        ],
-        "title": "OIDCEndpoints"
-      },
-      "PartitionField": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "sourceColumn": {
-            "type": "string",
-            "title": "Sourcecolumn"
-          },
-          "transform": {
-            "type": "string",
-            "title": "Transform"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "sourceColumn",
-          "transform"
-        ],
-        "title": "PartitionField"
-      },
-      "PortalPage": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "title",
-          "url"
-        ],
-        "title": "PortalPage"
-      },
-      "Producer": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Version"
-          },
-          "extension": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extension"
-          },
-          "url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Url"
-          },
-          "runId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Runid"
-          },
-          "runAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Runat"
-          },
-          "revision": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revision"
-          },
-          "node": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Node"
-          },
-          "inputs": {
-            "items": {
-              "$ref": "#/components/schemas/LineageInput"
-            },
-            "type": "array",
-            "title": "Inputs",
-            "default": []
-          },
-          "inputsTruncated": {
-            "type": "boolean",
-            "title": "Inputstruncated",
-            "default": false
-          },
-          "quality": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Quality"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "Producer"
-      },
-      "Quality": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary"
-          },
-          "checkedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checkedat"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status"
-        ],
-        "title": "Quality"
-      },
-      "Revoked": {
-        "properties": {
-          "revoked": {
-            "type": "boolean",
-            "title": "Revoked"
-          }
-        },
-        "type": "object",
-        "required": [
-          "revoked"
-        ],
-        "title": "Revoked"
-      },
-      "ScopedDatabase": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "team": {
-            "type": "string",
-            "title": "Team"
-          },
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "storageLocation": {
-            "type": "string",
-            "title": "Storagelocation"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "team",
-          "environment",
-          "status",
-          "storageLocation"
-        ],
-        "title": "ScopedDatabase"
-      },
-      "ScopedSharedDatabase": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "team": {
-            "type": "string",
-            "title": "Team"
-          },
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "sharedObjects": {
-            "items": {
-              "$ref": "#/components/schemas/SharedObject"
-            },
-            "type": "array",
-            "title": "Sharedobjects"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "team",
-          "environment",
-          "status",
-          "sharedObjects"
-        ],
-        "title": "ScopedSharedDatabase"
-      },
-      "SemanticModel": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "aiContext": {
-            "items": {
-              "$ref": "#/components/schemas/ContextRow"
-            },
-            "type": "array",
-            "title": "Aicontext"
-          },
-          "datasets": {
-            "items": {
-              "$ref": "#/components/schemas/ModelDataset"
-            },
-            "type": "array",
-            "title": "Datasets"
-          },
-          "relationships": {
-            "items": {
-              "$ref": "#/components/schemas/ModelRelationship"
-            },
-            "type": "array",
-            "title": "Relationships"
-          },
-          "metrics": {
-            "items": {
-              "$ref": "#/components/schemas/ModelMetric"
-            },
-            "type": "array",
-            "title": "Metrics"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "description",
-          "aiContext",
-          "datasets",
-          "relationships",
-          "metrics"
-        ],
-        "title": "SemanticModel"
-      },
-      "SharedDatabase": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "team": {
-            "type": "string",
-            "title": "Team"
-          },
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "sharedWithTeam": {
-            "type": "string",
-            "title": "Sharedwithteam"
-          },
-          "ownerTeamName": {
-            "type": "string",
-            "title": "Ownerteamname",
-            "default": ""
-          },
-          "recipientTeams": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Recipientteams",
-            "default": []
-          },
-          "sharedObjects": {
-            "items": {
-              "$ref": "#/components/schemas/SharedObject"
-            },
-            "type": "array",
-            "title": "Sharedobjects",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "team",
-          "environment",
-          "status",
-          "sharedWithTeam"
-        ],
-        "title": "SharedDatabase"
-      },
-      "SharedObject": {
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "table",
-              "view",
-              "semantic-model"
-            ],
-            "title": "Kind"
-          },
-          "namespace": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Namespace"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "kind",
-          "namespace",
-          "name"
-        ],
-        "title": "SharedObject"
-      },
-      "StorageEndpoints": {
-        "properties": {
-          "endpoint": {
-            "type": "string",
-            "title": "Endpoint"
-          },
-          "internalEndpoint": {
-            "type": "string",
-            "title": "Internalendpoint"
-          },
-          "region": {
-            "type": "string",
-            "title": "Region"
-          },
-          "pathStyle": {
-            "type": "boolean",
-            "title": "Pathstyle"
-          }
-        },
-        "type": "object",
-        "required": [
-          "endpoint",
-          "internalEndpoint",
-          "region",
-          "pathStyle"
-        ],
-        "title": "StorageEndpoints"
-      },
-      "TeamExtension": {
-        "properties": {
-          "extension": {
-            "type": "string",
-            "title": "Extension"
-          },
-          "environment": {
-            "type": "string",
-            "enum": [
-              "development",
-              "acceptance",
-              "production"
-            ],
-            "title": "Environment"
-          }
-        },
-        "type": "object",
-        "required": [
-          "extension",
-          "environment"
-        ],
-        "title": "TeamExtension"
-      },
-      "TeamExtensionList": {
-        "properties": {
-          "extensions": {
-            "items": {
-              "$ref": "#/components/schemas/TeamExtension"
-            },
-            "type": "array",
-            "title": "Extensions"
-          }
-        },
-        "type": "object",
-        "required": [
-          "extensions"
-        ],
-        "title": "TeamExtensionList"
-      },
-      "TokenCatalog": {
-        "properties": {
-          "internalUri": {
-            "type": "string",
-            "title": "Internaluri"
-          }
-        },
-        "type": "object",
-        "required": [
-          "internalUri"
-        ],
-        "title": "TokenCatalog"
-      },
-      "TokenRequest": {
-        "properties": {
-          "access": {
-            "type": "string",
-            "enum": [
-              "read",
-              "write"
-            ],
-            "title": "Access"
-          },
-          "purpose": {
-            "type": "string",
-            "maxLength": 120,
-            "title": "Purpose",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "access"
-        ],
-        "title": "TokenRequest"
-      },
-      "TokenResponse": {
-        "properties": {
-          "accessToken": {
-            "type": "string",
-            "title": "Accesstoken"
-          },
-          "tokenType": {
-            "type": "string",
-            "const": "bearer",
-            "title": "Tokentype"
-          },
-          "expiresIn": {
-            "type": "integer",
-            "title": "Expiresin"
-          },
-          "access": {
-            "type": "string",
-            "enum": [
-              "read",
-              "write"
-            ],
-            "title": "Access"
-          },
-          "principal": {
-            "type": "string",
-            "title": "Principal"
-          },
-          "catalog": {
-            "$ref": "#/components/schemas/TokenCatalog"
-          }
-        },
-        "type": "object",
-        "required": [
-          "accessToken",
-          "tokenType",
-          "expiresIn",
-          "access",
-          "principal",
-          "catalog"
-        ],
-        "title": "TokenResponse"
-      },
-      "User": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name"
-        ],
-        "title": "User"
-      },
-      "UserContext": {
-        "properties": {
-          "user": {
-            "$ref": "#/components/schemas/User"
-          },
-          "memberships": {
-            "items": {
-              "$ref": "#/components/schemas/Membership"
-            },
-            "type": "array",
-            "title": "Memberships"
-          },
-          "databases": {
-            "items": {
-              "$ref": "#/components/schemas/Database"
-            },
-            "type": "array",
-            "title": "Databases"
-          },
-          "sharedDatabases": {
-            "items": {
-              "$ref": "#/components/schemas/SharedDatabase"
-            },
-            "type": "array",
-            "title": "Shareddatabases"
-          }
-        },
-        "type": "object",
-        "required": [
-          "user",
-          "memberships",
-          "databases",
-          "sharedDatabases"
-        ],
-        "title": "UserContext"
-      }
-    },
-    "securitySchemes": {
-      "KeycloakBearer": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "Keycloak access token with audience iceberg-bridge."
-      }
-    }
-  }
-}
+openapi: 3.1.0
+info:
+  title: Iceberg Platform Bridge
+  description: 'The stable interface for extensions. Authenticate with a Keycloak access token for the `iceberg-bridge` audience:
+    a user token issued to the extension''s clients, or the service-account token of the extension''s confidential client.
+    See contracts/bridge for the compatibility policy.'
+  version: 1.0.0
+paths:
+  /bridge/v1:
+    get:
+      summary: Discover the platform
+      operationId: getDiscovery
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Discovery'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /bridge/v1/me:
+    get:
+      summary: The signed-in user's teams, roles and databases
+      operationId: getMe
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserContext'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method Not Allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Bad Gateway
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - KeycloakBearer: []
+  /bridge/v1/teams/{team}/automation-principals:
+    get:
+      summary: This extension's automation principals of a team
+      operationId: listTeamAutomationPrincipals
+      parameters:
+      - name: team
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^team-[a-f0-9]{32}$
+          title: Team
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationList'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Method Not Allowed
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unprocessable Content
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal Server Error
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Gateway
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Service Unavailable
+      security:
+      - KeycloakBearer: []
+    post:
+      summary: Enable this extension for a team environment (team administrators)
+      operationId: createAutomationPrincipal
+      parameters:
+      - name: team
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^team-[a-f0-9]{32}$
+          title: Team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationInput'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationPrincipal'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Method Not Allowed
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unprocessable Content
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal Server Error
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Gateway
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Service Unavailable
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationPrincipal'
+          description: OK
+      security:
+      - KeycloakBearer: []
+  /bridge/v1/automation-principals/{automationPrincipal}:
+    delete:
+      summary: Revoke an automation principal (team administrators or the extension)
+      operationId: deleteAutomationPrincipal
+      parameters:
+      - name: automationPrincipal
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^svc-[a-f0-9]{32}$
+          title: Automationprincipal
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationPrincipalDeleted'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Method Not Allowed
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unprocessable Content
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal Server Error
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Gateway
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Service Unavailable
+      security:
+      - KeycloakBearer: []
+    get:
+      summary: An automation principal and the databases it can reach
+      operationId: getAutomationPrincipal
+      parameters:
+      - name: automationPrincipal
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^svc-[a-f0-9]{32}$
+          title: Automationprincipal
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationScope'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Method Not Allowed
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unprocessable Content
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal Server Error
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Gateway
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Service Unavailable
+      security:
+      - KeycloakBearer: []
+  /bridge/v1/automation-principals:
+    get:
+      summary: All automation principals of this extension
+      operationId: listAutomationPrincipals
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationList'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method Not Allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Bad Gateway
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - KeycloakBearer: []
+  /bridge/v1/teams/{team}/extensions:
+    get:
+      summary: The extensions a team has enabled, per environment (extensions of that team only)
+      operationId: listTeamExtensions
+      parameters:
+      - name: team
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^team-[a-f0-9]{32}$
+          title: Team
+      - name: environment
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - development
+            - acceptance
+            - production
+            type: string
+          - type: 'null'
+          title: Environment
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamExtensionList'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Method Not Allowed
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unprocessable Content
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal Server Error
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Gateway
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Service Unavailable
+      security:
+      - KeycloakBearer: []
+  /bridge/v1/automation-principals/{automationPrincipal}/tokens:
+    post:
+      summary: A short-lived catalog token for an automation principal
+      operationId: createCatalogToken
+      parameters:
+      - name: automationPrincipal
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^svc-[a-f0-9]{32}$
+          title: Automationprincipal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Method Not Allowed
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unprocessable Content
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal Server Error
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Gateway
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Service Unavailable
+      security:
+      - KeycloakBearer: []
+  /bridge/v1/listings:
+    get:
+      summary: Data shares listed in a data catalog (listing extensions)
+      operationId: listListings
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingList'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method Not Allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Bad Gateway
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - KeycloakBearer: []
+  /bridge/v1/listings/{listing}:
+    get:
+      summary: One listing with the metadata of its objects (listing extensions)
+      operationId: getListing
+      parameters:
+      - name: listing
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^share-[a-f0-9]{32}$
+          title: Listing
+      - name: if-none-match
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: If-None-Match
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Method Not Allowed
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unprocessable Content
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal Server Error
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Gateway
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Service Unavailable
+        '304':
+          description: Not Modified
+      security:
+      - KeycloakBearer: []
+components:
+  schemas:
+    AutomationInput:
+      properties:
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+      additionalProperties: false
+      type: object
+      required:
+      - environment
+      title: AutomationInput
+    AutomationList:
+      properties:
+        automationPrincipals:
+          items:
+            $ref: '#/components/schemas/AutomationPrincipal'
+          type: array
+          title: Automationprincipals
+      type: object
+      required:
+      - automationPrincipals
+      title: AutomationList
+    AutomationPrincipal:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        team:
+          type: string
+          title: Team
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+        extension:
+          type: string
+          title: Extension
+        status:
+          type: string
+          enum:
+          - active
+          - revoking
+          title: Status
+        createdAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Createdat
+        createdBy:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Createdby
+      type: object
+      required:
+      - id
+      - name
+      - team
+      - environment
+      - extension
+      - status
+      - createdAt
+      - createdBy
+      title: AutomationPrincipal
+    AutomationPrincipalDeleted:
+      properties:
+        deleted:
+          type: boolean
+          title: Deleted
+        automationPrincipal:
+          type: string
+          title: Automationprincipal
+      type: object
+      required:
+      - deleted
+      - automationPrincipal
+      title: AutomationPrincipalDeleted
+    AutomationScope:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        team:
+          type: string
+          title: Team
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+        extension:
+          type: string
+          title: Extension
+        status:
+          type: string
+          enum:
+          - active
+          - revoking
+          title: Status
+        createdAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Createdat
+        createdBy:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Createdby
+        databases:
+          items:
+            $ref: '#/components/schemas/ScopedDatabase'
+          type: array
+          title: Databases
+        sharedDatabases:
+          items:
+            $ref: '#/components/schemas/ScopedSharedDatabase'
+          type: array
+          title: Shareddatabases
+      type: object
+      required:
+      - id
+      - name
+      - team
+      - environment
+      - extension
+      - status
+      - createdAt
+      - createdBy
+      - databases
+      - sharedDatabases
+      title: AutomationScope
+    CatalogEndpoints:
+      properties:
+        uri:
+          type: string
+          title: Uri
+        internalUri:
+          type: string
+          title: Internaluri
+        tokenUri:
+          type: string
+          title: Tokenuri
+      type: object
+      required:
+      - uri
+      - internalUri
+      - tokenUri
+      title: CatalogEndpoints
+    Column:
+      properties:
+        id:
+          type: integer
+          title: Id
+        name:
+          type: string
+          title: Name
+        type:
+          type: string
+          title: Type
+        required:
+          type: boolean
+          title: Required
+        doc:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Doc
+        children:
+          items:
+            $ref: '#/components/schemas/Column'
+          type: array
+          title: Children
+      type: object
+      required:
+      - id
+      - name
+      - type
+      - required
+      - doc
+      - children
+      title: Column
+    ContextRow:
+      properties:
+        label:
+          type: string
+          title: Label
+        value:
+          type: string
+          title: Value
+      type: object
+      required:
+      - label
+      - value
+      title: ContextRow
+    Database:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        team:
+          type: string
+          title: Team
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - id
+      - name
+      - team
+      - environment
+      - status
+      title: Database
+    Discovery:
+      properties:
+        contractVersion:
+          type: string
+          title: Contractversion
+        capabilities:
+          items:
+            type: string
+          type: array
+          title: Capabilities
+        catalog:
+          $ref: '#/components/schemas/CatalogEndpoints'
+        storage:
+          $ref: '#/components/schemas/StorageEndpoints'
+        oidc:
+          $ref: '#/components/schemas/OIDCEndpoints'
+        environments:
+          items:
+            type: string
+          type: array
+          title: Environments
+        network:
+          $ref: '#/components/schemas/Network'
+        userPortalUrl:
+          type: string
+          title: Userportalurl
+        userPortalPages:
+          items:
+            $ref: '#/components/schemas/PortalPage'
+          type: array
+          title: Userportalpages
+        extensions:
+          items:
+            $ref: '#/components/schemas/Extension'
+          type: array
+          title: Extensions
+      type: object
+      required:
+      - contractVersion
+      - capabilities
+      - catalog
+      - storage
+      - oidc
+      - environments
+      - network
+      - userPortalUrl
+      - userPortalPages
+      - extensions
+      title: Discovery
+    Error:
+      properties:
+        error:
+          type: string
+          title: Error
+        code:
+          type: string
+          enum:
+          - invalid_request
+          - unauthorized
+          - forbidden
+          - not_found
+          - method_not_allowed
+          - conflict
+          - platform_error
+          - unavailable
+          - internal_error
+          - unknown_extension
+          - not_linked
+          - user_required
+          - service_required
+          - listing_not_enabled
+          - not_a_member
+          - forbidden_role
+          - no_teams
+          - extension_not_enabled
+          - unknown_automation_principal
+          - unknown_listing
+          title: Code
+      type: object
+      required:
+      - error
+      - code
+      title: Error
+    Expression:
+      properties:
+        dialect:
+          type: string
+          title: Dialect
+        expression:
+          type: string
+          title: Expression
+      type: object
+      required:
+      - dialect
+      - expression
+      title: Expression
+    Extension:
+      properties:
+        id:
+          type: string
+          title: Id
+        origin:
+          type: string
+          title: Origin
+        listing:
+          type: boolean
+          title: Listing
+        title:
+          type: string
+          title: Title
+        purpose:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Purpose
+      type: object
+      required:
+      - id
+      - origin
+      - listing
+      - title
+      - purpose
+      title: Extension
+    LineageInput:
+      properties:
+        database:
+          type: string
+          title: Database
+        namespace:
+          items:
+            type: string
+          type: array
+          title: Namespace
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+      - database
+      - namespace
+      - name
+      title: LineageInput
+    ListedSemanticModel:
+      properties:
+        kind:
+          type: string
+          const: semantic-model
+          title: Kind
+        namespace:
+          items:
+            type: string
+          type: array
+          title: Namespace
+        name:
+          type: string
+          title: Name
+        specVersion:
+          type: string
+          title: Specversion
+        entityVersion:
+          type: string
+          title: Entityversion
+        models:
+          items:
+            $ref: '#/components/schemas/SemanticModel'
+          type: array
+          title: Models
+      type: object
+      required:
+      - kind
+      - namespace
+      - name
+      - specVersion
+      - entityVersion
+      - models
+      title: ListedSemanticModel
+    ListedTable:
+      properties:
+        kind:
+          type: string
+          const: table
+          title: Kind
+        namespace:
+          items:
+            type: string
+          type: array
+          title: Namespace
+        name:
+          type: string
+          title: Name
+        uuid:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Uuid
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comment
+        columns:
+          items:
+            $ref: '#/components/schemas/Column'
+          type: array
+          title: Columns
+        partitionFields:
+          items:
+            $ref: '#/components/schemas/PartitionField'
+          type: array
+          title: Partitionfields
+        rowCount:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Rowcount
+        updatedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Updatedat
+        producer:
+          anyOf:
+          - $ref: '#/components/schemas/Producer'
+          - type: 'null'
+      type: object
+      required:
+      - kind
+      - namespace
+      - name
+      - uuid
+      - comment
+      - columns
+      - partitionFields
+      - rowCount
+      - updatedAt
+      - producer
+      title: ListedTable
+    ListedView:
+      properties:
+        kind:
+          type: string
+          const: view
+          title: Kind
+        namespace:
+          items:
+            type: string
+          type: array
+          title: Namespace
+        name:
+          type: string
+          title: Name
+        uuid:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Uuid
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comment
+        columns:
+          items:
+            $ref: '#/components/schemas/Column'
+          type: array
+          title: Columns
+        updatedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Updatedat
+      type: object
+      required:
+      - kind
+      - namespace
+      - name
+      - uuid
+      - comment
+      - columns
+      - updatedAt
+      title: ListedView
+    Listing:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        contact:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Contact
+        expiresAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Expiresat
+        version:
+          type: string
+          title: Version
+        owner:
+          $ref: '#/components/schemas/ListingOwner'
+        database:
+          $ref: '#/components/schemas/ListingDatabase'
+        objects:
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/ListedTable'
+            - $ref: '#/components/schemas/ListedView'
+            - $ref: '#/components/schemas/ListedSemanticModel'
+            discriminator:
+              propertyName: kind
+              mapping:
+                semantic-model: '#/components/schemas/ListedSemanticModel'
+                table: '#/components/schemas/ListedTable'
+                view: '#/components/schemas/ListedView'
+          type: array
+          title: Objects
+        unavailable:
+          items:
+            $ref: '#/components/schemas/SharedObject'
+          type: array
+          title: Unavailable
+      type: object
+      required:
+      - id
+      - name
+      - description
+      - contact
+      - expiresAt
+      - version
+      - owner
+      - database
+      - objects
+      - unavailable
+      title: Listing
+    ListingDatabase:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+      type: object
+      required:
+      - id
+      - name
+      - environment
+      title: ListingDatabase
+    ListingList:
+      properties:
+        listings:
+          items:
+            $ref: '#/components/schemas/ListingSummary'
+          type: array
+          title: Listings
+      type: object
+      required:
+      - listings
+      title: ListingList
+    ListingOwner:
+      properties:
+        team:
+          type: string
+          title: Team
+        teamName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Teamname
+      type: object
+      required:
+      - team
+      - teamName
+      title: ListingOwner
+    ListingSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        version:
+          type: string
+          title: Version
+        database:
+          type: string
+          title: Database
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+      type: object
+      required:
+      - id
+      - version
+      - database
+      - environment
+      title: ListingSummary
+    Membership:
+      properties:
+        team:
+          type: string
+          title: Team
+        teamName:
+          type: string
+          title: Teamname
+        role:
+          type: string
+          enum:
+          - reader
+          - writer
+          - admin
+          - bucket-admin
+          title: Role
+      type: object
+      required:
+      - team
+      - teamName
+      - role
+      title: Membership
+    ModelDataset:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        source:
+          type: string
+          title: Source
+        table:
+          anyOf:
+          - $ref: '#/components/schemas/ModelTable'
+          - type: 'null'
+        primaryKey:
+          items:
+            type: string
+          type: array
+          title: Primarykey
+        aiContext:
+          items:
+            $ref: '#/components/schemas/ContextRow'
+          type: array
+          title: Aicontext
+        fields:
+          items:
+            $ref: '#/components/schemas/ModelField'
+          type: array
+          title: Fields
+      type: object
+      required:
+      - name
+      - description
+      - source
+      - table
+      - primaryKey
+      - aiContext
+      - fields
+      title: ModelDataset
+    ModelField:
+      properties:
+        name:
+          type: string
+          title: Name
+        label:
+          type: string
+          title: Label
+        description:
+          type: string
+          title: Description
+        datatype:
+          type: string
+          title: Datatype
+        dimension:
+          type: boolean
+          title: Dimension
+        timeDimension:
+          type: boolean
+          title: Timedimension
+        synonyms:
+          items:
+            type: string
+          type: array
+          title: Synonyms
+        aiContext:
+          items:
+            $ref: '#/components/schemas/ContextRow'
+          type: array
+          title: Aicontext
+        expressions:
+          items:
+            $ref: '#/components/schemas/Expression'
+          type: array
+          title: Expressions
+      type: object
+      required:
+      - name
+      - label
+      - description
+      - datatype
+      - dimension
+      - timeDimension
+      - synonyms
+      - aiContext
+      - expressions
+      title: ModelField
+    ModelMetric:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        datatype:
+          type: string
+          title: Datatype
+        synonyms:
+          items:
+            type: string
+          type: array
+          title: Synonyms
+        aiContext:
+          items:
+            $ref: '#/components/schemas/ContextRow'
+          type: array
+          title: Aicontext
+        expressions:
+          items:
+            $ref: '#/components/schemas/Expression'
+          type: array
+          title: Expressions
+      type: object
+      required:
+      - name
+      - description
+      - datatype
+      - synonyms
+      - aiContext
+      - expressions
+      title: ModelMetric
+    ModelRelationship:
+      properties:
+        name:
+          type: string
+          title: Name
+        from:
+          type: string
+          title: From
+        to:
+          type: string
+          title: To
+        fromColumns:
+          items:
+            type: string
+          type: array
+          title: Fromcolumns
+        toColumns:
+          items:
+            type: string
+          type: array
+          title: Tocolumns
+      type: object
+      required:
+      - name
+      - from
+      - to
+      - fromColumns
+      - toColumns
+      title: ModelRelationship
+    ModelTable:
+      properties:
+        namespace:
+          items:
+            type: string
+          type: array
+          title: Namespace
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+      - namespace
+      - name
+      title: ModelTable
+    Network:
+      properties:
+        name:
+          type: string
+          title: Name
+        aliases:
+          additionalProperties:
+            type: string
+          type: object
+          title: Aliases
+        roleLabel:
+          type: string
+          title: Rolelabel
+        extensionLabel:
+          type: string
+          title: Extensionlabel
+        platform:
+          type: string
+          enum:
+          - docker
+          - kubernetes
+          title: Platform
+        namespace:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Namespace
+      type: object
+      required:
+      - name
+      - aliases
+      - roleLabel
+      - extensionLabel
+      - platform
+      - namespace
+      title: Network
+    OIDCEndpoints:
+      properties:
+        issuer:
+          type: string
+          title: Issuer
+        internalIssuer:
+          type: string
+          title: Internalissuer
+        bridgeAudience:
+          type: string
+          title: Bridgeaudience
+      type: object
+      required:
+      - issuer
+      - internalIssuer
+      - bridgeAudience
+      title: OIDCEndpoints
+    PartitionField:
+      properties:
+        name:
+          type: string
+          title: Name
+        sourceColumn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sourcecolumn
+        transform:
+          type: string
+          title: Transform
+      type: object
+      required:
+      - name
+      - sourceColumn
+      - transform
+      title: PartitionField
+    PortalPage:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        url:
+          type: string
+          title: Url
+      type: object
+      required:
+      - id
+      - title
+      - url
+      title: PortalPage
+    Producer:
+      properties:
+        name:
+          type: string
+          title: Name
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+        extension:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Extension
+        url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Url
+        runId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runid
+        runAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runat
+        revision:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Revision
+        node:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Node
+        inputs:
+          items:
+            $ref: '#/components/schemas/LineageInput'
+          type: array
+          title: Inputs
+        inputsTruncated:
+          type: boolean
+          title: Inputstruncated
+        quality:
+          anyOf:
+          - $ref: '#/components/schemas/Quality'
+          - type: 'null'
+      type: object
+      required:
+      - name
+      - version
+      - extension
+      - url
+      - runId
+      - runAt
+      - revision
+      - node
+      - inputs
+      - inputsTruncated
+      - quality
+      title: Producer
+    Quality:
+      properties:
+        status:
+          type: string
+          enum:
+          - pass
+          - warn
+          - fail
+          title: Status
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        checkedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Checkedat
+      type: object
+      required:
+      - status
+      - summary
+      - checkedAt
+      title: Quality
+    ScopedDatabase:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        team:
+          type: string
+          title: Team
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+        status:
+          type: string
+          title: Status
+        storageLocation:
+          type: string
+          title: Storagelocation
+      type: object
+      required:
+      - id
+      - name
+      - team
+      - environment
+      - status
+      - storageLocation
+      title: ScopedDatabase
+    ScopedSharedDatabase:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        team:
+          type: string
+          title: Team
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+        status:
+          type: string
+          title: Status
+        sharedObjects:
+          items:
+            $ref: '#/components/schemas/SharedObject'
+          type: array
+          title: Sharedobjects
+      type: object
+      required:
+      - id
+      - name
+      - team
+      - environment
+      - status
+      - sharedObjects
+      title: ScopedSharedDatabase
+    SemanticModel:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        aiContext:
+          items:
+            $ref: '#/components/schemas/ContextRow'
+          type: array
+          title: Aicontext
+        datasets:
+          items:
+            $ref: '#/components/schemas/ModelDataset'
+          type: array
+          title: Datasets
+        relationships:
+          items:
+            $ref: '#/components/schemas/ModelRelationship'
+          type: array
+          title: Relationships
+        metrics:
+          items:
+            $ref: '#/components/schemas/ModelMetric'
+          type: array
+          title: Metrics
+      type: object
+      required:
+      - name
+      - description
+      - aiContext
+      - datasets
+      - relationships
+      - metrics
+      title: SemanticModel
+    SharedDatabase:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        team:
+          type: string
+          title: Team
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+        status:
+          type: string
+          title: Status
+        sharedWithTeam:
+          type: string
+          title: Sharedwithteam
+        ownerTeamName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ownerteamname
+        recipientTeams:
+          items:
+            type: string
+          type: array
+          title: Recipientteams
+        sharedObjects:
+          items:
+            $ref: '#/components/schemas/SharedObject'
+          type: array
+          title: Sharedobjects
+      type: object
+      required:
+      - id
+      - name
+      - team
+      - environment
+      - status
+      - sharedWithTeam
+      - ownerTeamName
+      - recipientTeams
+      - sharedObjects
+      title: SharedDatabase
+    SharedObject:
+      properties:
+        kind:
+          type: string
+          enum:
+          - table
+          - view
+          - semantic-model
+          title: Kind
+        namespace:
+          items:
+            type: string
+          type: array
+          title: Namespace
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+      - kind
+      - namespace
+      - name
+      title: SharedObject
+    StorageEndpoints:
+      properties:
+        endpoint:
+          type: string
+          title: Endpoint
+        internalEndpoint:
+          type: string
+          title: Internalendpoint
+        region:
+          type: string
+          title: Region
+        pathStyle:
+          type: boolean
+          title: Pathstyle
+      type: object
+      required:
+      - endpoint
+      - internalEndpoint
+      - region
+      - pathStyle
+      title: StorageEndpoints
+    TeamExtension:
+      properties:
+        extension:
+          type: string
+          title: Extension
+        environment:
+          type: string
+          enum:
+          - development
+          - acceptance
+          - production
+          title: Environment
+      type: object
+      required:
+      - extension
+      - environment
+      title: TeamExtension
+    TeamExtensionList:
+      properties:
+        extensions:
+          items:
+            $ref: '#/components/schemas/TeamExtension'
+          type: array
+          title: Extensions
+      type: object
+      required:
+      - extensions
+      title: TeamExtensionList
+    TokenCatalog:
+      properties:
+        internalUri:
+          type: string
+          title: Internaluri
+      type: object
+      required:
+      - internalUri
+      title: TokenCatalog
+    TokenRequest:
+      properties:
+        access:
+          type: string
+          enum:
+          - read
+          - write
+          title: Access
+        purpose:
+          type: string
+          maxLength: 120
+          title: Purpose
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - access
+      title: TokenRequest
+    TokenResponse:
+      properties:
+        accessToken:
+          type: string
+          title: Accesstoken
+        tokenType:
+          type: string
+          const: bearer
+          title: Tokentype
+        expiresIn:
+          type: integer
+          title: Expiresin
+        access:
+          type: string
+          enum:
+          - read
+          - write
+          title: Access
+        automationPrincipal:
+          type: string
+          title: Automationprincipal
+        catalog:
+          $ref: '#/components/schemas/TokenCatalog'
+      type: object
+      required:
+      - accessToken
+      - tokenType
+      - expiresIn
+      - access
+      - automationPrincipal
+      - catalog
+      title: TokenResponse
+    User:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+      - id
+      - name
+      title: User
+    UserContext:
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        memberships:
+          items:
+            $ref: '#/components/schemas/Membership'
+          type: array
+          title: Memberships
+        databases:
+          items:
+            $ref: '#/components/schemas/Database'
+          type: array
+          title: Databases
+        sharedDatabases:
+          items:
+            $ref: '#/components/schemas/SharedDatabase'
+          type: array
+          title: Shareddatabases
+      type: object
+      required:
+      - user
+      - memberships
+      - databases
+      - sharedDatabases
+      title: UserContext
+  securitySchemes:
+    KeycloakBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Keycloak access token with audience iceberg-bridge.

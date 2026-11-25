@@ -34,7 +34,7 @@ try {
   // Both real reactive execution and the WebSocket proxy are required here.
   await frame.getByRole('heading', {name: 'Available objects', exact: true}).waitFor({timeout: 60000});
   await frame.getByText('deploy', {exact: true}).first().waitFor({timeout: 60000});
-  const saved = page.waitForResponse(r => r.url().includes('/workspaces/') && r.url().endsWith('/save') && r.request().method() === 'POST');
+  const saved = page.waitForResponse(r => { const path = new URL(r.url()).pathname; return path.startsWith('/workspaces/') && path.endsWith('/save') && r.request().method() === 'POST'; });
   await frame.locator('.cm-content').first().click();
   await page.keyboard.press('Control+End');
   await page.keyboard.press('End');

@@ -11,6 +11,7 @@ on the copy is the team's own. NOTEBOOK_EXAMPLES=false turns them off for the wh
 
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 
@@ -99,7 +100,7 @@ class NotebookFiles:
                   files={"file": (name, content, "text/x-python")})
 
     def url(self, workspace, path):
-        return f"{workspace.url}?file={path}"
+        return f"{workspace.url}?file={quote(path, safe='/')}"
 
     def notebooks(self, workspace):
         """The team's notebooks: marimo files in the folder and in examples/, newest first."""

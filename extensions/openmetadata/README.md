@@ -10,7 +10,7 @@ label and term.
 
 This is an extension (Compose only; it has no Helm chart yet): its own Compose project (`iceberg-openmetadata`), dependencies, image,
 version and releases. It uses the platform only through the **Extension Bridge v1**
-(`contracts/bridge` in the platform repository), capability `listings` (contract 0.1.1 or later).
+(`contracts/bridge` in the platform repository), capability `listings` (contract 1.0 or later).
 
 ## Install
 

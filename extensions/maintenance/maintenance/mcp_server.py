@@ -17,7 +17,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from .auth import Caller
 from .errors import MaintenanceError
@@ -32,15 +32,21 @@ INSTRUCTIONS = """Maintenance (beta) on the Iceberg Data Platform: keeps a team'
 snapshots, compacts small data files (applying their deletes), removes dangling delete files, merges
 manifests and removes orphan files, per database, on a schedule or on demand.
 
-Start with whoami (your teams, roles, databases, the policy defaults and where Maintenance is
-enabled), then list_databases and list_table_health (attention=true for tables that need work). Table
-health comes from the last run that saw a table: inspect_database refreshes it and changes nothing.
-Runs only happen in environments a team administrator enabled: enable_environment turns one on
-(ask the user first: runs act for the whole team).
+Start with whoami (your teams, roles, databases, the policy types and defaults, and where
+Maintenance is enabled), then list_databases and list_table_health (attention=true for tables that
+need work). Table health comes from the last run that saw a table: inspect_database refreshes it and
+changes nothing. Runs only happen in environments a team administrator enabled: enable_environment
+turns one on (ask the user first: runs act for the whole team). Policies are read and written as
+that team's service account too, so they also need the environment enabled.
 
-A policy belongs to one database (get_policy, update_policy for team administrators). Without one,
-the defaults apply to inspections and dry runs, and nothing is maintained. Before maintaining,
-inspect_database with mode dry-run shows what the policy would do; run_maintenance applies it.
+Policies are Apache Polaris policies, one per type: snapshotExpiry (system.snapshot-expiry),
+dataCompaction (system.data-compaction, also dangling deletes), metadataCompaction
+(system.metadata-compaction, manifests) and orphanFileRemoval (system.orphan-file-removal). A
+database's policies are attached to its catalog (get_policy; update_policy for team administrators).
+Exclusions switch types off for a namespace or a table: a policy on a table overrides its namespace's,
+which overrides the database's. Runs ask Polaris which policies apply to each table, so policies other
+tools attached count too; a type without a policy is not maintained. Before maintaining,
+inspect_database with mode dry-run shows what the policies would do; run_maintenance applies them.
 set_schedule maintains a database on a cron schedule (UTC, at most once an hour; needs a policy) and
 delete_schedule removes it.
 
@@ -63,10 +69,19 @@ TableName = Annotated[str, Field(min_length=3, max_length=300,
                                  description="namespace.table, as list_table_health shows.")]
 RunId = Annotated[str, Field(pattern=r"^run-[a-f0-9]{24}$", description="Run id.")]
 TeamId = Annotated[str, Field(pattern=r"^team-[a-f0-9]{32}$", description="Team id from whoami.")]
+PolicyType = Literal["snapshotExpiry", "dataCompaction", "metadataCompaction", "orphanFileRemoval"]
 Settings = Annotated[dict[str, dict[str, Any]], Field(description=(
-    "Per operation, the settings to change: expireSnapshots {enabled, olderThanHours, retainLast}, compaction "
-    "{enabled, targetFileSizeMb, minInputFiles, deleteRatio, maxInputMbPerRun}, orphanFiles {enabled, "
-    "olderThanHours >= 24}, rewriteManifests {enabled, minManifests}, danglingDeletes {enabled}."))]
+    "Per policy type, the settings to change: snapshotExpiry {enabled, maxSnapshotAgeDays >= 1, "
+    "minSnapshotsToKeep}, dataCompaction {enabled, targetFileSizeBytes (16 to 512 MiB), minInputFiles, "
+    "deleteRatioThreshold, removeDanglingDeletes, maxInputBytesPerRun}, metadataCompaction {enabled, "
+    "minCountToMerge}, orphanFileRemoval {enabled, maxOrphanFileAgeInDays >= 1}."))]
+
+
+class Exclusion(BaseModel):
+    target: str = Field(min_length=1, max_length=300, description="A namespace, or a table as namespace.table.")
+    level: Literal["namespace", "table"]
+    types: list[PolicyType] | None = Field(default=None, min_length=1, description=(
+        "The policy types switched off there; all when left out."))
 Tables = Annotated[list[str] | None, Field(max_length=200, description=(
     "Only these tables (namespace.table); all when empty."))]
 Wait = Annotated[int, Field(ge=0, le=600, description=(
@@ -112,7 +127,7 @@ def create_mcp(settings, services, verifier):
     @mcp.tool(annotations=READ)
     async def whoami() -> dict[str, Any]:
         """Your teams with your role in each, their databases per environment, where Maintenance is enabled, the
-        policy defaults and this extension."""
+        policy types with their defaults, and this extension."""
         return await call(services.whoami)
 
     @mcp.tool(annotations=READ)
@@ -147,30 +162,36 @@ def create_mcp(settings, services, verifier):
 
     @mcp.tool(annotations=READ)
     async def get_table_health(database: DatabaseId, table: TableName) -> dict[str, Any]:
-        """One table's health, the actions of its last run, the effective policy and recent runs."""
+        """One table's health, the actions of its last run, the policies Polaris resolved for it then (and where
+        each is attached) and recent runs."""
         return await call(services.get_table_health, database, table)
 
     @mcp.tool(annotations=READ)
     async def get_policy(database: DatabaseId) -> dict[str, Any]:
-        """A database's maintenance policy and schedule, or the defaults when it has none."""
+        """A database's maintenance policies (the Polaris policies attached to its catalog, with their versions),
+        its exclusions and its schedule; the defaults for a type without a policy."""
         return await call(services.get_policy, database)
 
     @mcp.tool(annotations=WRITE)
     async def update_policy(database: DatabaseId, settings: Settings | None = None,
-                            exclude: Annotated[list[str] | None, Field(max_length=500, description=(
-                                "Tables (namespace.table) maintenance leaves alone; replaces the list."))] = None,
-                            expected_revision: Annotated[int | None, Field(description=(
-                                "Fail if the policy changed since this revision (0: only if there is none "
-                                "yet)."))] = None) -> dict[str, Any]:
-        """Change a database's policy (team administrators): give only what changes, the rest keeps its value.
-        Without a policy it creates one from the defaults. Ask the user first: maintenance runs expire snapshots
-        and rewrite files by it. The schedule is set with set_schedule."""
-        data = {"settings": settings, "exclude": exclude, "expectedRevision": expected_revision}
+                            exclusions: Annotated[list[Exclusion] | None, Field(max_length=500, description=(
+                                "Namespaces and tables maintenance leaves alone, per policy type; replaces the "
+                                "list. [] removes every exclusion."))] = None,
+                            expected_versions: Annotated[dict[PolicyType, int | None] | None, Field(description=(
+                                "Per policy type, the version get_policy showed (null: none). A type that "
+                                "changed since is refused."))] = None) -> dict[str, Any]:
+        """Change a database's Polaris policies (team administrators): give only what changes, the rest keeps its
+        value. A type without a policy is created from the defaults and attached to the database's catalog.
+        Ask the user first: maintenance runs expire snapshots and rewrite files by it. The schedule is set with
+        set_schedule."""
+        data = {"settings": settings, "expectedVersions": expected_versions,
+                "exclusions": [e.model_dump() for e in exclusions] if exclusions is not None else None}
         return await call(services.update_policy, database, {k: v for k, v in data.items() if v is not None})
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def delete_policy(database: DatabaseId) -> dict[str, Any]:
-        """Remove a database's policy and schedule (team administrators). Table health and past runs stay."""
+        """Remove a database's policies (team administrators): detach them from its catalog, delete the ones
+        Maintenance created, its exclusions and its schedule. Table health and past runs stay."""
         return await call(services.delete_policy, database)
 
     @mcp.tool(annotations=WRITE)
@@ -191,14 +212,14 @@ def create_mcp(settings, services, verifier):
     async def inspect_database(database: DatabaseId, mode: Literal["inspect", "dry-run"] = "inspect",
                                tables: Tables = None, wait: Wait = 0) -> dict[str, Any]:
         """Read a database now, without changing a table (writers). inspect refreshes every table's health;
-        dry-run plans the policy, or the defaults, and returns per table what maintenance would do."""
+        dry-run plans the policies that apply to each table and returns per table what maintenance would do."""
         return await call(services.run_maintenance, database, mode, tables, wait)
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def run_maintenance(database: DatabaseId, tables: Tables = None, wait: Wait = 0) -> dict[str, Any]:
-        """Maintain a database now (writers): apply its policy, which it needs. This expires snapshots, which
-        ends time travel to them, and rewrites and deletes files. Ask the user first, and show them a dry run
-        (inspect_database with mode dry-run)."""
+        """Maintain a database now (writers): apply the policies that apply to each table; the database needs
+        its own. This expires snapshots, which ends time travel to them, and rewrites and deletes files. Ask the
+        user first, and show them a dry run (inspect_database with mode dry-run)."""
         return await call(services.run_maintenance, database, "maintain", tables, wait)
 
     @mcp.tool(annotations=READ)

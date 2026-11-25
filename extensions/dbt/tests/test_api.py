@@ -784,10 +784,10 @@ async def _tools(app):
 
 
 def test_supports_the_platforms_bridge_contract():
-    # The platform serves Bridge contract 0.1.x (contracts/bridge/COMPATIBILITY.md in the core).
+    # The platform serves Bridge contract 1.x (contracts/bridge/COMPATIBILITY.md in the core).
     supported = contract_range()
-    assert in_range("0.1.0", supported) and in_range("0.1.4", supported)
-    assert not in_range("0.2.0", supported) and not in_range("1.0.0", supported)
+    assert in_range("1.0.0", supported) and in_range("1.4.2", supported)
+    assert not in_range("0.1.4", supported) and not in_range("2.0.0", supported)
 
 
 def test_the_viewer_revalidates_its_files(stack):

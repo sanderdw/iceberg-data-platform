@@ -1,9 +1,10 @@
 // The Maintenance runner: one run of one database, as the team's automation principal.
 //
-// It reads /work/job.json and the catalog token from MNT_TOKEN, inspects or maintains the database's
-// tables through the platform's Iceberg REST catalog and storage with iceberg-go, and writes
-// /work/out/result.json and /work/out/run.log. It never reaches anything but the catalog and storage (and,
-// as a Kubernetes Job, the launcher that hands it its job: remote.go).
+// It reads /work/job.json and the catalog token from MNT_TOKEN, inspects or maintains the tables the job
+// names, each by the Apache Polaris policies the gateway resolved for it, through the platform's Iceberg REST
+// catalog and storage with iceberg-go, and writes /work/out/result.json and /work/out/run.log. It never
+// reaches anything but the catalog and storage (and, as a Kubernetes Job, the launcher that hands it its job:
+// remote.go).
 package main
 
 import (
@@ -18,11 +19,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"slices"
 	"strings"
 	"time"
 
-	"github.com/apache/iceberg-go/catalog"
 	"github.com/apache/iceberg-go/catalog/rest"
 	iceio "github.com/apache/iceberg-go/io"
 	_ "github.com/apache/iceberg-go/io/gocloud/s3"
@@ -33,7 +32,7 @@ const (
 	Version     = "0.0.1"
 	icebergGo   = "github.com/apache/iceberg-go"
 	defaultWork = "/work"
-	// At most this many tables per run; a database with more is maintained over several runs.
+	// At most this many tables per run, as the gateway resolves them.
 	maxTables = 2000
 )
 
@@ -74,34 +73,6 @@ func tableName(id table.Identifier) string {
 	return strings.Join(id, ".")
 }
 
-// listTables walks every namespace of the database, nested ones included.
-func listTables(ctx context.Context, cat catalog.Catalog) ([]table.Identifier, error) {
-	var found []table.Identifier
-	queue := []table.Identifier{nil}
-	for len(queue) > 0 {
-		parent := queue[0]
-		queue = queue[1:]
-		children, err := cat.ListNamespaces(ctx, parent)
-		if err != nil {
-			return nil, fmt.Errorf("list namespaces: %w", err)
-		}
-		for _, ns := range children {
-			queue = append(queue, ns)
-			for id, err := range cat.ListTables(ctx, ns) {
-				if err != nil {
-					return nil, fmt.Errorf("list tables of %s: %w", tableName(ns), err)
-				}
-				found = append(found, id)
-				if len(found) >= maxTables {
-					return found, nil
-				}
-			}
-		}
-	}
-	slices.SortFunc(found, func(a, b table.Identifier) int { return strings.Compare(tableName(a), tableName(b)) })
-	return found, nil
-}
-
 func run(ctx context.Context, job Job, token string, logger *log.Logger) Result {
 	result := Result{Status: "success", Kind: job.Kind, DryRun: job.DryRun, RunnerVersion: Version,
 		IcebergGo: icebergGoVersion(), Tables: []TableResult{}}
@@ -124,25 +95,14 @@ func run(ctx context.Context, job Job, token string, logger *log.Logger) Result 
 		return fail(fmt.Errorf("connect to the catalog: %w", err))
 	}
 	defer cat.Close()
-	ids, err := listTables(ctx, cat)
-	if err != nil {
-		return fail(err)
-	}
-	selected := ids[:0]
-	for _, id := range ids {
-		if job.Selected(tableName(id)) {
-			selected = append(selected, id)
-		}
-	}
 	mode := job.Kind
 	if job.DryRun {
 		mode += " (dry run)"
 	}
 	logger.Printf("Maintenance runner %s, iceberg-go %s: %s of %d tables in %s", Version, result.IcebergGo, mode,
-		len(selected), job.Warehouse)
-	maintainer := Maintainer{Job: job, Log: logger}
-	for _, id := range selected {
-		name := tableName(id)
+		len(job.Tables), job.Warehouse)
+	for _, jt := range job.Tables {
+		name, id := jt.Name, table.Identifier(jt.Identifier)
 		if time.Now().After(deadline) {
 			result.Add(TableResult{Name: name, Status: "skipped", Error: errDeadline.Error(), Actions: []Action{}})
 			continue
@@ -153,14 +113,15 @@ func run(ctx context.Context, job Job, token string, logger *log.Logger) Result 
 			result.Add(TableResult{Name: name, Status: "failed", Error: "load: " + err.Error(), Actions: []Action{}})
 			continue
 		}
-		if job.Kind == KindInspect || job.Excluded(name) {
+		maintainer := Maintainer{Job: job, Policies: jt.Policies, Log: logger, Retry: DefaultRetry,
+			Reload: func(ctx context.Context) (*table.Table, error) { return cat.LoadTable(ctx, id) }}
+		if job.Kind == KindInspect || !jt.Policies.AnyEnabled() {
 			entry := TableResult{Name: name, Status: "success", Actions: []Action{}}
 			if job.Kind == KindMaintain {
-				entry.Status = "skipped"
-				entry.Actions = append(entry.Actions, Action{Operation: "excluded", Status: "skipped",
-					Detail: "The policy excludes this table."})
+				// No policy of any type runs here: read its health, change nothing.
+				entry.Status, entry.Actions = "skipped", maintainer.Off()
 			}
-			health, _, err := Inspect(ctx, tbl, job.Policy, nil)
+			health, _, err := Inspect(ctx, tbl, jt.Policies, nil)
 			entry.Health = health
 			if err != nil {
 				entry.Status, entry.Error = "failed", err.Error()

@@ -243,14 +243,14 @@ def test_publication_refuses_failed_quality(contract, product):
     assert catalog.mock_calls == []
 
 
-def test_polars_gets_only_the_storage_settings(monkeypatch):
+def test_polars_gets_the_storage_endpoint_and_renews_vended_credentials_itself(monkeypatch):
     table = Mock()
     table.io.properties = {"comment": "x", "uri": "sqlite:///c.db", "s3.endpoint": "http://localhost:9000",
                            "s3.access-key-id": "AK", "s3.secret-access-key": "SK", "s3.session-token": "ST"}
     monkeypatch.setenv("ICEBERG_S3_ENDPOINT", "http://rustfs:9000")
+    # Credentials in storage options would stop Polars from renewing the table's own before they expire.
     assert polars_storage_options(table) == {
-        "s3.endpoint": "http://rustfs:9000", "s3.access-key-id": "AK", "s3.secret-access-key": "SK",
-        "s3.session-token": "ST", "s3.region": "us-east-1", "allow_http": "true"}
+        "s3.endpoint": "http://rustfs:9000", "s3.region": "us-east-1", "allow_http": "true"}
     monkeypatch.delenv("ICEBERG_S3_ENDPOINT")
     table.io.properties = {"comment": "x", "warehouse": "file:///tmp"}
     assert polars_storage_options(table) == {}

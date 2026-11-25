@@ -26,11 +26,47 @@ Compared on 2026-11-19 (licences read from the repositories):
 | Apache SeaTunnel | Apache-2.0 | Its own engine | Equality deletes (not checked) | The earlier candidate in Ingestion's decisions; heavier |
 | RisingWave | Apache-2.0 | A streaming database | Equality deletes in upsert mode | Too heavy |
 | Supabase ETL | Apache-2.0 | PostgreSQL only | Into Supabase's own storage | No external catalog |
+| Filament 0.52 | Apache-2.0 | A server, control plane and worker with PostgreSQL and NATS | Rewrites every data file with a changed row | Tested side by side, see [Filament](#filament) |
 | Airbyte, Estuary, PeerDB, pg_mooncake, Redpanda Connect (CDC parts), Sling | ELv2, BSL, AGPL, BSL, paid licence, GPL | | | Licence |
 
 OLake is the only permissive option that runs as a command that ends, which is what the launcher
 needs, and writes no equality deletes. The extension uses only its command line, so another engine
 would replace the run image, not the extension.
+
+### Filament
+
+Tested 2026-11-23 against OLake v1.2.0 on one bench: PostgreSQL 17, Apache Polaris 1.8.0 and RustFS
+1.0.4, Filament 0.52.0 with its server, control plane and worker (4 GiB, 2 CPUs), CDC with `merge`.
+Four tables (1,000,000, 200,000, 1,000 and 20 rows); every table compared row by row with the source
+through DuckDB 2.0.0, PyIceberg 0.12.0 and Polars 2.1.0.
+
+| Run | OLake | Filament |
+| --- | --- | --- |
+| First copy, 1.2M rows | 29 s, 1.1 GiB | 46 s, 1.2 GiB |
+| 17,000 updates, deletes and inserts | 27 s | Failed (TOAST, below); 89 s after the fix |
+| No changes | 23 s | 1 s |
+| 120 changes and a new column | 26 s | 3 s, rewriting all 1,003,000 rows |
+| 500,000 updates in one transaction | 41 s, 1 GiB | Not finished after 37 min; the pipeline stayed blocked |
+
+Better in Filament: types (`numeric` stays decimal, `date`, `time`, `uuid` and `bytea` keep their
+types, `timestamp` stays without time zone; OLake writes `double`, `timestamptz` and strings), hard
+deletes instead of `_op_type = 'd'`, no delete files, and every finished run exact in all three
+readers, including the cases of OLake #1257 and #1363.
+
+Why not:
+
+- Every run with changes rewrites each data file holding a changed row, with no delete files. The
+  commit matches one `Or(id = …)` term per changed key against every row
+  (`connectors/iceberg/sink/mutation.go`), so its cost grows with rows times changed keys.
+- Cancelling the 500,000-update run did not stop it. After a restart of every Filament service the
+  run still showed as running, and new runs were refused ("run overlaps an active replication
+  route") while the slot kept the change log.
+- An update that leaves a TOAST value unchanged, without `REPLICA IDENTITY FULL`, fails the run for
+  every table until the table is set to `FULL` and resynced, which only the API offers.
+- Change data capture refuses the SQLite store of its CLI and single-binary engine ("cannot durably
+  admit replication streams"), so there is no command that ends; the launcher would need a Go
+  program around its one-run API.
+- Its sink sets no Iceberg partition spec.
 
 ## Delete modes
 
@@ -102,6 +138,18 @@ cannot finish within its limit or its memory is read again in full by every run.
 upserts after a bulk insert needed more than 4 GiB (killed) and finished in 11 minutes with 10 GiB.
 The runner reports a killed OLake as "probably out of memory, see RUN_MEMORY". To raise upstream: a
 periodic checkpoint of the LSN. A longer-lived token would also help large first copies.
+
+### Expiring credentials and conflicting commits
+
+OLake's Java writer (Apache Iceberg Java) gets the run's token and its vended storage credentials
+through the catalog proxy. The runner cannot renew either inside OLake; the time limit bounds the
+token. Whether the writer renews storage credentials depends on its Iceberg version and on Polaris
+sending `client.refresh-credentials-endpoint`. Not verified.
+
+Since Polaris 1.8, a commit that conflicts with a concurrent one gets 409. Iceberg Java retries its
+own commits (`commit.retry.num-retries`). The runner's property commit (`runner/publish.py`) has no requirements, so it
+sends the same commit again on 409, up to 5 tries with growing, jittered waits, and gives up at once
+on any other error.
 
 ### Costs per run
 

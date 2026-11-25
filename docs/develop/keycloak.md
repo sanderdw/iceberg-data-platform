@@ -49,7 +49,7 @@ sequenceDiagram
 ## Deployment boundaries
 
 - Access tokens last 15 minutes and renew automatically. Portal sessions last at most eight hours, or less if Keycloak refuses renewal.
-- Notebooks fetch their owner's current token from the gateway. PyIceberg picks it up automatically. A native DuckDB attachment must reconnect to renew it.
+- Notebooks fetch their owner's current token from the gateway. PyIceberg picks it up automatically. A native DuckDB attachment reaches Polaris through a loopback proxy in the notebook kernel, which adds the current token to each request; DuckDB itself holds only a random per-process secret for that proxy.
 - Signing out ends that portal's session and its notebooks, then signs out of Keycloak. There is no back-channel logout. A session in the other portal, a copied token or vended S3 credentials stay valid until they expire. Disabling an account or removing its admin role doesn't invalidate tokens that were already issued.
 - MCP clients and `iceberg_connect.py` keep an offline refresh token on the user's machine. It is valid for 30 days of inactivity. Revoke it in Keycloak under the user's offline **Sessions**, or with `uv run iceberg_connect.py logout`.
 - Sessions are in memory, so each portal needs a single replica.
@@ -71,4 +71,4 @@ This creates `demo-admin`, `demo-writer`, `demo-reader` and `demo-outsider`, wit
 ## References
 
 - [Keycloak server administration](https://www.keycloak.org/docs/latest/server_admin/index.html)
-- [Polaris external identity providers](https://polaris.apache.org/releases/1.8.0/managing-security/external-idp/)
+- [Polaris external identity providers](https://polaris.apache.org/releases/1.9.0/managing-security/external-idp/)

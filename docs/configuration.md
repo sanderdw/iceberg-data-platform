@@ -30,7 +30,7 @@ On Kubernetes the same settings are chart values; the last column names them.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP/HTTP receiver for logs and traces; see [OpenTelemetry](observability.md) | `otel.endpoint` |
 | `OTEL_EXPORTER_OTLP_HEADERS` | - | Headers for that receiver, such as its API key | `otel.headersSecret` |
 | `OTEL_RESOURCE_ATTRIBUTES` | - | Added to every record, such as `deployment.environment.name=production` | `otel.resourceAttributes` |
-| `POLARIS_OTEL_DISABLED` | `true` | Set to `false` to send Polaris's traces too | `otel.polaris` (`true`) |
+| `POLARIS_OTEL_DISABLED` | `true` | Set to `false` to send Polaris's traces too | `otel.polaris` (`false`) |
 
 Behind a reverse proxy, enable WebSockets and preserve the Host header. See the [security model](security.md) for the isolation and trust boundaries.
 

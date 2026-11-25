@@ -18,7 +18,7 @@ from pyiceberg.schema import Schema
 from pyiceberg.transforms import IdentityTransform
 from pyiceberg.types import BooleanType, DoubleType, IntegerType, NestedField, StringType
 
-from user_portal.notebook.connection import polars_storage_options
+from user_portal.notebook.connection import commit_with_retry, polars_storage_options
 from user_portal.notebook.duckdb_connection import EXAMPLE_PROPERTY
 
 EXAMPLE = "09_polars_grid_forecast_write"
@@ -425,11 +425,15 @@ def publish_grid_forecast(catalog, tables, contract, namespace, report):
         if table is None:
             table = catalog.create_table(identifier, schema=schema, partition_spec=spec, properties=properties)
         else:
-            with table.transaction() as transaction:
-                transaction.set_properties(properties)
-                with transaction.update_schema() as update:
-                    for field in schema.fields:
-                        update.update_column(field.name, doc=field.doc)
+            def describe(current, properties=properties, schema=schema):
+                with current.transaction() as transaction:
+                    transaction.set_properties(properties)
+                    with transaction.update_schema() as update:
+                        for field in schema.fields:
+                            update.update_column(field.name, doc=field.doc)
+
+            # A concurrent commit makes this metadata-only commit fail with 409; it is applied again.
+            commit_with_retry(lambda identifier=identifier: catalog.load_table(identifier), describe, table=table)
             table = catalog.load_table(identifier)
         tables[name].lazy().sink_iceberg(
             table,

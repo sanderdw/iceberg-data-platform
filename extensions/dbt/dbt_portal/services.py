@@ -58,7 +58,7 @@ def apps(discovery):
         [{"id": "portal", "title": "User portal", "url": discovery["userPortalUrl"]}]
         if discovery.get("userPortalUrl") else [])
     return {"workspace": [{k: str(p.get(k, "")) for k in ("id", "title", "url")} for p in pages],
-            "extensions": [{k: str(e.get(k, "")) for k in ("id", "title", "purpose", "origin")}
+            "extensions": [{k: str(e.get(k) or "") for k in ("id", "title", "purpose", "origin")}
                            for e in discovery.get("extensions") or []]}
 
 

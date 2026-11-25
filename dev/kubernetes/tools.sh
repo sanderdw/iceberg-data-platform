@@ -13,12 +13,12 @@ fetch() { # url sha256 file
   echo "$2  $work/$3" | sha256sum --check --quiet
 }
 
-fetch https://dl.k8s.io/release/v1.37.1/bin/linux/amd64/kubectl \
-  65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8 kubectl
+fetch https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl \
+  c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4 kubectl
 install -m 0755 "$work/kubectl" "$bin/kubectl"
 
-fetch https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz \
-  0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b helm.tar.gz
+fetch https://get.helm.sh/helm-v4.3.2-linux-amd64.tar.gz \
+  d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983 helm.tar.gz
 tar -xzf "$work/helm.tar.gz" -C "$work" linux-amd64/helm
 install -m 0755 "$work/linux-amd64/helm" "$bin/helm"
 
@@ -31,4 +31,4 @@ fetch https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-
 tar -xzf "$work/kubeconform.tar.gz" -C "$work" kubeconform
 install -m 0755 "$work/kubeconform" "$bin/kubeconform"
 
-echo "Installed kubectl 1.37.1, helm 4.3.1, kind 0.33.0 and kubeconform 0.8.0 in $bin"
+echo "Installed kubectl 1.37.2, helm 4.3.2, kind 0.33.0 and kubeconform 0.8.0 in $bin"

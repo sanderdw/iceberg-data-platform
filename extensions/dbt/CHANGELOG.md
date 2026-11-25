@@ -5,6 +5,12 @@
 The REST API and the MCP tools follow the platform's one set of conventions. Nothing of the old shapes
 is kept: update scripts and agent instructions.
 
+- **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
+  starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
+- **Apps menu.** Drawing the menu again no longer leaves the previous menu's listeners on the page.
+- **Every response is described.** Files, commits, branches, diffs, merges, compiling, previews, the
+  pipeline graph, nodes and lineage have their own schema in `contracts/dbt-api/v1/openapi.yaml`. A
+  diff's `added` and `removed` are numbers, null for a binary file (were strings, `-` for binary).
 - **Tools renamed:** `run` is `run_project`, `compile` is `compile_project`, `diff` is `get_diff`,
   `get_pipeline` is `get_pipeline_graph` and `get_model` is `get_node`. `set_schedule` is split into
   `create_schedule` and `update_schedule`; an update changes only what you give.
@@ -51,6 +57,11 @@ is kept: update scripts and agent instructions.
 - `iceberg_dbt.py` and the viewer use the new API. Download `iceberg_dbt.py` again from the viewer; an
   older copy no longer works.
 - The OpenAPI contract describes the shared responses and the error body.
+
+Apache Polaris 1.9:
+
+- A build sets its table properties and column docs again when a concurrent commit got there first
+  (409), instead of reporting the table under `published.errors`.
 
 ## 0.1.4 - 2026-11-18
 

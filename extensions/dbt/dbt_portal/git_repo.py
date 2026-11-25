@@ -189,7 +189,9 @@ class GitRepos:
         base, head = self.resolve(project, base), self.resolve(project, head)
         stat = self.git(project, "diff", "--numstat", base, head).stdout.decode()
         rows = (line.split("\t", 2) for line in stat.splitlines())
-        files = [{"path": p, "added": a, "removed": r} for a, r, p in rows]
+        # numstat counts lines; a binary file shows "-" for both.
+        files = [{"path": p, "added": None if a == "-" else int(a), "removed": None if r == "-" else int(r)}
+                 for a, r, p in rows]
         patch = self.git(project, "diff", "--no-color", base, head).stdout.decode(errors="replace")
         return {"base": base, "head": head, "files": files, "patch": patch[:200_000],
                 "truncated": len(patch) > 200_000}

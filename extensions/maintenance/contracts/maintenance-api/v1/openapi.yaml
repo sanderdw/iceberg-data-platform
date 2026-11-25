@@ -2,13 +2,13 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Maintenance \u00b7 Iceberg Data Platform",
-    "description": "Table maintenance for your teams' Iceberg databases (beta): snapshot expiry, compaction, dangling deletes, manifests and orphan files, by policy and schedule. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-maintenance-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
+    "description": "Table maintenance for your teams' Iceberg databases (beta): snapshot expiry, compaction, dangling deletes, manifests and orphan files, by Apache Polaris policies and a schedule. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-maintenance-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
     "version": "0.0.1"
   },
   "paths": {
     "/api/v1/me": {
       "get": {
-        "summary": "Your teams, roles, databases, the policy defaults and this extension",
+        "summary": "Your teams, roles, databases, the policy types and defaults, and this extension",
         "operationId": "whoami",
         "responses": {
           "200": {
@@ -777,7 +777,7 @@
     },
     "/api/v1/databases/{database}/tables/{table}": {
       "get": {
-        "summary": "One table's health, its last actions, effective policy and recent runs",
+        "summary": "One table's health, its last actions, the policies that applied and recent runs",
         "operationId": "getTableHealth",
         "parameters": [
           {
@@ -899,7 +899,7 @@
     },
     "/api/v1/databases/{database}/policy": {
       "get": {
-        "summary": "A database's maintenance policy and schedule, or the defaults when it has none",
+        "summary": "A database's Polaris maintenance policies, exclusions and schedule, or the defaults",
         "operationId": "getPolicy",
         "parameters": [
           {
@@ -1007,7 +1007,7 @@
         }
       },
       "patch": {
-        "summary": "Change a database's policy, or create it from the defaults (team administrators)",
+        "summary": "Change a database's policies and exclusions, or create them from the defaults (team administrators)",
         "operationId": "updatePolicy",
         "parameters": [
           {
@@ -1125,7 +1125,7 @@
         }
       },
       "delete": {
-        "summary": "Remove a database's policy and schedule (team administrators)",
+        "summary": "Remove a database's policies, exclusions and schedule (team administrators)",
         "operationId": "deletePolicy",
         "parameters": [
           {
@@ -2067,6 +2067,104 @@
   },
   "components": {
     "schemas": {
+      "Applied": {
+        "properties": {
+          "settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Settings",
+            "description": "The settings of this type that applied; off when no policy did."
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem",
+            "description": "Why the policy was not applied."
+          }
+        },
+        "type": "object",
+        "required": [
+          "settings",
+          "policy",
+          "problem"
+        ],
+        "title": "Applied"
+      },
+      "AppliedPolicies": {
+        "properties": {
+          "snapshotExpiry": {
+            "$ref": "#/components/schemas/Applied"
+          },
+          "dataCompaction": {
+            "$ref": "#/components/schemas/Applied"
+          },
+          "metadataCompaction": {
+            "$ref": "#/components/schemas/Applied"
+          },
+          "orphanFileRemoval": {
+            "$ref": "#/components/schemas/Applied"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshotExpiry",
+          "dataCompaction",
+          "metadataCompaction",
+          "orphanFileRemoval"
+        ],
+        "title": "AppliedPolicies"
+      },
+      "AppliedPolicy": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "appliedAt": {
+            "type": "string",
+            "enum": [
+              "catalog",
+              "namespace",
+              "table"
+            ],
+            "title": "Appliedat",
+            "description": "Where it is attached."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "namespace",
+          "version",
+          "appliedAt"
+        ],
+        "title": "AppliedPolicy",
+        "description": "The policy Polaris resolved for a table."
+      },
       "Apps": {
         "properties": {
           "workspace": {
@@ -2109,6 +2207,45 @@
         ],
         "title": "CancelResult"
       },
+      "DataCompaction": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "targetFileSizeBytes": {
+            "type": "integer",
+            "title": "Targetfilesizebytes"
+          },
+          "minInputFiles": {
+            "type": "integer",
+            "title": "Mininputfiles"
+          },
+          "deleteRatioThreshold": {
+            "type": "number",
+            "title": "Deleteratiothreshold"
+          },
+          "removeDanglingDeletes": {
+            "type": "boolean",
+            "title": "Removedanglingdeletes"
+          },
+          "maxInputBytesPerRun": {
+            "type": "integer",
+            "title": "Maxinputbytesperrun"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "targetFileSizeBytes",
+          "minInputFiles",
+          "deleteRatioThreshold",
+          "removeDanglingDeletes",
+          "maxInputBytesPerRun"
+        ],
+        "title": "DataCompaction",
+        "description": "system.data-compaction: enable and config target-file-size-bytes, min-input-files, delete-ratio-threshold,\nremove-dangling-deletes, max-input-bytes-per-run."
+      },
       "Database": {
         "properties": {
           "id": {
@@ -2136,9 +2273,16 @@
             "title": "Role"
           },
           "policy": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Policy",
-            "description": "Whether the database has a policy."
+            "description": "Whether maintenance policies are attached to the database's catalog; null where Maintenance is not enabled and cannot read them."
           },
           "schedule": {
             "anyOf": [
@@ -2391,6 +2535,104 @@
         ],
         "title": "Error"
       },
+      "Exclusion": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "namespace",
+              "table"
+            ],
+            "title": "Level"
+          },
+          "types": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "snapshotExpiry",
+                "dataCompaction",
+                "metadataCompaction",
+                "orphanFileRemoval"
+              ]
+            },
+            "type": "array",
+            "title": "Types",
+            "description": "The policy types switched off there."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "Createdby"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat",
+            "description": "RFC 3339 in UTC with milliseconds.",
+            "examples": [
+              "2026-11-24T09:15:02.123Z"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "level",
+          "types",
+          "createdBy",
+          "createdAt"
+        ],
+        "title": "Exclusion"
+      },
+      "ExclusionInput": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_$-]{1,128}(\\.[A-Za-z0-9_$-]{1,128}){0,7}$",
+            "title": "Target",
+            "description": "A namespace, or a table as namespace.table."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "namespace",
+              "table"
+            ],
+            "title": "Level"
+          },
+          "types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "snapshotExpiry",
+                    "dataCompaction",
+                    "metadataCompaction",
+                    "orphanFileRemoval"
+                  ]
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Types",
+            "description": "The policy types switched off there; all when left out."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target",
+          "level"
+        ],
+        "title": "ExclusionInput"
+      },
       "ExtensionApp": {
         "properties": {
           "id": {
@@ -2472,22 +2714,17 @@
           "apps": {
             "$ref": "#/components/schemas/Apps"
           },
-          "operations": {
+          "policyTypes": {
             "additionalProperties": {
-              "type": "string"
+              "$ref": "#/components/schemas/PolicyTypeInfo"
             },
             "type": "object",
-            "title": "Operations",
-            "description": "The maintenance operations and their names."
+            "title": "Policytypes",
+            "description": "The policy types: their Polaris type and title."
           },
           "defaults": {
-            "additionalProperties": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "object",
-            "title": "Defaults",
-            "description": "What a policy starts with, per operation."
+            "$ref": "#/components/schemas/Settings",
+            "description": "What a new policy starts with, per type."
           }
         },
         "type": "object",
@@ -2501,7 +2738,7 @@
           "enabledEnvironments",
           "userPortalUrl",
           "apps",
-          "operations",
+          "policyTypes",
           "defaults"
         ],
         "title": "Me"
@@ -2562,6 +2799,44 @@
         ],
         "title": "Membership"
       },
+      "MetadataCompaction": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "minCountToMerge": {
+            "type": "integer",
+            "title": "Mincounttomerge"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "minCountToMerge"
+        ],
+        "title": "MetadataCompaction",
+        "description": "system.metadata-compaction: rewrites manifests. enable, config.min-count-to-merge."
+      },
+      "OrphanFileRemoval": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "maxOrphanFileAgeInDays": {
+            "type": "integer",
+            "title": "Maxorphanfileageindays"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "maxOrphanFileAgeInDays"
+        ],
+        "title": "OrphanFileRemoval",
+        "description": "system.orphan-file-removal: enable, max_orphan_file_age_in_days (at least 1)."
+      },
       "Policy": {
         "properties": {
           "database": {
@@ -2583,22 +2858,22 @@
           "exists": {
             "type": "boolean",
             "title": "Exists",
-            "description": "False: the database has no policy, and settings are the defaults."
+            "description": "False: no maintenance policy is attached to the database's catalog, and settings are the defaults."
           },
           "settings": {
-            "additionalProperties": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "object",
-            "title": "Settings"
+            "$ref": "#/components/schemas/Settings",
+            "description": "The database's policies, or the defaults for a type without one."
           },
-          "exclude": {
+          "policies": {
+            "$ref": "#/components/schemas/PolicyRefs",
+            "description": "Per type, the Polaris policy behind settings; null when there is none."
+          },
+          "exclusions": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Exclusion"
             },
             "type": "array",
-            "title": "Exclude"
+            "title": "Exclusions"
           },
           "schedule": {
             "anyOf": [
@@ -2609,62 +2884,6 @@
                 "type": "null"
               }
             ]
-          },
-          "revision": {
-            "type": "integer",
-            "title": "Revision"
-          },
-          "createdAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "description": "RFC 3339 in UTC with milliseconds.",
-                "examples": [
-                  "2026-11-24T09:15:02.123Z"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Createdat"
-          },
-          "createdBy": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Createdby"
-          },
-          "updatedAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "description": "RFC 3339 in UTC with milliseconds.",
-                "examples": [
-                  "2026-11-24T09:15:02.123Z"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updatedat"
-          },
-          "updatedBy": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updatedby"
           },
           "role": {
             "type": "string",
@@ -2684,13 +2903,9 @@
           "environment",
           "exists",
           "settings",
-          "exclude",
+          "policies",
+          "exclusions",
           "schedule",
-          "revision",
-          "createdAt",
-          "createdBy",
-          "updatedAt",
-          "updatedBy",
           "role",
           "note"
         ],
@@ -2712,13 +2927,13 @@
               }
             ],
             "title": "Settings",
-            "description": "Per operation (expireSnapshots, compaction, orphanFiles, rewriteManifests, danglingDeletes), the settings to change; the rest keeps its value. whoami lists the defaults."
+            "description": "Per policy type (snapshotExpiry, dataCompaction, metadataCompaction, orphanFileRemoval), the settings to change; the rest keeps its value. whoami lists the defaults."
           },
-          "exclude": {
+          "exclusions": {
             "anyOf": [
               {
                 "items": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/ExclusionInput"
                 },
                 "type": "array",
                 "maxItems": 500
@@ -2727,25 +2942,159 @@
                 "type": "null"
               }
             ],
-            "title": "Exclude",
-            "description": "Tables (namespace.table) that maintenance leaves alone; replaces the list."
+            "title": "Exclusions",
+            "description": "Namespaces and tables that maintenance leaves alone, per policy type; replaces the list. Each is a disabled Polaris policy attached to the namespace or table, which overrides the database's."
           },
-          "expectedRevision": {
+          "expectedVersions": {
             "anyOf": [
               {
-                "type": "integer"
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "propertyNames": {
+                  "enum": [
+                    "snapshotExpiry",
+                    "dataCompaction",
+                    "metadataCompaction",
+                    "orphanFileRemoval"
+                  ]
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Expectedrevision",
-            "description": "Fail if the policy changed since this revision (0: only if there is none yet)."
+            "title": "Expectedversions",
+            "description": "Per policy type, the Polaris policy version you read (null: there was none). A type that changed since is refused with revision_conflict."
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "PolicyInput"
+      },
+      "PolicyRef": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace",
+            "description": "The namespace that holds the policy; _maintenance for Maintenance's own."
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Polaris's version of the policy: pass it as expectedVersions."
+          },
+          "managed": {
+            "type": "boolean",
+            "title": "Managed",
+            "description": "Whether Maintenance created it. Another tool's policy is updated in place."
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem",
+            "description": "Why Maintenance does not apply it, such as a value out of bounds."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "namespace",
+          "version",
+          "managed",
+          "problem"
+        ],
+        "title": "PolicyRef",
+        "description": "The Polaris policy of one type attached to the database's catalog."
+      },
+      "PolicyRefs": {
+        "properties": {
+          "snapshotExpiry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dataCompaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadataCompaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "orphanFileRemoval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshotExpiry",
+          "dataCompaction",
+          "metadataCompaction",
+          "orphanFileRemoval"
+        ],
+        "title": "PolicyRefs"
+      },
+      "PolicyTypeInfo": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "The Apache Polaris policy type, such as system.snapshot-expiry."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "title"
+        ],
+        "title": "PolicyTypeInfo"
       },
       "Run": {
         "properties": {
@@ -3252,6 +3601,54 @@
         ],
         "title": "ScheduleInput"
       },
+      "Settings": {
+        "properties": {
+          "snapshotExpiry": {
+            "$ref": "#/components/schemas/SnapshotExpiry"
+          },
+          "dataCompaction": {
+            "$ref": "#/components/schemas/DataCompaction"
+          },
+          "metadataCompaction": {
+            "$ref": "#/components/schemas/MetadataCompaction"
+          },
+          "orphanFileRemoval": {
+            "$ref": "#/components/schemas/OrphanFileRemoval"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshotExpiry",
+          "dataCompaction",
+          "metadataCompaction",
+          "orphanFileRemoval"
+        ],
+        "title": "Settings"
+      },
+      "SnapshotExpiry": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "maxSnapshotAgeDays": {
+            "type": "integer",
+            "title": "Maxsnapshotagedays"
+          },
+          "minSnapshotsToKeep": {
+            "type": "integer",
+            "title": "Minsnapshotstokeep"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "maxSnapshotAgeDays",
+          "minSnapshotsToKeep"
+        ],
+        "title": "SnapshotExpiry",
+        "description": "system.snapshot-expiry: enable, config.max_snapshot_age_days, config.min_snapshot_to_keep."
+      },
       "TableHealth": {
         "properties": {
           "database": {
@@ -3298,6 +3695,10 @@
             "type": "object",
             "title": "Health",
             "description": "What the runner read: snapshots, files, deletes, manifests."
+          },
+          "policies": {
+            "$ref": "#/components/schemas/AppliedPolicies",
+            "description": "The policies Polaris resolved for the table at its last run."
           },
           "inspectedAt": {
             "type": "string",
@@ -3371,6 +3772,7 @@
           "state",
           "reasons",
           "health",
+          "policies",
           "inspectedAt",
           "inspectedBy",
           "lastRun",
@@ -3427,6 +3829,10 @@
             "type": "object",
             "title": "Health",
             "description": "What the runner read: snapshots, files, deletes, manifests."
+          },
+          "policies": {
+            "$ref": "#/components/schemas/AppliedPolicies",
+            "description": "The policies Polaris resolved for the table at its last run."
           },
           "inspectedAt": {
             "type": "string",
@@ -3493,9 +3899,6 @@
             "type": "string",
             "title": "Role"
           },
-          "policy": {
-            "$ref": "#/components/schemas/Policy"
-          },
           "recentRuns": {
             "items": {
               "$ref": "#/components/schemas/RunSummary"
@@ -3514,6 +3917,7 @@
           "state",
           "reasons",
           "health",
+          "policies",
           "inspectedAt",
           "inspectedBy",
           "lastRun",
@@ -3522,7 +3926,6 @@
           "lastActions",
           "lastMaintainedAt",
           "role",
-          "policy",
           "recentRuns"
         ],
         "title": "TableHealthDetail"

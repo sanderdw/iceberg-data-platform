@@ -5,6 +5,9 @@
 The REST API and the MCP tools follow the platform's one set of conventions. Nothing of the old shapes
 is kept: update scripts and agent instructions.
 
+- **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
+  starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
+- **Apps menu.** Each menu has its own element id, so the page no longer has a fixed `apps-menu` id.
 - **Semantic models have the user portal's names.** The tools are `list_semantic_models`,
   `describe_semantic_model` and `query_semantic_model` (were `list_models`, `describe_model` and
   `query`). REST is `GET /semantic-models` and `GET /semantic-models/describe` (were `/models` and

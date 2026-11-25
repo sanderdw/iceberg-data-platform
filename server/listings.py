@@ -32,10 +32,10 @@ def listed(provider, id=None):
         header = {
             "id": share["id"],
             "name": share["name"],
-            "description": share["description"],
-            "contact": share["contact"],
-            "expiresAt": share["expiresAt"],
-            "owner": {"team": database["team"], "teamName": teams.get(database["team"], "")},
+            "description": share["description"] or None,
+            "contact": share["contact"] or None,
+            "expiresAt": catalog_metadata.utc_time(share["expiresAt"]),
+            "owner": {"team": database["team"], "teamName": teams.get(database["team"])},
             "database": {"id": database["id"], "name": database["name"], "environment": database["environment"]},
             # What the share's role really grants: renamed objects under their new name.
             "objects": provider.received_objects(share),
@@ -48,7 +48,7 @@ def summaries(provider):
     """Cheap to poll: management calls only. `version` changes when a listing's header or objects do;
     schema and semantic model edits show only in the full listing."""
     return [
-        {"id": h["id"], "version": h["version"], "databaseId": h["database"]["id"],
+        {"id": h["id"], "version": h["version"], "database": h["database"]["id"],
          "environment": h["database"]["environment"]}
         for _, h in listed(provider)
     ]

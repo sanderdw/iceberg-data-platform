@@ -14,7 +14,7 @@ def contract_range():
     try:
         return tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["iceberg-ingestion"]["bridge-contract"]
     except (OSError, KeyError):
-        return ">=0.1,<0.2"
+        return ">=1.0,<2"
 
 
 def flag(value):
@@ -46,7 +46,7 @@ class Settings:
     # Laptop demos: allow sources on private addresses, such as a database on the same machine.
     allow_private: bool = False
     mcp_callback_port: int = 3010
-    contract: str = ">=0.1,<0.2"
+    contract: str = ">=1.0,<2"
 
     @classmethod
     def from_env(cls, env=None):

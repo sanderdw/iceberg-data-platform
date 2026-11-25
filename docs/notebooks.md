@@ -6,9 +6,13 @@ Each session and database runs in its own container with your own credentials. S
 
 Notebooks have internet access. Packages you install with marimo's package installer (uv) go to `/tmp/packages` and disappear when the container stops. For permanent dependencies, add them to the `notebook` uv dependency group and rebuild the image ([run from source](develop/run-from-source.md)).
 
-A native DuckDB attachment caches its credentials. Reconnect it, or call `refresh_table_credentials`, to renew them or to query another table.
+Storage credentials for a table last about an hour. PyIceberg tables, Polars and native DuckDB attachments renew them shortly before they expire, so long-running cells keep working.
 
-Polars reads and writes Iceberg data files itself. Pass it the table's storage settings: `pl.scan_iceberg(table, storage_options=polars_storage_options(table))`, and the same for `sink_iceberg`, with `polars_storage_options` from `user_portal.notebook.connection`. Load the table again for fresh credentials.
+A native DuckDB attachment keeps working beyond the notebook's 15-minute sign-in, too. DuckDB keeps the token it attached with, so `connect_duckdb` attaches it to a small proxy inside the notebook kernel, on `127.0.0.1` only. The proxy forwards each catalog request with your current token and renews it shortly before it expires. It works for as long as your portal session lasts. Call `refresh_table_credentials` to query another table, or a table you just created.
+
+Polars reads and writes Iceberg data files itself. Pass it the internal storage address: `pl.scan_iceberg(table, storage_options=polars_storage_options(table))`, and the same for `sink_iceberg`, with `polars_storage_options` from `user_portal.notebook.connection`. Polars takes the credentials from the table and renews them itself.
+
+Two writers can commit to the same table at the same time. Polaris then refuses one commit with `409`, and nothing of it lands. PyIceberg and Polars retry appends and overwrites. For other changes, such as table properties or column docs, use `commit_with_retry` from `user_portal.notebook.connection`: it loads the table again and applies your change to it. DuckDB does not retry: run the statement again.
 
 ## Your notebooks
 

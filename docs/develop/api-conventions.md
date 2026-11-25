@@ -1,6 +1,6 @@
 # API and MCP conventions
 
-Every extension has a REST API under `/api/v1` and an MCP server, and all of them follow the rules on this page, so a person or an agent who has learned one extension can use the next. The core MCP servers (administration and user portal) follow the naming, confirmation and annotation rules. The portals' own `/api` routes serve their pages and are not covered.
+Every extension has a REST API under `/api/v1` and an MCP server, and all of them follow the rules on this page, so a person or an agent who has learned one extension can use the next. The core MCP servers (administration and user portal) follow the naming, confirmation and annotation rules, and the [Extension Bridge](extension-bridge.md) follows the casing, response, delete and error rules. The portals' own `/api` routes serve their pages and are not covered.
 
 Follow these rules when you change an extension or write a new one. `extensions/ingestion` is the reference implementation: its `services.py`, `api.py` and `mcp_server.py` show each rule in code.
 
@@ -66,7 +66,7 @@ One code per situation, and one status per code:
 | The platform refused or failed | `platform_error` | 502 |
 | The Bridge cannot be reached | `bridge_unavailable` | 503 |
 
-A code that only one service needs is fine, as long as it has one status. Codes from the Bridge pass through unchanged.
+A code that only one service needs is fine, as long as it has one status. Errors from the Bridge pass through unchanged, with their status and code; a Bridge answer without a code is 502 `platform_error`.
 
 ## Runs
 

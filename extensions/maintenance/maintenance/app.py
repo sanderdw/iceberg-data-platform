@@ -17,6 +17,7 @@ from .bridge_client import BridgeClient
 from .config import VERSION, Settings
 from .errors import CODES, MaintenanceError
 from .mcp_server import create_mcp, mount
+from .polaris import Polaris
 from .runs import RunManager
 from .scheduler import Scheduler
 from .services import Services
@@ -34,13 +35,14 @@ def validation_text(errors):
     return f"Check {field}: {first.get('msg', 'invalid input')}."
 
 
-def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=None):
+def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=None, polaris=None):
     settings = settings or Settings.from_env()
     store = store or Store(settings.state_dir / "state.sqlite3")
     bridge = bridge or BridgeClient(settings)
     verifier = verifier or TokenVerifier(settings)
-    runs = runs or RunManager(settings, store, bridge)
-    services = Services(settings, store, bridge, runs)
+    polaris = polaris or Polaris(bridge)
+    runs = runs or RunManager(settings, store, bridge, polaris)
+    services = Services(settings, store, bridge, runs, polaris)
     login = BrowserLogin(settings, verifier)
     scheduler = Scheduler(services)
     mcp = create_mcp(settings, services, verifier)
@@ -71,13 +73,15 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
                 for task in tasks:
                     task.cancel()
                 await runs.close()
+                await polaris.close()
                 await bridge.close()
                 store.close()
 
     app = FastAPI(title="Maintenance · Iceberg Data Platform", version=VERSION, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url="/api/v1/openapi.json",
                   description="Table maintenance for your teams' Iceberg databases (beta): snapshot expiry, "
-                              "compaction, dangling deletes, manifests and orphan files, by policy and schedule. "
+                              "compaction, dangling deletes, manifests and orphan files, by Apache Polaris policies "
+                              "and a schedule. "
                               "Authenticate "
                               "with a Keycloak bearer token for the iceberg-bridge audience (client "
                               "ext-maintenance-mcp), or sign in with the browser. Every operation is also an MCP tool "

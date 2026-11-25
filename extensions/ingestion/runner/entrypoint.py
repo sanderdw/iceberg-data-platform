@@ -136,7 +136,10 @@ def run(job, secrets, token, out):
     import dlt
     from pyiceberg.catalog import load_catalog
 
-    from runner import publish, sources
+    # Before dlt loads a table: binds tables to their FileIO, so vended credentials are renewed.
+    from runner import iceberg_io, publish, sources
+
+    iceberg_io.renew_table_credentials()
 
     catalog_location()
     name = pipeline_name(job)

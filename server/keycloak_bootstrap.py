@@ -157,7 +157,11 @@ def main():
                         json=[response.json()]).raise_for_status()
             response = kc.get(prefix + "/client-scopes")
             response.raise_for_status()
-            basic = next(scope["id"] for scope in response.json() if scope["name"] == "basic")
+            scopes = {scope["name"]: scope["id"] for scope in response.json()}
+            basic = scopes["basic"]
+            # Keycloak's Admin API accepts only tokens issued with its built-in kc-admin-api scope.
+            kc.put(prefix + "/clients/" + client_id + "/default-client-scopes/" + scopes["kc-admin-api"]
+                   ).raise_for_status()
             response = kc.get(prefix + "/clients")
             response.raise_for_status()
             for client in response.json():

@@ -16,7 +16,7 @@ def contract_range():
     try:
         return tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["iceberg-replication"]["bridge-contract"]
     except (OSError, KeyError):
-        return ">=0.1,<0.2"
+        return ">=1.0,<2"
 
 
 def flag(value):
@@ -50,7 +50,7 @@ class Settings:
     # Private networks where operational databases live, which runs may reach (CIDRs).
     allowed_networks: tuple = ()
     mcp_callback_port: int = 3010
-    contract: str = ">=0.1,<0.2"
+    contract: str = ">=1.0,<2"
 
     @classmethod
     def from_env(cls, env=None):

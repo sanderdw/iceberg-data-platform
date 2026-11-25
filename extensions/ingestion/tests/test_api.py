@@ -567,8 +567,8 @@ async def _tools(app):
 
 def test_supports_the_platforms_bridge_contract():
     supported = contract_range()
-    assert in_range("0.1.0", supported) and in_range("0.1.4", supported)
-    assert not in_range("0.2.0", supported) and not in_range("1.0.0", supported)
+    assert in_range("1.0.0", supported) and in_range("1.4.2", supported)
+    assert not in_range("0.1.4", supported) and not in_range("2.0.0", supported)
 
 
 def test_other_team_cannot_create_in_a_foreign_team(stack):

@@ -32,8 +32,14 @@ RunId = Annotated[str, PathParam(pattern=r"^run-[a-f0-9]{24}$")]
 TeamId = Annotated[str, PathParam(pattern=r"^team-[a-f0-9]{32}$")]
 Timestamp = Annotated[str, Field(description="RFC 3339 in UTC with milliseconds.",
                                  examples=["2026-11-24T09:15:02.123Z"])]
-SETTINGS_HELP = ("Per operation (expireSnapshots, compaction, orphanFiles, rewriteManifests, danglingDeletes), the "
+PolicyType = Literal["snapshotExpiry", "dataCompaction", "metadataCompaction", "orphanFileRemoval"]
+SETTINGS_HELP = ("Per policy type (snapshotExpiry, dataCompaction, metadataCompaction, orphanFileRemoval), the "
                  "settings to change; the rest keeps its value. whoami lists the defaults.")
+EXCLUSIONS_HELP = ("Namespaces and tables that maintenance leaves alone, per policy type; replaces the list. Each is "
+                   "a disabled Polaris policy attached to the namespace or table, which overrides the database's.")
+VERSIONS_HELP = ("Per policy type, the Polaris policy version you read (null: there was none). A type that changed "
+                 "since is refused with revision_conflict.")
+TARGET = r"^[A-Za-z0-9_$-]{1,128}(\.[A-Za-z0-9_$-]{1,128}){0,7}$"
 MODE_HELP = ("inspect reads every table's health; dry-run plans the policy without changing anything; maintain "
              "applies it (needs a policy).")
 WAIT_HELP = "Seconds to wait for the run to finish. The run is returned as it is then, finished or not."
@@ -47,13 +53,17 @@ class Input(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ExclusionInput(Input):
+    target: str = Field(pattern=TARGET, description="A namespace, or a table as namespace.table.")
+    level: Literal["namespace", "table"]
+    types: list[PolicyType] | None = Field(default=None, min_length=1,
+                                           description="The policy types switched off there; all when left out.")
+
+
 class PolicyInput(Input):
     settings: dict[str, dict[str, Any]] | None = Field(default=None, description=SETTINGS_HELP)
-    exclude: list[str] | None = Field(default=None, max_length=500,
-                                      description="Tables (namespace.table) that maintenance leaves alone; "
-                                                  "replaces the list.")
-    expectedRevision: int | None = Field(default=None, description="Fail if the policy changed since this revision "
-                                                                   "(0: only if there is none yet).")
+    exclusions: list[ExclusionInput] | None = Field(default=None, max_length=500, description=EXCLUSIONS_HELP)
+    expectedVersions: dict[PolicyType, int | None] | None = Field(default=None, description=VERSIONS_HELP)
 
 
 class ScheduleInput(Input):
@@ -129,8 +139,8 @@ class Me(BaseModel):
     enabledEnvironments: list[EnabledEnvironments]
     userPortalUrl: str
     apps: Apps
-    operations: dict[str, str] = Field(description="The maintenance operations and their names.")
-    defaults: dict[str, dict[str, Any]] = Field(description="What a policy starts with, per operation.")
+    policyTypes: dict[str, PolicyTypeInfo] = Field(description="The policy types: their Polaris type and title.")
+    defaults: Settings = Field(description="What a new policy starts with, per type.")
 
 
 class DatabaseName(BaseModel):
@@ -211,22 +221,115 @@ class DeletedPolicy(Deleted):
     note: str
 
 
+class PolicyTypeInfo(BaseModel):
+    type: str = Field(description="The Apache Polaris policy type, such as system.snapshot-expiry.")
+    title: str
+
+
+class SnapshotExpiry(BaseModel):
+    """system.snapshot-expiry: enable, config.max_snapshot_age_days, config.min_snapshot_to_keep."""
+
+    enabled: bool
+    maxSnapshotAgeDays: int
+    minSnapshotsToKeep: int
+
+
+class DataCompaction(BaseModel):
+    """system.data-compaction: enable and config target-file-size-bytes, min-input-files, delete-ratio-threshold,
+    remove-dangling-deletes, max-input-bytes-per-run."""
+
+    enabled: bool
+    targetFileSizeBytes: int
+    minInputFiles: int
+    deleteRatioThreshold: float
+    removeDanglingDeletes: bool
+    maxInputBytesPerRun: int
+
+
+class MetadataCompaction(BaseModel):
+    """system.metadata-compaction: rewrites manifests. enable, config.min-count-to-merge."""
+
+    enabled: bool
+    minCountToMerge: int
+
+
+class OrphanFileRemoval(BaseModel):
+    """system.orphan-file-removal: enable, max_orphan_file_age_in_days (at least 1)."""
+
+    enabled: bool
+    maxOrphanFileAgeInDays: int
+
+
+class Settings(BaseModel):
+    snapshotExpiry: SnapshotExpiry
+    dataCompaction: DataCompaction
+    metadataCompaction: MetadataCompaction
+    orphanFileRemoval: OrphanFileRemoval
+
+
+class PolicyRef(BaseModel):
+    """The Polaris policy of one type attached to the database's catalog."""
+
+    name: str
+    namespace: str = Field(description="The namespace that holds the policy; _maintenance for Maintenance's own.")
+    version: int = Field(description="Polaris's version of the policy: pass it as expectedVersions.")
+    managed: bool = Field(description="Whether Maintenance created it. Another tool's policy is updated in place.")
+    problem: str | None = Field(description="Why Maintenance does not apply it, such as a value out of bounds.")
+
+
+class PolicyRefs(BaseModel):
+    snapshotExpiry: PolicyRef | None
+    dataCompaction: PolicyRef | None
+    metadataCompaction: PolicyRef | None
+    orphanFileRemoval: PolicyRef | None
+
+
+class Exclusion(BaseModel):
+    target: str
+    level: Literal["namespace", "table"]
+    types: list[PolicyType] = Field(description="The policy types switched off there.")
+    createdBy: str
+    createdAt: Timestamp
+
+
 class Policy(BaseModel):
     database: str
     databaseName: str
     team: str
     environment: str
-    exists: bool = Field(description="False: the database has no policy, and settings are the defaults.")
-    settings: dict[str, dict[str, Any]]
-    exclude: list[str]
+    exists: bool = Field(description="False: no maintenance policy is attached to the database's catalog, and "
+                                     "settings are the defaults.")
+    settings: Settings = Field(description="The database's policies, or the defaults for a type without one.")
+    policies: PolicyRefs = Field(description="Per type, the Polaris policy behind settings; null when there is none.")
+    exclusions: list[Exclusion]
     schedule: Schedule | None
-    revision: int
-    createdAt: Timestamp | None
-    createdBy: str | None
-    updatedAt: Timestamp | None
-    updatedBy: str | None
     role: str = Field(description="Your role in the database's team.")
     note: str
+
+
+class AppliedPolicy(BaseModel):
+    """The policy Polaris resolved for a table."""
+
+    name: str
+    namespace: str
+    version: int
+    appliedAt: Literal["catalog", "namespace", "table"] = Field(description="Where it is attached.")
+
+
+class Applied(BaseModel):
+    settings: dict[str, Any] = Field(description="The settings of this type that applied; off when no policy did.")
+    policy: AppliedPolicy | None
+    problem: str | None = Field(description="Why the policy was not applied.")
+
+
+class AppliedPolicies(BaseModel):
+    snapshotExpiry: Applied
+    dataCompaction: Applied
+    metadataCompaction: Applied
+    orphanFileRemoval: Applied
+
+
+Me.model_rebuild()
 
 
 class Database(BaseModel):
@@ -236,7 +339,8 @@ class Database(BaseModel):
     teamName: str
     environment: str
     role: str
-    policy: bool = Field(description="Whether the database has a policy.")
+    policy: bool | None = Field(description="Whether maintenance policies are attached to the database's catalog; "
+                                            "null where Maintenance is not enabled and cannot read them.")
     schedule: Schedule | None
     tables: int = Field(description="Tables seen by the last runs.")
     attention: int = Field(description="Tables that need attention or failed.")
@@ -257,6 +361,7 @@ class TableHealth(BaseModel):
     state: Literal["healthy", "attention", "failed", "no-policy", "excluded"]
     reasons: list[str]
     health: dict[str, Any] = Field(description="What the runner read: snapshots, files, deletes, manifests.")
+    policies: AppliedPolicies = Field(description="The policies Polaris resolved for the table at its last run.")
     inspectedAt: Timestamp
     inspectedBy: str
     lastRun: str | None
@@ -273,7 +378,6 @@ class TableHealthList(BaseModel):
 
 class TableHealthDetail(TableHealth):
     role: str
-    policy: Policy
     recentRuns: list[RunSummary]
 
 
@@ -290,7 +394,7 @@ def router(services, caller_dependency):
     Team = Annotated[str | None, Query(pattern=r"^team-[a-f0-9]{32}$")]
 
     @api.get("/me", operation_id="whoami", response_model=Me,
-             summary="Your teams, roles, databases, the policy defaults and this extension")
+             summary="Your teams, roles, databases, the policy types and defaults, and this extension")
     async def whoami(caller: Caller):
         return await services.whoami(caller)
 
@@ -324,22 +428,23 @@ def router(services, caller_dependency):
 
     @api.get("/databases/{database}/tables/{table}", operation_id="getTableHealth",
              response_model=TableHealthDetail,
-             summary="One table's health, its last actions, effective policy and recent runs")
+             summary="One table's health, its last actions, the policies that applied and recent runs")
     async def table(database: DatabaseId, table: TableName, caller: Caller):
         return await services.get_table_health(caller, database, table)
 
     @api.get("/databases/{database}/policy", operation_id="getPolicy", response_model=Policy,
-             summary="A database's maintenance policy and schedule, or the defaults when it has none")
+             summary="A database's Polaris maintenance policies, exclusions and schedule, or the defaults")
     async def get_policy(database: DatabaseId, caller: Caller):
         return await services.get_policy(caller, database)
 
     @api.patch("/databases/{database}/policy", operation_id="updatePolicy", response_model=Policy,
-               summary="Change a database's policy, or create it from the defaults (team administrators)")
+               summary="Change a database's policies and exclusions, or create them from the defaults "
+                       "(team administrators)")
     async def update_policy(database: DatabaseId, data: Annotated[PolicyInput, Body()], caller: Caller):
         return await services.update_policy(caller, database, data.model_dump(exclude_unset=True))
 
     @api.delete("/databases/{database}/policy", operation_id="deletePolicy", response_model=DeletedPolicy,
-                summary="Remove a database's policy and schedule (team administrators)")
+                summary="Remove a database's policies, exclusions and schedule (team administrators)")
     async def delete_policy(database: DatabaseId, caller: Caller):
         return await services.delete_policy(caller, database)
 

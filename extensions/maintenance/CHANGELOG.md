@@ -2,17 +2,49 @@
 
 ## Unreleased
 
-The REST API and the MCP tools follow the platform's one set of conventions. Nothing of the old shapes
-is kept: update scripts and agent instructions.
+The REST API and the MCP tools follow the platform's one set of conventions, and policies moved into
+Apache Polaris. Nothing of the old shapes or the old state is kept: set the policies again, and update
+scripts and agent instructions.
+
+- **Bridge contract 1.0.** Needs platform 1.0.0 (contract `>=1.0,<2`). A Bridge error keeps its own
+  status and code (a Bridge 503 was answered as 502). The Apps menu no longer adds page-wide listeners
+  each time it opens.
+- **Policies are Apache Polaris policies.** A database's policy is one Polaris policy per system type,
+  attached to its catalog: `system.snapshot-expiry`, `system.data-compaction` (with dangling deletes),
+  `system.metadata-compaction` (manifests) and `system.orphan-file-removal`. Maintenance creates its own in
+  the namespace `_maintenance` and updates one another tool attached in place. `settings` has the keys
+  `snapshotExpiry` `{enabled, maxSnapshotAgeDays, minSnapshotsToKeep}`, `dataCompaction` `{enabled,
+  targetFileSizeBytes, minInputFiles, deleteRatioThreshold, removeDanglingDeletes, maxInputBytesPerRun}`,
+  `metadataCompaction` `{enabled, minCountToMerge}` and `orphanFileRemoval` `{enabled,
+  maxOrphanFileAgeInDays}` (were `expireSnapshots`, `compaction`, `danglingDeletes`, `rewriteManifests` and
+  `orphanFiles`, with hours and megabytes). `whoami` returns `policyTypes` (was `operations`).
+- **Versions, not revisions.** The policy returns `policies` with each type's Polaris `name`, `namespace`,
+  `version`, `managed` and `problem`; `PATCH` takes `expectedVersions` (was `expectedRevision`, tool
+  parameter `expected_versions`). A stale version is still 409 `revision_conflict`. `revision`, `createdAt`,
+  `createdBy`, `updatedAt` and `updatedBy` are gone: Polaris keeps none of them.
+- **Exclusions are overrides.** `exclusions` `[{target, level, types}]` (was `exclude`, tables only)
+  switches policy types off for a namespace or a table, with disabled Polaris policies attached there.
+  New codes: 422 `invalid_exclusions`, 409 `exclusion_conflict`.
+- **Runs ask Polaris.** A run resolves the policies that apply to each table, so policies other tools
+  attached to the catalog, a namespace or a table count. Each action has `policy` (`name`, `namespace`,
+  `version`, `appliedAt`); table health has `policies`. A type without a policy is not maintained, also in a
+  dry run.
+- **Reading and writing policies needs Maintenance enabled** in the environment (409
+  `environment_not_enabled`). `list_databases` returns `policy: null` where it cannot read them.
+- **Commit conflicts are retried.** A commit Polaris refuses as a conflict, and that iceberg-go does not
+  replay itself, is planned again against the new snapshot and retried with backoff, up to 4 tries, before
+  the table fails. Actions report `retries`, the totals `commitRetries`.
+- **State.** The SQLite store keeps schedules, exclusions, runs and table health only. A state file from
+  before this change is replaced on start.
 
 - **A schedule of its own.** `PUT /databases/{database}/schedule` with `{cron, enabled}` and
   `DELETE /databases/{database}/schedule`, as the tools `set_schedule` and `delete_schedule`. It needs a
   policy (409 `policy_required`) and is no longer set through the policy (`cron`, `scheduleEnabled`). A
   schedule is `{cron, enabled, nextRunAt, lastRun}`, read with the policy and the database. Changing it
-  does not change the policy's revision. The minimum stays once an hour.
-- **Policy.** `PATCH /databases/{database}/policy` (was `PUT`) with `{settings, exclude,
-  expectedRevision}` (was `expected_revision`); the tool is `update_policy` (was `set_policy`). Without a
-  policy it creates one from the defaults.
+  changes no policy version. The minimum stays once an hour.
+- **Policy.** `PATCH /databases/{database}/policy` (was `PUT`) with `{settings, exclusions,
+  expectedVersions}`; the tool is `update_policy` (was `set_policy`). Without a policy it creates one from
+  the defaults.
 - **Two tools start a run.** `inspect_database` (`mode` `inspect` or `dry-run`) changes no table and is
   no longer marked destructive; `run_maintenance` always maintains and takes no `mode`. The REST
   operation keeps `mode`. Maintaining without a policy is 409 `policy_required` (was `no_policy`, which

@@ -14,7 +14,7 @@ contract change.
   happens at image build only.
 - dbt v2 loads warehouse drivers through the ADBC driver manager. Without a local driver it
   downloads one from `public.cdn.getdbt.com`. Run containers have no internet, so the runner image
-  registers the ADBC entry point `duckdb_adbc_init` of the pinned `duckdb==2.0.0` wheel in a driver
+  registers the ADBC entry point `duckdb_adbc_init` of the pinned `duckdb==2.0.1` wheel in a driver
   manifest, `duckdb.toml`, found through `ADBC_DRIVER_PATH`. The runner runs the same DuckDB version
   as the platform's notebooks.
 - The DuckDB extensions `iceberg`, `avro` and `httpfs` are installed at image build from DuckDB's
@@ -75,6 +75,19 @@ loopback proxy in the run (`runner/catalog_proxy.py`) that replaces the vended `
 the internal storage endpoint. DuckDB signs its requests for the internal host, which RustFS
 accepts: vended credentials are not bound to a host name. The optional capability `storage-credentials` (path B) is reserved in the contract but
 not implemented in 0.1.
+
+### Expiring credentials and conflicting commits (2026-11-25, Polaris 1.9)
+
+- **DuckDB keeps the catalog token it attached with.** Checked against a fake catalog: neither a
+  replaced `iceberg` secret nor `ATTACH OR REPLACE` changes the token it sends, and a 401 does not
+  make it read the secret again. So the run limit (token lifetime minus 15 minutes) stays.
+- **Storage credentials are DuckDB's own.** With `access_delegation_mode: vended_credentials` DuckDB
+  takes them from each loadTable; runner code cannot renew them inside a statement.
+- **Conflicting commits.** Since Polaris 1.8 a commit that conflicts with a concurrent one gets 409.
+  DuckDB does not retry it: that model fails, and the next build writes it again. The runner's own
+  metadata commit (`runner/publish.py`) loads the table again and applies the properties and column
+  docs again, up to 5 tries with growing, jittered waits. PyIceberg retries only commits that add
+  snapshots, so there is no double retry.
 
 ## Materializations
 

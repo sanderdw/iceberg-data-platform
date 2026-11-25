@@ -3,8 +3,12 @@
 // Bridge's discovery (capability `app-directory`), which the extension's gateway passes to its page.
 // A reference copy lives in contracts/bridge/v1/apps-menu/ of the platform; extensions copy it unchanged.
 // Usage: IcebergApps.mount(element, {workspace: [{id, title, url}], extensions: [{id, title, purpose, origin}],
-// current: '<this extension id>'}). Plain DOM, no dependencies; every text is set as text, never markup.
+// current: '<this extension id>'}). Mount again on the same element to redraw it: the previous menu's listeners
+// are removed. Plain DOM, no dependencies; every text is set as text, never markup.
 (() => {
+  // The listeners of each mounted menu, so that mounting again removes those of the previous one.
+  const mounted = new WeakMap();
+
   const make = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -23,6 +27,10 @@
 
   function mount(anchor, apps) {
     const workspace = (apps && apps.workspace) || [], extensions = (apps && apps.extensions) || [];
+    if (mounted.has(anchor)) mounted.get(anchor).abort();
+    const listeners = new AbortController();
+    mounted.set(anchor, listeners);
+    const { signal } = listeners;
     anchor.replaceChildren();
     anchor.classList.add('apps-anchor');
     if (!workspace.length && !extensions.length) { anchor.hidden = true; return; }
@@ -51,12 +59,12 @@
       const open = toggle.getAttribute('aria-expanded') !== 'true';
       toggle.setAttribute('aria-expanded', String(open));
       menu.hidden = !open;
-    });
-    menu.addEventListener('click', event => { if (event.target.closest('a')) close(); });
-    document.addEventListener('click', event => { if (!anchor.contains(event.target)) close(); });
+    }, { signal });
+    menu.addEventListener('click', event => { if (event.target.closest('a')) close(); }, { signal });
+    document.addEventListener('click', event => { if (!anchor.contains(event.target)) close(); }, { signal });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !menu.hidden) { close(); toggle.focus(); }
-    });
+    }, { signal });
     anchor.append(toggle, menu);
     anchor.hidden = false;
   }

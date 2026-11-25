@@ -164,7 +164,7 @@ def test_a_listing_revoked_during_a_sync_is_skipped(world):
 
     def revoked(request):
         if request.url.path.endswith(SHARE):
-            return httpx.Response(404, json={"error": "This listing does not exist.", "code": "not_found"})
+            return httpx.Response(404, json={"error": "This listing does not exist.", "code": "unknown_listing"})
         return original(request)
 
     world.bridge_client.http._transport.handler = revoked
@@ -174,9 +174,9 @@ def test_a_listing_revoked_during_a_sync_is_skipped(world):
 
 def test_foreign_keys_wait_for_the_tables_they_refer_to(world):
     # orders comes before customers, and an employee table refers to itself: every key still lands.
-    employees = {"kind": "table", "namespace": ["sales"], "name": "employees", "uuid": "u9", "comment": "",
-                 "columns": [{"id": 1, "name": "id", "type": "long", "required": True, "doc": "", "children": []},
-                             {"id": 2, "name": "manager_id", "type": "long", "required": False, "doc": "",
+    employees = {"kind": "table", "namespace": ["sales"], "name": "employees", "uuid": "u9", "comment": None,
+                 "columns": [{"id": 1, "name": "id", "type": "long", "required": True, "doc": None, "children": []},
+                             {"id": 2, "name": "manager_id", "type": "long", "required": False, "doc": None,
                               "children": []}],
                  "partitionFields": [], "rowCount": None, "updatedAt": None, "producer": None}
     model = copy.deepcopy(REVENUE)

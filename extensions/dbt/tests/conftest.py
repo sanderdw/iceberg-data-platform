@@ -51,7 +51,7 @@ class FakeBridge:
         self.token_lifetime = 3600
 
     async def discovery(self, refresh=False):
-        return {"contractVersion": "0.1.0",
+        return {"contractVersion": "1.0.0",
                 "catalog": {"internalUri": "http://polaris-control-plane:8181/api/catalog"},
                 "storage": {"endpoint": "http://localhost:9000", "internalEndpoint": "http://rustfs:9000"},
                 "userPortalUrl": "http://localhost:3002"}
@@ -82,7 +82,7 @@ class FakeBridge:
 
     async def revoke(self, token, id):
         self.automation = [a for a in self.automation if a["id"] != id]
-        return {"revoked": True}
+        return {"deleted": True, "automationPrincipal": id}
 
     async def principal_for(self, team, environment):
         for item in self.automation:

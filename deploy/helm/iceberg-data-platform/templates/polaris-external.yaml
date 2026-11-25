@@ -43,7 +43,7 @@ spec:
 ---
 # Values for the official chart, computed from this release: install it with
 #   kubectl get configmap iceberg-polaris-values -o jsonpath='{.data.values\.yaml}' > polaris-values.yaml
-#   helm install catalog polaris/polaris --version 1.8.0 -f polaris-values.yaml
+#   helm install catalog polaris/polaris --version 1.9.0 -f polaris-values.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:

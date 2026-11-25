@@ -1,6 +1,6 @@
 # Evaluations internals
 
-How the [Evaluations](../evaluations.md) extension is built. Its source is in [`extensions/evaluations`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/evaluations): its own Compose project (`iceberg-evaluations`), dependencies, image, version and releases. It uses the platform only through the [Extension Bridge](extension-bridge.md) v1 (contract 0.1.3 or later) and Conversational BI only through its evaluation API.
+How the [Evaluations](../evaluations.md) extension is built. Its source is in [`extensions/evaluations`](https://github.com/sanderdw/iceberg-data-platform/tree/main/extensions/evaluations): its own Compose project (`iceberg-evaluations`), dependencies, image, version and releases. It uses the platform only through the [Extension Bridge](extension-bridge.md) v1 (contract 1.0 or later) and Conversational BI only through its evaluation API.
 
 | | |
 | --- | --- |
