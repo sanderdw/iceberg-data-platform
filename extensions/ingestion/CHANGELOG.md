@@ -7,6 +7,9 @@ is kept: update scripts and agent instructions.
 
 - **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
   starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
+- **File downloads.** `ING_MAX_DOWNLOAD_GB` (`runs.maxDownloadGB` on Kubernetes) sets the largest file an
+  https or http file source downloads: 4 GiB by default (was a fixed 2 GiB). On Kubernetes a run's work
+  volume (`runs.workSize`) is 8Gi (was 4Gi), so such a file fits.
 - **Apps menu.** Drawing the menu again no longer leaves the previous menu's listeners on the page.
 - **Lists** are an object with one key, in REST as in MCP: `{"pipelines": [...]}`, `{"templates": [...]}`,
   `{"runs": [...]}` and `{"environments": [...]}` (REST returned bare arrays).

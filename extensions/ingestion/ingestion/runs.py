@@ -208,6 +208,7 @@ class RunManager:
             "storageEndpoint": discovery["storage"]["internalEndpoint"], "sourceType": pipeline["source_type"],
             "source": pipeline["source"], "resources": pipeline["resources"],
             "allowPrivate": self.settings.allow_private, "fullRefresh": bool(run["full_refresh"]),
+            "maxDownload": self.settings.max_download,
         }
 
     async def launch(self, run, pipeline, principal):

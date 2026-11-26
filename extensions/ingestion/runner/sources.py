@@ -13,7 +13,8 @@ from urllib.parse import unquote, urlsplit
 SECRET = re.compile(r"^\$secret:([a-z][a-z0-9_]{0,63})$")
 FORMATS = {"csv", "jsonl", "parquet"}
 CHUNK = 10_000
-MAX_DOWNLOAD = 2 * 1024**3
+# The default for the largest http(s) download; the gateway sends ING_MAX_DOWNLOAD_GB in job.json.
+MAX_DOWNLOAD = 4 * 1024**3
 
 
 class SourceError(ValueError):
@@ -32,14 +33,14 @@ def substitute(value, secrets):
     return value
 
 
-def build(source_type, config, secrets, work):
+def build(source_type, config, secrets, work, max_download=MAX_DOWNLOAD):
     config = substitute(config, secrets)
     if source_type == "rest_api":
         return rest_api(config)
     if source_type == "sql_database":
         return sql_database(config)
     if source_type == "filesystem":
-        return filesystem(config, Path(work))
+        return filesystem(config, Path(work), max_download)
     raise SourceError(f"Unknown source type {source_type!r}.")
 
 
@@ -131,7 +132,7 @@ def read_parquet(items):
             yield from pq.ParquetFile(file).iter_batches(batch_size=CHUNK * 5)
 
 
-def download(url, target):
+def download(url, target, limit=MAX_DOWNLOAD):
     import requests
 
     name = Path(unquote(urlsplit(url).path)).name or "download"
@@ -142,13 +143,14 @@ def download(url, target):
         with open(target / name, "wb") as file:
             for chunk in response.iter_content(1024 * 1024):
                 size += len(chunk)
-                if size > MAX_DOWNLOAD:
-                    raise SourceError(f"The file is larger than {MAX_DOWNLOAD:,} bytes.")
+                if size > limit:
+                    raise SourceError(f"The file is larger than {limit / 1024**3:g} GiB, the limit the platform "
+                                      "administrator set (ING_MAX_DOWNLOAD_GB).")
                 file.write(chunk)
     return name
 
 
-def filesystem(config, work):
+def filesystem(config, work, max_download=MAX_DOWNLOAD):
     import dlt
     from dlt.sources.filesystem import filesystem as files
 
@@ -159,7 +161,7 @@ def filesystem(config, work):
         raise SourceError("A file source needs a table name.")
     scheme = urlsplit(url).scheme
     if scheme in ("http", "https"):
-        name = download(url, work / "in")
+        name = download(url, work / "in", max_download)
         listing = files(bucket_url=(work / "in").as_uri(), file_glob=name)
     elif scheme == "s3":
         import s3fs

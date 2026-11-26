@@ -194,6 +194,7 @@ def test_runs_execute_as_the_team_with_state_between_runs(stack):
     job = started["job"]
     assert job["warehouse"] == DATABASES[("sales", "development")] and job["namespace"] == "raw_crm"
     assert job["url"] == f"http://localhost:3008/#/pipelines/{pipeline['id']}" and not job["allowPrivate"]
+    assert job["maxDownload"] == 4 * 1024**3
     assert job["source"]["client"]["auth"]["token"] == "$secret:token" and SECRET not in json.dumps(job)
     assert job["catalogUri"] == "http://polaris-control-plane:8181/api/catalog"
     second = stack.call("POST", path, "bob", json={"wait": 30}).json()

@@ -76,6 +76,7 @@ spec:
             - {name: ING_RUN_RETENTION, value: {{ .Values.runs.retention | quote }}}
             - {name: ING_RUN_TIMEOUT_SECONDS, value: {{ .Values.runs.timeoutSeconds | quote }}}
             - {name: ING_ALLOW_PRIVATE_SOURCES, value: {{ .Values.runs.allowPrivateSources | quote }}}
+            - {name: ING_MAX_DOWNLOAD_GB, value: {{ .Values.runs.maxDownloadGB | quote }}}
             - {name: HOME, value: /tmp}
           ports:
             - {name: http, containerPort: 3008}

@@ -146,6 +146,9 @@ def test_a_csv_file_over_http_is_read_with_arrow(server, tmp_path):
                           tmp_path)
     assert [r.name for r in built] == ["airports"]
     assert load(tmp_path, sources.apply_hints(built, {}), "csv") == {"airports": 2}
+    with pytest.raises(sources.SourceError, match="ING_MAX_DOWNLOAD_GB"):
+        sources.build("filesystem", {"url": server + "airports.csv", "format": "csv", "table": "airports"}, {},
+                      tmp_path / "small", max_download=10)
     with pytest.raises(sources.SourceError, match="https, http or s3"):
         sources.build("filesystem", {"url": "file:///etc/passwd", "format": "csv", "table": "x"}, {}, tmp_path)
     with pytest.raises(sources.SourceError, match="format"):

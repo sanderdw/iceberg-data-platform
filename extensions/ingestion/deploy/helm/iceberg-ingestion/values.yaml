@@ -32,7 +32,10 @@ runs:
   timeoutSeconds: 43200
   memory: 2g
   cpus: "2"
-  workSize: 4Gi
+  # The largest file an https or http file source downloads, in GiB. It lands in the run's work
+  # volume, so keep workSize larger.
+  maxDownloadGB: 4
+  workSize: 8Gi
   # Sources on private addresses (a database inside your network). Off: runs reach only public sources.
   allowPrivateSources: false
 

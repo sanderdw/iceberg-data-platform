@@ -147,7 +147,9 @@ def run(job, secrets, token, out):
     restored = restore(job, pipelines / name)
     print(f"Pipeline {job.get('pipelineName', name)}: {job['sourceType']} into {job['namespace']}"
           f"{' (continuing from the previous state)' if restored else ''}", flush=True)
-    resources = sources.apply_hints(sources.build(job["sourceType"], job["source"], secrets, WORK),
+    source = sources.build(job["sourceType"], job["source"], secrets, WORK,
+                           job.get("maxDownload", sources.MAX_DOWNLOAD))
+    resources = sources.apply_hints(source,
                                     job.get("resources") or {}, job.get("fullRefresh", False))
     pipeline = dlt.pipeline(name, destination="filesystem", dataset_name=job["namespace"],
                             pipelines_dir=str(pipelines))
