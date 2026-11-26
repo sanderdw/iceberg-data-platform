@@ -107,6 +107,15 @@ A schedule has `cron` (five fields, UTC), `enabled`, `nextRunAt`, `lastRun`, and
 
 `list_environments`, `enable_environment` and `disable_environment` work with one entry: `{team, environment, enabled, enabledBy, databases: [{id, name}]}`.
 
+On the page, every extension enables and disables itself the same way, with the Settings page from [`contracts/bridge/v1/settings/`](https://github.com/sanderdw/iceberg-data-platform/tree/main/contracts/bridge/v1/settings), copied unchanged (Conversational BI ports it to React and keeps the stylesheet):
+
+- A **Settings** link in the header, next to Apps, opens `#/settings`. Its first option is **Environments** (`#/settings/environments`, `?team=<team>` scrolls to one team): each of the caller's teams with its three environments, who enabled each and its databases. An extension adds its own options after it.
+- Team administrators get **Enable** and **Disable**. Both ask first and say what the extension may then do, or what stops. Others read that a team administrator enables it.
+- A page about one team environment where the extension is not enabled shows the shared notice: **Enable** for team administrators, a link to Settings for others. No extension writes its own wording or its own enable button.
+- The header is the same in every extension and in both portals: its own navigation, then **Read-only** (when the person has the read role in each of their teams, and the extension has anything to change), **Settings**, **Apps** and the account menu from [`contracts/bridge/v1/account-menu/`](https://github.com/sanderdw/iceberg-data-platform/tree/main/contracts/bridge/v1/account-menu). Under the person's name it shows their teams and roles (`IcebergAccount.teams`), **Getting started** (the extension's documentation), the theme switch and **Sign out**.
+- The Settings page says, for every setting, what it does when it is on, what turning it off stops and who can change it. It sets its own type and spacing, so it looks the same in every extension.
+- Settings that only make sense where the extension is enabled, such as Evaluations' live evaluation, are reached from that environment under Environments. They are not a second way to enable it.
+
 ## MCP names
 
 - **Tools** are `verb_noun`: `list_pipelines`, `get_run`, `run_project`. `update_` merges, `set_` replaces a singleton or writes write-only values such as secrets. `whoami` is the one name without a noun.

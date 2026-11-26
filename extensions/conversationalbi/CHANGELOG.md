@@ -8,6 +8,14 @@ is kept: update scripts and agent instructions.
 - **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
   starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
 - **Apps menu.** Each menu has its own element id, so the page no longer has a fixed `apps-menu` id.
+- **Account menu.** The header ends the same way as in the administration and user portals: Settings, Apps and
+  your name. Your name opens your teams and roles, **Getting started** (this extension's documentation), the theme
+  switch and **Sign out**. Settings says what
+  turning it on and off does and who can change it, and looks the same in every extension.
+- **Settings.** A **Settings** link in the header opens the page every extension shares. Its first option,
+  **Environments**, shows per team whether Conversational BI is on in each environment, by whom, with which
+  databases, and Enable and Disable for team administrators, each behind a confirmation. The model
+  picker's Enable asks the same confirmation; other members get a link to Settings.
 - **Semantic models have the user portal's names.** The tools are `list_semantic_models`,
   `describe_semantic_model` and `query_semantic_model` (were `list_models`, `describe_model` and
   `query`). REST is `GET /semantic-models` and `GET /semantic-models/describe` (were `/models` and

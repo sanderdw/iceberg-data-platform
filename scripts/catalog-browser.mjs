@@ -48,7 +48,7 @@ try {
       body = {columns: ['meter_id', 'kwh'], rows: [['9007199254740993', '1.25'], ['2', null]], snapshotId: input.snapshot_id, limit: 100};
     }
     if (body) return route.fulfill({json: body});
-    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || path === '/favicon.svg' ? `public${path}` : `user_portal/public${path}`;
+    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || /^\/(favicon\.svg|(apps|account)-menu\.(js|css))$/.test(path) ? `public${path}` : `user_portal/public${path}`;
     const mime = path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.ttf') ? 'font/ttf' : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
     await route.fulfill({body: await readFile(asset), contentType: mime});
   });
@@ -120,7 +120,7 @@ try {
   await page.getByRole('button', {name: 'Refresh catalog', exact: true}).click();
   await expect(page.locator('#namespace-title')).toHaveText('readings');
   await expect(page.getByRole('tab', {name: 'Overview', exact: true})).toHaveAttribute('aria-selected', 'true');
-  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
+  await page.locator('.account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.screenshot({path: 'test-results/catalog/table-light.png', fullPage: true});
   await page.setViewportSize({width: 390, height: 844});
   for (const name of ['Overview', 'Schema', 'Snapshots', 'Partitioning & sort', 'Properties', 'Preview']) {
@@ -164,8 +164,8 @@ try {
   const ask = page.getByRole('link', {name: 'Ask in Conversational BI'});
   await expect(ask).toHaveAttribute('href', 'http://bi.test/#/ask?database=warehouse-dev&namespace=%5B%22analytics%22%5D&model=energy_model');
   await expect(ask).toHaveAttribute('rel', 'noopener');
-  await page.locator('#apps-toggle').click();
-  await expect(page.locator('#apps-list .extension-link strong')).toHaveText('Conversational BI');
+  await page.locator('.apps-toggle').click();
+  await expect(page.locator('.apps-menu a.apps-link strong')).toHaveText('Conversational BI');
   await page.keyboard.press('Escape');
   const modelUrl = page.url();
   await page.reload();

@@ -33,7 +33,7 @@ $env:ICEBERG_EXTENSIONS = 'replication'
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-A team administrator enables it once per environment with **Enable** on the page, creates replications and enters the source's password. Passwords are write-only: no page, API or MCP response returns them. Writers check sources and start runs; a schedule starts them too.
+A team administrator enables Replication once per environment: under **Settings** › **Environments** (Settings is in the header, and Environments is its first option), through an AI agent (`enable_environment`) or with `POST /api/v1/teams/{team}/environments/{environment}`. Environments shows who enabled each environment, and **Disable** revokes the team's service account there again. Team administrators also create replications and enter the source's password. Passwords are write-only: no page, API or MCP response returns them. Writers check sources and start runs; a schedule starts them too.
 
 Operational databases usually live on a private network. Runs reach only public addresses until you list your database networks in `replication/.env`, for example `REP_ALLOWED_SOURCE_NETWORKS=10.20.0.0/16,192.168.5.0/24`, and restart the extension with `docker compose -f replication/compose.yaml up -d --wait`. Loopback and link-local addresses stay refused. On Kubernetes, install the chart with `runs.allowedSourceNetworks`.
 

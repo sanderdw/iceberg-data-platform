@@ -66,6 +66,11 @@ DIRECTORY = {
     "evaluations": ("Evaluations", "Check Conversational BI's answers"),
     "openmetadata": ("OpenMetadata", "Your data products in OpenMetadata"),
 }
+# The platform's extensions that act for a team in one environment through an automation principal, enabled per
+# team environment in each extension's Settings. OpenMetadata publishes listings and has no such switch.
+TEAM_ENVIRONMENTS = ("conversationalbi", "dbt", "ingestion", "replication", "maintenance", "evaluations")
+# Where an extension's Settings › Environments is, under its origin (contracts/bridge/v1/settings).
+SETTINGS_PAGE = "/#/settings/environments"
 # The user portal's pages, which every Apps menu links to, in the order of the portal's own navigation.
 PORTAL_PAGES = [("team", "Team overview"), ("databases", "Databases"), ("catalog", "Catalog"),
                 ("notebooks", "Notebooks"), ("shares", "Data shares")]

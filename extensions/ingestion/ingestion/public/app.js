@@ -1,6 +1,8 @@
 'use strict';
 // The Ingestion page over the REST API: pipelines of your teams, their secrets, schedules and runs.
 // Agents do the same through the MCP server; the server checks every permission again.
+// Getting started, in the account menu: this extension's page in the platform's documentation.
+const GUIDE = 'https://sanderdw.github.io/iceberg-data-platform/ingestion/';
 const $ = selector => document.querySelector(selector);
 const ENVIRONMENTS = ['development', 'acceptance', 'production'];
 const LABELS = {development: 'Development', acceptance: 'Acceptance', production: 'Production'};
@@ -19,6 +21,8 @@ const BLANKS = {
 };
 const number = new Intl.NumberFormat();
 let me = null, templates = null, route = {}, poller = null, flash = null, renderToken = 0;
+// What a page redraws after an environment is enabled or disabled from a notice; by default the whole page.
+let environmentChanged = null;
 
 function h(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -76,6 +80,7 @@ function target(p) {
            h('span', {class: 'visually-hidden', text: ' namespace '}), p.namespace);
 }
 function teamName(id) { return (me?.memberships.find(m => m.team === id) || {}).teamName || id; }
+function membership(team) { return me.memberships.find(m => m.team === team); }
 const isAdmin = role => ADMINS.includes(role);
 const isWriter = role => WRITERS.includes(role);
 function enabledIn(team) { return (me?.enabledEnvironments.find(e => e.team === team) || {}).environments || []; }
@@ -90,7 +95,7 @@ function failure(error) { if (!error.signin) notice(error.message + (error.detai
 // Screens and routes
 function show(section) { for (const id of ['loading', 'signin', 'page']) $(`#${id}`).hidden = id !== section; }
 function showSignin() {
-  show('signin'); $('#identity').hidden = true;
+  show('signin'); IcebergAccount.mount($('#account'));
   $('#signin-link').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`;
 }
 function parseRoute() {
@@ -99,6 +104,7 @@ function parseRoute() {
   if (parts[0] === 'new') return {page: 'new', template: params.get('template'), type: params.get('type')};
   if (parts[0] === 'pipelines' && parts[1]) return {page: parts[2] === 'edit' ? 'edit' : 'pipeline', id: parts[1]};
   if (parts[0] === 'runs' && parts[1]) return {page: 'run', id: parts[1]};
+  if (parts[0] === 'settings') return {page: 'settings', section: parts[1] || '', team: params.get('team') || ''};
   return {page: 'list', team: params.get('team') || '', environment: ENVIRONMENTS.includes(params.get('environment')) ? params.get('environment') : ''};
 }
 function crumbs(...items) {
@@ -114,6 +120,7 @@ function schedulePoll(fn, ms) { clearTimeout(poller); poller = setTimeout(fn, ms
 
 async function render(keep = false) {
   clearTimeout(poller);
+  environmentChanged = null;
   route = parseRoute();
   const token = ++renderToken;
   try {
@@ -122,14 +129,23 @@ async function render(keep = false) {
       if (!session.authenticated) return showSignin();
       // Who is signed in, with Sign out, before /me: an account /me refuses (not linked to a portal user, or
       // someone else's Keycloak session) must still be able to sign out and sign in as someone else.
-      $('#identity').hidden = false; $('#username').textContent = session.user || '';
+      IcebergAccount.mount($('#account'), {name: session.user || '', guide: GUIDE, signOut});
       me = await api('/me');
-      $('#identity').hidden = false; $('#username').textContent = me.user.name;
+      IcebergAccount.mount($('#account'), {name: me.user.name, details: IcebergAccount.teams(me.memberships), guide: GUIDE, signOut});
+      // Read-only: the read role in every team, so nothing here can be changed.
+      $('#read-only').hidden = me.memberships.some((m) => ['writer', 'admin', 'bucket-admin'].includes(m.role));
       IcebergApps.mount($('#apps'), {...me.apps, current: me.extension});
+      IcebergSettings.configure({
+        title: 'Ingestion', request: (method, path) => send(path, method),
+        enables: 'Its pipelines load data into the team\'s databases of this environment as the team\'s service account.',
+        disables: 'Pipelines can no longer run here and their schedules stop. Pipelines, their runs and the tables they loaded stay.',
+        onChange: async () => { me = await api('/me'); if (environmentChanged) environmentChanged(); else render(true); }});
+      IcebergSettings.link($('#settings-link'));
     }
     show('page');
     if (flash) { notice(...flash); flash = null; } else notice('');
-    const pages = {list: renderList, new: renderEditor, edit: renderEditor, pipeline: renderPipeline, run: renderRun};
+    const pages = {list: renderList, new: renderEditor, edit: renderEditor, pipeline: renderPipeline, run: renderRun,
+                   settings: renderSettings};
     await pages[route.page](token);
     if (token === renderToken && !keep) window.scrollTo(0, 0);
   } catch (error) {
@@ -166,7 +182,7 @@ async function renderList() {
     heading('INGESTION', h('h1', {}, 'Your pipelines', h('span', {class: 'dot-accent', text: '.'})),
       'Declarative dlt pipelines that load REST APIs, databases and files into your teams\' Iceberg databases, as each team\'s service account.',
       adminTeams.length ? h('a', {class: 'button', href: '#/new', text: 'New pipeline'}) : null),
-    filters, body, environmentsCard(), agentCard());
+    filters, body, agentCard());
   if (pipelines.some(p => ACTIVE.has(p.lastRun?.status))) schedulePoll(() => render(true), 4000);
 }
 
@@ -200,32 +216,11 @@ function emptyState(admin) {
       : h('p', {class: 'small-print', text: 'A team administrator creates pipelines. You can follow their runs here.'}));
 }
 
-function environmentsCard() {
-  const items = me.memberships.map(m => {
-    const on = enabledIn(m.team);
-    return h('div', {class: 'env-row'}, h('span', {class: 'team', text: m.teamName}),
-      ENVIRONMENTS.map(env => h('span', {class: `env ${on.includes(env) ? 'on' : 'off'}`},
-        h('i', {class: `status ${on.includes(env) ? 'success' : ''}`, 'aria-hidden': 'true'}),
-        `${LABELS[env]}${on.includes(env) ? '' : ' · off'}`,
-        !on.includes(env) && isAdmin(m.role) ? h('button', {type: 'button', class: 'quiet', text: 'Enable',
-          'aria-label': `Enable Ingestion for ${m.teamName} in ${LABELS[env]}`, onclick: () => enableEnvironment(m, env)}) : null)));
-  });
-  return h('section', {class: 'card agent-hint'},
-    h('div', {class: 'section-title'}, h('h2', {text: 'Where pipelines can run'})),
-    h('p', {class: 'small', text: 'Runs only happen in environments a team administrator enabled. Each runs as that team\'s service account for the environment.'}),
-    h('div', {class: 'env-list'}, items));
-}
-
-async function enableEnvironment(membership, env) {
-  const ok = await confirmDialog(`Enable Ingestion in ${LABELS[env]}?`,
-    `Pipelines of ${membership.teamName} in ${LABELS[env]} will load data as the team's service account. The platform creates that account now; a team administrator can disable it again.`,
-    'Enable');
-  if (!ok) return;
-  try {
-    await send(`/teams/${membership.team}/environments/${env}`, 'POST');
-    me = await api('/me');
-    go(location.hash, [`Ingestion is enabled for ${membership.teamName} in ${LABELS[env]}.`]);
-  } catch (error) { failure(error); }
+// Where Ingestion is enabled, with Enable and Disable for team administrators (Settings › Environments, the page every extension shares).
+function renderSettings() {
+  crumbs(['Settings']);
+  environmentChanged = () => {};
+  IcebergSettings.mount($('#content'), me.memberships, {team: route.team, section: route.section});
 }
 
 function agentCard() {
@@ -291,13 +286,13 @@ async function renderEditor(token) {
   const envSelect = h('select', {id: 'f-env', disabled: editing, onchange: e => { state.environment = e.target.value; refreshDatabases(); }},
     ENVIRONMENTS.map(env => h('option', {value: env, text: LABELS[env], selected: env === state.environment})));
   const dbSelect = h('select', {id: 'f-db'});
-  const envHelp = h('span', {class: 'help'});
+  const envNotice = h('div');
   function refreshDatabases() {
     const dbs = me.databases.filter(d => d.team === state.team && d.environment === state.environment);
     const current = dbSelect.value || (editing ? existing.database : '');
     fill(dbSelect, dbs.length ? dbs.map(d => h('option', {value: d.id, text: d.name, selected: d.id === current})) : h('option', {value: '', text: 'No databases in this environment'}));
     dbSelect.disabled = !dbs.length;
-    envHelp.textContent = enabledIn(state.team).includes(state.environment) ? '' : 'Ingestion is not enabled here yet; enable it before the first run.';
+    fill(envNotice, enabledIn(state.team).includes(state.environment) ? null : IcebergSettings.notice(membership(state.team), state.environment));
   }
   const name = h('input', {id: 'f-name', value: start.name, maxlength: 64, required: true, autocomplete: 'off', placeholder: 'crm customers'});
   const description = h('input', {id: 'f-desc', value: start.description, maxlength: 500, autocomplete: 'off', placeholder: 'What it loads and why'});
@@ -390,12 +385,13 @@ async function renderEditor(token) {
   }
 
   const form = h('form', {class: 'stack', onsubmit: save, novalidate: true},
+    envNotice,
     h('section', {class: 'card'},
       h('h2', {text: 'Where it loads'}),
       h('div', {class: 'form-grid'},
         h('label', {class: 'field'}, h('span', {text: 'Name'}), name),
         h('label', {class: 'field'}, h('span', {text: 'Team'}), teamSelect),
-        h('label', {class: 'field'}, h('span', {text: 'Environment'}), envSelect, envHelp),
+        h('label', {class: 'field'}, h('span', {text: 'Environment'}), envSelect),
         h('label', {class: 'field'}, h('span', {text: 'Database'}), dbSelect),
         h('label', {class: 'field'}, h('span', {text: 'Namespace'}), namespace, h('span', {class: 'help', text: 'Lowercase, such as raw_crm.'}))),
       h('label', {class: 'field'}, h('span', {text: 'Description'}), description)),
@@ -413,6 +409,7 @@ async function renderEditor(token) {
       h('button', {type: 'submit', text: editing ? 'Save changes' : 'Create pipeline'}),
       h('a', {class: 'button quiet', href: editing ? `#/pipelines/${existing.id}` : '#/', text: 'Cancel'})));
   refreshDatabases(); parse(); renderHints();
+  environmentChanged = refreshDatabases;
   fill($('#content'), head, picker, form);
 }
 
@@ -425,7 +422,7 @@ async function renderPipeline(token) {
   const active = p.recentRuns.find(r => ACTIVE.has(r.status));
   const enabled = enabledIn(p.team).includes(p.environment);
   const fullRefresh = h('input', {type: 'checkbox', id: 'full-refresh'});
-  const blocked = p.secretsMissing.length ? `Set ${p.secretsMissing.join(', ')} first.` : !enabled ? 'Ingestion is not enabled in this environment.' : active ? 'A run is in progress.' : '';
+  const blocked = p.secretsMissing.length ? `Set ${p.secretsMissing.join(', ')} first.` : !enabled ? 'Not enabled in this environment.' : active ? 'A run is in progress.' : '';
   const runButton = writer && h('button', {type: 'button', text: active ? 'Running…' : 'Run now', disabled: Boolean(blocked), title: blocked || null,
     onclick: async event => {
       event.target.disabled = true;
@@ -440,6 +437,7 @@ async function renderPipeline(token) {
       runButton, writer && h('label', {class: 'check', title: 'Ignore incremental state and replace the tables\' rows'}, fullRefresh, 'Full refresh'),
       admin && h('a', {class: 'button quiet', href: `#/pipelines/${p.id}/edit`, text: 'Edit'}),
       admin && h('button', {type: 'button', class: 'danger', text: 'Delete', onclick: () => deletePipeline(p)})),
+    enabled ? null : IcebergSettings.notice(membership(p.team), p.environment),
     h('div', {class: 'status-line spaced'}, status, typeChip(p.sourceType), h('span', {class: 'chip'}, target(p)),
       p.schedule && h('span', {class: 'chip', text: p.schedule.enabled ? `Every ${p.schedule.cron} UTC` : 'Schedule paused'}),
       blocked && !active ? h('span', {class: 'small-print', text: blocked}) : null),
@@ -622,19 +620,11 @@ function confirmDialog(title, text, action, danger = false, extra = null, valid 
   });
 }
 
-function theme() {
-  const saved = (() => { try { return localStorage.getItem('iceberg-theme'); } catch { return null; } })();
-  const apply = mode => { document.documentElement.dataset.theme = mode;
-    document.querySelector('meta[name="theme-color"]').setAttribute('content', mode === 'light' ? '#f5f5f5' : '#000000');
-    $('#theme').textContent = mode === 'light' ? 'Dark / ●' : 'Light / ○';
-    $('#theme').setAttribute('aria-label', `Switch to ${mode === 'light' ? 'dark' : 'light'} mode`); };
-  apply(saved === 'light' ? 'light' : 'dark');
-  $('#theme').onclick = () => { const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; apply(next); try { localStorage.setItem('iceberg-theme', next); } catch { /* private mode */ } };
-}
-$('#logout').onclick = async () => {
+// Sign out of the extension and of Keycloak.
+async function signOut() {
   const result = await (await fetch('/auth/logout', {method: 'POST', headers: {'X-Iceberg-Ingestion': '1'}, credentials: 'same-origin'})).json();
   location.href = result.logoutUrl || '/';
-};
+}
 window.addEventListener('hashchange', () => render());
-theme();
+IcebergAccount.mount($('#account'));
 render();

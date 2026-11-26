@@ -25,7 +25,7 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 `ICEBERG_EXTENSIONS=conversationalbi` adds it without a model, and `ICEBERG_EXTENSIONS=none` skips the question. Allocate 8 GiB of Docker memory with it. Rerunning the installer keeps Conversational BI and `llm.env`. Pass `LLM_MODEL` and its key again to replace them.
 
-A **team administrator** enables Conversational BI once per environment: the **Enable** button in the chat's sidebar, or `enable_environment` over MCP. That creates the team's read-only service account for that environment, which also reads the data shares the team received there.
+A team administrator enables Conversational BI once per environment: under **Settings** › **Environments** (Settings is in the header, and Environments is its first option), through an AI agent (`enable_environment`) or with `POST /api/v1/teams/{team}/environments/{environment}`. Environments shows who enabled each environment, and **Disable** revokes the team's service account there again. The model picker in the chat's sidebar also offers **Enable** for the environments that still need it. Enabling creates the team's read-only service account for that environment, which also reads the data shares the team received there.
 
 On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 

@@ -22,7 +22,7 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/dow
   ICEBERG_EXTENSIONS=conversationalbi,evaluations sh
 ```
 
-Open http://localhost:3012 and sign in. A team administrator enables Evaluations for an environment, through an AI agent (`enable_environment`) or with `POST /api/v1/teams/{team}/environments/{environment}`, and Conversational BI in the same environment: a run asks Conversational BI for the whole team, with what every member of the team can read. On Kubernetes, register it as `extensions.evaluations.host` and install its chart `iceberg-evaluations` ([add extensions](install-kubernetes.md#add-extensions)).
+Open http://localhost:3012 and sign in. A team administrator enables Evaluations once per environment: under **Settings** › **Environments** (Settings is in the header, and Environments is its first option), through an AI agent (`enable_environment`) or with `POST /api/v1/teams/{team}/environments/{environment}`. Environments shows who enabled each environment, and **Disable** revokes the team's service account there again. Enable Conversational BI in the same environment too: a run asks Conversational BI for the whole team, with what every member of the team can read. On Kubernetes, register it as `extensions.evaluations.host` and install its chart `iceberg-evaluations` ([add extensions](install-kubernetes.md#add-extensions)).
 
 For an LLM judge, put `JUDGE_MODEL` (a Pydantic AI model string) and its provider's key in `evaluations/llm.env` in the installation directory, then run `docker compose up -d` in `evaluations`. To compare LLMs, the platform administrator lists them in Conversational BI's `BI_EVAL_MODELS` (with their keys in its `llm.env`).
 
@@ -57,7 +57,7 @@ Read the number with one thing in mind: the right answer is the semantic model's
 
 ## Live evaluation
 
-A team administrator switches on **Live evaluation** for an environment. From then on Conversational BI keeps that team's conversations in that environment, for its retention period (30 days by default), and only Evaluations reads them. Enabling Evaluations alone keeps nothing, and switching live evaluation off deletes the conversations that were kept. Every check (hourly by default, at most every 5 minutes) scores a sample of the new ones:
+A team administrator switches on **Live evaluation** for an environment where Evaluations is enabled, from that environment under **Settings** › **Environments**. From then on Conversational BI keeps that team's conversations in that environment, for its retention period (30 days by default), and only Evaluations reads them. Enabling Evaluations alone keeps nothing, and switching live evaluation off deletes the conversations that were kept. Every check (hourly by default, at most every 5 minutes) scores a sample of the new ones:
 
 - `grounded`: every figure comes from a result;
 - `refusal_explained`: a refused query isn't answered around with figures;

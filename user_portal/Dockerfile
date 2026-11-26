@@ -22,5 +22,6 @@ COPY user_portal/client ./user_portal/client
 COPY public/fonts ./user_portal/public/fonts
 COPY public/favicon.svg ./user_portal/public/favicon.svg
 COPY public/docs.js ./user_portal/public/docs.js
+COPY public/apps-menu.js public/apps-menu.css public/account-menu.js public/account-menu.css ./user_portal/public/
 EXPOSE 3002
 CMD ["uv", "run", "--no-sync", "python", "-m", "user_portal"]

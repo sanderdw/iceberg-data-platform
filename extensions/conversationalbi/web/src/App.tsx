@@ -2,12 +2,13 @@ import { CopilotChat, CopilotKitProvider, useAgent, useConfigureSuggestions, use
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { api, CSRF, describeModel, sameRef, type ModelDescription, type ModelEntry, type ModelRef, type NotEnabled } from "./api";
 import { AppsMenu, type Apps } from "./components/AppsMenu";
+import { AccountMenu, teams } from "./components/AccountMenu";
+import { SettingsLink, SettingsPage, type Membership } from "./components/Settings";
 import { Icon } from "./components/Icon";
 import { ModelGuide } from "./components/ModelGuide";
 import { ModelPicker } from "./components/ModelPicker";
 import { useGenerativeUI } from "./generative";
 import { starterQuestions } from "./guide";
-import { useTheme } from "./theme";
 
 type Session = { authenticated: boolean; user?: string };
 type Models = { semanticModels: ModelEntry[]; notEnabled: NotEnabled[] };
@@ -31,18 +32,42 @@ function deepLink(): ModelRef | null {
   }
 }
 
-// The platform portals' header: brand, navigation, theme, identity.
-function Header({ nav, children }: { nav?: ReactNode; children?: ReactNode }) {
-  const [theme, toggle] = useTheme();
+// #/settings or #/settings/<option>, with ?team= for the team to scroll to; anything else is the chat.
+function settingsRoute(): { section: string | null; team: string | null } | null {
+  const [path, query] = location.hash.slice(1).split("?");
+  const parts = path.split("/").filter(Boolean);
+  return parts[0] === "settings"
+    ? { section: parts[1] ?? null, team: new URLSearchParams(query ?? "").get("team") } : null;
+}
+
+function useSettingsRoute() {
+  const [route, setRoute] = useState(settingsRoute);
+  useEffect(() => {
+    const changed = () => setRoute(settingsRoute());
+    addEventListener("hashchange", changed);
+    return () => removeEventListener("hashchange", changed);
+  }, []);
+  return route;
+}
+
+type Me = { apps?: Apps; extension: string; memberships: Membership[] };
+
+// Getting started, in the account menu: Conversational BI's page in the platform's documentation.
+const GUIDE = "https://sanderdw.github.io/iceberg-data-platform/conversational-bi/";
+
+// The header every portal and extension shares: brand, navigation, then Settings, Apps and the account menu (who is
+// signed in, Getting started, the theme switch and Sign out). Asking questions needs only the read role, so there is
+// no Read-only pill here.
+function Header({ nav, children, user, details, signOut }: {
+  nav?: ReactNode; children?: ReactNode; user?: string; details?: string[]; signOut?: () => Promise<void>;
+}) {
   return (
     <header className="site">
       <a className="brand" href="/"><img src="/favicon.svg" alt="" />iceberg<span>/ conversational bi</span></a>
       {nav}
       <div className="header-actions">
-        <button type="button" className="ghost" onClick={toggle} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
-          {theme === "dark" ? "Light / ○" : "Dark / ●"}
-        </button>
         {children}
+        <AccountMenu name={user} details={details} guide={user ? GUIDE : undefined} signOut={signOut} />
       </div>
     </header>
   );
@@ -149,7 +174,8 @@ function Workspace({ user }: { user: string }) {
   const { agent } = useAgent({ agentId: "analyst" });
   const { copilotkit } = useCopilotKit();
   const [models, setModels] = useState<Models>();
-  const [apps, setApps] = useState<{ apps?: Apps; extension: string }>();
+  const [apps, setApps] = useState<Me>();
+  const settings = useSettingsRoute();
   const [problem, setProblem] = useState<string>();
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const selected = (agent.state as { model?: ModelRef } | undefined)?.model ?? null;
@@ -269,7 +295,7 @@ function Workspace({ user }: { user: string }) {
     };
   }, []);
   useEffect(() => {
-    api<{ apps?: Apps; extension: string }>("/api/v1/me").then((me) => setApps(me), () => undefined);
+    api<Me>("/api/v1/me").then((me) => setApps(me), () => undefined);
   }, []);
 
   const signOut = async () => {
@@ -279,20 +305,25 @@ function Workspace({ user }: { user: string }) {
 
   const nav = (
     <nav aria-label="Conversational BI">
-      <button type="button" className="nav-item" aria-current="page">Ask</button>
+      <button type="button" className="nav-item" aria-current={settings ? undefined : "page"}
+        onClick={() => { if (settings) location.hash = "#/"; }}>Ask</button>
     </nav>
   );
 
   return (
     <>
-      <Header nav={nav}>
+      <Header nav={nav} user={user} details={teams(apps?.memberships)} signOut={signOut}>
+        <SettingsLink current={!!settings} />
         <AppsMenu apps={apps?.apps} current={apps?.extension ?? ""} />
-        <div id="identity">
-          <span id="username">{user}</span>
-          <button type="button" className="quiet" onClick={signOut}>Sign out</button>
-        </div>
       </Header>
-      <main id="workspace-screen" className={started ? "started" : undefined}>
+      {settings && (
+        <main id="settings-screen">
+          {apps ? <SettingsPage memberships={apps.memberships} focusTeam={settings.team} section={settings.section} onChange={load} />
+            : <p className="eyebrow">[ LOADING ]</p>}
+        </main>
+      )}
+      {/* Hidden, not removed, on the Settings page: the conversation stays. */}
+      <main id="workspace-screen" className={started ? "started" : undefined} hidden={!!settings}>
         <section className={`workspace-heading${started ? " compact" : ""}`}>
           <div>
             <div className="eyebrow">{current ? (current.shared ? "SHARED SEMANTIC MODEL" : "TEAM SEMANTIC MODEL") : "CONVERSATIONAL BI"}</div>

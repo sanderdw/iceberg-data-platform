@@ -70,25 +70,10 @@ async function renderSettings() {
   const status = h('p', {class: 'small', role: 'status'});
   const say = (words, error = false) => { status.textContent = words; status.classList.toggle('error', error); };
   const admin = ADMINS.includes(project.role), writer = WRITERS.includes(project.role);
-  const reload = async () => { project = await api(`/projects/${project.id}`); renderProjectBar(); await renderSettings(); };
-
-  const toggle = async (env, on) => {
-    if (!on && !confirm(`Disable dbt in ${LABELS[env.environment]}? Its runs and schedules stop and the team's service account for it is revoked. Tables stay.`)) return;
-    try {
-      await api(`/teams/${project.team}/environments/${env.environment}`, {method: on ? 'POST' : 'DELETE'});
-      await reload();
-    } catch (error) { say(error.message, true); }
-  };
   const environments = h('section', {class: 'card'},
     h('h2', {text: 'Environments'}),
-    h('p', {class: 'small', text: 'dbt runs in an environment once a team administrator enables it there. It then writes to the team\'s databases of that environment as the team\'s service account.'}),
-    h('table', {}, h('thead', {}, h('tr', {}, ...['Environment', 'State', 'Databases', 'Enabled by', ''].map(t => h('th', {text: t})))),
-      h('tbody', {}, ...project.environments.map(env => h('tr', {},
-        h('td', {text: LABELS[env.environment]}),
-        h('td', {}, h('span', {class: `chip ${env.enabled ? 'success' : ''}`, text: env.enabled ? 'enabled' : 'off'})),
-        h('td', {text: env.databases.map(d => d.name).join(', ') || '—'}), h('td', {text: env.enabledBy || '—'}),
-        h('td', {class: 'nowrap'}, admin ? h('button', {type: 'button', class: env.enabled ? 'danger' : 'quiet',
-          onclick: () => toggle(env, !env.enabled), text: env.enabled ? 'Disable' : 'Enable'}) : null))))));
+    h('p', {class: 'small'}, 'dbt is enabled per team environment, for every project of the team, in ',
+      h('a', {href: IcebergSettings.href(project.team), text: 'Settings'}), '.'));
 
   const remove = async branch => {
     if (!confirm(`Delete the branch ${branch.name}? Its commits that are not on main are lost.`)) return;

@@ -2,10 +2,10 @@
    --border-visible, --text-primary, --text-secondary, --text-display, --mono and --small. */
 .apps-anchor { position: relative; }
 .apps-anchor[hidden] { display: none; }
-.apps-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; background: transparent; border: 1px solid var(--border-visible); border-radius: 999px; color: var(--text-primary); font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; cursor: pointer; }
-.apps-toggle::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s; }
-.apps-toggle[aria-expanded='true']::after { transform: translateY(2px) rotate(-135deg); }
-.apps-toggle:hover, .apps-toggle[aria-expanded='true'] { background: transparent; border-color: var(--text-primary); color: var(--text-display); }
+.apps-anchor .apps-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; background: transparent; border: 1px solid var(--border-visible); border-radius: 999px; color: var(--text-primary); font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; cursor: pointer; }
+.apps-anchor .apps-toggle::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s; }
+.apps-anchor .apps-toggle[aria-expanded='true']::after { transform: translateY(2px) rotate(-135deg); }
+.apps-anchor .apps-toggle:hover, .apps-anchor .apps-toggle[aria-expanded='true'] { background: transparent; border-color: var(--text-primary); color: var(--text-display); }
 .apps-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; display: grid; gap: 12px; width: min(520px, calc(100vw - 32px)); padding: 16px; background: var(--surface); border: 1px solid var(--border-visible); border-radius: 12px; box-shadow: 0 12px 32px rgb(0 0 0 / .35); text-align: left; }
 .apps-menu[hidden] { display: none; }
 .apps-group { margin: 0; font: var(--small)/1.6 var(--mono); color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; }

@@ -1,6 +1,8 @@
 'use strict';
 // The pipeline viewer over the REST API. Agents change pipelines through MCP; people see what
 // exists, how it ran and where each table comes from, and writers can edit a node's file on a branch.
+// Getting started, in the account menu: this extension's page in the platform's documentation.
+const GUIDE = 'https://sanderdw.github.io/iceberg-data-platform/dbt/';
 const $ = selector => document.querySelector(selector);
 const ENVIRONMENTS = ['development', 'acceptance', 'production'];
 const LABELS = {development: 'Development', acceptance: 'Acceptance', production: 'Production'};
@@ -58,16 +60,17 @@ function chip(status) { return h('span', {class: `chip ${status}`}, h('i', {clas
 function notice(message, error = false) { const n = $('#notice'); n.hidden = !message; n.textContent = message || ''; n.classList.toggle('error', error); }
 
 function show(section) {
-  for (const id of ['loading', 'signin', 'projects', 'project']) $(`#${id}`).hidden = id !== section;
+  for (const id of ['loading', 'signin', 'projects', 'project', 'settings-page']) $(`#${id}`).hidden = id !== section;
 }
 function showSignin() {
-  show('signin'); $('#identity').hidden = true;
+  show('signin'); IcebergAccount.mount($('#account'));
   $('#signin-link').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`;
 }
 
 function parseRoute() {
   const [path, query = ''] = location.hash.replace(/^#/, '').split('?');
   const parts = path.split('/').filter(Boolean), params = new URLSearchParams(query);
+  if (parts[0] === 'settings') return {page: 'settings', section: parts[1] || '', team: params.get('team')};
   return {project: parts[0] === 'projects' ? parts[1] : null, view: VIEWS.includes(parts[2]) ? parts[2] : 'pipeline',
           environment: ENVIRONMENTS.includes(params.get('environment')) ? params.get('environment') : 'development',
           node: params.get('node'), run: params.get('run'), ref: params.get('ref') || 'main', file: params.get('file')};
@@ -84,6 +87,7 @@ function go(next, replace = false) {
 
 function crumbs() {
   const nav = $('#crumbs'); nav.replaceChildren(h('a', {href: '#/', text: 'Projects'}));
+  if (route.page === 'settings') return nav.append(' / ', h('span', {text: 'Settings', 'aria-current': 'page'}));
   if (project) nav.append(' / ', h('span', {text: `${teamName(project.team)} · ${project.name}`}));
 }
 // The pipeline shows one branch: its latest structure, node statuses and runs. Acceptance and
@@ -100,10 +104,27 @@ async function render() {
       if (!session.authenticated) return showSignin();
       // Who is signed in, with Sign out, before /me: an account /me refuses (not linked to a portal user, or
       // someone else's Keycloak session) must still be able to sign out and sign in as someone else.
-      $('#identity').hidden = false; $('#username').textContent = session.user || '';
+      IcebergAccount.mount($('#account'), {name: session.user || '', guide: GUIDE, signOut});
       me = await api('/me');
-      $('#identity').hidden = false; $('#username').textContent = me.user.name;
+      IcebergAccount.mount($('#account'), {name: me.user.name, details: IcebergAccount.teams(me.memberships), guide: GUIDE, signOut});
+      // Read-only: the read role in every team, so nothing here can be changed.
+      $('#read-only').hidden = me.memberships.some((m) => ['writer', 'admin', 'bucket-admin'].includes(m.role));
       IcebergApps.mount($('#apps'), {...me.apps, current: me.extension});
+      IcebergSettings.configure({
+        title: 'dbt',
+        request: (method, path) => api(path, {method}),
+        enables: "Its projects build into the team's databases of this environment as the team's service account.",
+        disables: "Projects can no longer build here and their schedules stop. Projects, their runs and the tables they built stay.",
+        onChange: async () => {
+          me = await api('/me');
+          if (project) { project = await api(`/projects/${project.id}`); render(); }
+        },
+      });
+      IcebergSettings.link($('#settings-link'));
+    }
+    if (route.page === 'settings') {
+      project = null; crumbs(); show('settings-page');
+      return IcebergSettings.mount($('#settings-content'), me.memberships, {team: route.team, section: route.section});
     }
     if (!route.project) { project = null; crumbs(); return renderProjects(); }
     if (!project || project.id !== route.project) { project = await api(`/projects/${route.project}`); pipeline = null; }
@@ -229,8 +250,12 @@ function renderProjectBar() {
     button.onclick = () => go({view: button.dataset.view, node: null, run: null, file: null});
   }
   for (const view of VIEWS) $(`#${view}-view`).hidden = route.view !== view;
-  const where = ADMINS.includes(project.role) ? 'Enable it under Settings.' : 'A team administrator enables it under Settings.';
-  notice(enabled.get(route.environment) || ['files', 'settings'].includes(route.view) ? '' : `dbt is not enabled for ${LABELS[route.environment]} in this team. ${where}`);
+  // Where dbt is off, the shared notice says so, with Enable for team administrators.
+  const off = !enabled.get(route.environment) && !['files', 'settings'].includes(route.view);
+  const membership = me.memberships.find(m => m.team === project.team) || {team: project.team, teamName: teamName(project.team), role: project.role};
+  fill($('#environment-notice'), off ? IcebergSettings.notice(membership, route.environment) : null);
+  $('#environment-notice').hidden = !off;
+  notice('');
 }
 
 async function renderPipeline() {
@@ -671,21 +696,12 @@ async function renderRuns() {
   if (ACTIVE.has(run.status)) { log.scrollTop = log.scrollHeight; again(); } else if (all.some(r => ACTIVE.has(r.status))) again();
 }
 
-function theme() {
-  const saved = (() => { try { return localStorage.getItem('iceberg-theme'); } catch { return null; } })();
-  const apply = mode => { document.documentElement.dataset.theme = mode;
-    document.querySelector('meta[name="theme-color"]').setAttribute('content', mode === 'light' ? '#f5f5f5' : '#000000');
-    $('#theme').textContent = mode === 'light' ? 'Dark / ●' : 'Light / ○';
-    $('#theme').setAttribute('aria-label', `Switch to ${mode === 'light' ? 'dark' : 'light'} mode`); };
-  apply(saved || 'dark');
-  $('#theme').onclick = () => { const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; apply(next); try { localStorage.setItem('iceberg-theme', next); } catch { /* private mode */ } };
-}
-
-$('#logout').onclick = async () => {
+// Sign out of the extension and of Keycloak.
+async function signOut() {
   const result = await (await fetch('/auth/logout', {method: 'POST', headers: {'X-Iceberg-Dbt': '1'}, credentials: 'same-origin'})).json();
   location.href = result.logoutUrl || '/';
-};
+}
 window.addEventListener('hashchange', render);
 window.addEventListener('resize', () => graph?.fit());
-theme();
+IcebergAccount.mount($('#account'));
 render();

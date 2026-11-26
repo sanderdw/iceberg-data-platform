@@ -53,7 +53,7 @@ try {
       else { shares = []; body = {deleted: true}; }
     }
     if (body) return route.fulfill({status, json: body});
-    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || path === '/favicon.svg' ? `public${path}` : `user_portal/public${path}`;
+    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || /^\/(favicon\.svg|(apps|account)-menu\.(js|css))$/.test(path) ? `public${path}` : `user_portal/public${path}`;
     const mime = path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.ttf') ? 'font/ttf' : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
     await route.fulfill({body: await readFile(asset), contentType: mime});
   });
@@ -344,7 +344,7 @@ print(json.dumps(outputs))
   const rotatedSnippet = await page.evaluate(() => window.copied);
   expect(rotatedSnippet).toContain("CLIENT_SECRET 'second-secret'");
   expect(rotatedSnippet).not.toContain('first-secret');
-  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
+  await page.locator('.account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.setViewportSize({width: 390, height: 844});
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Mobile overflow in the credential panel');
   await page.screenshot({path: 'test-results/shares/credential-mobile.png', fullPage: true});
@@ -474,7 +474,7 @@ print(json.dumps(outputs))
   for (const [width, height] of [[390, 844], [1280, 800], [1440, 1000]]) {
     await page.setViewportSize({width, height});
     for (const theme of ['light', 'dark']) {
-      await page.evaluate(theme => applyTheme(theme), theme);
+      await page.evaluate(theme => IcebergAccount.apply(theme, false), theme);
       for (const name of ['team', 'databases', 'catalog', 'notebooks', 'shares']) {
         await page.locator(`#workspace-nav [data-page=${name}]`).click();
         await noOverflow(page, `${name} at ${width}×${height}`);

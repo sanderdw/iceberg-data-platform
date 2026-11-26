@@ -111,7 +111,7 @@ try {
   await page.route('http://user-forms.test/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/session') return route.fulfill({json: {authenticated: false}});
-    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || path === '/favicon.svg' ? `public${path}` : `user_portal/public${path}`;
+    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || /^\/(favicon\.svg|(apps|account)-menu\.(js|css))$/.test(path) ? `public${path}` : `user_portal/public${path}`;
     const contentType = path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.ttf') ? 'font/ttf' : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
     return route.fulfill({body: await readFile(asset), contentType});
   });

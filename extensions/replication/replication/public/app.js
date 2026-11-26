@@ -1,6 +1,8 @@
 'use strict';
 // The Replication page over the REST API: replications of your teams, their secrets, schedules and runs.
 // Agents do the same through the MCP server; the server checks every permission again.
+// Getting started, in the account menu: this extension's page in the platform's documentation.
+const GUIDE = 'https://sanderdw.github.io/iceberg-data-platform/replication/';
 const $ = selector => document.querySelector(selector);
 const ENVIRONMENTS = ['development', 'acceptance', 'production'];
 const LABELS = {development: 'Development', acceptance: 'Acceptance', production: 'Production'};
@@ -21,6 +23,8 @@ const BLANK = {host: 'db.example.com', port: 5432, database: 'app', username: 'o
                tls: 'verify-full', slot: 'iceberg_app', publication: 'iceberg_app'};
 const number = new Intl.NumberFormat();
 let me = null, templates = null, route = {}, poller = null, flash = null, renderToken = 0;
+// What a page redraws after an environment is enabled or disabled from a notice; by default the whole page.
+let environmentChanged = null;
 
 function h(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -79,6 +83,7 @@ function target(p) {
            h('span', {class: 'visually-hidden', text: ' namespace '}), p.namespace);
 }
 function teamName(id) { return (me?.memberships.find(m => m.team === id) || {}).teamName || id; }
+function membership(team) { return me.memberships.find(m => m.team === team); }
 const isAdmin = role => ADMINS.includes(role);
 const isWriter = role => WRITERS.includes(role);
 function enabledIn(team) { return (me?.enabledEnvironments.find(e => e.team === team) || {}).environments || []; }
@@ -94,7 +99,7 @@ function failure(error) { if (!error.signin) notice(error.message + (error.detai
 // Screens and routes
 function show(section) { for (const id of ['loading', 'signin', 'page']) $(`#${id}`).hidden = id !== section; }
 function showSignin() {
-  show('signin'); $('#identity').hidden = true;
+  show('signin'); IcebergAccount.mount($('#account'));
   $('#signin-link').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`;
 }
 function parseRoute() {
@@ -103,6 +108,7 @@ function parseRoute() {
   if (parts[0] === 'new') return {page: 'new', template: params.get('template')};
   if (parts[0] === 'replications' && parts[1]) return {page: parts[2] === 'edit' ? 'edit' : 'replication', id: parts[1]};
   if (parts[0] === 'runs' && parts[1]) return {page: 'run', id: parts[1]};
+  if (parts[0] === 'settings') return {page: 'settings', section: parts[1] || '', team: params.get('team') || ''};
   return {page: 'list', team: params.get('team') || '', environment: ENVIRONMENTS.includes(params.get('environment')) ? params.get('environment') : ''};
 }
 function crumbs(...items) {
@@ -118,6 +124,7 @@ function schedulePoll(fn, ms) { clearTimeout(poller); poller = setTimeout(fn, ms
 
 async function render(keep = false) {
   clearTimeout(poller);
+  environmentChanged = null;
   route = parseRoute();
   const token = ++renderToken;
   try {
@@ -126,14 +133,23 @@ async function render(keep = false) {
       if (!session.authenticated) return showSignin();
       // Who is signed in, with Sign out, before /me: an account /me refuses (not linked to a portal user, or
       // someone else's Keycloak session) must still be able to sign out and sign in as someone else.
-      $('#identity').hidden = false; $('#username').textContent = session.user || '';
+      IcebergAccount.mount($('#account'), {name: session.user || '', guide: GUIDE, signOut});
       me = await api('/me');
-      $('#identity').hidden = false; $('#username').textContent = me.user.name;
+      IcebergAccount.mount($('#account'), {name: me.user.name, details: IcebergAccount.teams(me.memberships), guide: GUIDE, signOut});
+      // Read-only: the read role in every team, so nothing here can be changed.
+      $('#read-only').hidden = me.memberships.some((m) => ['writer', 'admin', 'bucket-admin'].includes(m.role));
       IcebergApps.mount($('#apps'), {...me.apps, current: me.extension});
+      IcebergSettings.configure({
+        title: 'Replication', request: (method, path) => send(path, method),
+        enables: 'Its replications write data into the team\'s databases of this environment as the team\'s service account.',
+        disables: 'Replications can no longer run here and their schedules stop. Replications, their runs and the tables they wrote stay.',
+        onChange: async () => { me = await api('/me'); if (environmentChanged) environmentChanged(); else render(true); }});
+      IcebergSettings.link($('#settings-link'));
     }
     show('page');
     if (flash) { notice(...flash); flash = null; } else notice('');
-    const pages = {list: renderList, new: renderEditor, edit: renderEditor, replication: renderReplication, run: renderRun};
+    const pages = {list: renderList, new: renderEditor, edit: renderEditor, replication: renderReplication, run: renderRun,
+                   settings: renderSettings};
     await pages[route.page](token);
     if (token === renderToken && !keep) window.scrollTo(0, 0);
   } catch (error) {
@@ -170,7 +186,7 @@ async function renderList() {
     heading('REPLICATION', h('h1', {}, 'Replication', h('span', {class: 'dot-accent', text: '.'})),
       'Keep operational databases in step with your teams\' Iceberg databases. Each run reads the changes since the last one, writes them as the team\'s service account and stops. For APIs, files and one-time loads, use Ingestion (dlt).',
       adminTeams.length ? h('a', {class: 'button', href: '#/new', text: 'New replication'}) : null),
-    filters, body, h('div', {class: 'columns even'}, deletedRowsCard(), agentCard()), environmentsCard());
+    filters, body, h('div', {class: 'columns even'}, deletedRowsCard(), agentCard()));
   if (replications.some(p => ACTIVE.has(p.lastRun?.status))) schedulePoll(() => render(true), 4000);
 }
 
@@ -220,32 +236,11 @@ function deletedRowsCard() {
     h('p', {class: 'small-print', text: 'OLake adds _olake_id, _olake_timestamp, _op_type, _cdc_lsn and _cdc_timestamp to every table.'}));
 }
 
-function environmentsCard() {
-  const items = me.memberships.map(m => {
-    const on = enabledIn(m.team);
-    return h('div', {class: 'env-row'}, h('span', {class: 'team', text: m.teamName}),
-      ENVIRONMENTS.map(env => h('span', {class: `env ${on.includes(env) ? 'on' : 'off'}`},
-        h('i', {class: `status ${on.includes(env) ? 'success' : ''}`, 'aria-hidden': 'true'}),
-        `${LABELS[env]}${on.includes(env) ? '' : ' · off'}`,
-        !on.includes(env) && isAdmin(m.role) ? h('button', {type: 'button', class: 'quiet', text: 'Enable',
-          'aria-label': `Enable Replication for ${m.teamName} in ${LABELS[env]}`, onclick: () => enableEnvironment(m, env)}) : null)));
-  });
-  return h('section', {class: 'card agent-hint'},
-    h('div', {class: 'section-title'}, h('h2', {text: 'Where replications can run'})),
-    h('p', {class: 'small', text: 'Runs only happen in environments a team administrator enabled. Each runs as that team\'s service account for the environment.'}),
-    h('div', {class: 'env-list'}, items));
-}
-
-async function enableEnvironment(membership, env) {
-  const ok = await confirmDialog(`Enable Replication in ${LABELS[env]}?`,
-    `Replications of ${membership.teamName} in ${LABELS[env]} will write data as the team's service account. The platform creates that account now; a team administrator can disable it again.`,
-    'Enable');
-  if (!ok) return;
-  try {
-    await send(`/teams/${membership.team}/environments/${env}`, 'POST');
-    me = await api('/me');
-    go(location.hash, [`Replication is enabled for ${membership.teamName} in ${LABELS[env]}.`]);
-  } catch (error) { failure(error); }
+// Where Replication is enabled, with Enable and Disable for team administrators (Settings › Environments, the page every extension shares).
+function renderSettings() {
+  crumbs(['Settings']);
+  environmentChanged = () => {};
+  IcebergSettings.mount($('#content'), me.memberships, {team: route.team, section: route.section});
 }
 
 function agentCard() {
@@ -283,13 +278,13 @@ async function renderEditor(token) {
   const envSelect = h('select', {id: 'f-env', disabled: editing, onchange: e => { state.environment = e.target.value; refreshDatabases(); }},
     ENVIRONMENTS.map(env => h('option', {value: env, text: LABELS[env], selected: env === state.environment})));
   const dbSelect = h('select', {id: 'f-db'});
-  const envHelp = h('span', {class: 'help'});
+  const envNotice = h('div');
   function refreshDatabases() {
     const dbs = me.databases.filter(d => d.team === state.team && d.environment === state.environment);
     const current = dbSelect.value || (editing ? existing.database : '');
     fill(dbSelect, dbs.length ? dbs.map(d => h('option', {value: d.id, text: d.name, selected: d.id === current})) : h('option', {value: '', text: 'No databases in this environment'}));
     dbSelect.disabled = !dbs.length;
-    envHelp.textContent = enabledIn(state.team).includes(state.environment) ? '' : 'Replication is not enabled here yet; enable it before the first run.';
+    fill(envNotice, enabledIn(state.team).includes(state.environment) ? null : IcebergSettings.notice(membership(state.team), state.environment));
   }
   const input = (id, value, extra = {}) => h('input', {id, value: value ?? '', autocomplete: 'off', spellcheck: 'false', ...extra});
   const f = {
@@ -370,7 +365,7 @@ async function renderEditor(token) {
         h('section', {class: 'card'},
           h('h2', {text: 'Where it writes'}),
           h('div', {class: 'form-grid'},
-            field('Name', f.name), field('Team', teamSelect), h('label', {class: 'field'}, h('span', {text: 'Environment'}), envSelect, envHelp),
+            field('Name', f.name), field('Team', teamSelect), h('label', {class: 'field'}, h('span', {text: 'Environment'}), envSelect),
             field('Database', dbSelect), field('Namespace', f.namespace, 'Lowercase, such as raw_crm.'), field('First run', f.firstRun)),
           field('Description', f.description))),
       h('div', {class: 'stack'},
@@ -383,10 +378,11 @@ async function renderEditor(token) {
       h('button', {type: 'submit', text: editing ? 'Save changes' : 'Create replication'}),
       h('a', {class: 'button quiet', href: editing ? `#/replications/${existing.id}` : '#/', text: 'Cancel'})));
   refreshDatabases();
+  environmentChanged = refreshDatabases;
   fill($('#content'), heading(editing ? 'EDIT REPLICATION' : 'NEW REPLICATION',
     h('h1', {class: 'compact'}, editing ? existing.name : 'Connect a source', h('span', {class: 'dot-accent', text: '.'})),
     editing ? 'Changes apply from the next run. A new host or user removes the password; a new source, slot, database or namespace copies everything again.'
-      : 'Where the replication connects and where it writes. Then set the password, check the source and choose its tables.'), form);
+      : 'Where the replication connects and where it writes. Then set the password, check the source and choose its tables.'), envNotice, form);
 }
 
 // One replication
@@ -400,7 +396,7 @@ async function renderReplication(token) {
   const active = p.recentRuns.find(r => ACTIVE.has(r.status));
   const enabled = enabledIn(p.team).includes(p.environment);
   const hasTables = Object.keys(p.tables).length > 0;
-  const blocked = p.secretsMissing.length ? 'Set the password first.' : !enabled ? 'Replication is not enabled in this environment.'
+  const blocked = p.secretsMissing.length ? 'Set the password first.' : !enabled ? 'Not enabled in this environment.'
     : active ? 'A run is in progress.' : '';
   const start = async (event, path, body, message) => {
     event.target.disabled = true;
@@ -416,6 +412,7 @@ async function renderReplication(token) {
     heading(`${teamName(p.team)} · ${LABELS[p.environment]}`.toUpperCase(),
       h('h1', {class: 'compact'}, p.name, h('span', {class: 'dot-accent', text: '.'})), p.description,
       admin && h('a', {class: 'button quiet', href: `#/replications/${p.id}/edit`, text: 'Edit'}), checkButton, runButton),
+    enabled ? null : IcebergSettings.notice(membership(p.team), p.environment),
     h('div', {class: 'status-line spaced'}, p.lastRun ? chip(p.lastRun.status, `Last run ${p.lastRun.status}`) : chip('idle', 'Never run'),
       typeChip(p.sourceType), h('span', {class: 'chip', text: p.options.deleteMode === 'dv' ? 'Deletion vectors' : 'Positional deletes'}),
       p.schedule && h('span', {class: 'chip', text: p.schedule.enabled ? `${p.schedule.cron} UTC` : 'Schedule paused'}),
@@ -695,19 +692,11 @@ function confirmDialog(title, text, action, danger = false, extra = null, valid 
   });
 }
 
-function theme() {
-  const saved = (() => { try { return localStorage.getItem('iceberg-theme'); } catch { return null; } })();
-  const apply = mode => { document.documentElement.dataset.theme = mode;
-    document.querySelector('meta[name="theme-color"]').setAttribute('content', mode === 'light' ? '#f5f5f5' : '#000000');
-    $('#theme').textContent = mode === 'light' ? 'Dark / ●' : 'Light / ○';
-    $('#theme').setAttribute('aria-label', `Switch to ${mode === 'light' ? 'dark' : 'light'} mode`); };
-  apply(saved === 'light' ? 'light' : 'dark');
-  $('#theme').onclick = () => { const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; apply(next); try { localStorage.setItem('iceberg-theme', next); } catch { /* private mode */ } };
-}
-$('#logout').onclick = async () => {
+// Sign out of the extension and of Keycloak.
+async function signOut() {
   const result = await (await fetch('/auth/logout', {method: 'POST', headers: {'X-Iceberg-Replication': '1'}, credentials: 'same-origin'})).json();
   location.href = result.logoutUrl || '/';
-};
+}
 window.addEventListener('hashchange', () => render());
-theme();
+IcebergAccount.mount($('#account'));
 render();

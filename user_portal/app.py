@@ -45,6 +45,8 @@ from .preview import run_preview
 from .runtime import RuntimeBackendError, filespace_key, notebook_runtime
 
 PUBLIC = Path(__file__).parent / "public"
+# Served from the administration portal's public/ (the menus are copies of contracts/bridge/v1 there).
+SHARED = ("favicon.svg", "docs.js", "apps-menu.js", "apps-menu.css", "account-menu.js", "account-menu.css")
 CONNECT_SCRIPT = Path(__file__).parent / "client" / "iceberg_connect.py"
 COOKIE = "iceberg_user_session"
 SWEEP_SECONDS = 30
@@ -783,6 +785,10 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         "guide.js": "guide.js",
         "style.css": "style.css",
         "favicon.svg": "favicon.svg",
+        "apps-menu.js": "apps-menu.js",
+        "apps-menu.css": "apps-menu.css",
+        "account-menu.js": "account-menu.js",
+        "account-menu.css": "account-menu.css",
     }
     files.update(
         {f"fonts/{font}.ttf": f"fonts/{font}.ttf" for font in ("doto", "space-grotesk", "space-mono")}
@@ -793,8 +799,9 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         if path not in files:
             raise ServiceError(404, "Not found.")
         asset = PUBLIC / files[path]
-        # Fonts, the icon and the API docs script are the administration portal's; the image copies them in.
-        if path.startswith("fonts/") or path in ("favicon.svg", "docs.js"):
+        # Fonts, the icon, the API docs script and the header's menus are the administration portal's; the image
+        # copies them in.
+        if path.startswith("fonts/") or path in SHARED:
             shared = Path(__file__).parent.parent / "public" / files[path]
             if shared.is_file():
                 asset = shared

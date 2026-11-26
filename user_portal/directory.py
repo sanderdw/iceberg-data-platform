@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from server import extensions
 from server.catalog_metadata import object_details, properties, semantic_model_details
-from server.models import DatabaseInput, Environment, ServiceError
+from server.models import ENVIRONMENTS, DatabaseInput, Environment, ServiceError
 from server.polaris import MAX_SHARES, PolarisProvider, enc
 from server.storage import RustFSStorage
 from server.validation import validation_message
@@ -216,7 +216,33 @@ class UserDirectory:
             for membership in user["memberships"]
             if membership["team"] == team["id"]
         ]
-        return {"team": team["id"], "members": sorted(members, key=lambda member: member["name"].casefold())}
+        return {"team": team["id"], "members": sorted(members, key=lambda member: member["name"].casefold()),
+                "extensions": self.team_extensions(team["id"])}
+
+    def team_extensions(self, team):
+        """Where the registered extensions are enabled for a team, per environment; read-only, without principal ids."""
+        registered = extensions.extensions(os.environ)
+        if not registered:
+            return []
+        enabled = {}
+        for item in self.metadata.list_automation(team=team):
+            if item["status"] == "active" and item["extension"] in registered:
+                enabled.setdefault(item["extension"], {})[item["environment"]] = item["createdBy"] or None
+        return [
+            {
+                "id": id,
+                "title": extensions.DIRECTORY.get(id, (id, ""))[0],
+                "origin": origin,
+                "url": f"{origin}{extensions.SETTINGS_PAGE}?team={enc(team)}",
+                "environments": [
+                    {"environment": env, "enabled": env in enabled.get(id, {}),
+                     "enabledBy": enabled.get(id, {}).get(env)}
+                    for env in ENVIRONMENTS
+                ],
+            }
+            for id, origin in registered.items()
+            if id in extensions.TEAM_ENVIRONMENTS or id in enabled
+        ]
 
     def database(self, session, database, profile=None):
         profile = profile or self.profile(session)

@@ -29,7 +29,7 @@ $env:ICEBERG_EXTENSIONS = 'maintenance'
 irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/install.ps1 | iex
 ```
 
-A team administrator then enables it once per environment with **Enable** on the page. Maintenance reads and writes policies as the team's service account for that environment, so policies also need it enabled. Rerunning the installer keeps the extension, its runs and its schedules; the policies are in Polaris.
+A team administrator enables Maintenance once per environment: under **Settings** › **Environments** (Settings is in the header, and Environments is its first option), through an AI agent (`enable_environment`) or with `POST /api/v1/teams/{team}/environments/{environment}`. Environments shows who enabled each environment, and **Disable** revokes the team's service account there again. Maintenance reads and writes policies as the team's service account for that environment, so policies also need it enabled. Rerunning the installer keeps the extension, its runs and its schedules; the policies are in Polaris.
 
 On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions). To run it from source, see [Maintenance internals](develop/maintenance.md#run-from-source).
 

@@ -8,6 +8,15 @@ conventions in its evaluation API.
 
 - **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
   starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
+- **Account menu.** The header ends the same way as in the administration and user portals: **Read-only** when
+  you have the read role in each of your teams, then Settings, Apps and your name. Your name opens your teams and
+  roles, **Getting started** (this extension's documentation), the theme switch and **Sign out**. Settings says what
+  turning it on and off does and who can change it, and looks the same in every extension.
+- **Settings.** Evaluations is now enabled and disabled on the page too: **Settings** › **Environments** in
+  the header shows each of your teams' environments, with Enable and Disable for team administrators and a
+  link to live evaluation where it is on. It is the same page every extension has. The home page links there
+  instead of listing every team environment, and the new-question-set form and the live page say when the
+  environment is not enabled, with Enable for team administrators.
 - **Apps menu.** Drawing the menu again no longer leaves the previous menu's listeners on the page.
 - **Tools renamed:** `save_question_set` is now `create_question_set` and `update_question_set`;
   `compare_models` is `compare_llm_models`; `set_schedule` is `create_schedule` and `update_schedule`,

@@ -3,7 +3,7 @@ const $ = (s) => document.querySelector(s);
 const envNames = {development: 'Development', acceptance: 'Acceptance', production: 'Production'};
 const roleNames = {reader: 'Read', writer: 'Read & write', admin: 'Administrator', 'bucket-admin': 'Database + bucket administration'};
 let state, database = null, namespace = [], activeNotebook = null, browseVersion = 0;
-let workspacePage = 'catalog', sharesContext = null;
+let workspacePage = 'catalog', sharesContext = null, mountedHeader = {};
 let restoringRoute = false, refreshingWorkspace = false, pendingActions = 0;
 let teamMembersVersion = 0;
 let databaseFormContext = null;
@@ -65,6 +65,7 @@ function showPage(page, updateRoute = true) {
   if (page === 'databases' && state) renderDatabases();
   if (page === 'shares') renderTeamShares();
   if (page === 'guide' && state) renderGuide();
+  if (state) renderHeader();
   placeNotice();
   if (updateRoute) saveRoute();
 }
@@ -74,15 +75,6 @@ function element(tag, text, className) { const e = document.createElement(tag); 
 function placeNotice() { const target = !$('#login-screen').hidden ? $('#login-status') : workspacePage === 'notebooks' && !$('#editor').hidden ? $('#editor-status') : $('#workspace-status'); target.append($('#notice')); }
 function clearNotice() { $('#notice').hidden = true; $('#notice').textContent = ''; }
 function notice(message, error = false) { placeNotice(); $('#notice').textContent = `[ ${error ? 'ERROR: ' : ''}${message} ]`; $('#notice').className = error ? 'error' : ''; $('#notice').hidden = false; }
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  const light = theme === 'light';
-  $('#theme-toggle').textContent = light ? 'Dark / ●' : 'Light / ○';
-  $('#theme-toggle').setAttribute('aria-label', `Switch to ${light ? 'dark' : 'light'} mode`);
-  document.querySelector('meta[name="theme-color"]').content = light ? '#f5f5f5' : '#000000';
-}
-try { applyTheme(localStorage.getItem('iceberg-theme') === 'light' ? 'light' : 'dark'); } catch { applyTheme('dark'); }
-$('#theme-toggle').addEventListener('click', () => { const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; applyTheme(theme); try { localStorage.setItem('iceberg-theme', theme); } catch {} });
 function symbol(kind) {
   const paths = {database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>', namespace: '<path d="m12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 17l10 5 10-5"/>', table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/>', view: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>', 'semantic-model': '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7 8.2l4 7.6M17 8.2l-4 7.6"/>'};
   const e = element('span', undefined, 'object-icon');
@@ -135,50 +127,30 @@ function notebookLoader(label) {
 }
 function hideNotebookLoader() { clearInterval(loaderTimer); loaderTimer = null; $('#notebook-loader')?.remove(); }
 function resetEditor() { hideNotebookLoader(); closeNewNotebook(); $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
-function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Sign in with your Keycloak account. Your team roles decide what you can read, write and share.'; } $('#workspace-nav').hidden = true; $('#guide-nav').hidden = true; $('#apps').hidden = true; closeMenus(); placeThemeToggle(false); sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
+function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Sign in with your Keycloak account. Your team roles decide what you can read, write and share.'; } $('#workspace-nav').hidden = true; $('#read-only').hidden = true; IcebergApps.mount($('#apps'), {}); mountedHeader = {}; IcebergAccount.mount($('#account')); sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
 // A stopped server answers through the proxy with plain text, or not at all.
 const serverDown = 'The workspace server is not responding. Try again in a moment.';
 async function api(path, method = 'GET', body) { let response, result; try { response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); } catch { throw new Error(serverDown); } try { result = await response.json(); } catch { throw new Error(response.status >= 500 ? serverDown : `The request failed with HTTP ${response.status}.`); } if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
-// Extensions open in their own origin; the portal only links to them, from the Apps menu.
-function renderExtensions() {
-  const links = (state.extensions || []).map(extension => {
-    const label = extension.title || extension.id;
-    const link = element('a', undefined, 'extension-link');
-    link.href = extension.origin + '/'; link.target = '_blank'; link.rel = 'noopener'; link.dataset.extension = extension.id;
-    link.append(element('strong', label), element('span', extension.purpose || 'Opens in a new tab'));
-    link.addEventListener('click', () => closeMenus());
-    return link;
-  });
-  $('#apps-list').replaceChildren(...links);
-  $('#apps').hidden = !links.length;
-  fitHeader();
+// The header's right end, as in the administration portal and every extension: the Read-only pill when the person only
+// reads in the active team, the Apps menu (apps-menu.js: the extensions, each in its own origin) and the account menu
+// (account-menu.js: who is signed in, Getting started, the theme and Sign out). Each is mounted again only when it changes.
+async function signOut() {
+  try { const result = await api('/session', 'DELETE'); if (result.logoutUrl) { location.assign(result.logoutUrl); return; } loginScreen(); }
+  catch (error) { notice(error.message, true); }
 }
-// Header menus (Apps, account): one open at a time; Escape or a click elsewhere closes it.
-function closeMenus(except) {
-  for (const toggle of document.querySelectorAll('.menu-toggle')) {
-    if (toggle === except) continue;
-    toggle.setAttribute('aria-expanded', 'false');
-    $('#' + toggle.getAttribute('aria-controls')).hidden = true;
+function renderHeader() {
+  const team = state.teams.find(t => t.id === state.activeTeam);
+  const role = team?.role || state.activeRole;
+  $('#read-only').hidden = role !== 'reader';
+  const apps = JSON.stringify(state.extensions || []);
+  if (mountedHeader.apps !== apps) { IcebergApps.mount($('#apps'), {extensions: state.extensions || []}); mountedHeader.apps = apps; }
+  const account = {name: state.user.name, details: [team ? `${team.name} · ${roleNames[role] || role}` : ''], guideCurrent: workspacePage === 'guide'};
+  if (mountedHeader.account !== JSON.stringify(account)) {
+    IcebergAccount.mount($('#account'), {...account, guide: () => showPage('guide'), signOut});
+    mountedHeader.account = JSON.stringify(account);
   }
-}
-for (const toggle of document.querySelectorAll('.menu-toggle')) toggle.addEventListener('click', () => {
-  const open = toggle.getAttribute('aria-expanded') !== 'true';
-  closeMenus(toggle);
-  toggle.setAttribute('aria-expanded', String(open));
-  $('#' + toggle.getAttribute('aria-controls')).hidden = !open;
-});
-document.addEventListener('click', e => { if (!e.target.closest('.menu-anchor')) closeMenus(); });
-document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape') return;
-  const open = document.querySelector('.menu-toggle[aria-expanded="true"]');
-  if (open) { closeMenus(); open.focus(); }
-});
-// The theme switch sits in the header before sign-in, and in the account menu after it.
-function placeThemeToggle(signedIn) {
-  if (signedIn) $('#account-menu').prepend($('#theme-toggle'));
-  else $('#identity').before($('#theme-toggle'));
-  $('#theme-toggle').className = signedIn ? 'menu-item' : 'ghost';
+  fitHeader();
 }
 // On narrow screens the sections may not fit beside the actions: then the navigation takes its own row.
 function fitHeader() {
@@ -190,8 +162,8 @@ const refitHeader = () => { if (!$('#workspace-nav').hidden) fitHeader(); };
 window.addEventListener('resize', refitHeader);
 document.fonts?.ready.then(refitHeader);
 function renderState() {
-  $('#login-screen').hidden = true; $('#identity').hidden = false; placeThemeToggle(true); $('#workspace-screen').hidden = false; $('#username').textContent = $('#account-toggle').title = state.user.name; $('#workspace-nav').hidden = false; $('#guide-nav').hidden = false; placeNotice();
-  renderExtensions();
+  $('#login-screen').hidden = true; $('#workspace-screen').hidden = false; $('#workspace-nav').hidden = false; placeNotice();
+  renderHeader();
   $('#team').replaceChildren(...state.teams.map(t => { const option = element('option', `${t.name} · ${roleNames[t.role] || t.role}`); option.value = t.id; return option; })); $('#team').value = state.activeTeam;
   $('#environment').replaceChildren(...state.environments.map(env => { const option = element('option', envNames[env]); option.value = env; return option; })); $('#environment').value = state.activeEnvironment;
   $('#databases').replaceChildren(...databaseGroups(state.databases, db => db, items => items.map(d => { const b = element('button', undefined, `db${database === d.id ? ' selected' : ''}`); const label = databaseLabel(d); label.append(element('small', envNames[d.environment])); b.append(symbol('database'), label); b.setAttribute('aria-pressed', String(database === d.id)); b.addEventListener('click', () => browse(d.id, [])); return b; })));
@@ -333,6 +305,7 @@ async function loadTeamMembers() {
   try {
     const result = await api('/team');
     if (!current() || result.team !== state.activeTeam) return;
+    renderTeamExtensions(result.extensions || []);
     const serialized = JSON.stringify(result.members);
     if (host.dataset.members === serialized) return;
     host.replaceChildren(result.members.length ? dataGrid(['Member', 'Team role'], result.members.map(member => [
@@ -342,6 +315,25 @@ async function loadTeamMembers() {
   } catch (error) {
     if (current()) { delete host.dataset.members; host.replaceChildren(element('p', error.message, 'catalog-empty')); }
   }
+}
+// Read-only: each extension enables itself per team environment in its own Settings › Environments.
+function renderTeamExtensions(items) {
+  $('#team-extensions').hidden = !items.length;
+  if (!items.length) return $('#team-extensions-list').replaceChildren();
+  const environments = state.environments || Object.keys(envNames);
+  const grid = dataGrid(['Extension', ...environments.map(env => envNames[env] || env), ''], items.map(item => [
+    item.title,
+    ...environments.map(env => {
+      const entry = item.environments.find(e => e.environment === env) || {enabled: false};
+      const cell = element('span', entry.enabled ? 'On' : 'Off', `extension-state ${entry.enabled ? 'on' : 'off'}`);
+      if (entry.enabled) cell.title = `Enabled by ${entry.enabledBy || 'a team administrator'}`;
+      return cell;
+    }),
+    Object.assign(element('a', 'Settings ↗'), {href: item.url, target: '_blank', rel: 'noopener'}),
+  ]), 'Extensions per environment');
+  const active = environments.indexOf(state.activeEnvironment) + 1;
+  if (active) grid.querySelectorAll('tr').forEach(row => row.children[active]?.classList.add('active-environment'));
+  $('#team-extensions-list').replaceChildren(grid);
 }
 $('#refresh-team').addEventListener('click', event => busy(event.currentTarget, async () => { await loadState(); await loadTeamMembers(); }));
 function clearBrowser() { clearNotice(); database = null; namespace = []; selectedObject = null; browseVersion++; $('#database-label').textContent = 'CATALOG'; renderDatabaseContext($('#catalog-database-context'), null); $('#namespace-title').textContent = 'Select a database'; $('#breadcrumbs').replaceChildren(); $('#objects').replaceChildren(element('p', 'Select a database from the catalog.', 'empty')); }
@@ -390,7 +382,6 @@ function renderListing(db, ns, detail, result) {
 function showNotebook(notebook, targetUrl = notebook.url) { if (activeNotebook?.id !== notebook.id || activeNotebook?.selectedUrl !== targetUrl) { const frame = element('iframe'); frame.title = `marimo · ${notebook.database}`; frame.src = targetUrl; frame.allow = 'clipboard-read; clipboard-write'; frame.addEventListener('load', () => { if (frame.isConnected) hideNotebookLoader(); }, {once: true}); $('#frame-host').replaceChildren(frame, notebookLoader('Loading notebook')); } activeNotebook = {...notebook, selectedUrl: targetUrl}; renderNotebookPicker(notebook, targetUrl); renderNotebookContext(notebook); $('#editor-external').href = targetUrl; $('#browser').hidden = false; $('#editor').hidden = false; $('#notebook-empty').hidden = true; showPage('notebooks'); }
 async function openNotebook(db) { const existing = state.notebooks.find(n => n.database === db); if (existing) { showNotebook(existing); notice('Your existing notebook for this database has resumed. Select the table you want to work with there.'); return; } notice('Opening your team’s shared workspace…'); const previous = activeNotebook; activeNotebook = null; $('#frame-host').replaceChildren(notebookLoader('Starting your session')); $('#notebook-file').replaceChildren(); renderNotebookContext({database: db, environment: state.activeEnvironment}); $('#editor').hidden = false; $('#notebook-empty').hidden = true; showPage('notebooks'); let notebook; try { notebook = await api('/notebooks', 'POST', {database: db, namespace: [], table: null}); } catch (error) { if (previous) showNotebook(previous, previous.selectedUrl); else resetEditor(); throw error; } await loadState(); showNotebook(notebook); notice('Marimo is ready. Saved files are shared with your team in this environment.'); }
 $('#login').addEventListener('submit', e => { e.preventDefault(); const form = e.currentTarget; busy(form.querySelector('button'), async () => { const data = Object.fromEntries(new FormData(form)); await api('/session', 'POST', data); form.reset(); clearBrowser(); await loadState(); await restoreRoute(); }); });
-$('#logout').addEventListener('click', e => busy(e.currentTarget, async () => { const result = await api('/session', 'DELETE'); if (result.logoutUrl) { location.assign(result.logoutUrl); return; } loginScreen(); }));
 $('#team').addEventListener('change', e => busy(e.currentTarget, async () => { try { const next = await api('/team', 'PATCH', {team: e.target.value}); resetEditor(); clearBrowser(); state = next; renderState(); saveRoute(); } catch (error) { $('#team').value = state.activeTeam; throw error; } }));
 $('#environment').addEventListener('change', e => busy(e.currentTarget, async () => { try { const next = await api('/environment', 'PATCH', {environment: e.target.value}); resetEditor(); clearBrowser(); state = next; renderState(); saveRoute(); } catch (error) { $('#environment').value = state.activeEnvironment; throw error; } }));
 $('#refresh').addEventListener('click', e => busy(e.currentTarget, async () => { await loadState(); if (selectedObject) await inspectObject(database, namespace, selectedObject.kind, selectedObject.name); else if (database) await browse(database, namespace); }));

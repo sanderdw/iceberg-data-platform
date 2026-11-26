@@ -85,15 +85,16 @@ def test_api_docs_require_session_and_send_write_headers():
         assert "security" not in schema["paths"]["/api/health"]["get"]
 
 
-def test_admin_portal_uses_the_reference_apps_menu():
-    """The portal serves the Apps menu copied unchanged from contracts/bridge/v1/apps-menu, as extensions do."""
+def test_admin_portal_uses_the_reference_header_menus():
+    """The portal serves the Apps and account menus copied unchanged from contracts/bridge/v1, as extensions do."""
     root = Path(__file__).resolve().parent.parent
     with TestClient(create_app(MemoryPolaris(), PASSWORD)) as c:
-        for name in ("apps-menu.js", "apps-menu.css"):
-            reference = (root / "contracts/bridge/v1/apps-menu" / name).read_bytes()
-            assert (root / "public" / name).read_bytes() == reference, f"public/{name} differs from the reference"
-            assert c.get(f"/{name}").content == reference
-        assert all(f'"/{name}"' in c.get("/").text for name in ("apps-menu.js", "apps-menu.css"))
+        for menu in ("apps-menu", "account-menu"):
+            for name in (f"{menu}.js", f"{menu}.css"):
+                reference = (root / "contracts/bridge/v1" / menu / name).read_bytes()
+                assert (root / "public" / name).read_bytes() == reference, f"public/{name} differs from the reference"
+                assert c.get(f"/{name}").content == reference
+                assert f'"/{name}"' in c.get("/").text
 
 
 def test_login_throttle():

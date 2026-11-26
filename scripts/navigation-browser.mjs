@@ -34,7 +34,7 @@ try {
   await expect(page.locator('.header nav .nav-item')).toHaveText(['Teams', 'Users', 'Databases0', 'Data shares', 'Catalog', 'Infrastructure']);
   await expect(page.locator('.panel-heading h2').first()).toHaveText('All teams 1');
   // The account menu: closed until asked for, reachable by keyboard, closed by Escape (focus returns) or a click elsewhere.
-  const account = page.locator('#account-toggle'), accountMenu = page.locator('#account-menu');
+  const account = page.locator('.account-toggle'), accountMenu = page.locator('.account-menu');
   await expect(account).toHaveText('ada.admin');
   await expect(account).toHaveAttribute('aria-expanded', 'false');
   await expect(accountMenu).toBeHidden();
@@ -191,8 +191,8 @@ try {
   expect(header.spread).toBeLessThanOrEqual(2);
   expect(header.labels).toEqual(['Teams', 'Users', 'Databases1', 'Data shares', 'Catalog', 'Infrastructure']);
   await expect(readOnly.locator('.brand > span')).toBeVisible();
-  await readOnly.locator('#account-toggle').click();
-  await expect(readOnly.locator('#account-menu .account-identity')).toHaveText('tom.adminTeam administrator · read-onlypolaris online');
+  await readOnly.locator('.account-toggle').click();
+  await expect(readOnly.locator('.account-menu .account-identity')).toHaveText('tom.adminTeam administrator · read-onlypolaris online');
   await readOnly.keyboard.press('Escape');
   await expect(readOnly.locator('thead th')).not.toContainText(['Actions']);
   await expect(readOnly.locator('tbody')).toContainText('Analytics');
@@ -208,7 +208,7 @@ try {
     await expect(readOnly.getByText('read-only').filter({visible: true})).toHaveCount(1 + shown);
   }
   // Getting started keeps its own note instead of the bar.
-  await readOnly.locator('#account-toggle').click();
+  await readOnly.locator('.account-toggle').click();
   await readOnly.getByRole('button', {name: 'Getting started'}).click();
   await expect(bar).toHaveCount(0);
   await expect(readOnly.locator('.read-only-note')).toBeVisible();

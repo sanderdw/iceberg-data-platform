@@ -99,27 +99,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .header-actions { display:flex; align-items:center; gap:12px; margin-left:auto; min-width:0; }
 .header-actions > * { flex-shrink:0; }
 /* A long username gives way before anything else does. */
-.header-actions > .menu-anchor { flex-shrink:1; min-width:0; }
-.menu-anchor { position:relative; }
-.menu-toggle { display:inline-flex; align-items:center; gap:8px; max-width:100%; min-height:40px; padding:8px 16px; border:1px solid var(--border-visible); border-radius:999px; color:var(--text-primary); font:var(--small)/1.5 var(--mono); white-space:nowrap; }
-.menu-toggle > span { max-width:24ch; overflow:hidden; text-overflow:ellipsis; }
-.menu-toggle::after { content:''; flex-shrink:0; width:6px; height:6px; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:translateY(-2px) rotate(45deg); transition:transform .15s; }
-.menu-toggle[aria-expanded='true']::after { transform:translateY(2px) rotate(-135deg); }
-.menu-toggle:hover, .menu-toggle[aria-expanded='true'] { border-color:var(--text-primary); color:var(--text-display); }
-.menu-toggle:focus-visible, .apps-toggle:focus-visible { outline-offset:3px; }
-.header-menu { position:absolute; top:calc(100% + 8px); right:0; z-index:30; display:grid; gap:4px; width:max-content; min-width:240px; max-width:min(360px, calc(100vw - 32px)); padding:8px; background:var(--surface); border:1px solid var(--border-visible); border-radius:12px; box-shadow:0 12px 32px rgb(0 0 0 / .35); }
-.header-menu[hidden] { display:none; }
-.account-identity { display:grid; gap:4px; padding:8px 12px 12px; margin-bottom:4px; border-bottom:1px solid var(--border); }
-.account-identity strong { color:var(--text-display); overflow-wrap:anywhere; }
-.account-identity span { font:var(--small)/1.6 var(--mono); color:var(--text-secondary); }
-.menu-item { display:flex; align-items:center; gap:6px; width:100%; min-height:40px; padding:8px 12px; border-radius:8px; color:var(--text-primary); font:var(--small)/1.5 var(--mono); text-transform:uppercase; letter-spacing:.06em; text-align:left; white-space:nowrap; }
-.menu-item:hover, .menu-item:focus-visible { background:var(--surface-raised); }
-.menu-item:focus-visible, a.apps-link:focus-visible { outline-offset:-2px; }
-.menu-item[aria-current='page'] { color:var(--text-display); }
-.menu-item[aria-current='page']::before { content:'['; }
-.menu-item[aria-current='page']::after { content:']'; }
-.read-only-badge { display:inline-flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:999px; background:color-mix(in srgb, var(--accent) 12%, transparent); color:var(--text-display); font:var(--small)/1.5 var(--mono); text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
-.read-only-badge::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--accent); }
+.header-actions > .account-anchor { flex-shrink:1; min-width:0; }
+.apps-toggle:focus-visible { outline-offset:3px; }
 /* Narrower: first the brand's suffix goes, then the pages take their own row; on phones they sit along the bottom. */
 @media (max-width:1240px) {
   .header { padding-inline:24px; gap:16px; }
@@ -137,20 +118,12 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .nav-count { display:none; }
   .header-actions { gap:8px; }
 }
-/* Phones: the pill and the toggles tighten, so a team administrator's username keeps some room. */
+/* Phones: the toggles tighten (the account menu and the pill tighten in account-menu.css), so the username keeps some room. */
 @media (max-width:480px) {
   .header { gap:8px; }
   .brand { gap:8px; }
   .brand img { width:24px; height:24px; }
-  .menu-toggle, .apps-toggle { gap:6px; padding-inline:10px; }
-  .read-only-badge { padding:4px 8px; font-size:.65rem; }
-  .read-only-badge::before { display:none; }
-}
-/* Phones: the account menu spans the screen under the header, as the Apps menu does (apps-menu.css). */
-@media (max-width:700px) {
-  .header { position:relative; }
-  .menu-anchor { position:static; }
-  .header-menu { left:16px; right:16px; top:calc(100% - 8px); width:auto; min-width:0; max-width:none; }
+  .apps-toggle { gap:6px; padding-inline:10px; }
 }
 
 /* Team administrators: one line on the pages where they could expect to change something. */

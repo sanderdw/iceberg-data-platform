@@ -3,6 +3,15 @@
 ## 1.0.0 - unreleased
 
 Released with core 1.0.0. The first stable contract (see [COMPATIBILITY.md](COMPATIBILITY.md)).
+
+Added: the Settings page that every extension copies unchanged, [`v1/settings/`](v1/settings). Its first option,
+Environments, is where an extension is enabled for each of the caller's teams, with Enable and Disable for team administrators. It calls only the
+extension's own API, so the REST contract is unchanged.
+
+Added: the account menu every extension copies unchanged, [`v1/account-menu/`](v1/account-menu), which both portals
+use too: the person's name, opening their teams and roles, Getting started, the theme switch and Sign out, and the
+Read-only pill's style. The Apps menu's selectors start at `.apps-anchor`, so a
+page's own button styles no longer override them.
 **Breaking:** extensions built for 0.1.x do not work with it. Declare `bridge-contract = ">=1.0,<2"`.
 
 Breaking changes, so the Bridge follows the [API conventions](../../docs/develop/api-conventions.md):

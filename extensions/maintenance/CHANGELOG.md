@@ -6,6 +6,14 @@ The REST API and the MCP tools follow the platform's one set of conventions, and
 Apache Polaris. Nothing of the old shapes or the old state is kept: set the policies again, and update
 scripts and agent instructions.
 
+- **Account menu.** The header ends the same way as in the administration and user portals: **Read-only** when
+  you have the read role in each of your teams, then Settings, Apps and your name. Your name opens your teams and
+  roles, **Getting started** (this extension's documentation), the theme switch and **Sign out**. Settings says what
+  turning it on and off does and who can change it, and looks the same in every extension.
+- **Settings.** Team administrators enable and disable Maintenance per environment under **Settings** ›
+  **Environments** (the header link), the page every extension shares, which also shows who enabled each one. Disabling was only possible
+  through MCP or REST. A database, policy or table in an environment where Maintenance is off says so, with
+  Enable for administrators; the start page's "Where maintenance can run" card is gone.
 - **Bridge contract 1.0.** Needs platform 1.0.0 (contract `>=1.0,<2`). A Bridge error keeps its own
   status and code (a Bridge 503 was answered as 502). The Apps menu no longer adds page-wide listeners
   each time it opens.

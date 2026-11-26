@@ -58,8 +58,7 @@ async function api(path, method = 'GET', body) {
   } finally { if (method !== 'GET') activeMutations--; }
 }
 function notifyStatus(message) { state.status = message; const target = modal.open ? modal.querySelector('.modal-status') : $('#status'); if (target) target.textContent = `[ ${message} ]`; }
-function themeControls() { for (const button of document.querySelectorAll('[data-theme-toggle]')) { const dark = document.documentElement.dataset.theme === 'dark'; button.textContent = dark ? 'Light / ○' : 'Dark / ●'; button.setAttribute('aria-label', `Switch to ${dark ? 'light' : 'dark'} mode`); button.onclick = () => { const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = theme; try { localStorage.setItem('iceberg-theme', theme); } catch {} themeControls(); }; } }
-try { document.documentElement.dataset.theme = localStorage.getItem('iceberg-theme') || 'dark'; } catch { document.documentElement.dataset.theme = 'dark'; }
+function themeControls() { for (const button of document.querySelectorAll('[data-theme-toggle]')) { const dark = document.documentElement.dataset.theme === 'dark'; button.textContent = dark ? 'Light / ○' : 'Dark / ●'; button.setAttribute('aria-label', `Switch to ${dark ? 'light' : 'dark'} mode`); button.onclick = () => { IcebergAccount.apply(IcebergAccount.current() === 'dark' ? 'light' : 'dark'); themeControls(); }; } }
 function login() {
   stopInfrastructure();
   state.data = null;
@@ -96,15 +95,21 @@ function placeApps() {
   if (JSON.stringify(apps) !== mountedApps) { IcebergApps.mount(appsAnchor, apps); mountedApps = JSON.stringify(apps); }
   $('#apps').replaceWith(appsAnchor);
 }
-// The account menu closes on Escape or a click elsewhere, as the Apps menu does for itself.
-function accountMenu(open) {
-  const toggle = $('#account-toggle');
-  if (toggle) { toggle.setAttribute('aria-expanded', String(open)); $('#account-menu').hidden = !open; }
+// The account menu (account-menu.js), like the Apps menu, is mounted once and moved into each new header; it is mounted
+// again only when what it shows changes: who is signed in, their role, the provider's status and whether the guide is open.
+const accountAnchor = document.createElement('div');
+let mountedAccount = '';
+async function signOut() {
+  try { const result = await api('/session', 'DELETE'); if (result.logoutUrl) { location.assign(result.logoutUrl); return; } login(); } catch (e) { notifyStatus(e.message); }
 }
-document.addEventListener('click', event => { if (!event.target.closest('#account')) accountMenu(false); });
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && $('#account-toggle')?.getAttribute('aria-expanded') === 'true') { accountMenu(false); $('#account-toggle').focus(); }
-});
+function placeAccount(details) {
+  const options = { name: viewer.user || 'Account', details, guideCurrent: state.page === 'guide' };
+  if (JSON.stringify(options) !== mountedAccount) {
+    IcebergAccount.mount(accountAnchor, { ...options, guide: () => { state.page = 'guide'; state.query = ''; render(); }, signOut });
+    mountedAccount = JSON.stringify(options);
+  }
+  $('#account').replaceWith(accountAnchor);
+}
 let renderedPage = null;
 function render() {
   saveAdminRoute();
@@ -117,18 +122,15 @@ function render() {
   const isViewer = viewer.access === 'viewer';
   const pages = [['teams', 'Teams'], ['users', 'Users'], ['databases', 'Databases'], ['shares', 'Data shares'], ['explorer', 'Catalog'], ['infrastructure', 'Infrastructure']];
   const tabs = pages.map(([id, label]) => `<button data-page="${id}" class="nav-item ${state.page === id ? 'active' : ''}"${state.page === id ? ' aria-current="page"' : ''}>${label}${id === 'databases' ? `<span class="nav-count">${databases.length}</span>` : ''}</button>`).join('');
-  // The account menu: who is signed in, the provider's status, the guide, the theme and signing out.
-  const account = `<div id="account" class="menu-anchor"><button id="account-toggle" class="menu-toggle" aria-expanded="false" aria-controls="account-menu"><span>${esc(viewer.user || 'Account')}</span></button><div id="account-menu" class="header-menu" hidden><div class="account-identity">${viewer.user ? `<strong>${esc(viewer.user)}</strong>` : ''}<span>${isViewer ? 'Team administrator · read-only' : 'Platform administrator'}</span><span class="account-status"><span class="dot ${online ? '' : 'offline'}"></span>${online ? esc(health.provider) + ' online' : 'Stack offline'}</span></div><button class="menu-item" data-page="guide"${state.page === 'guide' ? ' aria-current="page"' : ''}>Getting started</button><button class="menu-item" data-theme-toggle></button><button class="menu-item" id="logout">Sign out</button></div></div>`;
   // A team administrator changes nothing here; on the pages where they might try, a bar says where they can.
   const readOnlyBar = isViewer && ['teams', 'users', 'databases', 'shares'].includes(state.page) ? `<div class="read-only-bar" role="note"><span>You have read-only access. Manage your team’s databases and data shares in Workspaces.</span>${viewer.userPortalUrl ? `<a href="${esc(viewer.userPortalUrl)}" target="_blank" rel="noopener">Open Workspaces ↗</a>` : ''}</div>` : '';
-  $('#app').innerHTML = `<div class="shell"><header class="header"><a class="brand" href="/"> <img src="/favicon.svg" alt="">iceberg<span> / administration</span></a><nav aria-label="Administration">${tabs}</nav><div class="header-actions">${isViewer ? '<span class="read-only-badge" title="Team administrators can inspect everything here; only platform administrators change it.">Read-only</span>' : ''}<div id="apps"></div>${account}</div></header><main class="content"><div class="page-heading"><div><div class="eyebrow">PLATFORM ADMINISTRATION</div><h1>${titles[state.page]}<span>.</span></h1><p>${({ databases: 'Iceberg catalogs and dedicated storage buckets, organized by team and environment.', users: 'Accounts and per-team database roles across your workspaces.', teams: 'Teams own databases, memberships and extension service accounts.', shares: 'Tables, views and semantic models that team administrators share with other teams and external parties.', explorer: 'Browse all databases, namespaces, tables, views and semantic models across the platform.', infrastructure: 'Live health, compute and storage across your stack.', guide: 'Portal, AI agent or API. Three ways to configure the platform.' })[state.page]}</p></div>${['databases', 'users', 'teams'].includes(state.page) ? `<button class="button primary" id="create" ${!online || (state.page !== 'teams' && !teams.length) ? 'disabled' : ''}>${icon('plus')}${({ databases: 'Create database', users: 'Create user', teams: 'Create team' })[state.page]}</button>` : ''}</div>${readOnlyBar}${!online ? '<div class="alert" role="alert">The data provider is unavailable. Start the stack and refresh the page.</div>' : ''}<div id="status" class="inline-status" role="status" aria-live="polite">${state.status ? `[ ${esc(state.status)} ]` : ''}</div><div id="page-content"></div><footer><span><span class="dot"></span> ICEBERG / CONTROL PLANE</span><span>Iceberg Data Platform <span class="footer-divider">/</span> Administration</span></footer></main></div>`;
+  $('#app').innerHTML = `<div class="shell"><header class="header"><a class="brand" href="/"> <img src="/favicon.svg" alt="">iceberg<span> / administration</span></a><nav aria-label="Administration">${tabs}</nav><div class="header-actions">${isViewer ? '<span class="read-only-badge" title="Team administrators can inspect everything here; only platform administrators change it.">Read-only</span>' : ''}<div id="apps"></div><div id="account"></div></div></header><main class="content"><div class="page-heading"><div><div class="eyebrow">PLATFORM ADMINISTRATION</div><h1>${titles[state.page]}<span>.</span></h1><p>${({ databases: 'Iceberg catalogs and dedicated storage buckets, organized by team and environment.', users: 'Accounts and per-team database roles across your workspaces.', teams: 'Teams own databases, memberships and extension service accounts.', shares: 'Tables, views and semantic models that team administrators share with other teams and external parties.', explorer: 'Browse all databases, namespaces, tables, views and semantic models across the platform.', infrastructure: 'Live health, compute and storage across your stack.', guide: 'Portal, AI agent or API. Three ways to configure the platform.' })[state.page]}</p></div>${['databases', 'users', 'teams'].includes(state.page) ? `<button class="button primary" id="create" ${!online || (state.page !== 'teams' && !teams.length) ? 'disabled' : ''}>${icon('plus')}${({ databases: 'Create database', users: 'Create user', teams: 'Create team' })[state.page]}</button>` : ''}</div>${readOnlyBar}${!online ? '<div class="alert" role="alert">The data provider is unavailable. Start the stack and refresh the page.</div>' : ''}<div id="status" class="inline-status" role="status" aria-live="polite">${state.status ? `[ ${esc(state.status)} ]` : ''}</div><div id="page-content"></div><footer><span><span class="dot"></span> ICEBERG / CONTROL PLANE</span><span>Iceberg Data Platform <span class="footer-divider">/</span> Administration</span></footer></main></div>`;
   document.body.classList.toggle('read-only', viewer.access === 'viewer');
   for (const nav of document.querySelectorAll('[data-page]')) nav.onclick = () => { state.page = nav.dataset.page; state.query = ''; render(); };
   placeApps();
-  $('#account-toggle').onclick = () => accountMenu($('#account-toggle').getAttribute('aria-expanded') !== 'true');
-  $('#logout').onclick = async () => { try { const result = await api('/session', 'DELETE'); if (result.logoutUrl) { location.assign(result.logoutUrl); return; } login(); } catch (e) { notifyStatus(e.message); } };
+  // Who is signed in, their role and the provider's status, then Getting started, the theme and Sign out.
+  placeAccount([isViewer ? 'Team administrator · read-only' : 'Platform administrator', online ? `${health.provider} online` : 'Stack offline']);
   if ($('#create')) $('#create').onclick = () => state.page === 'databases' ? databaseModal() : state.page === 'teams' ? teamModal() : userModal();
-  themeControls();
   renderPage();
 }
 function renderPage() {

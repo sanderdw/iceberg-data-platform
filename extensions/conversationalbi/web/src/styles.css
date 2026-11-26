@@ -8,7 +8,7 @@
   color-scheme: dark;
   --black: #000; --surface: #111; --surface-raised: #1a1a1a; --border: #222; --border-visible: #333;
   --text-disabled: #666; --text-secondary: #999; --text-primary: #e8e8e8; --text-display: #fff;
-  --accent: #d71921; --success: #4a9e5c;
+  --accent: #d71921; --success: #4a9e5c; --warn: #d9a23b; --fail: #e0474f; --idle: #555;
   --body: 'Space Grotesk', system-ui, sans-serif; --mono: 'Space Mono', monospace; --display: Doto, var(--mono);
   --large: 4.5rem; --medium: 1rem; --small: .75rem;
   font: var(--medium)/1.5 var(--body); font-synthesis: none; background: var(--black); color: var(--text-primary);
@@ -16,7 +16,7 @@
 :root[data-theme='light'] {
   color-scheme: light;
   --black: #f5f5f5; --surface: #fff; --surface-raised: #f0f0f0; --border: #e8e8e8; --border-visible: #ccc;
-  --text-disabled: #999; --text-secondary: #666; --text-primary: #1a1a1a; --text-display: #000;
+  --text-disabled: #999; --text-secondary: #666; --text-primary: #1a1a1a; --text-display: #000; --idle: #bbb;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--black); }
@@ -36,6 +36,8 @@ button, input, select { font: inherit; }
 :is(button:not([data-copilotkit] *), .gen-card button):hover { background: var(--text-primary); }
 button.quiet { background: transparent; border-color: var(--border-visible); color: var(--text-primary); }
 button.quiet:hover { background: transparent; border-color: var(--text-primary); color: var(--text-display); }
+button.danger { background: transparent; border-color: var(--fail); color: var(--fail); }
+button.danger:hover { background: var(--fail); color: var(--black); }
 button.ghost { background: transparent; border-color: transparent; color: var(--text-secondary); padding-inline: 8px; }
 button.ghost:hover { background: transparent; color: var(--text-display); }
 button:disabled { cursor: not-allowed; opacity: .4; }
@@ -48,9 +50,9 @@ svg { width: 20px; height: 20px; flex-shrink: 0; fill: none; stroke: currentColo
 .notice-error { margin-top: 16px; padding-left: 16px; border-left: 2px solid var(--accent); font: var(--small)/1.7 var(--mono); color: var(--text-primary); }
 
 /* Header */
-header.site { min-height: 96px; padding: 24px 48px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--border); }
+header.site { min-height: 60px; padding: 0 32px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--border); }
 .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 500; text-decoration: none; color: var(--text-display); }
-.brand img { width: 32px; height: 32px; }
+.brand img { width: 28px; height: 28px; }
 .brand span { font: var(--small) var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
 header.site nav { display: flex; align-items: center; gap: 24px; margin-right: auto; margin-left: 24px; }
 header.site .nav-item { background: transparent; border: 0; border-radius: 0; padding: 16px 0; color: var(--text-secondary); white-space: nowrap; }
@@ -59,8 +61,7 @@ header.site .nav-item[aria-current='page']::before { content: '['; }
 header.site .nav-item[aria-current='page']::after { content: ']'; }
 header.site a.nav-item { display: inline-flex; align-items: center; min-height: 44px; font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; text-decoration: none; }
 header.site a.nav-item.extension-link::after { content: ' ↗'; }
-.header-actions, #identity { display: flex; align-items: center; gap: 24px; min-width: 0; }
-#username { max-width: 240px; overflow: hidden; text-overflow: ellipsis; font: var(--small) var(--mono); }
+.header-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
 main.initial { display: grid; place-items: center; min-height: calc(100vh - 96px); }
 
 /* Sign in */
@@ -84,6 +85,7 @@ h1 { font: 500 var(--large)/1.1 var(--display); letter-spacing: -.03em; color: v
 .fact strong { font: var(--small)/1.5 var(--mono); color: var(--text-primary); font-weight: 400; }
 /* After the first question: one line under the header, so the conversation starts at the top. */
 #workspace-screen.started { padding-top: 24px; }
+#settings-screen { max-width: 1600px; margin: 0 auto; padding: 48px; }
 .workspace-heading.compact { align-items: center; gap: 32px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
 .workspace-heading.compact > div:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 24px; min-width: 0; }
 .workspace-heading.compact h1 { font-size: 2rem; margin: 0; }
@@ -215,10 +217,11 @@ th:first-child, td:first-child { padding-left: 0; }
 
 @media (max-width: 1100px) {
   :root { --large: 3rem; }
-  header.site { padding-inline: 32px; }
+  header.site { padding-inline: 24px; }
   #login-screen { gap: 48px; padding-inline: 32px; }
   .intro { padding-left: 0; }
   #workspace-screen { padding-inline: 32px; }
+  #settings-screen { padding-inline: 32px; }
   .workbench, .workbench.with-guide { grid-template-columns: 200px minmax(0, 1fr); gap: 32px; }
   .guide { position: fixed; inset: 0 0 0 auto; z-index: 20; width: min(420px, 100vw); padding: 0 24px; background: var(--black);
     border-left: 1px solid var(--border-visible); }
@@ -226,16 +229,16 @@ th:first-child, td:first-child { padding-left: 0; }
 }
 @media (max-width: 700px) {
   :root { --large: 2.25rem; }
-  header.site { min-height: 80px; padding: 16px 20px; flex-wrap: wrap; gap: 8px 16px; }
+  header.site { min-height: 56px; padding: 6px 20px; flex-wrap: wrap; gap: 8px 16px; }
   header.site nav { order: 3; width: 100%; margin: 0; gap: 20px; overflow-x: auto; }
   header.site .nav-item { font-size: .65rem; }
-  .header-actions, #identity { gap: 8px; }
+  .header-actions { gap: 8px; }
   .header-actions { margin-left: auto; }
   .brand span { display: none; }
-  #username { max-width: 120px; }
   #login-screen { display: block; min-height: calc(100vh - 80px); padding: 64px 24px; }
   .intro { display: none; }
   #workspace-screen { padding: 48px 24px 24px; height: auto; min-height: 0; display: block; }
+  #settings-screen { padding: 32px 16px; }
   /* The chat fills the visible screen; the keyboard shrinks it (interactive-widget=resizes-content),
      so the question field stays directly above the keyboard. */
   section.chat { height: 100dvh; min-height: 320px; padding-bottom: 8px; }
@@ -247,4 +250,10 @@ th:first-child, td:first-child { padding-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }
+}
+/* Phones: the header's pills (Read-only, Settings, Apps and the account) tighten so they fit one row. */
+@media (max-width: 480px) {
+  .header-actions { gap: 6px; }
+  .header-actions .settings-link, .header-actions .apps-anchor .apps-toggle { padding-inline: 10px; }
+  .header-actions .account-anchor .account-toggle { max-width: 130px; }
 }

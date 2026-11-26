@@ -71,7 +71,7 @@ test('portal admin explores namespaces, tables and views; database credentials a
     await page.getByRole('button', { name: 'Refresh catalog' }).click();
     await expect(page.locator('summary strong').getByText(name, { exact: true })).toBeVisible();
     // Sign out sits in the account menu.
-    await page.locator('#account-toggle').click();
+    await page.locator('.account-toggle').click();
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Sign in to Administration' })).toBeVisible();
     expect((await api.get(`/api/admin/explorer/contents?database=${name}`)).status()).toBe(401);

@@ -42,6 +42,25 @@ An extension reaches the core through four doors:
   extension shows the same Apps menu: the portal's pages and the other extensions. The menu is a
   small script and stylesheet in [`v1/apps-menu/`](v1/apps-menu); copy both into the extension's page
   unchanged and call `IcebergApps.mount(element, {workspace, extensions, current})`.
+- **Settings page.** Every extension enables and disables itself per team environment in the same
+  way: a **Settings** link in the header opens `#/settings`, whose first option, **Environments**, shows each
+  of the caller's teams with its three environments, who enabled each, and Enable and Disable for team
+  administrators, each behind a confirmation. Pages that are about one team environment show the same "not
+  enabled" notice. The page is a small script and stylesheet in [`v1/settings/`](v1/settings); copy both
+  unchanged, call `IcebergSettings.configure({title, request, enables, disables, sections})`, then `link`,
+  `mount` and `notice`. An extension adds its own options after Environments with `sections`.
+  It uses only the extension's own `list_environments`, `enable_environment` and `disable_environment`
+  operations ([API conventions](../../docs/develop/api-conventions.md)), so it needs no Bridge capability.
+- **Account menu.** The right end of every header, in the administration portal, the user portal and every
+  extension, is the person's name. It opens who is signed in (for an extension, each team with the person's
+  role in it), **Getting started**, the theme switch and **Sign out**; before sign-in only the theme switch
+  shows. The theme is kept in `localStorage` under `iceberg-theme`, so the portals and extensions share it.
+  Copy the script and stylesheet in [`v1/account-menu/`](v1/account-menu) unchanged and call
+  `IcebergAccount.mount(element, {name, details: IcebergAccount.teams(me.memberships), guide, signOut})`, with
+  `guide` the URL of the extension's documentation. The header's order is the same everywhere: the page's own
+  navigation, then **Read-only**, Settings, Apps and the account menu. Read-only is a
+  `<span class="read-only-badge">Read-only</span>` (styled by the same stylesheet), shown when the person has
+  the read role in each of their teams and the extension has anything a writer could change.
 - **Discovery.** `GET /bridge/v1` returns the endpoints, environments, network aliases (Docker
   aliases, or Kubernetes Services in `network.namespace`) and registered extensions, so the
   handshake file holds only the extension's identity.

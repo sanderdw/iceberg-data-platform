@@ -38,7 +38,8 @@ from .validation import validation_message
 PUBLIC = Path(__file__).resolve().parent.parent / "public"
 FILES = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg",
          "/infrastructure.js": "infrastructure.js", "/identity.js": "identity.js", "/guide.js": "guide.js",
-         "/docs.js": "docs.js", "/apps-menu.js": "apps-menu.js", "/apps-menu.css": "apps-menu.css"}
+         "/docs.js": "docs.js", "/apps-menu.js": "apps-menu.js", "/apps-menu.css": "apps-menu.css",
+         "/account-menu.js": "account-menu.js", "/account-menu.css": "account-menu.css"}
 FILES.update({f"/fonts/{name}.ttf": f"fonts/{name}.ttf" for name in ("doto", "space-grotesk", "space-mono")})
 
 

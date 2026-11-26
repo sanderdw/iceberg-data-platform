@@ -571,6 +571,41 @@ def test_every_extension_uses_the_reference_apps_menu():
         assert copy.read_bytes() == (reference / copy.name).read_bytes(), f"{copy} differs from {reference / copy.name}"
 
 
+def test_every_extension_uses_the_reference_settings_page():
+    """Extensions copy the Settings page unchanged from contracts/bridge/v1/settings; Conversational BI's React port
+    shares its stylesheet."""
+    root = Path(__file__).resolve().parent.parent
+    reference = root / "contracts/bridge/v1/settings"
+    copies = [p for p in (root / "extensions").glob("*/*/public/settings.*") if ".venv" not in p.parts]
+    assert {(p.parts[-4], p.name) for p in copies} >= {
+        (e, n) for e in ("dbt", "ingestion", "replication", "maintenance", "evaluations")
+        for n in ("settings.js", "settings.css")}
+    copies += list((root / "extensions").glob("conversationalbi/web/src/settings.css"))
+    assert any("conversationalbi" in p.parts for p in copies)
+    for copy in copies:
+        assert copy.read_bytes() == (reference / copy.name).read_bytes(), f"{copy} differs from {reference / copy.name}"
+
+
+def test_every_extension_uses_the_reference_account_menu():
+    """Extensions copy the account menu (theme switch and Sign out under the person's name) unchanged from
+    contracts/bridge/v1/account-menu; Conversational BI's React port shares its stylesheet."""
+    root = Path(__file__).resolve().parent.parent
+    reference = root / "contracts/bridge/v1/account-menu"
+    copies = [p for p in (root / "extensions").glob("*/*/public/account-menu.*") if ".venv" not in p.parts]
+    assert {(p.parts[-4], p.name) for p in copies} >= {
+        (e, n) for e in ("dbt", "ingestion", "replication", "maintenance", "evaluations")
+        for n in ("account-menu.js", "account-menu.css")}
+    copies += list((root / "extensions").glob("conversationalbi/web/src/account-menu.css"))
+    assert any("conversationalbi" in p.parts for p in copies)
+    for copy in copies:
+        assert copy.read_bytes() == (reference / copy.name).read_bytes(), f"{copy} differs from {reference / copy.name}"
+    for page in (root / "extensions").glob("*/*/public/index.html"):
+        if ".venv" in page.parts:
+            continue
+        html = page.read_text()
+        assert 'id="theme"' not in html and 'id="logout"' not in html, f"{page}: the theme switch and Sign out belong in the account menu"
+
+
 def test_a_compat_job_skips_a_release_outside_the_extension_range():
     """scripts/bridge_compat.py: an extension's compat job runs against the newest release only when it is in range."""
     from scripts.bridge_compat import decide, in_range

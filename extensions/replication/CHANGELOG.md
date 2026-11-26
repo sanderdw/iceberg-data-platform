@@ -5,6 +5,14 @@
 The REST API and the MCP tools follow the platform's one set of conventions. Nothing of the old shapes
 is kept: update scripts and agent instructions.
 
+- **Account menu.** The header ends the same way as in the administration and user portals: **Read-only** when
+  you have the read role in each of your teams, then Settings, Apps and your name. Your name opens your teams and
+  roles, **Getting started** (this extension's documentation), the theme switch and **Sign out**. Settings says what
+  turning it on and off does and who can change it, and looks the same in every extension.
+- **Settings.** Team administrators enable and disable Replication per environment under **Settings** ›
+  **Environments** (the header link), the page every extension shares, which also shows who enabled each one. Disabling was only possible
+  through MCP or REST. A replication in an environment where Replication is off says so, with Enable for
+  administrators; the start page's "Where replications can run" card is gone.
 - **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
   starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
 - **Apps menu.** Drawing the menu again no longer leaves the previous menu's listeners on the page.

@@ -49,7 +49,7 @@ try {
     if (path === '/api/details') return route.fulfill({json: {kind: 'database', database}});
     if (path === '/api/received-shares') return route.fulfill({json: []});
     if (path === '/api/shares') return route.fulfill({json: {shares: [], limits: {shares: 20, objects: 50}}});
-    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || path === '/favicon.svg' ? `public${path}` : `user_portal/public${path}`;
+    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || /^\/(favicon\.svg|(apps|account)-menu\.(js|css))$/.test(path) ? `public${path}` : `user_portal/public${path}`;
     const contentType = path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.ttf') ? 'font/ttf' : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
     return route.fulfill({body: await readFile(asset), contentType});
   });
@@ -93,7 +93,7 @@ try {
   await expect(page.locator('#guide-agent pre')).toHaveCount(0);
   keycloak = true;
   await page.reload();
-  await expect(page.locator('#guide-nav')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.account-menu .account-item[aria-current=page]')).toHaveText('Getting started');
   await expect(page.locator('#guide-computer a[href="/iceberg_connect.py"]')).toBeVisible();
   // DuckDB CLI only: install for the chosen operating system, sign in, then read-only and writable attach.
   await expect(page.locator('#guide-computer pre')).toHaveCount(4);
@@ -162,13 +162,13 @@ try {
   await page.getByLabel('Active team', {exact: true}).selectOption('analytics');
   await page.getByLabel('Environment', {exact: true}).selectOption('development');
   await expect(page.locator('#team-databases')).toContainText('Energy');
-  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
+  await page.locator('.account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.screenshot({path: 'test-results/team/overview-light.png', fullPage: true});
   await page.setViewportSize({width: 390, height: 844});
   await expect(page.locator('#team-members')).toContainText('bob');
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({path: 'test-results/team/overview-mobile.png', fullPage: true});
-  await page.locator('#guide-nav').click();
+  await page.locator('.account-toggle').click(); await page.getByRole('button', {name: 'Getting started', exact: true}).click();
   await expect(page.locator('#guide-agent')).toContainText('iceberg-user');
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({path: 'test-results/team/guide-mobile-light.png', fullPage: true});
@@ -205,14 +205,15 @@ try {
   await page.screenshot({path: 'test-results/team/databases-mobile.png', fullPage: true});
   await page.setViewportSize({width: 1440, height: 1050});
   await page.screenshot({path: 'test-results/team/databases-light.png', fullPage: true});
-  await page.locator('#account-toggle').click(); await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click(); await page.keyboard.press('Escape');
+  await page.locator('.account-toggle').click(); await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.screenshot({path: 'test-results/team/databases-dark.png', fullPage: true});
   // The compact layout: on a laptop a 60px header on one row and a 52px context bar with the page title, its
   // description and the Team and Environment selects; on no page does anything scroll sideways.
   for (const [width, height] of [[1280, 800], [390, 844]]) {
     await page.setViewportSize({width, height});
     for (const name of ['team', 'databases', 'catalog', 'notebooks', 'shares', 'guide']) {
-      await page.locator(`header [data-page=${name}]`).click();
+      if (name === 'guide') { await page.locator('.account-toggle').click(); await page.getByRole('button', {name: 'Getting started', exact: true}).click(); }
+      else await page.locator(`header [data-page=${name}]`).click();
       await expect(page.locator(`#${name}-page`)).toBeVisible();
       await noOverflow(page, `${name} at ${width}×${height}`);
       if (width !== 1280) continue;

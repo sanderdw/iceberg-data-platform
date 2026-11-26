@@ -2,6 +2,8 @@
 // The Maintenance page over the REST API: table health of your teams' databases, their Apache Polaris policies
 // and runs.
 // Agents do the same through the MCP server; the server checks every permission again.
+// Getting started, in the account menu: this extension's page in the platform's documentation.
+const GUIDE = 'https://sanderdw.github.io/iceberg-data-platform/maintenance/';
 const $ = selector => document.querySelector(selector);
 const ENVIRONMENTS = ['development', 'acceptance', 'production'];
 const LABELS = {development: 'Development', acceptance: 'Acceptance', production: 'Production'};
@@ -34,6 +36,8 @@ const BUCKETS = ['<1 MB', '1–4', '4–16', '16–64', '64–128', '128–256',
 const CRON_PRESETS = [['Nightly 02:00', '0 2 * * *'], ['Every 6 hours', '0 */6 * * *'], ['Sundays 03:00', '0 3 * * 0']];
 const number = new Intl.NumberFormat();
 let me = null, route = {}, poller = null, flash = null, renderToken = 0;
+// What a page redraws after an environment is enabled or disabled from a notice; by default the whole page.
+let environmentChanged = null;
 
 function h(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -102,6 +106,7 @@ function chip(status, label) { return h('span', {class: `chip ${status}`}, h('i'
 function runChip(status) { return chip(RUN_STATUSES.has(status) ? status : 'idle', status); }
 function stateChip(state) { return chip(STATE_CLASS[state] || 'idle', STATES[state] || state); }
 function teamName(id) { return (me?.memberships.find(m => m.team === id) || {}).teamName || id; }
+function membership(team) { return me.memberships.find(m => m.team === team); }
 const isAdmin = role => ADMINS.includes(role);
 const isWriter = role => WRITERS.includes(role);
 function roleIn(team) { return (me?.memberships.find(m => m.team === team) || {}).role; }
@@ -118,7 +123,7 @@ function failure(error) { if (!error.signin) notice(error.message + (error.detai
 // Screens and routes
 function show(section) { for (const id of ['loading', 'signin', 'page']) $(`#${id}`).hidden = id !== section; }
 function showSignin() {
-  show('signin'); $('#identity').hidden = true;
+  show('signin'); IcebergAccount.mount($('#account'));
   $('#signin-link').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`;
 }
 function parseRoute() {
@@ -128,6 +133,7 @@ function parseRoute() {
   if (parts[0] === 'databases' && parts[1] && parts[2] === 'tables' && parts[3]) return {page: 'table', id: parts[1], table: decodeURIComponent(parts[3])};
   if (parts[0] === 'databases' && parts[1]) return {page: 'database', id: parts[1]};
   if (parts[0] === 'runs' && parts[1]) return {page: 'run', id: parts[1]};
+  if (parts[0] === 'settings') return {page: 'settings', section: parts[1] || '', team: params.get('team') || ''};
   return {page: 'home', team: params.get('team') || '', environment: ENVIRONMENTS.includes(params.get('environment')) ? params.get('environment') : '',
           attention: params.get('attention') === '1'};
 }
@@ -144,6 +150,7 @@ function schedulePoll(fn, ms) { clearTimeout(poller); poller = setTimeout(fn, ms
 
 async function render(keep = false) {
   clearTimeout(poller);
+  environmentChanged = null;
   route = parseRoute();
   const token = ++renderToken;
   try {
@@ -152,14 +159,23 @@ async function render(keep = false) {
       if (!session.authenticated) return showSignin();
       // Who is signed in, with Sign out, before /me: an account /me refuses (not linked to a portal user, or
       // someone else's Keycloak session) must still be able to sign out and sign in as someone else.
-      $('#identity').hidden = false; $('#username').textContent = session.user || '';
+      IcebergAccount.mount($('#account'), {name: session.user || '', guide: GUIDE, signOut});
       me = await api('/me');
-      $('#identity').hidden = false; $('#username').textContent = me.user.name;
+      IcebergAccount.mount($('#account'), {name: me.user.name, details: IcebergAccount.teams(me.memberships), guide: GUIDE, signOut});
+      // Read-only: the read role in every team, so nothing here can be changed.
+      $('#read-only').hidden = me.memberships.some((m) => ['writer', 'admin', 'bucket-admin'].includes(m.role));
       IcebergApps.mount($('#apps'), {...me.apps, current: me.extension});
+      IcebergSettings.configure({
+        title: 'Maintenance', request: (method, path) => send(path, method),
+        enables: 'Its runs check the team\'s databases of this environment and, by their policies, rewrite and delete files as the team\'s service account. Nothing is maintained until a policy is saved.',
+        disables: 'Maintenance can no longer run here or read the databases\' policies, and their schedules stop. The policies, table health and past runs stay.',
+        onChange: async () => { me = await api('/me'); if (environmentChanged) environmentChanged(); else render(true); }});
+      IcebergSettings.link($('#settings-link'));
     }
     show('page');
     if (flash) { notice(...flash); flash = null; } else notice('');
-    const pages = {home: renderHome, database: renderDatabase, policy: renderPolicy, table: renderTable, run: renderRun};
+    const pages = {home: renderHome, database: renderDatabase, policy: renderPolicy, table: renderTable, run: renderRun,
+                   settings: renderSettings};
     await pages[route.page](token);
     if (token === renderToken && !keep) window.scrollTo(0, 0);
   } catch (error) {
@@ -214,7 +230,7 @@ async function renderHome(token) {
     total > tables.length && h('div', {class: 'notice', text: `Showing the first ${number.format(tables.length)} of ${number.format(total)} tables. Choose a team or an environment, or open a database, to see the rest.`}),
     tables.length ? tableList(shown) : emptyState(databases),
     databasesCard(databases),
-    h('div', {class: 'columns spaced-top'}, environmentsCard(), agentCard()));
+    h('div', {class: 'spaced-top'}, agentCard()));
   if (runsBusy) schedulePoll(() => render(true), 4000);
 }
 
@@ -273,7 +289,8 @@ function emptyState(databases) {
       h('li', {}, h('span', {text: '[ 02 ]'}), 'Check a database\'s health'),
       h('li', {}, h('span', {text: '[ 03 ]'}), 'Set a policy and a schedule')),
     first ? h('div', {class: 'actions'}, h('button', {type: 'button', text: `Check ${first.name}`, onclick: () => startRun(first, 'inspect')}))
-      : h('p', {class: 'small-print', text: databases.length ? 'Enable Maintenance for an environment below to check its databases.' : 'Your teams have no databases yet.'}));
+      : databases.length ? h('p', {class: 'small-print'}, 'Enable Maintenance for an environment in ', h('a', {href: IcebergSettings.href(), text: 'Settings'}), ' to check its databases.')
+      : h('p', {class: 'small-print', text: 'Your teams have no databases yet.'}));
 }
 
 function databasesCard(databases) {
@@ -291,32 +308,11 @@ function databasesCard(databases) {
           h('span', {class: 'small-print'}, MODES[d.lastRun.mode], ' · ', time(d.lastRun.createdAt))) : h('span', {class: 'muted small', text: 'Never'})))))));
 }
 
-function environmentsCard() {
-  const items = me.memberships.map(m => {
-    const on = enabledIn(m.team);
-    return h('div', {class: 'env-row'}, h('span', {class: 'team', text: m.teamName}),
-      ENVIRONMENTS.map(env => h('span', {class: `env ${on.includes(env) ? 'on' : 'off'}`},
-        h('i', {class: `status ${on.includes(env) ? 'success' : ''}`, 'aria-hidden': 'true'}),
-        `${LABELS[env]}${on.includes(env) ? '' : ' · off'}`,
-        !on.includes(env) && isAdmin(m.role) ? h('button', {type: 'button', class: 'quiet', text: 'Enable',
-          'aria-label': `Enable Maintenance for ${m.teamName} in ${LABELS[env]}`, onclick: () => enableEnvironment(m, env)}) : null)));
-  });
-  return h('section', {class: 'card agent-hint'},
-    h('div', {class: 'section-title'}, h('h2', {text: 'Where maintenance can run'})),
-    h('p', {class: 'small', text: 'Runs only happen in environments a team administrator enabled. Each runs as that team\'s service account for the environment, which can rewrite and delete files in the team\'s databases.'}),
-    h('div', {class: 'env-list'}, items));
-}
-
-async function enableEnvironment(membership, env) {
-  const ok = await confirmDialog(`Enable Maintenance in ${LABELS[env]}?`,
-    `Runs for ${membership.teamName} in ${LABELS[env]} will rewrite and delete files as the team's service account. The platform creates that account now; a team administrator can disable it again. Nothing is maintained until you save a policy.`,
-    'Enable');
-  if (!ok) return;
-  try {
-    await send(`/teams/${membership.team}/environments/${env}`, 'POST');
-    me = await api('/me');
-    go(location.hash, [`Maintenance is enabled for ${membership.teamName} in ${LABELS[env]}.`]);
-  } catch (error) { failure(error); }
+// Where Maintenance is enabled, with Enable and Disable for team administrators (Settings › Environments, the page every extension shares).
+function renderSettings() {
+  crumbs(['Settings']);
+  environmentChanged = () => {};
+  IcebergSettings.mount($('#content'), me.memberships, {team: route.team, section: route.section});
 }
 
 function agentCard() {
@@ -337,7 +333,7 @@ async function renderDatabase(token) {
   crumbs([`${d.teamName} · ${d.name}`]);
   const active = runs.find(r => ACTIVE.has(r.status));
   const enabled = enabledIn(d.team).includes(d.environment);
-  const blocked = !enabled ? 'Maintenance is not enabled in this environment.' : active ? 'A run is in progress.' : '';
+  const blocked = !enabled ? 'Not enabled in this environment.' : active ? 'A run is in progress.' : '';
   const writer = isWriter(d.role);
   const button = (mode, label, cls) => writer && h('button', {type: 'button', class: cls, text: label, disabled: Boolean(blocked) || (mode === 'maintain' && !policy?.exists),
     title: blocked || (mode === 'maintain' && !policy?.exists ? 'Set a policy first.' : null), onclick: () => startRun(d, mode)});
@@ -345,6 +341,7 @@ async function renderDatabase(token) {
     heading(`${d.teamName} · ${LABELS[d.environment]}`.toUpperCase(), h('h1', {class: 'compact', text: d.name}), null,
       button('inspect', 'Check health', 'quiet'), button('dry-run', 'Dry run', 'quiet'), button('maintain', 'Run maintenance'),
       h('a', {class: 'button quiet', href: `#/databases/${d.id}/policy`, text: isAdmin(d.role) ? 'Edit policy' : 'Policy'})),
+    enabled ? null : IcebergSettings.notice(membership(d.team), d.environment),
     h('div', {class: 'status-line spaced'}, policy?.exists ? chip('success', 'Policy') : chip('idle', policy ? 'No policy' : 'Policies unknown'),
       policy?.schedule && h('span', {class: 'chip', text: policy.schedule.enabled ? `Every ${policy.schedule.cron} UTC` : 'Schedule paused'}),
       blocked && !active ? h('span', {class: 'small-print', text: blocked}) : null),
@@ -405,7 +402,7 @@ function exclusionText(e) {
 
 function policySummary(policy, d) {
   if (!policy) return h('section', {class: 'card'}, h('h2', {text: 'Policy'}),
-    h('p', {class: 'small', text: 'Maintenance is not enabled in this environment, so it cannot read the database\'s policies. A team administrator enables it on the start page.'}));
+    h('p', {class: 'small', text: 'Maintenance is not enabled in this environment, so it cannot read the database\'s policies.'}));
   const foreign = Object.values(policy.policies).filter(p => p && !p.managed);
   return h('section', {class: 'card'},
     h('div', {class: 'section-title'}, h('h2', {text: 'Policy'}), policy.exists ? h('span', {class: 'small-print', text: 'Apache Polaris'}) : chip('idle', 'Defaults')),
@@ -476,7 +473,8 @@ async function renderPolicy(token) {
   crumbs([`${d.teamName} · ${d.name}`, `#/databases/${d.id}`], ['Policy']);
   if (!policy) {
     fill($('#content'), heading(`${d.teamName} · ${LABELS[d.environment]}`.toUpperCase(), h('h1', {class: 'compact', text: `${d.name} · policy`}), null),
-      h('section', {class: 'card'}, h('p', {class: 'small', text: 'Maintenance is not enabled in this environment. Its policies are Apache Polaris policies that Maintenance reads and writes as the team\'s service account, so a team administrator enables it first, on the start page.'})));
+      IcebergSettings.notice(membership(d.team), d.environment),
+      h('section', {class: 'card'}, h('p', {class: 'small', text: 'Its policies are Apache Polaris policies that Maintenance reads and writes as the team\'s service account, so Maintenance is enabled here first.'})));
     return;
   }
   const admin = isAdmin(d.role), locked = !admin;
@@ -578,9 +576,10 @@ async function renderPolicy(token) {
   fill($('#content'),
     heading(`${d.teamName} · ${LABELS[d.environment]}`.toUpperCase(), h('h1', {class: 'compact', text: `${d.name} · policy`}),
       admin ? 'Applies to every table in the database, except where an exclusion or a policy on a namespace or table overrides it.' : 'Only a team administrator changes the policy.',
-      isWriter(d.role) && h('button', {type: 'button', class: 'quiet', text: 'Dry run', disabled: !enabled, title: enabled ? 'Plans the saved policies' : 'Maintenance is not enabled in this environment.', onclick: () => startRun(d, 'dry-run')}),
+      isWriter(d.role) && h('button', {type: 'button', class: 'quiet', text: 'Dry run', disabled: !enabled, title: enabled ? 'Plans the saved policies' : 'Not enabled in this environment.', onclick: () => startRun(d, 'dry-run')}),
       admin && policy.exists && h('button', {type: 'button', class: 'danger', text: 'Remove', onclick: remove}),
       admin && h('button', {type: 'button', text: policy.exists ? 'Save policy' : 'Create policy', onclick: save})),
+    enabled ? null : IcebergSettings.notice(membership(d.team), d.environment),
     !policy.exists && h('div', {class: 'notice', text: 'No policy yet. These are the defaults, as in Apache Iceberg and Amazon S3 Tables. Saving creates one Apache Polaris policy per type and attaches it to the database.'}),
     h('div', {class: 'columns'},
       h('section', {class: 'card'}, sections, excludeSection),
@@ -616,6 +615,7 @@ async function renderTable(token) {
       writer && h('button', {type: 'button', class: 'quiet', text: 'Check health', disabled: !enabled, onclick: () => startRun(d, 'inspect', [t.name])}),
       writer && h('button', {type: 'button', class: 'quiet', text: 'Dry run', disabled: !enabled, onclick: () => startRun(d, 'dry-run', [t.name])}),
       writer && t.state !== 'no-policy' && h('button', {type: 'button', text: 'Maintain table', disabled: !enabled || t.state === 'excluded', onclick: () => startRun(d, 'maintain', [t.name])})),
+    enabled ? null : IcebergSettings.notice(membership(t.team), t.environment),
     h('div', {class: 'status-line spaced'}, stateChip(t.state), h('span', {class: 'small-print'}, 'Seen ', time(t.inspectedAt), ` by a ${SEEN_BY[t.inspectedBy] || t.inspectedBy}`)),
     t.reasons.length ? h('div', {class: 'notice warn', text: `Needs attention: ${t.reasons.join(', ')}.`}) : null,
     t.lastError ? h('div', {class: 'notice error', text: t.lastError}) : null,
@@ -771,19 +771,11 @@ function confirmDialog(title, text, action, danger = false, extra = null, valid 
   });
 }
 
-function theme() {
-  const saved = (() => { try { return localStorage.getItem('iceberg-theme'); } catch { return null; } })();
-  const apply = mode => { document.documentElement.dataset.theme = mode;
-    document.querySelector('meta[name="theme-color"]').setAttribute('content', mode === 'light' ? '#f5f5f5' : '#000000');
-    $('#theme').textContent = mode === 'light' ? 'Dark / ●' : 'Light / ○';
-    $('#theme').setAttribute('aria-label', `Switch to ${mode === 'light' ? 'dark' : 'light'} mode`); };
-  apply(saved === 'light' ? 'light' : 'dark');
-  $('#theme').onclick = () => { const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; apply(next); try { localStorage.setItem('iceberg-theme', next); } catch { /* private mode */ } };
-}
-$('#logout').onclick = async () => {
+// Sign out of the extension and of Keycloak.
+async function signOut() {
   const result = await (await fetch('/auth/logout', {method: 'POST', headers: {'X-Iceberg-Maintenance': '1'}, credentials: 'same-origin'})).json();
   location.href = result.logoutUrl || '/';
-};
+}
 window.addEventListener('hashchange', () => render());
-theme();
+IcebergAccount.mount($('#account'));
 render();

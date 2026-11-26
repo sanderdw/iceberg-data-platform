@@ -2,6 +2,8 @@
 // Text from the API is only ever set with textContent, never parsed as HTML.
 'use strict';
 
+// Getting started, in the account menu: this extension's page in the platform's documentation.
+const GUIDE = 'https://sanderdw.github.io/iceberg-data-platform/evaluations/';
 const $ = (id) => document.getElementById(id);
 const state = { me: null, roles: {}, sets: [], set: null, view: 'runs', picked: [] };
 const WRITERS = ['writer', 'admin', 'bucket-admin'];
@@ -43,7 +45,7 @@ async function api(method, path, body) {
   });
   const data = await response.json().catch(() => ({}));
   if (response.status === 401) { showSignin(); throw new Error(data.error || 'Sign in again.'); }
-  if (!response.ok) throw new Error(data.error || `The request failed (${response.status}).`);
+  if (!response.ok) throw Object.assign(new Error(data.error || `The request failed (${response.status}).`), { code: data.code });
   return data;
 }
 
@@ -53,7 +55,7 @@ function show(id) {
 
 function showSignin() {
   show('signin');
-  $('identity').hidden = true;
+  IcebergAccount.mount($('account'));
   $('signin-link').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`;
 }
 
@@ -83,6 +85,9 @@ const when = (t) => (t ? new Date(t).toLocaleString() : '');
 const pct = (r) => (r === null || r === undefined ? '–' : `${Math.round(r * 100)}%`);
 const rateClass = (r) => (r === null || r === undefined ? '' : r >= 0.9 ? 'high' : r >= 0.6 ? 'mid' : 'low');
 const teamName = (team) => (state.me.memberships.find((m) => m.team === team) || {}).teamName || team;
+const membership = (team) => state.me.memberships.find((m) => m.team === team) || { team, teamName: team, role: state.roles[team] };
+const enabledIn = (team, environment) =>
+  ((state.me.enabledEnvironments.find((e) => e.team === team) || {}).environments || []).includes(environment);
 
 // A finished run with too many unanswered questions has no pass rate: it measured the outage, not the agent.
 const unreliable = (run) => run.status === 'success' && run.summary.reliable === false;
@@ -111,8 +116,6 @@ async function home() {
         last && last.status === 'success' ? pct(rate) : '–'),
       el('p', { class: 'small' }, last ? `Last run ${when(last.createdAt)} · ${unreliable(last) ? 'not reliable' : last.status}` : 'Not run yet'));
   }) : [el('p', {}, 'No question sets yet.')]));
-  $('live-links').replaceChildren(...state.me.memberships.flatMap((m) => ['development', 'acceptance', 'production']
-    .map((e) => el('a', { class: 'button quiet', href: `#/live/${m.team}/${e}` }, `${m.teamName} · ${e}`))));
   $('mcp-command').textContent = `claude mcp add --transport http --client-id ext-evaluations-mcp --callback-port 3010 iceberg-evaluations ${location.origin}/mcp`;
 }
 
@@ -127,8 +130,18 @@ async function newSetForm() {
   const target = el('select', { name: 'target' });
   const yaml = el('textarea', { class: 'code editor', name: 'yaml', spellcheck: 'false' }, TEMPLATE);
   const error = el('p', { class: 'small error' });
+  const off = el('div');
   let models = [];
   async function loadModels() {
+    error.textContent = '';
+    off.replaceChildren();
+    if (!enabledIn(team.value, environment.value)) {
+      // Evaluations reads the semantic models as the team's service account, which exists only where it is enabled.
+      models = [];
+      model.replaceChildren(el('option', { value: '' }, 'Not available'));
+      off.replaceChildren(IcebergSettings.notice(membership(team.value), environment.value));
+      return;
+    }
     model.replaceChildren(el('option', { value: '' }, 'Loading…'));
     try {
       ({ semanticModels: models } = await api('GET', `/teams/${team.value}/environments/${environment.value}/agent-models`));
@@ -158,13 +171,14 @@ async function newSetForm() {
       el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Team'), team),
       el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Environment'), environment),
       el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Name'), name)),
+    off,
     el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Semantic model'), model),
     el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Results to this team database (Iceberg)'), target),
     el('label', { class: 'field' }, el('span', { class: 'eyebrow' }, 'Cases (YAML)'), yaml),
     error,
     el('div', { class: 'actions' },
       el('button', { type: 'submit' }, 'Create'),
-      el('button', { type: 'button', class: 'quiet', onclick: () => { form.hidden = true; } }, 'Cancel')));
+      el('button', { type: 'button', class: 'quiet', onclick: () => { form.hidden = true; state.afterEnable = null; } }, 'Cancel')));
   form.onsubmit = async (event) => {
     event.preventDefault();
     const chosen = models[Number(model.value)];
@@ -178,6 +192,7 @@ async function newSetForm() {
     } catch (e) { error.textContent = e.message; }
   };
   form.hidden = false;
+  state.afterEnable = loadModels;
   await loadModels();
 }
 
@@ -440,7 +455,7 @@ async function comparePage(a, b) {
 
 async function livePage(team, environment) {
   show('live');
-  crumbs({ label: 'Question sets', href: '#/' }, { label: 'Live' });
+  crumbs({ label: 'Question sets', href: '#/' }, { label: 'Settings', href: IcebergSettings.href(team) }, { label: 'Live' });
   $('live-eyebrow').textContent = `${teamName(team)} · ${environment}`;
   const say = (text, error = false) => {
     const box = $('live-notice');
@@ -458,6 +473,7 @@ async function livePage(team, environment) {
   const target = el('select', {}, databaseOptions(team, environment, setting.targetDatabase));
   const last = setting.lastSummary || {};
   $('live-view').replaceChildren(
+    enabledIn(team, environment) ? '' : IcebergSettings.notice(membership(team), environment),
     el('section', { class: 'card' }, el('h2', {}, 'Settings'),
       el('p', { class: 'small' }, 'While this is on, Conversational BI keeps this team\'s conversations in this environment for its retention period, and only the Evaluations extension reads them. Switching it off deletes them.'),
       el('label', { class: 'check' }, enabled, 'Score new conversations'),
@@ -499,15 +515,26 @@ async function livePage(team, environment) {
       }))) : el('p', {}, 'Nothing to review.')));
 }
 
+// Settings, with where Evaluations is enabled per team environment as its first option (the shared Settings page)
+
+function settingsPage(section, team) {
+  show('settings');
+  crumbs({ label: 'Question sets', href: '#/' }, { label: 'Settings' });
+  IcebergSettings.mount($('settings-view'), state.me.memberships, { team, section });
+}
+
 // Routing, session and theme
 
 async function route() {
-  const parts = location.hash.replace(/^#\/?/, '').split('/');
+  state.afterEnable = null;
+  const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
+  const parts = path.split('/');
   try {
     if (parts[0] === 'sets' && parts[1]) await questionSet(parts[1]);
     else if (parts[0] === 'runs' && parts[1]) await runPage(parts[1]);
     else if (parts[0] === 'compare' && parts[2]) await comparePage(parts[1], parts[2]);
     else if (parts[0] === 'live' && parts[2]) await livePage(parts[1], parts[2]);
+    else if (parts[0] === 'settings') settingsPage(parts[1], new URLSearchParams(query).get('team'));
     else await home();
   } catch (e) {
     show('home');
@@ -515,31 +542,41 @@ async function route() {
   }
 }
 
-function theme(next) {
-  document.documentElement.dataset.theme = next;
-  $('theme').textContent = next === 'dark' ? 'Light / ○' : 'Dark / ●';
-  try { localStorage.setItem('iceberg-theme', next); } catch { /* private mode */ }
+// Sign out of the extension and of Keycloak.
+async function signOut() {
+  const result = await (await fetch('/auth/logout', {method: 'POST', headers: {'x-iceberg-evaluations': '1'}, credentials: 'same-origin'})).json();
+  location.href = result.logoutUrl || '/';
 }
 
 async function start() {
-  let saved = 'dark';
-  try { saved = localStorage.getItem('iceberg-theme') || 'dark'; } catch { /* private mode */ }
-  theme(saved);
-  $('theme').addEventListener('click', () => theme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
-  $('logout').addEventListener('click', async () => {
-    const { logoutUrl } = await fetch('/auth/logout', { method: 'POST', headers: { 'x-iceberg-evaluations': '1' } }).then((r) => r.json());
-    location.href = logoutUrl;
-  });
+  IcebergAccount.mount($('account'));
   $('new-set').addEventListener('click', newSetForm);
   try {
     const session = await fetch('/api/session', { credentials: 'same-origin' }).then((r) => r.json());
     if (!session.authenticated) { showSignin(); return; }
-    $('identity').hidden = false;
-    $('username').textContent = session.user || '';
+    IcebergAccount.mount($('account'), { name: session.user || '', guide: GUIDE, signOut });
     state.me = await api('GET', '/me');
-    $('username').textContent = state.me.user?.name || session.user || '';
+    IcebergAccount.mount($('account'), { name: state.me.user?.name || session.user || '', details: IcebergAccount.teams(state.me.memberships), guide: GUIDE, signOut });
+    // Read-only: the read role in every team, so nothing here can be changed.
+    $('read-only').hidden = state.me.memberships.some((m) => ['writer', 'admin', 'bucket-admin'].includes(m.role));
     IcebergApps.mount($('apps'), {...state.me.apps, current: state.me.extension});
     state.roles = Object.fromEntries(state.me.memberships.map((m) => [m.team, m.role]));
+    IcebergSettings.configure({
+      title: 'Evaluations',
+      request: (method, path) => api(method, path),
+      enables: 'Its question sets ask Conversational BI for the whole team, with what every member can read, and write '
+        + 'results into the team\'s databases of this environment as the team\'s service account. Conversational BI has to be enabled here too.',
+      disables: 'Question sets can no longer run here, their schedules stop, and live evaluation ends: the conversations it kept are deleted. '
+        + 'Question sets, their runs and the results they wrote stay.',
+      details: (entry) => el('a', { href: `#/live/${entry.team}/${entry.environment}` }, 'Live evaluation →'),
+      onChange: async () => {
+        state.me = await api('GET', '/me');
+        // An open new-question-set form loads its semantic models again; any other page is drawn again.
+        if (state.afterEnable) await state.afterEnable();
+        else if (!location.hash.startsWith('#/settings')) await route();
+      },
+    });
+    IcebergSettings.link($('settings-link'));
     window.addEventListener('hashchange', route);
     await route();
   } catch (error) {

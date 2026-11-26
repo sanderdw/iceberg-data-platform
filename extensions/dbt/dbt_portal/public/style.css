@@ -57,15 +57,14 @@ button.ghost:hover { color: var(--text-display); }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 4px; }
 
 /* Header */
-header.site { min-height: 96px; padding: 24px 48px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--border); }
+header.site { min-height: 60px; padding: 0 32px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--border); }
 .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 500; text-decoration: none; color: var(--text-display); white-space: nowrap; }
-.brand img { width: 32px; height: 32px; }
+.brand img { width: 28px; height: 28px; }
 .brand span { font: var(--small) var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
 #crumbs { flex: 1; display: flex; gap: 8px; margin-left: 24px; font: var(--small) var(--mono); color: var(--text-secondary); min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #crumbs a { text-decoration: none; }
 #crumbs a:hover { color: var(--text-display); }
-.header-actions, #identity { display: flex; align-items: center; gap: 24px; min-width: 0; }
-#username { max-width: 240px; overflow: hidden; text-overflow: ellipsis; font: var(--small) var(--mono); }
+.header-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
 main { padding: 48px; max-width: 1600px; margin: 0 auto; }
 /* The pipeline page uses the whole window: graphs are wide. */
 main#project { max-width: none; }
@@ -194,19 +193,18 @@ th { font: .7rem var(--mono); color: var(--text-secondary); font-weight: 400; te
 
 @media (max-width: 1100px) {
   :root { --large: 3rem; }
-  header.site { padding-inline: 32px; }
+  header.site { padding-inline: 24px; }
   main { padding-inline: 32px; }
   #signin { gap: 48px; padding-inline: 32px; }
   .intro { padding-left: 0; }
 }
 @media (max-width: 700px) {
   :root { --large: 2.25rem; }
-  header.site { min-height: 80px; padding: 16px 20px; flex-wrap: wrap; gap: 8px 16px; }
+  header.site { min-height: 56px; padding: 6px 20px; flex-wrap: wrap; gap: 8px 16px; }
   #crumbs { order: 3; width: 100%; flex-basis: 100%; margin: 0; }
-  .header-actions, #identity { gap: 8px; }
+  .header-actions { gap: 8px; }
   .header-actions { margin-left: auto; }
   .brand span { display: none; }
-  #username { max-width: 120px; }
   main { padding: 32px 16px; }
   main.initial { min-height: calc(100vh - 80px); }
   #signin { display: block; min-height: calc(100vh - 80px); padding: 64px 24px; }
@@ -249,3 +247,9 @@ table.rows td { white-space: nowrap; overflow-wrap: normal; max-width: 220px; ov
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .settings { display: grid; gap: 16px; }
 td .tabs { margin-bottom: 0; flex-wrap: wrap; }
+/* Phones: the header's pills (Read-only, Settings, Apps and the account) tighten so they fit one row. */
+@media (max-width: 480px) {
+  .header-actions { gap: 6px; }
+  .header-actions .settings-link, .header-actions .apps-anchor .apps-toggle { padding-inline: 10px; }
+  .header-actions .account-anchor .account-toggle { max-width: 130px; }
+}

@@ -79,9 +79,7 @@ header { min-height: 60px; padding: 0 48px; display: flex; justify-content: spac
 .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 500; text-decoration: none; color: var(--text-display); }
 .brand img { width: 28px; height: 28px; }
 .brand span { font: var(--small) var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
-.header-actions, #identity { display: flex; align-items: center; gap: 24px; min-width: 0; }
-#username { max-width: 240px; overflow: hidden; text-overflow: ellipsis; font: var(--small) var(--mono); }
-#theme-toggle { white-space: nowrap; }
+.header-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .eyebrow, label, .hint, .footer-note { font: var(--small)/1.6 var(--mono); color: var(--text-secondary); }
 .eyebrow, label { text-transform: uppercase; letter-spacing: .06em; }
 h1 { font: 500 var(--large)/1.1 Doto, var(--mono); letter-spacing: -.03em; color: var(--text-display); margin: 16px 0; }
@@ -184,11 +182,9 @@ iframe { display: block; width: 100%; height: max(550px, calc(100vh - 192px)); b
 @media (max-width: 700px) {
   :root { --large: 2.25rem; }
   header { min-height: 56px; padding: 6px 20px; flex-wrap: wrap; }
-  .header-actions, #identity { gap: 8px; }
-  .header-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+  .header-actions { gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
   .brand span { display: none; }
-  #username { max-width: 120px; }
-  #identity button { padding-inline: 12px; }
+  .account-anchor .account-toggle { max-width: 140px; }
   #login-screen { display: block; min-height: calc(100vh - 56px); padding: 64px 24px; }
   .intro { display: none; }
   .login form { margin-top: 32px; }
@@ -356,36 +352,10 @@ header .nav-item { background: transparent; border: 0; border-radius: 0; padding
 header .nav-item:hover, header .nav-item[aria-current='page'] { color: var(--text-display); }
 header .nav-item[aria-current='page']::before { content: '['; }
 header .nav-item[aria-current='page']::after { content: ']'; }
-/* Header menus: Apps (the extensions, PLATFORM_EXTENSIONS, each on its own origin) and the account. */
-.menu-anchor { position: relative; }
-.menu-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; background: transparent; border: 1px solid var(--border-visible); border-radius: 999px; color: var(--text-primary); font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
-.menu-toggle::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s; }
-.menu-toggle[aria-expanded='true']::after { transform: translateY(2px) rotate(-135deg); }
-.menu-toggle:hover, .menu-toggle[aria-expanded='true'] { background: transparent; border-color: var(--text-primary); color: var(--text-display); }
-#account-toggle { text-transform: none; letter-spacing: 0; }
-.header-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; display: grid; gap: 12px; min-width: 220px; padding: 16px; background: var(--surface); border: 1px solid var(--border-visible); border-radius: 12px; box-shadow: 0 12px 32px rgb(0 0 0 / .35); }
-.header-menu[hidden] { display: none; }
-.apps-menu { width: min(520px, calc(100vw - 32px)); }
-.apps-menu .eyebrow { margin: 0; }
-.apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 8px; }
-.extension-link { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); text-decoration: none; }
-.extension-link:hover, .extension-link:focus-visible { border-color: var(--text-secondary); background: var(--surface-raised); }
-.extension-link strong { font-weight: 500; color: var(--text-display); }
-.extension-link strong::after { content: ' ↗'; color: var(--text-secondary); font-size: .8em; }
-.extension-link span { color: var(--text-secondary); font-size: .8rem; line-height: 1.45; }
-.account-menu { gap: 4px; padding: 8px; }
-.menu-item { width: 100%; justify-content: flex-start; min-height: 40px; padding: 8px 12px; background: transparent; border: 0; border-radius: 8px; color: var(--text-primary); text-align: left; white-space: nowrap; }
-.menu-item:hover, .menu-item:focus-visible { background: var(--surface-raised); }
-/* Phones: a menu spans the screen under the header instead of hanging off its button. */
-@media (max-width: 700px) {
-  header { position: relative; }
-  .menu-anchor { position: static; }
-  .header-menu { left: 16px; right: 16px; top: calc(100% - 8px); width: auto; min-width: 0; }
-}
+/* The Read-only pill, the Apps menu and the account menu are the platform's: apps-menu.css and account-menu.css. */
 /* Wide screens keep the actions whole, so an overflowing header stacks its navigation instead (app.js fitHeader).
    Phones wrap the actions, as before. */
 @media (min-width: 701px) { .header-actions { flex-shrink: 0; } }
-#identity button { white-space: nowrap; }
 header.stacked { flex-wrap: wrap; gap: 0 24px; padding-block: 6px; }
 header.stacked #workspace-nav { order: 3; width: 100%; }
 #notebooks-page .saved:first-child { margin-top: 0; }
@@ -396,6 +366,14 @@ header.stacked #workspace-nav { order: 3; width: 100%; }
 .team-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; }
 .team-overview-grid > section { min-width: 0; }
 .team-overview-grid .hint { margin-bottom: 24px; }
+.team-extensions { margin-top: 48px; }
+.team-extensions .data-grid { max-height: none; }
+.team-extensions .active-environment { background: var(--surface-raised); }
+.team-extensions th.active-environment { color: var(--text-primary); }
+.extension-state { display: inline-flex; align-items: center; gap: 8px; font: var(--small)/1.6 var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
+.extension-state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--text-disabled); }
+.extension-state.on { color: var(--text-primary); }
+.extension-state.on::before { background: var(--success); }
 .team-workspace-links { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--border); }
 .database-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .database-actions button { padding-inline: 12px; }
@@ -422,8 +400,7 @@ header.stacked #workspace-nav { order: 3; width: 100%; }
 @media (min-width: 701px) and (max-width: 1400px) {
   header { gap: 0 24px; }
   #workspace-nav { gap: 20px; }
-  .header-actions, #identity { gap: 16px; }
-  #username { max-width: 140px; }
+  .account-anchor .account-toggle { max-width: 160px; }
 }
 @media (max-width: 700px) {
   header { gap: 4px 16px; }
