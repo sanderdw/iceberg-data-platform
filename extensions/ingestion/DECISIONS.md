@@ -36,6 +36,7 @@ What works, verified against Polaris:
 | `RESTORE_FROM_DESTINATION=false` | dlt does not look for its state in the destination; it uses its pipelines folder |
 | The extension stores `state.json` and `schemas/` of the pipelines folder after each successful run, and stages them into the next | Incremental cursors carry over (6 → 9 in the spike); a failed run keeps the previous state |
 | `py-io-impl` that overrides `s3.endpoint` | Polaris vends the browser-facing storage address; the run uses the internal one (as the platform's notebooks do) |
+| dlt's Iceberg load job replaced for `append` and `replace` (`runner/iceberg_load.py`) | dlt reads all of a table's load into one Arrow table before it writes: a 373 MB Parquet file took 7.3 GB. The runner reads it in pieces of 128 MB and writes each piece's data files before reading the next, all in one snapshot and one commit: 1.2 GB for the same file, and a failed run still changes nothing. pyiceberg's own streaming writes don't help: they hand every file to `Executor.map`, which reads the whole stream first |
 
 `replace` is PyIceberg's `overwrite` and `merge` (strategy `upsert`) is PyIceberg's `upsert`, so
 the table keeps its UUID; data shares and table properties survive. dlt's `refresh` modes and
@@ -45,7 +46,8 @@ the table keeps its UUID; data shares and table properties survive. dlt's `refre
 Known limits, from dlt and PyIceberg:
 
 - `merge` upserts in batches of 1,000 rows, one commit each: fine for increments, slow for large
-  first loads. Load large tables with `replace` first.
+  first loads. It also holds the whole load in memory, uncompressed. Load large tables with `replace`
+  first.
 - Upsert needs unique keys in each batch and does not evolve the schema of nested types.
 - dlt adds `_dlt_load_id` and `_dlt_id` to every table, and child tables `<table>__<field>` for
   nested lists, joined on `_dlt_parent_id`.

@@ -347,6 +347,7 @@ class Services:
         pipeline, me, role = await self.pipeline_for(caller, pipeline_id, "admin")
         needed = set(validate.refs(pipeline["source"]))
         validate.secret_values(values, needed)
+        validate.secret_url(pipeline["source_type"], pipeline["source"], values, self.settings.allow_private)
         stored = dict(pipeline["secrets"])
         for name, value in values.items():
             if value is None:

@@ -1,4 +1,5 @@
 import json
+import re
 import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -9,7 +10,7 @@ import dlt
 import pytest
 from pyiceberg.exceptions import CommitFailedException
 
-from runner import entrypoint, guard, iceberg_io, publish, sources
+from runner import entrypoint, guard, iceberg_io, iceberg_load, publish, sources
 from runner.scrub import Scrubber
 
 
@@ -149,12 +150,90 @@ def test_a_csv_file_over_http_is_read_with_arrow(server, tmp_path):
     with pytest.raises(sources.SourceError, match="ING_MAX_DOWNLOAD_GB"):
         sources.build("filesystem", {"url": server + "airports.csv", "format": "csv", "table": "airports"}, {},
                       tmp_path / "small", max_download=10)
+    signed = sources.build("filesystem", {"url": "$secret:file_url", "format": "csv", "table": "airports"},
+                           {"file_url": server + "airports.csv?X-Amz-Signature=abc"}, tmp_path / "signed")
+    assert load(tmp_path / "signed", sources.apply_hints(signed, {}), "signed") == {"airports": 2}
+    with pytest.raises(sources.SourceError, match="kept in a secret"):
+        sources.build("filesystem", {"url": "$secret:file_url", "format": "csv", "table": "x"},
+                      {"file_url": "s3://bucket/x.csv"}, tmp_path)
     with pytest.raises(sources.SourceError, match="https, http or s3"):
         sources.build("filesystem", {"url": "file:///etc/passwd", "format": "csv", "table": "x"}, {}, tmp_path)
     with pytest.raises(sources.SourceError, match="format"):
         sources.build("filesystem", {"url": server, "format": "xlsx", "table": "x"}, {}, tmp_path)
     with pytest.raises(sources.SourceError, match="Unknown source"):
         sources.build("python", {}, {}, tmp_path)
+
+
+def test_progress_logs_each_step_and_a_heartbeat_with_memory(tmp_path):
+    import io
+    import time
+
+    from runner.progress import Progress
+
+    @dlt.resource(name="orders")
+    def orders():
+        time.sleep(0.3)
+        yield [{"id": i} for i in range(3)]
+
+    stream = io.StringIO()
+    progress = Progress(interval=0.1, stream=stream)
+    pipeline = dlt.pipeline("test_progress", destination=dlt.destinations.filesystem((tmp_path / "out").as_uri()),
+                            dataset_name="raw", pipelines_dir=str(tmp_path / "pipelines"), progress=progress)
+    try:
+        pipeline.run(orders(), loader_file_format="parquet")
+    finally:
+        progress.close()
+    log = stream.getvalue()
+    for step in ("Extract", "Normalize", "Load"):
+        assert re.search(rf"{step} test_progress.* started", log) and re.search(rf"{step} .*finished in", log)
+    assert re.search(r"\] Extract test_progress running, memory \d+\.\d\d GB", log)
+
+
+def test_iceberg_loads_in_pieces_in_one_commit(tmp_path, monkeypatch):
+    import pyarrow as pa
+    from dlt.common.libs.pyiceberg import get_iceberg_tables
+    from dlt.destinations.adapters import iceberg_adapter
+    from dlt.destinations.impl.filesystem.filesystem import IcebergLoadFilesystemJob
+
+    monkeypatch.setattr(IcebergLoadFilesystemJob, "run", IcebergLoadFilesystemJob.run)  # undone after the test
+    iceberg_load.install(size=1)  # a piece per batch
+    read = []
+    pieces = iceberg_load.pieces
+    monkeypatch.setattr(iceberg_load, "pieces", lambda *a: (read.append(p.num_rows) or p for p in pieces(*a)))
+
+    def rows(n):
+        for start in range(0, n, 70_000):
+            ids = list(range(start, min(start + 70_000, n)))
+            yield pa.table({"id": ids, "part": [i % 3 for i in ids]})
+
+    pipeline = dlt.pipeline("test_pieces", destination=dlt.destinations.filesystem((tmp_path / "out").as_uri()),
+                            dataset_name="raw", pipelines_dir=str(tmp_path / "pipelines"))
+    for name, partition in (("plain", None), ("parted", "part")):
+        def load(n, disposition, name=name, partition=partition):
+            resource = dlt.resource(rows(n), name=name, write_disposition=disposition)
+            pipeline.run(iceberg_adapter(resource, partition=partition) if partition else resource,
+                         table_format="iceberg")
+            table = get_iceberg_tables(pipeline, name)[name]
+            return table.scan().to_arrow().num_rows, table
+
+        assert load(200_000, "replace")[0] == 200_000
+        read.clear()
+        count, table = load(150_000, "append")
+        assert count == 350_000 and len(read) > 2
+        assert table.metadata.snapshots[-1].summary["added-records"] == "150000"
+        commits = len(table.metadata.metadata_log)
+        count, table = load(100_000, "replace")
+        assert count == 100_000 and len(table.metadata.metadata_log) == commits + 1
+        assert load(0, "replace")[0] == 0
+
+    def failing(*args):
+        yield from pieces(*args)
+        raise OSError("storage went away")
+
+    monkeypatch.setattr(iceberg_load, "pieces", failing)
+    with pytest.raises(Exception, match="storage went away"):
+        load(100_000, "append")
+    assert get_iceberg_tables(pipeline, "parted")["parted"].scan().to_arrow().num_rows == 0
 
 
 def test_hints_come_from_the_pipeline_and_full_refresh_replaces():

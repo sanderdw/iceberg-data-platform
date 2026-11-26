@@ -34,7 +34,10 @@ def substitute(value, secrets):
 
 
 def build(source_type, config, secrets, work, max_download=MAX_DOWNLOAD):
+    secret_url = isinstance(config.get("url"), str) and SECRET.fullmatch(config["url"])
     config = substitute(config, secrets)
+    if secret_url and urlsplit(config["url"]).scheme not in ("http", "https"):
+        raise SourceError("A file URL kept in a secret must start with https:// or http://.")
     if source_type == "rest_api":
         return rest_api(config)
     if source_type == "sql_database":
@@ -138,6 +141,7 @@ def download(url, target, limit=MAX_DOWNLOAD):
     name = Path(unquote(urlsplit(url).path)).name or "download"
     target.mkdir(parents=True, exist_ok=True)
     size = 0
+    print(f"Downloading {name}", flush=True)
     with requests.get(url, stream=True, timeout=(30, 300)) as response:
         response.raise_for_status()
         with open(target / name, "wb") as file:
@@ -147,6 +151,7 @@ def download(url, target, limit=MAX_DOWNLOAD):
                     raise SourceError(f"The file is larger than {limit / 1024**3:g} GiB, the limit the platform "
                                       "administrator set (ING_MAX_DOWNLOAD_GB).")
                 file.write(chunk)
+    print(f"Downloaded {name}: {size / 1000**3:.2f} GB", flush=True)
     return name
 
 
@@ -168,6 +173,7 @@ def filesystem(config, work, max_download=MAX_DOWNLOAD):
 
         s3 = config.get("s3") or {}
         fs = s3fs.S3FileSystem(key=s3.get("access_key_id"), secret=s3.get("secret_access_key"),
+                               token=s3.get("session_token"),
                                anon=not s3.get("access_key_id"), endpoint_url=s3.get("endpoint_url"),
                                client_kwargs={"region_name": s3["region"]} if s3.get("region") else None)
         incremental = dlt.sources.incremental("modification_date") if config.get("incremental") else None

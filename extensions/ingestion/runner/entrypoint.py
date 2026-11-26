@@ -137,11 +137,13 @@ def run(job, secrets, token, out):
     from pyiceberg.catalog import load_catalog
 
     # Before dlt loads a table: binds tables to their FileIO, so vended credentials are renewed.
-    from runner import iceberg_io, publish, sources
+    from runner import iceberg_io, iceberg_load, publish, sources
+    from runner.progress import Progress
 
     iceberg_io.renew_table_credentials()
 
     catalog_location()
+    iceberg_load.install()
     name = pipeline_name(job)
     pipelines = WORK / "pipelines"
     restored = restore(job, pipelines / name)
@@ -151,9 +153,13 @@ def run(job, secrets, token, out):
                            job.get("maxDownload", sources.MAX_DOWNLOAD))
     resources = sources.apply_hints(source,
                                     job.get("resources") or {}, job.get("fullRefresh", False))
+    progress = Progress()
     pipeline = dlt.pipeline(name, destination="filesystem", dataset_name=job["namespace"],
-                            pipelines_dir=str(pipelines))
-    info = pipeline.run(platform_source(name, resources), table_format="iceberg")
+                            pipelines_dir=str(pipelines), progress=progress)
+    try:
+        info = pipeline.run(platform_source(name, resources), table_format="iceberg")
+    finally:
+        progress.close()
     print(info, flush=True)
     load_id = info.loads_ids[-1] if info.loads_ids else None
     tables, roots = loaded_tables(pipeline, resources)
@@ -176,7 +182,8 @@ def main():
     scrub = Scrubber([token, *secrets.values()])
     result = {"status": "failed", "startedAt": now(), "loadId": None, "dltVersion": None, "tables": [],
               "published": {"tables": [], "errors": []}, "error": None}
-    with open(out / "run.log", "w", encoding="utf-8") as log:
+    # Line by line: a run killed for memory keeps every line it wrote.
+    with open(out / "run.log", "w", encoding="utf-8", buffering=1) as log:
         sys.stdout, sys.stderr = Tee(sys.__stdout__, log, scrub), Tee(sys.__stderr__, log, scrub)
         try:
             job = json.loads((WORK / "job.json").read_text())

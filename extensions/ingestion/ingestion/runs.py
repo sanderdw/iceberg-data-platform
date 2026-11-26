@@ -249,6 +249,9 @@ class RunManager:
             status, error = "error", f"The run exceeded its time limit of {limit // 60} minutes."
         elif launched.get("exitCode") == 0:
             status, error = "success", ""
+        elif launched.get("exitCode") == 137:  # SIGKILL; not stopped and not timed out, so out of memory
+            status, error = "error", ("The run ran out of memory and was stopped. A platform administrator can "
+                                      "raise RUN_MEMORY (runs.memory on Kubernetes).")
         else:
             status, error = "failed", summary.get("error") or "dlt reported an error. Read the run log."
         if status == "success":

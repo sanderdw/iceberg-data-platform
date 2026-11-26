@@ -128,6 +128,27 @@ def test_sql_and_files_are_checked(stack):
           "s3": {"region": "eu-west-1", "access_key_id": "AK", "secret_access_key": "$secret:s3"}}
     assert check("filesystem", s3).json()["detail"]["field"] == "source.file_glob"
     assert check("filesystem", {**s3, "file_glob": "*.parquet", "incremental": True}).json()["valid"]
+    sts = {**s3, "file_glob": "*.parquet", "s3": {**s3["s3"], "session_token": "$secret:s3_token"}}
+    assert check("filesystem", sts).json()["secretsNeeded"] == ["s3", "s3_token"]
+    assert check("filesystem", {**sts, "s3": {**sts["s3"], "session_token": "IQo"}}).json()["detail"]["field"] == (
+        "source.s3.session_token")
+    anonymous = {**sts, "s3": {"region": "eu-west-1", "session_token": "$secret:s3_token"}}
+    assert check("filesystem", anonymous).json()["detail"]["field"] == "source.s3.session_token"
+
+
+def test_a_file_url_can_be_a_secret(stack):
+    enable(stack)
+    files = {"url": "$secret:file_url", "format": "parquet", "table": "areas"}
+    pipeline = stack.create(sourceType="filesystem", source=files, resources={}).json()
+    assert pipeline["secretsMissing"] == ["file_url"]
+    path = f"/pipelines/{pipeline['id']}/secrets"
+    signed = "https://bucket.s3.eu-west-1.amazonaws.com/areas.parquet?X-Amz-Expires=600&X-Amz-Signature=" + "ab" * 1200
+    for bad in ("file:///etc/passwd", "s3://bucket/areas.parquet", "http://10.1.2.3/areas.parquet"):
+        refused = stack.call("PATCH", path, json={"secrets": {"file_url": bad}}).json()
+        assert refused["code"] == "invalid_pipeline" and refused["detail"]["field"] == "secrets.file_url", bad
+    set_ = stack.call("PATCH", path, json={"secrets": {"file_url": signed}})
+    assert set_.json()["secretsSet"] == ["file_url"] and "X-Amz-Signature" not in set_.text
+    assert "X-Amz" not in stack.call("GET", f"/pipelines/{pipeline['id']}").text
 
 
 def test_private_sources_need_the_platforms_permission(tmp_path, monkeypatch):
@@ -224,6 +245,9 @@ def test_a_failed_run_keeps_the_previous_state(stack):
     failed = stack.call("POST", path, "bob", json={"wait": 30}).json()
     assert failed["status"] == "failed" and failed["error"] == "Source returned 401"
     assert failed["summary"]["error"] == "Source returned 401" and failed["exitCode"] == 1
+    stack.launcher.exit_code = 137
+    killed = stack.call("POST", path, "bob", json={"wait": 30}).json()
+    assert killed["status"] == "error" and "out of memory" in killed["error"] and killed["exitCode"] == 137
     stack.launcher.exit_code = 0
     after = stack.call("POST", path, "bob", json={"wait": 30}).json()
     assert stack.launcher.started[after["id"]]["state"] == {"runs": 1}

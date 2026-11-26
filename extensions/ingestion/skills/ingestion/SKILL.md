@@ -61,8 +61,11 @@ with `ICEBERG_EXTENSIONS=ingestion`, or on Kubernetes to register it and install
   an optional `incremental.cursor` column. Ask for a read-only account. A cursor misses deleted
   rows: run with `full_refresh` now and then.
 - `filesystem`: `url` of one file over HTTPS, or `s3://bucket/prefix/` with `file_glob` and `s3`
-  (`endpoint_url` or `region`, `access_key_id`, `secret_access_key` as a secret); `format` `csv`,
-  `jsonl` or `parquet`; `table`; `incremental` (only files changed since the last run, S3 only).
+  (`endpoint_url` or `region`, `access_key_id`, `secret_access_key` as a secret, and `session_token`
+  as a secret for temporary keys); `format` `csv`, `jsonl` or `parquet`; `table`; `incremental` (only
+  files changed since the last run, S3 only). A pre-signed link (`X-Amz-Signature` and the like in
+  its query) carries credentials: put it in a secret, `"url": "$secret:file_url"`. It expires, so
+  it suits one run, not a schedule.
 - `resources`: per resource name, `writeDisposition` (`append`, `replace`, `merge`), `primaryKey`
   (needed for merge) and `partition`.
 

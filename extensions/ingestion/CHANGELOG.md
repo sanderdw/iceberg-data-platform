@@ -18,6 +18,20 @@ is kept: update scripts and agent instructions.
 - **File downloads.** `ING_MAX_DOWNLOAD_GB` (`runs.maxDownloadGB` on Kubernetes) sets the largest file an
   https or http file source downloads: 4 GiB by default (was a fixed 2 GiB). On Kubernetes a run's work
   volume (`runs.workSize`) is 8Gi (was 4Gi), so such a file fits.
+- **Out of memory.** A run killed for memory ends with status `error` and "The run ran out of memory",
+  naming `RUN_MEMORY`. It said "dlt reported an error. Read the run log.", while the log had no error.
+- **Large loads.** Append and replace load into Iceberg in pieces of 128 MB, all in one snapshot and
+  one commit, instead of holding the whole load in memory: a 373 MB Parquet file took 7.3 GB, now
+  1.2 GB. Merge still holds its rows in memory.
+- **Pre-signed links.** A file source's `url` can be a secret (`"$secret:file_url"`), so a pre-signed
+  link's credentials are no longer stored in the definition for everyone to read. The link gets the
+  same checks when the secret is set.
+- **Temporary S3 keys.** `s3.session_token` (a secret) goes with `access_key_id` and
+  `secret_access_key`.
+- **Run logs** show what a run is doing: the download of a file source with its size, when each dlt step
+  (extract, normalize, load) starts and ends with its counts, and every 30 seconds the step that is running
+  and the memory the run uses against its limit. The log is written line by line, so a run that is killed
+  keeps everything it wrote; it had only its first line until dlt finished.
 - **Apps menu.** Drawing the menu again no longer leaves the previous menu's listeners on the page.
 - **Lists** are an object with one key, in REST as in MCP: `{"pipelines": [...]}`, `{"templates": [...]}`,
   `{"runs": [...]}` and `{"environments": [...]}` (REST returned bare arrays).
