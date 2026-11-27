@@ -62,7 +62,8 @@ def reconcile_extensions(kc, prefix, env):
         if not secrets.get(extension):
             raise RuntimeError(f"No client secret for extension {extension}; run scripts.setup --extension")
         upsert_client(kc, prefix, extension_client(extension, origin, secrets[extension]))
-        upsert_client(kc, prefix, extension_mcp_client(extension, env.get("MCP_CALLBACK_PORT", "3010")))
+        upsert_client(kc, prefix, extension_mcp_client(extension, env.get("MCP_CALLBACK_PORT", "3010"),
+                                                        env.get("MCP_REDIRECT_URIS", "")))
     wanted = {registry.client_id(e) for e in known} | {registry.mcp_client_id(e) for e in known}
     response = kc.get(prefix + "/clients")
     response.raise_for_status()
@@ -130,7 +131,8 @@ def main():
                 client_id = response.json()[0]["id"]
             # MCP clients and tools on the user's computer sign in through public
             # clients; existing realms skip the import, so reconcile them here.
-            upsert_public_client(kc, prefix, mcp_client(os.environ.get("MCP_CALLBACK_PORT", "3010")))
+            upsert_public_client(kc, prefix, mcp_client(os.environ.get("MCP_CALLBACK_PORT", "3010"),
+                                                        os.environ.get("MCP_REDIRECT_URIS", "")))
             upsert_public_client(kc, prefix, cli_client())
             extension_clients = reconcile_extensions(kc, prefix, os.environ)
             # Realms imported by earlier setups gave the administrator no default roles, so

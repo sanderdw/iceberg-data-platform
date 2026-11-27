@@ -6,6 +6,7 @@ import os
 import re
 import secrets
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -60,20 +61,36 @@ def polaris_mappers():
     return mappers
 
 
-def mcp_client(callback_port):
+def remote_redirect_uris(value):
+    """The exact https callbacks of hosted MCP clients, such as https://claude.ai/api/mcp/auth_callback.
+
+    Comma-separated in MCP_REDIRECT_URIS. Wildcards are refused: a hosted client's callback is
+    fixed, and a pattern would let any page on that host receive a sign-in code.
+    """
+    uris = [uri.strip() for uri in (value or "").split(",") if uri.strip()]
+    for uri in uris:
+        parts = urlsplit(uri)
+        if parts.scheme != "https" or not parts.hostname or "*" in uri or parts.query or parts.fragment:
+            raise ValueError(f"MCP_REDIRECT_URIS: {uri!r} is not an exact https callback URL")
+    return uris
+
+
+def mcp_client(callback_port, redirect_uris=""):
     """Public client for MCP clients such as Codex, GitHub Copilot and Claude Code: PKCE, loopback redirects.
 
     Agents choose their own callback: Claude Code listens on this fixed port, VS Code on
     127.0.0.1:33418 or a random port, others on their own path. Keycloak retries an unmatched
     http loopback redirect without its port, so the two wildcard entries accept any local
-    port and path (RFC 8252 section 7.3) and never a remote host. The bootstrap service
-    reuses this definition to upgrade existing realms.
+    port and path (RFC 8252 section 7.3) and never a remote host. Hosted clients such as
+    Claude on the web and mobile return to their own server; `redirect_uris` (MCP_REDIRECT_URIS)
+    adds those exact callbacks. The bootstrap service reuses this definition to upgrade existing realms.
     """
     return {
         "clientId": MCP_CLIENT_ID, "name": "MCP clients", "enabled": True, "protocol": "openid-connect",
         "publicClient": True, "standardFlowEnabled": True, "implicitFlowEnabled": False,
         "directAccessGrantsEnabled": False, "serviceAccountsEnabled": False,
-        "redirectUris": [f"http://localhost:{int(callback_port)}/callback", "http://localhost/*", "http://127.0.0.1/*"],
+        "redirectUris": [f"http://localhost:{int(callback_port)}/callback", "http://localhost/*", "http://127.0.0.1/*",
+                         *remote_redirect_uris(redirect_uris)],
         "webOrigins": [],
         "attributes": {"pkce.code.challenge.method": "S256"},
         "defaultClientScopes": ["basic", "profile", "roles"],
@@ -118,10 +135,10 @@ def extension_client(extension, origin, secret):
     }
 
 
-def extension_mcp_client(extension, callback_port):
+def extension_mcp_client(extension, callback_port, redirect_uris=""):
     """Public PKCE client through which AI agents use an extension's MCP server, like `mcp_client`."""
     return {
-        **mcp_client(callback_port), "clientId": f"ext-{extension}-mcp", "name": f"Extension MCP: {extension}",
+        **mcp_client(callback_port, redirect_uris), "clientId": f"ext-{extension}-mcp", "name": f"Extension MCP: {extension}",
         "protocolMappers": bridge_mappers(),
     }
 
@@ -152,7 +169,7 @@ def realm(env):
                            "post.logout.redirect.uris": origin + "/"},
             "defaultClientScopes": ["basic", "profile", "roles"], "protocolMappers": polaris_mappers(),
         })
-    clients.append(mcp_client(env["MCP_CALLBACK_PORT"]))
+    clients.append(mcp_client(env["MCP_CALLBACK_PORT"], env.get("MCP_REDIRECT_URIS", "")))
     clients.append(cli_client())
     users = [{
         "username": env["PLATFORM_ADMIN_USERNAME"], "enabled": True,
@@ -318,7 +335,7 @@ def write_realm(path, env=os.environ):
     """
     values = {"PLATFORM_ADMIN_USERNAME": "platform-admin", "MCP_CALLBACK_PORT": "3010",
               **{key: env[key] for key in ("PORTAL_ORIGIN", "USER_ORIGIN", "PLATFORM_ADMIN_USERNAME",
-                                           "MCP_CALLBACK_PORT") if env.get(key)}}
+                                           "MCP_CALLBACK_PORT", "MCP_REDIRECT_URIS") if env.get(key)}}
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(realm(values), indent=2) + "\n")

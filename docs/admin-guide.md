@@ -129,7 +129,7 @@ Any other MCP client needs:
 - OAuth with the public client ID `iceberg-mcp`, with no client secret and no dynamic client registration
 - the scopes `openid`, `profile` and `offline_access`
 
-Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env` (the chart's `mcpCallbackPort` on Kubernetes). Sign in with your platform administrator account.
+Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env` (the chart's `mcpCallbackPort` on Kubernetes). For Claude on the web and mobile, see [AI agents](ai-agents.md#claude-on-the-web-and-mobile). Sign in with your platform administrator account.
 
 Every call requires the `platform-admin` role, the read tools too: a team Administrator's [read-only access](#read-only-access-for-team-administrators) covers the portal and its API, not this server. The tools are the administration API's operations:
 

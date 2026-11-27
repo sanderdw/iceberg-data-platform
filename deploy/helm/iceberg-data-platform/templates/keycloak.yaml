@@ -47,6 +47,8 @@ spec:
               value: {{ .Values.platformAdminUsername | quote }}
             - name: MCP_CALLBACK_PORT
               value: {{ .Values.mcpCallbackPort | quote }}
+            - name: MCP_REDIRECT_URIS
+              value: {{ join "," .Values.mcpRedirectUris | quote }}
           {{- include "idp.restricted" . | nindent 10 }}
           volumeMounts:
             - {name: import, mountPath: /import}

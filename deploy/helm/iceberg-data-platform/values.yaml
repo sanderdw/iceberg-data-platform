@@ -60,6 +60,9 @@ rustfsAccessKey: iceberg-local
 awsRegion: us-east-1
 # Loopback port MCP clients listen on for the Keycloak OAuth callback.
 mcpCallbackPort: 3010
+# Exact https callbacks of hosted MCP clients, added to every MCP client in Keycloak, such as
+# https://claude.ai/api/mcp/auth_callback for Claude on the web and mobile.
+mcpRedirectUris: []
 clusterDomain: cluster.local
 
 # Addresses whose X-Forwarded-For the portals trust: the ingress controller. The notebook token

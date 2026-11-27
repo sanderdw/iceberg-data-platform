@@ -23,6 +23,7 @@ On Kubernetes the same settings are chart values; the last column names them.
 | `POLARIS_SEMANTIC_MODELS` | `true` | Set to `false` to turn off semantic models in Polaris | `polaris.semanticModels` |
 | `POLARIS_TOKEN_LIFETIME` | `3600` | Lifetime in seconds of the catalog tokens of extensions and data-share recipients. Extension runs end 15 minutes before their token expires. A revoked service account or data share keeps its issued tokens up to that long | `polaris.tokenLifetime` |
 | `MCP_CALLBACK_PORT` | `3010` | OAuth callback port of MCP clients | `mcpCallbackPort` |
+| `MCP_REDIRECT_URIS` | - | Exact `https` sign-in callbacks of hosted MCP clients, comma-separated, such as `https://claude.ai/api/mcp/auth_callback`. See [Claude on the web and mobile](ai-agents.md#claude-on-the-web-and-mobile) | `mcpRedirectUris` |
 | `PLATFORM_LISTING_EXTENSIONS` | - | Registered extensions that publish listed data shares to a data catalog, such as `openmetadata`. `scripts.setup --extension … --listing` sets it | `extensions.<id>.listing` |
 | `POLARIS_PUBLIC_URL` | `http://localhost:8181` | Catalog address for `iceberg_connect.py` and external share recipients | `https://<hosts.catalog>.<baseDomain>` |
 | `S3_ENDPOINT` | `http://localhost:9000` | Storage address that Polaris hands out with each table. On restart, the administration portal moves existing databases to it. | `https://<hosts.s3>.<baseDomain>` |
@@ -57,6 +58,7 @@ Chart values are set with `helm upgrade ... --reset-then-reuse-values --set <val
 | `notebooks.examples` | `true` | The example notebooks in the notebook picker (`NOTEBOOK_EXAMPLES`) |
 | `notebooks.startSeconds` | `180` | How long a notebook may take to start; the first on a node pulls its image |
 | `mcpCallbackPort` | `3010` | The loopback port MCP clients use for their sign-in callback (`MCP_CALLBACK_PORT`) |
+| `mcpRedirectUris` | `[]` | Exact `https` sign-in callbacks of hosted MCP clients (`MCP_REDIRECT_URIS`) |
 | `forwardedAllowIps` | `*` | Addresses whose `X-Forwarded-For` the portals trust; see the [security model](security.md#on-kubernetes) |
 | `keycloak.adminOrigin` | `http://localhost:8080` | The address of the Keycloak administration console, through a port-forward |
 | `keycloak.proxyTrustedAddresses` | (all) | Addresses Keycloak takes `X-Forwarded-*` from |

@@ -282,6 +282,18 @@ def test_a_second_run_updates_the_provisioner_instead_of_creating_another(keyclo
     assert len(provisioners) == 1 and provisioners[0]["secret"] == "rotated-management-secret"
 
 
+def test_hosted_mcp_callbacks_reach_every_mcp_client_on_each_run(keycloak, run):
+    claude = "https://claude.ai/api/mcp/auth_callback"
+    run(MCP_REDIRECT_URIS=claude)
+    for name in ("iceberg-mcp", "ext-dbt-mcp"):
+        assert claude in keycloak.by_client_id(name)["redirectUris"], name
+    assert claude not in keycloak.by_client_id("ext-dbt")["redirectUris"]
+    # Taking the setting away removes the callback again on the next run.
+    run(MCP_REDIRECT_URIS=None)
+    for name in ("iceberg-mcp", "ext-dbt-mcp"):
+        assert claude not in keycloak.by_client_id(name)["redirectUris"], name
+
+
 @pytest.mark.parametrize("origin,ssl", [("http://localhost:8080", "none"), ("https://kc.example.com", "external")])
 def test_the_admin_origin_becomes_the_master_realms_front_end(keycloak, run, origin, ssl):
     run(KEYCLOAK_ADMIN_ORIGIN=origin)

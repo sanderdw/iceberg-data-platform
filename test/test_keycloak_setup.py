@@ -151,6 +151,20 @@ def test_extension_clients_never_carry_the_polaris_audience():
         assert "polaris-roles" not in {m["name"] for m in client["protocolMappers"]}
 
 
+def test_hosted_mcp_clients_get_only_their_exact_https_callbacks():
+    from scripts.setup import extension_mcp_client, mcp_client
+
+    loopback = ["http://localhost:3010/callback", "http://localhost/*", "http://127.0.0.1/*"]
+    claude = "https://claude.ai/api/mcp/auth_callback"
+    assert mcp_client(3010)["redirectUris"] == loopback
+    assert mcp_client(3010, f" {claude}, ")["redirectUris"] == [*loopback, claude]
+    assert extension_mcp_client("dbt", 3010, claude)["redirectUris"] == [*loopback, claude]
+    for bad in ("http://claude.ai/api/mcp/auth_callback", "https://claude.ai/*", "https://*.claude.ai/callback",
+                "claude.ai/api/mcp/auth_callback", "https://claude.ai/callback?next=x", "https:///callback"):
+        with pytest.raises(ValueError, match="MCP_REDIRECT_URIS"):
+            mcp_client(3010, bad)
+
+
 def test_bootstrap_reconciles_and_disables_extension_clients():
     from server.keycloak_bootstrap import reconcile_extensions
 
