@@ -4,6 +4,10 @@
 
 - **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
   starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
+- **Apache Ossie 0.3.0.dev0.** Listed semantic models follow [Ossie 0.3.0.dev0](https://github.com/apache/ossie/blob/main/core-spec/spec.md),
+  as the Bridge contract 1.0 lists them. A dataset's own metrics become metrics too, named `DATASET__metric`.
+  Keys and relationships name fields: a primary or foreign key lands on the columns its fields read, and only
+  when each field reads one column. SQL shown for a field or metric is the portable `OSSIE_SQL_2026` first.
 
 ## 0.1.4 - 2026-11-18
 

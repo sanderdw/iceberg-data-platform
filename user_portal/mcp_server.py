@@ -27,8 +27,7 @@ from server.validation import validation_message
 
 from .directory import UserSession, validate_namespace
 from .preview import run_preview
-from .semantic.compiler import Dimension, FieldRef, Filter, Order, QuerySpec, unit
-from .semantic.compiler import Name as MetricName
+from .semantic.compiler import Dimension, FieldRef, Filter, MetricName, Order, QuerySpec, unit
 
 READ_ONLY = ToolAnnotations(
     read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False
@@ -52,7 +51,8 @@ semantic models stored next to the tables: datasets that map to tables, fields, 
 and metrics with their SQL expressions, plus what each metric can be split by. describe_semantic_model
 gives a summary by default (names, units, first sentences); narrow a large model with search or
 dataset, and ask detail="full" for every description. Answer business questions with
-query_semantic_model: name metrics, dimensions (DATASET.field, optional time grain) and filters; it
+query_semantic_model: name metrics (a dataset's own metric as DATASET.metric), dimensions
+(DATASET.field, optional time grain) and filters; it
 compiles the model's agreed SQL and reads with the user's own grants. Find the exact value to filter
 on, such as a region's spelling, with list_dimension_values instead of guessing. State the metric
 definition, filters and period with every answer, and use preview_rows only to look at raw rows. All tools read with the user's Polaris grants; none runs free-form SQL.
@@ -63,7 +63,8 @@ script with the platform's iceberg_connect.py: it writes with PyIceberg or a wri
 connection under the user's own grants (AGENTS.md, "Loading data from somewhere else"). Land
 outside data as-is in a raw namespace and transform it from there.
 Writers create a semantic model with publish_semantic_model: model is its name and definition the
-Apache Ossie document. To replace one, read it with describe_semantic_model first and pass its
+Apache Ossie 0.3.0.dev0 document, with the model's name, datasets, relationships and metrics at its
+root. Fields read table columns; keys, relationships and metrics name fields. To replace one, read it with describe_semantic_model first and pass its
 entityVersion as entity_version; a newer version is refused. Ask the user before replacing a model
 or calling delete_semantic_model, which needs confirm_name equal to model.
 Only a current Administrator or Database + bucket administrator of a team may create,
@@ -128,7 +129,7 @@ def first_sentence(value, limit=160):
 
 
 def model_digest(details, guide, detail="summary", search=None, dataset=None):
-    """describe_semantic_model's models and queryable part, narrowed by `search` and `dataset`.
+    """describe_semantic_model's model and queryable part, narrowed by `search` and `dataset`.
 
     A model with hundreds of fields and metrics is too large to read whole. The summary keeps what
     an agent needs to pick names for query_semantic_model; `detail="full"` keeps every description.
@@ -146,8 +147,8 @@ def model_digest(details, guide, detail="summary", search=None, dataset=None):
     def sql(item):
         return next((e["expression"] for e in item["expressions"] if e.get("expression")), "")
 
-    models = []
-    for model in details["models"]:
+    model = details["model"]
+    if model is not None:
         datasets = []
         for d in model["datasets"]:
             if dataset and d["name"] != dataset:
@@ -158,20 +159,22 @@ def model_digest(details, guide, detail="summary", search=None, dataset=None):
                            "datatype": f["datatype"], "dimension": f["dimension"],
                            "timeDimension": f["timeDimension"], "summary": first_sentence(f["description"], 120)}
                           for f in fields]
-            datasets.append({**d, "fields": fields})
-        metrics = [m for m in model["metrics"] if (not dataset or homes.get(m["name"]) == dataset)
-                   and keep("metrics", m)]
+            datasets.append({k: v for k, v in d.items() if k != "metrics"} | {"fields": fields})
+        # One list, named as query_semantic_model takes them: dataset-scoped metrics as DATASET.metric.
+        every = [*model["metrics"], *({**m, "name": f"{d['name']}.{m['name']}"} for d in model["datasets"]
+                                      for m in d["metrics"])]
+        metrics = [m for m in every if (not dataset or homes.get(m["name"]) == dataset) and keep("metrics", m)]
         if not full:
             metrics = [{"name": m["name"], "dataset": homes.get(m["name"]), "unit": unit(m["description"]),
                         "expression": sql(m), "synonyms": m["synonyms"], "summary": first_sentence(m["description"])}
                        for m in metrics]
-        models.append({**model, "datasets": datasets, "metrics": metrics})
+        model = {**model, "datasets": datasets, "metrics": metrics}
     dimensions = {home: found for home, found in guide.get("dimensions", {}).items() if not dataset or home == dataset}
     if not full:
         # A plain field name means: on the metric's own dataset, or one unambiguous join away.
         dimensions = {home: [f if f.get("ambiguous") or f.get("path") else f["field"] for f in found]
                       for home, found in dimensions.items()}
-    result = {"models": models, "queryable": {**guide, "dimensions": dimensions}}
+    result = {"model": model, "queryable": {**guide, "dimensions": dimensions}}
     if search or dataset:
         result["matched"] = {kind: {"shown": n, "of": total} for kind, (n, total) in shown.items()}
     return result
@@ -457,7 +460,8 @@ def create_mcp(directory, oidc, *, lock, previews, query_wait=15.0):
     async def publish_semantic_model(
         database: DatabaseId, namespace: Namespace, model: ModelName,
         definition: Annotated[dict[str, Any], Field(
-            description="One Apache Ossie semantic model, or a document that holds one.")],
+            description="One Apache Ossie 0.3.0.dev0 document: the model's name, datasets, relationships "
+                        "and metrics at its root.")],
         entity_version: Annotated[int | None, Field(description="entityVersion from describe_semantic_model; "
                                                                 "required to replace an existing model.")] = None,
     ) -> dict[str, Any]:

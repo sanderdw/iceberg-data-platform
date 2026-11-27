@@ -201,8 +201,7 @@ class Services:
         me = me or await self.me(caller)
         access = await self.resolve(caller, ref, me)
         principal = access["principal"]
-        model = ossie.parse(await self.catalog.load_model(principal, ref.database, ref.namespace, ref.name),
-                            ref.namespace)
+        model = ossie.parse(await self.catalog.load_model(principal, ref.database, ref.namespace, ref.name))
         if access["shared"]:
             # Read with a recipient team that received the model and every table it reads.
             needed = {("table", d.namespace, d.table) for d in model.datasets}
@@ -289,8 +288,7 @@ class Services:
         homes = {}
         for metric in model.metrics:
             try:
-                tree = compiler.expressions.parse(metric.expression)
-                homes[metric.name] = compiler.metric_home(model, metric, tree)
+                homes[metric.name] = compiler.metric_home(model, metric)
             except CbiError as exc:
                 homes[metric.name] = None
                 homes.setdefault("_errors", []).append({"metric": metric.name, "error": str(exc)})

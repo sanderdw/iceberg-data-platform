@@ -179,21 +179,22 @@ class FakePolaris:
 
 
 MODEL_YAML = """\
-version: "0.2.0"
-semantic_model:
-  - name: FlightPerformance
-    description: Reliability of flights.
-    datasets:
-      - name: FLIGHT
-        source: lakehouse.marts.fct_flights
-        primary_key: [flight_id]
-        fields:
-          - name: flight_id
-            expression: flight_id
+version: 0.3.0.dev0
+name: FlightPerformance
+description: Reliability of flights.
+datasets:
+  - name: FLIGHT
+    source: marts.fct_flights
+    primary_key: [flight_id]
+    fields:
+      - name: flight_id
+        expression:
+          sql: flight_id
     metrics:
       - name: flights
         description: "Scheduled flights. Unit: count."
-        expression: count(*)
+        expression:
+          sql: count(*)
 """
 
 
@@ -206,7 +207,8 @@ def test_semantic_models_in_the_project_are_published_once_per_change(tmp_path):
     assert semantic.main(job, tmp_path, "token", polaris)["created"] == ["db1/marts/flight_performance.yml"]
     url = "http://polaris:8181/api/catalog/polaris/v1/db-1/namespaces/marts/semantic-models/flight_performance"
     stored = json.loads(polaris.store[url]["document"]["semantic_model"])
-    assert stored["semantic_model"][0]["name"] == "FlightPerformance" and polaris.store[url]["entity-version"] == 1
+    assert stored["name"] == "FlightPerformance" and stored["version"] == "0.3.0.dev0"
+    assert polaris.store[url]["document"]["version"] == "0.3.0.dev0" and polaris.store[url]["entity-version"] == 1
     # An unchanged file keeps the stored version; an edit (here or elsewhere) is replaced by the file.
     assert semantic.main(job, tmp_path, "token", polaris)["unchanged"] == ["db1/marts/flight_performance.yml"]
     (folder / "flight_performance.yml").write_text(MODEL_YAML.replace("Reliability of flights.", "Punctuality."))
@@ -223,6 +225,8 @@ def test_misplaced_or_broken_semantic_model_files_are_reported_not_published(tmp
     (root / "db1" / "marts").mkdir()
     (root / "db1" / "marts" / "not_a_model.yml").write_text("hello: [")
     (root / "db1" / "marts" / "empty.yml").write_text("name: x\n")
+    (root / "db1" / "marts" / "earlier.yml").write_text("version: '0.2.0'\nsemantic_model: [{name: x, datasets: []}]\n")
+    (root / "db1" / "marts" / "other_version.yml").write_text(MODEL_YAML.replace("0.3.0.dev0", "'0.2.0.dev0'"))
     polaris = FakePolaris()
     outcome = semantic.main({"catalogs": {"db1": "db-1"}, "catalogUri": "http://p/api/catalog"}, tmp_path, "t", polaris)
     errors = {e["model"]: e["error"] for e in outcome["errors"]}
@@ -230,6 +234,8 @@ def test_misplaced_or_broken_semantic_model_files_are_reported_not_published(tmp
     assert "not a database of this environment" in errors["other_db/marts/unknown_database.yml"]
     assert "does not parse" in errors["db1/marts/not_a_model.yml"]
     assert "not an Apache Ossie semantic model" in errors["db1/marts/empty.yml"]
+    assert "no semantic_model list" in errors["db1/marts/earlier.yml"]
+    assert "write '0.3.0.dev0'" in errors["db1/marts/other_version.yml"]
     assert polaris.calls == [] and not outcome["created"]
 
 
@@ -249,15 +255,15 @@ def test_semantic_models_take_missing_descriptions_from_the_dbt_project(tmp_path
 name: Regions
 datasets:
   - name: REGION
-    source: stg_regions
+    source: staging.stg_regions
     fields:
-      - {name: region_id, expression: {dialects: [{dialect: ANSI_SQL, expression: region_id}]}}
-      - {name: code, expression: upper(region_id)}
+      - {name: region_id, expression: {sql: region_id}}
+      - {name: code, expression: {sql: upper(region_id)}}
 """)
     polaris = FakePolaris()
     semantic.main({"catalogs": {"sales": "db-1"}, "catalogUri": "http://p/api/catalog"}, tmp_path, "t", polaris,
                   docs=docs)
-    stored = json.loads(next(iter(polaris.store.values()))["document"]["semantic_model"])["semantic_model"][0]
+    stored = json.loads(next(iter(polaris.store.values()))["document"]["semantic_model"])
     region = stored["datasets"][0]
     assert region["description"] == "Cleaned regions"
     assert [f.get("description") for f in region["fields"]] == ["Stable id", None]

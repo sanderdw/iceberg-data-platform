@@ -18,15 +18,16 @@ const table = {
 const view = {kind: 'view', uuid: 'view-uuid', formatVersion: 1, schemaId: 0, columns, properties: {}, currentVersionId: 1,
   versions: [{id: 1, schemaId: 0, timestamp: 1789506000000, defaultNamespace: ['analytics'], representations: [{dialect: 'spark', sql: 'SELECT meter_id, SUM(kwh) AS kwh\nFROM readings\nGROUP BY meter_id'}]}]};
 const semantic = {
-  kind: 'semantic-model', name: 'energy_model', namespace: ['analytics'], specVersion: '0.2.0', entityVersion: '3', definition: '{\n  "name": "Energy"\n}',
-  models: [{
+  kind: 'semantic-model', name: 'energy_model', namespace: ['analytics'], specVersion: '0.3.0.dev0', entityVersion: '3', definition: '{\n  "name": "Energy"\n}',
+  model: {
     name: 'Energy', description: '<img src=x onerror=alert(1)>Energy use per meter', aiContext: [{label: 'Instructions', value: 'Report kWh per meter.\nExclude test meters.'}, {label: 'Synonyms', value: 'power'}],
-    datasets: [{name: 'READINGS', description: '', source: 'lakehouse.analytics.readings', table: {namespace: ['analytics'], name: 'readings'}, primaryKey: ['meter_id'], aiContext: [],
-      fields: [{name: 'kwh', label: 'Energy', description: 'Energy', datatype: 'Decimal', dimension: false, timeDimension: false, synonyms: ['consumption'], aiContext: [{label: 'Instructions', value: 'Sum per meter.'}], expressions: [{dialect: 'ANSI_SQL', expression: 'kwh'}]}]},
-      {name: 'METERS', description: '', source: '', table: null, primaryKey: ['id'], aiContext: [], fields: [{name: 'id', label: '', description: '', datatype: 'Integer', dimension: true, timeDimension: false, synonyms: [], aiContext: [], expressions: []}]}],
+    datasets: [{name: 'READINGS', description: '', source: 'analytics.readings', table: {namespace: ['analytics'], name: 'readings'}, primaryKey: ['meter_id'], uniqueKeys: [], aiContext: [],
+      metrics: [{name: 'meters', description: 'Meters that reported', datatype: 'Integer', synonyms: [], aiContext: [], expressions: [{dialect: 'OSSIE_SQL_2026', expression: 'COUNT(DISTINCT meter_id)'}]}],
+      fields: [{name: 'kwh', label: 'Energy', description: 'Energy', datatype: 'Decimal', dimension: false, timeDimension: false, synonyms: ['consumption'], aiContext: [{label: 'Instructions', value: 'Sum per meter.'}], expressions: [{dialect: 'OSSIE_SQL_2026', expression: 'kwh'}]}]},
+      {name: 'METERS', description: '', source: '', table: null, primaryKey: ['id'], uniqueKeys: [], aiContext: [], metrics: [], fields: [{name: 'id', label: '', description: '', datatype: 'Integer', dimension: true, timeDimension: false, synonyms: [], aiContext: [], expressions: []}]}],
     relationships: [{name: 'readings_meter', from: 'READINGS', to: 'METERS', fromColumns: ['meter_id'], toColumns: ['id']}],
-    metrics: [{name: 'total_kwh', description: 'Sum of energy', datatype: 'Decimal', synonyms: [], aiContext: [], expressions: [{dialect: 'ANSI_SQL', expression: 'SUM(READINGS.kwh)'}]}],
-  }],
+    metrics: [{name: 'total_kwh', description: 'Sum of energy', datatype: 'Decimal', synonyms: [], aiContext: [], expressions: [{dialect: 'OSSIE_SQL_2026', expression: 'SUM(READINGS.kwh)'}]}],
+  },
 };
 let previewCalls = [], deny = false, oidc = true;
 // Nothing may scroll sideways.
@@ -153,7 +154,7 @@ try {
   await expect(modelRow).toContainText('Semantic model');
   await modelRow.getByRole('button').click();
   await expect(page.locator('#namespace-title')).toHaveText('energy_model');
-  await expect(page.getByRole('tabpanel')).toContainText('0.2.0');
+  await expect(page.getByRole('tabpanel')).toContainText('0.3.0.dev0');
   await expect(page.getByRole('tabpanel')).toContainText('Energy use per meter');
   // Descriptions are user-written text, never markup.
   await expect(page.locator('#catalog-tab-panel img')).toHaveCount(0);
@@ -187,6 +188,8 @@ try {
   await expect(readings).toContainText('Instructions: Sum per meter.');
   await page.getByRole('tab', {name: 'Metrics & relationships', exact: true}).click();
   await expect(page.getByRole('tabpanel')).toContainText('SUM(READINGS.kwh)');
+  // A dataset's own metric is listed as queries name it, DATASET.metric.
+  await expect(page.getByRole('tabpanel')).toContainText('READINGS.meters');
   await expect(page.getByRole('tabpanel')).toContainText('meter_id → id');
   await page.getByRole('tab', {name: 'Definition', exact: true}).click();
   // YAML by default; JSON is the stored document.

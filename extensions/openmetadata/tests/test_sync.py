@@ -45,12 +45,14 @@ def test_a_listing_is_published_as_a_data_product(world):
     average = om.entities["metrics"][f"iceberg__{DB}__sales__revenue__average_order"]
     schemas = {e["id"] for e in om.entities["databaseSchemas"].values()}
     assert len(schemas) == 2
-    assert {a["id"] for a in om.assets[PRODUCT].values()} == {*ids.values(), *schemas, metric["id"], average["id"]}
+    orders_count = om.entities["metrics"][f"iceberg__{DB}__sales__revenue__ORDERS__orders"]
+    assert {a["id"] for a in om.assets[PRODUCT].values()} == {*ids.values(), *schemas, metric["id"], average["id"],
+                                                              orders_count["id"]}
     # The description draws the tables and keys, with the same relationships as a table.
     description = html.unescape(om.entities["dataProducts"][PRODUCT]["description"])
     assert "![Tables and keys of orders-product](data:image/svg+xml;base64," in description
     assert "| sales.orders | customer_id | sales.customers (id) |" in description
-    assert (world.syncer.status["listings"], world.syncer.status["tables"], world.syncer.status["metrics"]) == (1, 3, 2)
+    assert (world.syncer.status["listings"], world.syncer.status["tables"], world.syncer.status["metrics"]) == (1, 3, 3)
 
 
 def test_syncing_again_changes_nothing_and_polls_are_cheap(world):
@@ -180,10 +182,14 @@ def test_foreign_keys_wait_for_the_tables_they_refer_to(world):
                               "children": []}],
                  "partitionFields": [], "rowCount": None, "updatedAt": None, "producer": None}
     model = copy.deepcopy(REVENUE)
-    model["models"][0]["datasets"].append({
-        "name": "EMPLOYEES", "description": "", "source": "lakehouse.sales.employees",
-        "table": {"namespace": ["sales"], "name": "employees"}, "primaryKey": ["id"], "aiContext": [], "fields": []})
-    model["models"][0]["relationships"].append({"name": "manager", "from": "EMPLOYEES", "to": "EMPLOYEES",
+    model["model"]["datasets"].append({
+        "name": "EMPLOYEES", "description": "", "source": "sales.employees",
+        "table": {"namespace": ["sales"], "name": "employees"}, "primaryKey": ["id"], "uniqueKeys": [], "aiContext": [],
+        "metrics": [], "fields": [{"name": name, "label": "", "description": "", "datatype": "Integer",
+                                   "dimension": False, "timeDimension": False, "synonyms": [], "aiContext": [],
+                                   "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": name}]}
+                                  for name in ("id", "manager_id")]})
+    model["model"]["relationships"].append({"name": "manager", "from": "EMPLOYEES", "to": "EMPLOYEES",
                                                 "fromColumns": ["manager_id"], "toColumns": ["id"]})
     item = listing()
     item["objects"] = [employees, *item["objects"][:-1], model]
@@ -223,12 +229,12 @@ def test_changed_descriptions_reach_openmetadata_and_its_own_ones_stay(world):
 def test_semantic_models_add_terms_notes_and_a_section(world):
     item = listing()
     model = copy.deepcopy(REVENUE)
-    model["models"][0]["aiContext"] = [{"label": "Instructions", "value": "Amounts are in EUR."}]
-    model["models"][0]["datasets"][0]["description"] = "A webshop order."
-    model["models"][0]["datasets"][1]["aiContext"] = [{"label": "Instructions", "value": "One row per customer"}]
-    region = model["models"][0]["datasets"][1]["fields"][0]
+    model["model"]["aiContext"] = [{"label": "Instructions", "value": "Amounts are in EUR."}]
+    model["model"]["datasets"][0]["description"] = "A webshop order."
+    model["model"]["datasets"][1]["aiContext"] = [{"label": "Instructions", "value": "One row per customer"}]
+    region = model["model"]["datasets"][1]["fields"][0]
     region.update(label="Region", aiContext=[{"label": "Examples", "value": "north, south"}])
-    model["models"][0]["metrics"][0]["aiContext"] = [{"label": "Instructions", "value": "Never sum over time."}]
+    model["model"]["metrics"][0]["aiContext"] = [{"label": "Instructions", "value": "Never sum over time."}]
     item["objects"][-1] = model
     world.bridge.listings[SHARE] = item
     run(world.syncer.cycle(full=True))
@@ -284,10 +290,11 @@ def test_semantic_models_add_terms_notes_and_a_section(world):
 def test_fields_with_the_same_name_get_terms_of_their_own(world):
     # OpenMetadata wants term names unique in a glossary; many datasets have an `id` or a `name`.
     model = copy.deepcopy(REVENUE)
-    for dataset, text in zip(model["models"][0]["datasets"], ("Order number", "Customer number"), strict=True):
-        dataset["fields"].append({"name": "id", "label": "", "description": text, "datatype": "Integer",
-                                  "dimension": False, "timeDimension": False, "synonyms": [], "aiContext": [],
-                                  "expressions": []})
+    orders, customers = model["model"]["datasets"]
+    orders["fields"].append({"name": "id", "label": "", "description": "Order number", "datatype": "Integer",
+                             "dimension": False, "timeDimension": False, "synonyms": [], "aiContext": [],
+                             "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "id"}]})
+    next(f for f in customers["fields"] if f["name"] == "id")["description"] = "Customer number"
     item = listing()
     item["objects"][-1] = model
     world.bridge.listings[SHARE] = item
@@ -299,8 +306,8 @@ def test_fields_with_the_same_name_get_terms_of_their_own(world):
 
 def labelled(region="Region", ordered_at="Region"):
     item, model = listing(), copy.deepcopy(REVENUE)
-    model["models"][0]["datasets"][0]["fields"][0]["label"] = ordered_at
-    model["models"][0]["datasets"][1]["fields"][0]["label"] = region
+    model["model"]["datasets"][0]["fields"][0]["label"] = ordered_at
+    model["model"]["datasets"][1]["fields"][0]["label"] = region
     item["objects"][-1] = model
     return item
 

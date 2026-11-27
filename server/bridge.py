@@ -376,14 +376,26 @@ class ModelField(BaseModel):
     expressions: list[Expression]
 
 
+class ModelMetric(BaseModel):
+    name: str
+    description: str
+    datatype: str
+    synonyms: list[str]
+    aiContext: list[ContextRow]
+    expressions: list[Expression]
+
+
 class ModelDataset(BaseModel):
     name: str
     description: str
     source: str
     table: ModelTable | None
     primaryKey: list[str]
+    uniqueKeys: list[list[str]]
     aiContext: list[ContextRow]
     fields: list[ModelField]
+    # Dataset-scoped metrics, which queries name DATASET.metric.
+    metrics: list[ModelMetric]
 
 
 class ModelRelationship(BaseModel):
@@ -394,15 +406,6 @@ class ModelRelationship(BaseModel):
     to: str
     fromColumns: list[str]
     toColumns: list[str]
-
-
-class ModelMetric(BaseModel):
-    name: str
-    description: str
-    datatype: str
-    synonyms: list[str]
-    aiContext: list[ContextRow]
-    expressions: list[Expression]
 
 
 class SemanticModel(BaseModel):
@@ -420,7 +423,8 @@ class ListedSemanticModel(BaseModel):
     name: str
     specVersion: str
     entityVersion: str
-    models: list[SemanticModel]
+    # One Apache Ossie 0.3.0.dev0 document holds one model; null when the stored text is not one.
+    model: SemanticModel | None
 
 
 class Listing(BaseModel):

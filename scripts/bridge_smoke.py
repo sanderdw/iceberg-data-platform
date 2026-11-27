@@ -52,9 +52,10 @@ def shared_data(provider, recipient, principal, bridge, as_service, token):
         for name in ("shared", "private"):
             owner.create_table(("ops", name), schema=rows.schema).append(rows)
         models = f"{provider.url}/api/catalog/polaris/v1/{database}/namespaces/ops/semantic-models"
-        document = {"version": "0.2.0", "semantic_model": json.dumps({"version": "0.2.0", "semantic_model": [
-            {"name": "Ops", "datasets": [{"name": "SHARED", "source": "lakehouse.ops.shared", "primary_key": ["id"],
-                                          "fields": []}]}]})}
+        document = {"version": "0.3.0.dev0", "semantic_model": json.dumps({
+            "version": "0.3.0.dev0", "name": "Ops", "datasets": [
+                {"name": "SHARED", "source": "ops.shared", "primary_key": ["id"],
+                 "fields": [{"name": "id", "expression": {"sql": "id"}}]}]})}
         as_owner = {"Authorization": f"Bearer {principal_token(provider, credentials)}"}
         httpx.post(models, json={"name": "ops", "document": document}, headers=as_owner,
                    timeout=15).raise_for_status()

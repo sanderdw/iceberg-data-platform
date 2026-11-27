@@ -368,31 +368,47 @@ CUSTOMERS = {
 REPORT = {"kind": "view", "namespace": ["sales", "eu"], "name": "report", "uuid": "u3", "comment": "Monthly",
           "columns": [column(1, "total", "decimal(12,2)")], "updatedAt": "1970-01-01T00:00:00.005Z"}
 REVENUE = {
-    "kind": "semantic-model", "namespace": ["sales"], "name": "revenue", "specVersion": "0.2.0", "entityVersion": "3",
-    "models": [{
+    "kind": "semantic-model", "namespace": ["sales"], "name": "revenue", "specVersion": "0.3.0.dev0",
+    "entityVersion": "3",
+    "model": {
         "name": "Revenue", "description": "Webshop revenue", "aiContext": [],
         "datasets": [
-            {"name": "ORDERS", "description": "", "source": "lakehouse.sales.orders",
-             "table": {"namespace": ["sales"], "name": "orders"}, "primaryKey": ["id"], "aiContext": [],
+            {"name": "ORDERS", "description": "", "source": "sales.orders",
+             "table": {"namespace": ["sales"], "name": "orders"}, "primaryKey": ["order_id"], "uniqueKeys": [],
+             "aiContext": [],
              "fields": [{"name": "ordered_at", "label": "", "description": "Order time", "datatype": "DateTimeTz",
                          "dimension": True, "timeDimension": True, "synonyms": [], "aiContext": [],
-                         "expressions": [{"dialect": "ANSI_SQL", "expression": "ordered_at"}]}]},
-            {"name": "CUSTOMERS", "description": "", "source": "lakehouse.sales.customers",
-             "table": {"namespace": ["sales"], "name": "customers"}, "primaryKey": ["id"], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "ordered_at"}]},
+                        # Keys and relationships name fields; each reads one column of the table.
+                        {"name": "order_id", "label": "", "description": "", "datatype": "Integer", "dimension": False,
+                         "timeDimension": False, "synonyms": [], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "id"}]},
+                        {"name": "customer", "label": "", "description": "", "datatype": "Integer", "dimension": False,
+                         "timeDimension": False, "synonyms": [], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "customer_id"}]}],
+             "metrics": [{"name": "orders", "description": "Number of orders", "datatype": "Integer", "synonyms": [],
+                          "aiContext": [], "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "COUNT(*)"}]}]},
+            {"name": "CUSTOMERS", "description": "", "source": "sales.customers",
+             "table": {"namespace": ["sales"], "name": "customers"}, "primaryKey": ["id"], "uniqueKeys": [],
+             "aiContext": [],
              "fields": [{"name": "region", "label": "", "description": "", "datatype": "String", "dimension": True,
-                         "timeDimension": False, "synonyms": [], "aiContext": [], "expressions": []}]},
+                         "timeDimension": False, "synonyms": [], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "region"}]},
+                        {"name": "id", "label": "", "description": "", "datatype": "Integer", "dimension": False,
+                         "timeDimension": False, "synonyms": [], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "id"}]}],
+             "metrics": []},
         ],
         "relationships": [{"name": "orders_customers", "from": "ORDERS", "to": "CUSTOMERS",
-                           "fromColumns": ["customer_id"], "toColumns": ["id"]}],
+                           "fromColumns": ["customer"], "toColumns": ["id"]}],
         "metrics": [
             {"name": "revenue", "description": "Sum of order amounts", "datatype": "Decimal", "synonyms": ["sales"],
-             "aiContext": [], "expressions": [{"dialect": "ANSI_SQL", "expression": "SUM(ORDERS.amount)"}]},
+             "aiContext": [], "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "SUM(ORDERS.amount)"}]},
             {"name": "average_order", "description": "", "datatype": "Decimal", "synonyms": [], "aiContext": [],
-             "expressions": [{"dialect": "ANSI_SQL", "expression": "SUM(ORDERS.amount) / COUNT(*)"}]},
+             "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "SUM(ORDERS.amount) / COUNT(*)"}]},
         ],
-    }],
+    },
 }
-
 
 def settings(**extra):
     return Settings(**{"bridge_url": "http://bridge:3005", "extension_id": "openmetadata",

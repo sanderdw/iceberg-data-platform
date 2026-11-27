@@ -27,11 +27,11 @@ See [notebooks](notebooks.md).
 
 ## Build it in a dbt project
 
-Put an Apache Ossie document at `semantic_models/<database>/<namespace>/<name>.yml` in the project. Every successful build or run publishes it to its environment, next to the tables. Descriptions the model leaves out come from the dbt models it reads. See [project conventions](dbt.md#project-conventions).
+Put an Apache Ossie 0.3.0.dev0 document at `semantic_models/<database>/<namespace>/<name>.yml` in the project. Every successful build or run publishes it to its environment, next to the tables. Descriptions the model leaves out come from the dbt models it reads. See [project conventions](dbt.md#project-conventions).
 
 ## Publish it through MCP
 
-An agent connected to the [user portal's MCP server](ai-agents.md) publishes a model with `publish_semantic_model`: `model` is its name and `definition` the document. Replacing a model needs the `entityVersion` you read, so an update is refused if someone else changed it since. The tool returns warnings for metrics a governed query would refuse, and refuses fields that are not columns of their table.
+An agent connected to the [user portal's MCP server](ai-agents.md) publishes a model with `publish_semantic_model`: `model` is its name and `definition` the Apache Ossie 0.3.0.dev0 document. Replacing a model needs the `entityVersion` you read, so an update is refused if someone else changed it since. The tool refuses what Ossie forbids, such as a metric that reads a column that is not a field, and fields that read a column their table doesn't have. It returns warnings for metrics a governed query would refuse.
 
 ## Check the result
 
@@ -44,9 +44,14 @@ An agent connected to the [user portal's MCP server](ai-agents.md) publishes a m
 These rules come from building models with the [core MCP tools](mcp.md); [why the tools work this way](mcp-design.md) gives the reasons:
 
 - **Units.** End each metric description with `Unit: …`.
-- **Dataset names.** Write metric expressions with the dataset name, such as `sum(SALES.amount)` or
-  `count(SALES.id)`. A metric that names no dataset, such as a bare `count(*)`, cannot be queried on
-  its own, because the portal cannot tell which dataset it counts.
+- **Fields, not columns.** Fields read the table's columns. Keys, relationships and metrics name
+  fields, so give every column they need a field.
+- **Where a metric lives.** Put a measure of one dataset in that dataset's `metrics`, written with
+  its field names, such as `sum(amount)`; queries name it `SALES.amount_total`. Write a metric in
+  the model's `metrics` with the dataset name, such as `sum(SALES.amount)`, or build it on a
+  dataset's metric with `AGG(SALES.amount_total)`. A model metric that names no dataset, such as a
+  bare `count(*)`, cannot be queried on its own, because the portal cannot tell which dataset it
+  counts.
 - **Fields.** Describe each field, and give it synonyms and examples in its `ai_context`. A `label`
   groups fields by what they hold across models, such as `Delay`; a data catalog shows it as a tag.
 - **Example questions.** List the questions the model answers in the model's `ai_context.examples`.

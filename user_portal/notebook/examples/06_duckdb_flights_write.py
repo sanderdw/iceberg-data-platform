@@ -195,7 +195,7 @@ def _(mo):
 def _(MODEL_NAME, NAMESPACE, SemanticModels, model, plain_table, product, published, semantic_model):
     assert published
     flights_model = semantic_model(model, product, NAMESPACE)
-    with SemanticModels.connect(NAMESPACE, model["version"]) as _models:
+    with SemanticModels.connect(NAMESPACE) as _models:
         model_action, model_version = _models.publish(MODEL_NAME, flights_model)
     plain_table(
         [

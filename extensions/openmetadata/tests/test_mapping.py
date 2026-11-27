@@ -1,5 +1,4 @@
 from openmetadata_sync import mapping as m
-from openmetadata_sync import semantics
 from tests.conftest import CUSTOMERS, DB, ORDERS, REVENUE, SHARE, listing
 
 
@@ -60,13 +59,15 @@ def test_tables_never_carry_view_sql_or_locations():
 def test_metrics_dimensions_and_keys():
     item = listing()
     metrics = m.metric_requests("iceberg", item, REVENUE, "Iceberg Data Platform", [])
-    [(name, revenue, tables), (_, average, _)] = metrics
+    [(name, revenue, tables), (_, average, _), (orders, count, _)] = metrics
     assert name == f"iceberg__{DB}__sales__revenue__revenue"
+    # A dataset's own metric is named as queries name it, DATASET.metric.
+    assert orders == f"iceberg__{DB}__sales__revenue__ORDERS__orders" and count["displayName"] == "ORDERS.orders"
     assert revenue["metricExpression"] == {"language": "SQL", "code": "SUM(ORDERS.amount)"}
     assert revenue["metricType"] == "SUM" and average["metricType"] == "RATIO"
     assert revenue["dimensions"] == [
         {"name": "ORDERS.ordered_at", "type": "TIME", "description": "Order time", "expression": "ordered_at"},
-        {"name": "CUSTOMERS.region", "type": "CATEGORICAL"}]
+        {"name": "CUSTOMERS.region", "type": "CATEGORICAL", "expression": "region"}]
     assert "Also called: sales." in revenue["description"]
     assert tables == [(("sales",), "orders"), (("sales",), "customers")]
     keys = m.constraints("iceberg", item)
@@ -89,13 +90,18 @@ def test_lineage_and_data_product():
     assert product["domains"] == ["Iceberg Data Platform"]
 
 
-def test_only_a_field_without_expression_falls_back_to_its_name():
-    def field(expression=None):
-        found = [{"dialect": "ANSI_SQL", "expression": expression}] if expression else []
+def test_a_field_reads_a_column_only_when_its_expression_is_that_column():
+    def field(expression=None, dialect="OSSIE_SQL_2026"):
+        found = [{"dialect": dialect, "expression": expression}] if expression else []
         return {"name": "amount", "expressions": found}
 
     columns = ["id", "amount"]
-    assert semantics.field_column(field(), columns) == "amount"
-    assert semantics.field_column(field("o.AMOUNT"), columns) == "amount"
-    assert semantics.field_column(field("amount * 100"), columns) is None
-    assert semantics.field_column(field("id"), columns) == "id"
+    assert m.field_column(field(), columns) is None  # Ossie fields always have an expression
+    assert m.field_column(field("o.AMOUNT"), columns) == "amount"
+    assert m.field_column(field("amount * 100"), columns) is None
+    assert m.field_column(field("id"), columns) == "id"
+    # The portable OSSIE_SQL_2026 comes first, then ANSI SQL.
+    both = {"expressions": [{"dialect": "SNOWFLAKE", "expression": "amount"},
+                            {"dialect": "ANSI_SQL", "expression": "id"},
+                            {"dialect": "OSSIE_SQL_2026", "expression": "amount"}]}
+    assert m.expression(both) == "amount" and m.expression({"expressions": both["expressions"][:2]}) == "id"

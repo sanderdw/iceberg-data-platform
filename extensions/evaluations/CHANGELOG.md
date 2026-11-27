@@ -78,6 +78,8 @@ conventions in its evaluation API.
   reads `semanticModels`, `llmModel`, `toolCalls`, `inputTokens`, `outputTokens` and `traceId`. It never
   receives who asked a question.
 - The OpenAPI contract describes every response and the error body.
+- **Apache Ossie 0.3.0.dev0.** The `evaluation_results` semantic model is stored as an [Ossie 0.3.0.dev0](https://github.com/apache/ossie/blob/main/core-spec/spec.md)
+  document, with its source `evaluations.case_results`, and is replaced on the next run.
 
 ## 0.1.1 - 2026-11-18
 

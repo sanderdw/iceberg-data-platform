@@ -14,7 +14,7 @@ ontology:
   file: flights.yaml
   project: https://github.com/apache/ossie
   source: https://raw.githubusercontent.com/apache/ossie/refs/heads/main/examples/flights.yaml
-  commit: 6d37d7b61183f6405e3a4e65ec883b10ebe0ce2c
+  commit: c1a33181c815852f059ce7986729612332240ff8
   scope: >-
     All six mapped datasets and their mapped fields are generated. Coordinates,
     schedules, aircraft and airline names are fictional. The SQL generator is a

@@ -95,7 +95,7 @@ def _(flights_model, mo, plain_table):
             ),
             plain_table(
                 [
-                    {"metric": _m["name"], "SQL": _m["expression"]["dialects"][0]["expression"],
+                    {"metric": _m["name"], "SQL": _m["expression"]["sql"],
                      "definition": _m["description"]}
                     for _m in flights_model["metrics"]
                 ],

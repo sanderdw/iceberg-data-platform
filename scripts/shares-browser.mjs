@@ -36,7 +36,7 @@ try {
     else if (path.startsWith('/api/notebooks/notebook-1/examples/')) { const file = 'examples/' + decodeURIComponent(path.split('/').at(-1)); teamFiles.unshift(file); body = {path: file, url: `/notebook-fixture?file=${file}`}; }
     else if (path === '/notebook-fixture') return route.fulfill({contentType: 'text/html', body: '<p>Notebook fixture</p>'});
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'meters', namespace: ['analytics']}, {name: 'readings', namespace: ['analytics']}], views: [{name: 'daily_energy', namespace: ['analytics']}], semanticModels: [{name: 'energy_model', namespace: ['analytics']}]} : {namespaces: [['analytics']], tables: [], views: []};
-    else if (path === '/api/details' && url.searchParams.get('kind') === 'semantic-model') body = {kind: 'semantic-model', models: [{datasets: [{table: {namespace: ['analytics'], name: 'readings'}}, {table: {namespace: ['analytics'], name: 'meters'}}]}]};
+    else if (path === '/api/details' && url.searchParams.get('kind') === 'semantic-model') body = {kind: 'semantic-model', model: {datasets: [{table: {namespace: ['analytics'], name: 'readings'}}, {table: {namespace: ['analytics'], name: 'meters'}}]}};
     else if (path === '/api/details') body = {kind: url.searchParams.get('kind'), database: workspace().databases.find(db => db.id === url.searchParams.get('database')), catalogUri: 'https://catalog.example/api/catalog'};
     else if (path === '/api/team') body = {team: 'analytics', members: []};
     else if (path === '/api/share-teams') body = [{id: 'team-' + 'c'.repeat(32), name: 'Research'}];

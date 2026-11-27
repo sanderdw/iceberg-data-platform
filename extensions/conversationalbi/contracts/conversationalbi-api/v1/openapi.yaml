@@ -2286,7 +2286,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}(\\.[A-Za-z_][A-Za-z0-9_]{0,127})?$",
+                "description": "A model metric's name, or DATASET.metric for a dataset's own metric."
               },
               {
                 "type": "null"
@@ -2602,7 +2603,8 @@
           "metrics": {
             "items": {
               "type": "string",
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}(\\.[A-Za-z_][A-Za-z0-9_]{0,127})?$",
+              "description": "A model metric's name, or DATASET.metric for a dataset's own metric."
             },
             "type": "array",
             "maxItems": 5,
@@ -2660,7 +2662,8 @@
           "metrics": {
             "items": {
               "type": "string",
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}(\\.[A-Za-z_][A-Za-z0-9_]{0,127})?$",
+              "description": "A model metric's name, or DATASET.metric for a dataset's own metric."
             },
             "type": "array",
             "maxItems": 5,

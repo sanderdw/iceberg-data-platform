@@ -115,14 +115,12 @@ def check_semantic_models(provider, directory, session, db, ns, credentials):
         "datasets": [
             {
                 "name": "EVENTS",
-                "source": "lakehouse.analytics.nested.events",
+                "source": "analytics.nested.events",
                 "primary_key": ["id"],
-                "fields": [{"name": "id", "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "id"}]}}],
+                "fields": [{"name": "id", "expression": {"sql": "id"}}],
             }
         ],
-        "metrics": [
-            {"name": "events", "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "COUNT(*)"}]}}
-        ],
+        "metrics": [{"name": "events", "expression": {"sql": "COUNT(*)"}}],
     }
     base = f"{provider.public_url}/api/catalog/polaris/v1/{db}/namespaces/{'%1F'.join(ns)}/semantic-models"
     writer = SemanticModels(
@@ -134,9 +132,9 @@ def check_semantic_models(provider, directory, session, db, ns, credentials):
     assert directory.semantic_models(session, db, ns) == [{"name": "events", "namespace": ns}]
     assert directory.contents(session, db, ns)["semanticModels"][0]["name"] == "events"
     detail = directory.details(session, db, ns, "semantic-model", "events")
-    assert detail["entityVersion"] == "1" and detail["specVersion"] == "0.2.0"
-    assert detail["models"][0]["datasets"][0]["table"] == {"namespace": ["analytics", "nested"], "name": "events"}
-    assert detail["models"][0]["metrics"][0]["expressions"][0]["expression"] == "COUNT(*)"
+    assert detail["entityVersion"] == "1" and detail["specVersion"] == "0.3.0.dev0"
+    assert detail["model"]["datasets"][0]["table"] == {"namespace": ["analytics", "nested"], "name": "events"}
+    assert detail["model"]["metrics"][0]["expressions"][0]["expression"] == "COUNT(*)"
     explored = provider.explorer_contents(db, ns)
     assert explored["semanticModels"] == [{"name": "events", "namespace": ns}]
     assert "COUNT(*)" not in str(explored), "The administration explorer must list model names only"

@@ -12,7 +12,7 @@ Everything you do runs **as a signed-in person**, with that person's team roles:
 | database | One Iceberg catalog (Polaris warehouse) with its own bucket. Its id `db-…` is what every tool takes; display names repeat across environments |
 | environment | development, acceptance or production |
 | namespace | Folder of tables inside a database, written as a list of parts: `["sales"]`, `["sales", "eu"]` |
-| semantic model | Apache Ossie document stored in a namespace: what the tables mean, their joins and agreed metrics |
+| semantic model | Apache Ossie 0.3.0.dev0 document stored in a namespace: what the tables mean, their joins and agreed metrics |
 
 ## Ground rules for agents
 
@@ -93,7 +93,7 @@ Register a server in your agent (replace `iceberg-user` and the address for anot
 
 Notes:
 - The MCP tools work with the person's grants and never run free-form SQL. `query_semantic_model` answers business questions from a model's agreed metrics; use `iceberg_connect.py` for anything else and for writing data.
-- `publish_semantic_model` stores a model (Writer role): `model` is its name and `definition` the Ossie document. To replace one, pass the `entityVersion` that `describe_semantic_model` returned as `entity_version`. Build and check models with the semantic-model skill below first.
+- `publish_semantic_model` stores a model (Writer role): `model` is its name and `definition` the Ossie 0.3.0.dev0 document, with the model at its root. To replace one, pass the `entityVersion` that `describe_semantic_model` returned as `entity_version`. Build and check models with the semantic-model skill below first.
 - Claude Code's callback port must equal `MCP_CALLBACK_PORT` in `.env` (3010 by default; the chart's `mcpCallbackPort` on Kubernetes).
 - An MCP server that "failed to connect" with `ENOTFOUND` usually points at an address that no longer exists, such as an ended quick-share tunnel. Register it again with the current address.
 

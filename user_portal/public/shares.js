@@ -10,7 +10,7 @@ function modelTables(modelTableCache, db, model) {
     const query = new URLSearchParams({database: db.id, kind: 'semantic-model', name: model.name}); model.namespace.forEach(part => query.append('namespace', part));
     modelTableCache.set(key, api(`/details?${query}`).then(detail => {
       const seen = new Map();
-      detail.models.flatMap(m => m.datasets).forEach(d => { if (d.table) { const t = {kind: 'table', namespace: d.table.namespace, name: d.table.name}; seen.set(objectKey(t), t); } });
+      (detail.model?.datasets || []).forEach(d => { if (d.table) { const t = {kind: 'table', namespace: d.table.namespace, name: d.table.name}; seen.set(objectKey(t), t); } });
       return [...seen.values()];
     }).catch(error => { modelTableCache.delete(key); throw error; }));
   }

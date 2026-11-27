@@ -370,7 +370,8 @@ def test_a_listing_carries_metadata_never_data(bridge):
     # Lineage keeps only what the same listing names.
     assert table["producer"]["inputs"] == [{"database": bridge.dev, "namespace": ["sales"], "name": "report"}]
     assert view["columns"][0]["type"] == "decimal(10,2)" and view["comment"] == "Monthly"
-    assert [m["name"] for m in model["models"][0]["metrics"]] == ["event_count"]
+    assert [m["name"] for m in model["model"]["metrics"]] == ["event_count"]
+    assert [m["name"] for m in model["model"]["datasets"][0]["metrics"]] == ["users"]
     text = json.dumps(body)
     for secret in ("SELECT", "s3://", "write.format", "unlisted", "snapshots", "definition"):
         assert secret not in text

@@ -66,9 +66,9 @@ def test_a_run_appends_rows_and_publishes_the_model(tmp_path, catalog):
     assert table.properties["iceberg-data-platform.producer.run-id"] == runs[1]["id"]
     # A write token of Evaluations' principal for the team, once per run.
     assert [access for _, access, _ in bridge.tokens] == ["write", "write"]
-    stored = json.loads(models["evaluation_results"]["document"]["semantic_model"])
-    [model] = stored["semantic_model"]
-    assert model["datasets"][0]["source"] == "lakehouse.evaluations.case_results"
+    model = json.loads(models["evaluation_results"]["document"]["semantic_model"])
+    assert model["version"] == models["evaluation_results"]["document"]["version"] == "0.3.0.dev0"
+    assert model["datasets"][0]["source"] == "evaluations.case_results"
     assert {m["name"] for m in model["metrics"]} >= {"pass_rate", "grounded_rate", "average_tokens"}
     # Unchanged the second time.
     assert models["evaluation_results"]["entity-version"] == 1

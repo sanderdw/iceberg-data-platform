@@ -11,7 +11,7 @@ The application source is licensed under Apache-2.0. Bundled font files retain t
 Fonts are served locally from `public/fonts`; both portals use the same source assets. The documentation site serves copies from `docs/assets/fonts`, with the same license files. Their license files accompany the font files in the container images.
 
 `user_portal/notebook/examples/flights.yaml` is the unchanged Apache Ossie (incubating)
-flights example from [commit 6d37d7b61183f6405e3a4e65ec883b10ebe0ce2c](https://github.com/apache/ossie/blob/6d37d7b61183f6405e3a4e65ec883b10ebe0ce2c/examples/flights.yaml),
+flights example from [commit c1a33181c815852f059ce7986729612332240ff8](https://github.com/apache/ossie/blob/c1a33181c815852f059ce7986729612332240ff8/examples/flights.yaml),
 licensed under Apache-2.0. Its license header is retained and the upstream NOTICE is
 included beside it as `OSSIE-NOTICE.txt`: Copyright 2026 The Apache Software Foundation.
 These files are bundled in the notebook image and copied into team workspaces.

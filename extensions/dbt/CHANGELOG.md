@@ -70,6 +70,10 @@ Apache Polaris 1.9:
 
 - A build sets its table properties and column docs again when a concurrent commit got there first
   (409), instead of reporting the table under `published.errors`.
+- **Apache Ossie 0.3.0.dev0.** Files in `semantic_models/` are [Ossie 0.3.0.dev0](https://github.com/apache/ossie/blob/main/core-spec/spec.md)
+  documents: `version: 0.3.0.dev0` and the model's keys at the root, expressions as `{sql: ...}`, and each
+  dataset's `source` as `namespace.table` (Polaris refuses `lakehouse.namespace.table`). A file with a
+  `semantic_model` list or another version is reported and not published.
 
 ## 0.1.4 - 2026-11-18
 

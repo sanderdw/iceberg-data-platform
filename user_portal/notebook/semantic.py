@@ -1,9 +1,9 @@
 """Store Apache Ossie semantic models in Polaris with the notebook owner's own token.
 
-Polaris 1.8 keeps a semantic model beside the tables it describes, in a namespace, and
-authorizes it like a table (Polaris privileges SEMANTIC_MODEL_*; a writer role can change models).
-The API is beta and must be switched on with ENABLE_SEMANTIC_MODELS. Polaris only stores the
-document: it never runs a metric.
+Polaris keeps a semantic model beside the tables it describes, in a namespace, and authorizes it
+like a table (Polaris privileges SEMANTIC_MODEL_*; a writer role can change models). The API is
+beta and must be switched on with ENABLE_SEMANTIC_MODELS. Polaris only stores the document: it
+never runs a metric. A model is an Apache Ossie 0.3.0.dev0 document, with the model at its root.
 """
 
 import json
@@ -15,7 +15,7 @@ import httpx
 from user_portal.notebook.credentials import access_token
 from user_portal.notebook.duckdb_connection import _catalog, refresh_table_credentials, table_reference
 
-SPEC_VERSION = "0.2.0"
+SPEC_VERSION = "0.3.0.dev0"
 
 
 class NotebookAuth(httpx.Auth):
@@ -31,13 +31,6 @@ class NotebookAuth(httpx.Auth):
         current = access_token() if os.environ.get("ICEBERG_SESSION_TOKEN_URL") else self.token
         request.headers["Authorization"] = f"Bearer {current}"
         yield request
-
-
-def first_model(payload):
-    """The model in a stored document: an Ossie document `{version, semantic_model: [model]}`, or a bare model."""
-    if isinstance(payload, dict) and isinstance(payload.get("semantic_model"), list):
-        payload = payload["semantic_model"][0] if payload["semantic_model"] else None
-    return payload if isinstance(payload, dict) else None
 
 
 class SemanticModelError(RuntimeError):
@@ -68,11 +61,11 @@ def explain(response, name):
 class SemanticModels:
     """The semantic models of one namespace."""
 
-    def __init__(self, client, base, spec_version=SPEC_VERSION):
-        self.client, self.base, self.spec_version = client, base, spec_version
+    def __init__(self, client, base):
+        self.client, self.base = client, base
 
     @classmethod
-    def connect(cls, namespace, spec_version=SPEC_VERSION):
+    def connect(cls, namespace):
         with httpx.Client(timeout=30) as discovery:
             token, endpoint, warehouse, *_ = _catalog(discovery)
         client = httpx.Client(timeout=30, auth=NotebookAuth(token))
@@ -80,7 +73,7 @@ class SemanticModels:
             f"{endpoint}/polaris/v1/{quote(warehouse, safe='')}"
             f"/namespaces/{quote(chr(31).join(namespace), safe='')}/semantic-models"
         )
-        return cls(client, base, spec_version)
+        return cls(client, base)
 
     def close(self):
         self.client.close()
@@ -119,12 +112,13 @@ class SemanticModels:
         if response.status_code == 404:
             return None
         loaded = response.json()
-        return first_model(json.loads(loaded["document"]["semantic_model"])), loaded["entity-version"]
+        stored = json.loads(loaded["document"]["semantic_model"])
+        return (stored if isinstance(stored, dict) else None), loaded["entity-version"]
 
     def document(self, model):
-        # Polaris keeps a whole Ossie document, as a JSON string, inside its versioned envelope.
-        ossie = {"version": self.spec_version, "semantic_model": [model]}
-        return {"version": self.spec_version, "semantic_model": json.dumps(ossie)}
+        # Polaris keeps the whole Ossie document, as a JSON string, inside its versioned envelope.
+        ossie = {"version": SPEC_VERSION, **{k: v for k, v in model.items() if k != "version"}}
+        return {"version": SPEC_VERSION, "semantic_model": json.dumps(ossie)}
 
     def create(self, name, model):
         return self.send("POST", body={"name": name, "document": self.document(model)}).json()["entity-version"]
@@ -161,31 +155,48 @@ def quoted(name):
 
 
 def dataset_table(dataset):
-    """The Iceberg namespace and table of `catalog.namespace….table`; the catalog is the attached one."""
-    parts = [p for p in dataset["source"].split(".") if p]
-    if len(parts) < 3:
-        raise ValueError(f"Dataset {dataset['name']} needs a source like lakehouse.namespace.table.")
-    return parts[1:-1], parts[-1]
+    """The Iceberg namespace and table of a dataset's source, `namespace….table` in the attached catalog."""
+    parts = dataset["source"].split(".")
+    if len(parts) < 2 or not all(parts):
+        raise ValueError(f"Dataset {dataset['name']} needs a source like namespace.table.")
+    return parts[:-1], parts[-1]
+
+
+def expression_sql(item, dialect=None):
+    """A field's or metric's SQL: the portable `sql` (OSSIE_SQL_2026), or the expression in `dialect`."""
+    expression = item["expression"]
+    if dialect is None and expression.get("sql"):
+        return expression["sql"]
+    wanted = dialect or "OSSIE_SQL_2026"
+    found = next((d["expression"] for d in expression.get("dialects", []) if d["dialect"] == wanted), None)
+    if found is None:
+        raise KeyError(f"{item['name']!r} has no {wanted} expression.")
+    return found
+
+
+def fields_sql(dataset, source):
+    """SELECT one column per field over `source`: the dataset as keys, relationships and metrics see it."""
+    columns = ", ".join(f"{expression_sql(f)} AS {quoted(f['name'])}" for f in dataset.get("fields", []))
+    return f"SELECT {columns} FROM {source}"
 
 
 def bind_datasets(connection, model):
-    """One temporary view per dataset, named like the dataset, over its Iceberg table."""
+    """One temporary view per dataset, named like the dataset, with its fields over its Iceberg table."""
     for dataset in model["datasets"]:
         namespace, table = dataset_table(dataset)
         refresh_table_credentials(connection, namespace, table, secret_name=f"model_{dataset['name']}")
         connection.execute(
-            f"CREATE OR REPLACE TEMP VIEW {quoted(dataset['name'])} AS SELECT * FROM {table_reference(namespace, table)}"
+            f"CREATE OR REPLACE TEMP VIEW {quoted(dataset['name'])} AS "
+            f"{fields_sql(dataset, table_reference(namespace, table))}"
         )
 
 
-def metric_sql(model, name, dialect="ANSI_SQL"):
-    metric = next((m for m in model["metrics"] if m["name"] == name), None)
+def metric_sql(model, name, dialect=None):
+    """A model metric's SQL, which reads fields as DATASET.field: it runs over the views of bind_datasets."""
+    metric = next((m for m in model.get("metrics", []) if m["name"] == name), None)
     if metric is None:
         raise KeyError(f"The semantic model has no metric {name!r}.")
-    found = next((d["expression"] for d in metric["expression"]["dialects"] if d["dialect"] == dialect), None)
-    if found is None:
-        raise KeyError(f"Metric {name!r} has no {dialect} expression.")
-    return found
+    return expression_sql(metric, dialect)
 
 
 def joins(model, *names):
@@ -230,7 +241,7 @@ def model_checks(connection, model):
 
 
 def scan_datasets(catalog, model):
-    """One lazy Polars scan per dataset, keyed by the dataset name, over the table the model points at.
+    """One lazy Polars frame per dataset, keyed by the dataset name, with its fields over its table.
 
     `catalog` is a PyIceberg catalog signed in as the reader, such as `connection.connect()`.
     """
@@ -242,5 +253,7 @@ def scan_datasets(catalog, model):
     for dataset in model["datasets"]:
         namespace, name = dataset_table(dataset)
         table = catalog.load_table((*namespace, name))
-        scans[dataset["name"]] = pl.scan_iceberg(table, storage_options=polars_storage_options(table))
+        scan = pl.scan_iceberg(table, storage_options=polars_storage_options(table))
+        scans[dataset["name"]] = scan.select(
+            [pl.sql_expr(expression_sql(f)).alias(f["name"]) for f in dataset.get("fields", [])])
     return scans

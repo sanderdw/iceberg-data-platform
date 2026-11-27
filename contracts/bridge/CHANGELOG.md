@@ -42,6 +42,14 @@ Breaking changes, so the Bridge follows the [API conventions](../../docs/develop
   - `provider_error` (502) is `platform_error`, the code the extensions use for the same case.
   - `invalid_request` is always 422. A refusal Polaris answered with 400 was 400.
 - `contracts/bridge/v1/openapi.yaml` is YAML. It was JSON.
+- Listed semantic models follow [Apache Ossie 0.3.0.dev0](https://github.com/apache/ossie/blob/main/core-spec/spec.md),
+  where one document holds one model:
+  - `ListedSemanticModel.model` is that model, or `null` when the stored text is not an Ossie
+    0.3.0.dev0 document. It was the list `models`.
+  - `ModelDataset` has `uniqueKeys` and `metrics`: the dataset-scoped metrics, which queries name
+    `DATASET.metric`.
+  - An expression's portable `sql` is the `Expression` with dialect `OSSIE_SQL_2026`.
+  - Keys, relationship columns and metric expressions name fields, not columns of the table.
 - The Apps menu script (`v1/apps-menu/apps-menu.js`) removes the listeners of a previous
   `IcebergApps.mount()` on the same element. Mounting again used to add another set.
 

@@ -36,9 +36,10 @@ Start with list_semantic_models: the Apache Ossie semantic models of your teams 
 your teams received, each with its reference `model` (database, namespace, name).
 describe_semantic_model explains one model: datasets, fields, metrics (with their SQL and unit)
 and which dimensions each metric can be split by. Then call query_semantic_model with metric
-names, dimensions written as DATASET.field, and optional filters, a time grain, ordering and a
-limit. The platform compiles the SQL from the model: you never write SQL, and metric definitions
-and joins are always the model owner's. When a dimension can be reached along several
+names (a dataset's own metric as DATASET.metric, as describe_semantic_model lists it), dimensions
+written as DATASET.field, and optional filters, a time grain, ordering and a limit. The
+platform compiles the SQL from the model: you never write SQL, and metric definitions and joins
+are always the model owner's. When a dimension can be reached along several
 relationships (for example an airport of departure or of destination), the error names the
 options: pass one in `via`. A dimension that would repeat rows of the metric's dataset is refused
 (fan_out).

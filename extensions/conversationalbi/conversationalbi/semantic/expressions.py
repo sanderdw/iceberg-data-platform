@@ -4,6 +4,10 @@ A model can come from another team through a data share, so its metric and field
 trusted. Only scalar and aggregate expressions over the model's own columns pass: no queries,
 tables, table functions, file readers, settings or unknown functions. The worker that runs the
 query has nothing beyond one read-only catalog token and vended storage credentials either.
+
+Expressions are read as DuckDB SQL, which covers the Ossie (OSSIE_SQL_2026) functions listed here
+with the same numeric semantics: `/` is true division and ROUND breaks ties away from zero. Ossie's
+`AGG(...)` passes here; `resolve` replaces it before any SQL is written. `METRIC(...)` is reserved.
 """
 
 from functools import lru_cache
@@ -20,12 +24,15 @@ AGGREGATES = (exp.Avg, exp.Sum, exp.Count, exp.Min, exp.Max, exp.Median, exp.Std
 SCALARS = (exp.Nullif, exp.Coalesce, exp.Abs, exp.Round, exp.Floor, exp.Ceil, exp.Sqrt, exp.Ln, exp.Log, exp.Pow,
            exp.Greatest, exp.Least, exp.If, exp.Case, exp.Cast, exp.TryCast, exp.Extract, exp.DateDiff, exp.DateAdd,
            exp.DateSub, exp.DateTrunc, exp.TimestampTrunc, exp.TimeToUnix, exp.TimeToStr, exp.CurrentDate,
-           exp.Upper, exp.Lower, exp.Length, exp.Concat, exp.Substring, exp.Trim, exp.DPipe, exp.Sign)
+           exp.Upper, exp.Lower, exp.Length, exp.Concat, exp.Substring, exp.Trim, exp.DPipe, exp.Sign,
+           exp.Year, exp.Quarter, exp.Month, exp.Week, exp.Day, exp.DayOfWeek, exp.DayOfYear, exp.Hour, exp.Minute,
+           exp.Second, exp.CurrentTimestamp, exp.Left, exp.Right, exp.Replace, exp.SplitPart, exp.StrPosition,
+           exp.Contains, exp.StartsWith, exp.EndsWith, exp.Trunc, exp.Mod, exp.Exp, exp.Nvl2)
 OPERATORS = (exp.Add, exp.Sub, exp.Mul, exp.Div, exp.IntDiv, exp.Mod, exp.Neg, exp.Paren, exp.EQ, exp.NEQ, exp.GT,
              exp.GTE, exp.LT, exp.LTE, exp.And, exp.Or, exp.Not, exp.Is, exp.In, exp.Between, exp.Like, exp.ILike,
-             exp.Filter, exp.Where, exp.Distinct, exp.Interval, exp.Tuple)
+             exp.Filter, exp.Where, exp.Distinct, exp.Interval, exp.Tuple, exp.NullSafeEQ, exp.NullSafeNEQ)
 LEAVES = (exp.Column, exp.Identifier, exp.Literal, exp.Boolean, exp.Null, exp.DataType, exp.DataTypeParam, exp.Var)
-ALLOWED = AGGREGATES + SCALARS + OPERATORS + LEAVES
+ALLOWED = AGGREGATES + SCALARS + OPERATORS + LEAVES + (exp.Agg,)
 
 
 def refuse(message):
@@ -47,6 +54,8 @@ def _parse(sql):
             continue
         if isinstance(node, exp.In) and (node.args.get("query") or node.args.get("unnest")):
             raise refuse("IN needs a list of values, not a query.")
+        if isinstance(node, exp.Anonymous) and str(node.this).upper() == "METRIC":
+            raise refuse("METRIC(...) is reserved in Ossie: a metric's expression is the aggregate itself.")
         if not isinstance(node, ALLOWED) or isinstance(node, (exp.Anonymous, exp.Subquery, exp.Select, exp.Table)):
             raise refuse(f"The expression {sql[:80]!r} uses {type(node).__name__}, which is not allowed.")
     return tree
@@ -58,7 +67,7 @@ def parse(sql):
 
 
 def is_aggregate(tree):
-    return any(isinstance(n, AGGREGATES) for n in tree.walk())
+    return any(isinstance(n, (*AGGREGATES, exp.Agg)) for n in tree.walk())
 
 
 def is_additive(tree):
@@ -67,23 +76,14 @@ def is_additive(tree):
     return isinstance(node, (exp.Sum, exp.Count)) and node.find(exp.Distinct) is None
 
 
-def datasets(tree):
-    """The dataset names the expression's columns are qualified with."""
-    return {c.table for c in tree.find_all(exp.Column) if c.table}
-
-
-def columns(tree):
-    return {(c.table, c.name) for c in tree.find_all(exp.Column)}
-
-
-def qualify(tree, aliases, default=None):
-    """Point every column at a join alias: `DATASET.col` through `aliases`, bare columns to `default`."""
+def qualify(tree, aliases):
+    """Point every column of a resolved expression (`DATASET.column`) at a join alias through `aliases`."""
     tree = tree.copy()
     for column in list(tree.find_all(exp.Column)):
-        source = column.table or default
-        alias = aliases.get(source)
+        alias = aliases.get(column.table)
         if alias is None:
-            raise refuse(f"The expression reads {source or 'an unqualified column'}, which this query cannot join.")
+            raise refuse(f"The expression reads {column.table or 'an unqualified column'}, which this query cannot "
+                         "join.")
         column.set("table", exp.to_identifier(alias, quoted=True))
         column.set("this", exp.to_identifier(column.name, quoted=True))
         column.set("db", None)

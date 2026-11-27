@@ -81,7 +81,7 @@ The **Catalog** page browses all Polaris catalogs, namespaces, tables, views and
 
 ## Semantic models
 
-Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic models beside the tables they describe. The platform enables the beta feature with `ENABLE_SEMANTIC_MODELS` in `compose.yaml`. Set `POLARIS_SEMANTIC_MODELS=false` in `.env` and restart Polaris to turn it off (on Kubernetes: `polaris.semanticModels=false`). Polaris then answers 406 and the user portal lists no models.
+Polaris stores [Apache Ossie](https://github.com/apache/ossie) semantic models beside the tables they describe. Polaris keeps the document as written; the platform writes and reads [Ossie 0.3.0.dev0](https://github.com/apache/ossie/blob/main/core-spec/spec.md) documents and shows a model in an earlier shape only as its stored text. The platform enables the beta feature with `ENABLE_SEMANTIC_MODELS` in `compose.yaml`. Set `POLARIS_SEMANTIC_MODELS=false` in `.env` and restart Polaris to turn it off (on Kubernetes: `polaris.semanticModels=false`). Polaris then answers 406 and the user portal lists no models.
 
 - **Access:** the Reader role of a new database gets `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ`. Writers and administrators already have `CATALOG_MANAGE_CONTENT`, which covers creating, replacing and dropping models.
 - **Deleting a database** removes its semantic models first. Polaris refuses to drop a namespace that still holds one.

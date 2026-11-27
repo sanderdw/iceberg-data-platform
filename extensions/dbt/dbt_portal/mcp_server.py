@@ -66,8 +66,8 @@ get_pipeline_graph returns the DAG with each node's latest status; pass ref to s
 pipeline viewer shows main unless the user picks a branch). get_node and get_lineage explain
 one node. When a mart answers business questions, offer a semantic model for it (the platform's
 semantic-model skill), so agents and Conversational BI answer from its agreed metrics. Keep it in
-the project as semantic_models/<database>/<namespace>/<name>.yml (an Apache Ossie document): every
-successful build or run publishes those files to that environment, and get_run reports them under
+the project as semantic_models/<database>/<namespace>/<name>.yml (an Apache Ossie 0.3.0.dev0
+document): every successful build or run publishes those files to that environment, and get_run reports them under
 summary.semanticModels. The project's file wins over edits made elsewhere.
 
 Schedules: create_schedule adds one to a project (cron in UTC, at most every 5 minutes),

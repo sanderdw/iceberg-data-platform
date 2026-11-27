@@ -1189,11 +1189,10 @@ components:
         entityVersion:
           type: string
           title: Entityversion
-        models:
-          items:
-            $ref: '#/components/schemas/SemanticModel'
-          type: array
-          title: Models
+        model:
+          anyOf:
+          - $ref: '#/components/schemas/SemanticModel'
+          - type: 'null'
       type: object
       required:
       - kind
@@ -1201,7 +1200,7 @@ components:
       - name
       - specVersion
       - entityVersion
-      - models
+      - model
       title: ListedSemanticModel
     ListedTable:
       properties:
@@ -1484,6 +1483,13 @@ components:
             type: string
           type: array
           title: Primarykey
+        uniqueKeys:
+          items:
+            items:
+              type: string
+            type: array
+          type: array
+          title: Uniquekeys
         aiContext:
           items:
             $ref: '#/components/schemas/ContextRow'
@@ -1494,6 +1500,11 @@ components:
             $ref: '#/components/schemas/ModelField'
           type: array
           title: Fields
+        metrics:
+          items:
+            $ref: '#/components/schemas/ModelMetric'
+          type: array
+          title: Metrics
       type: object
       required:
       - name
@@ -1501,8 +1512,10 @@ components:
       - source
       - table
       - primaryKey
+      - uniqueKeys
       - aiContext
       - fields
+      - metrics
       title: ModelDataset
     ModelField:
       properties:

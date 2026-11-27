@@ -1,4 +1,4 @@
-"""Semantic models (Apache Ossie, Polaris 1.8): projection, listing that tolerates a disabled feature and cleanup."""
+"""Semantic models (Apache Ossie 0.3.0.dev0 in Polaris): projection, listing that tolerates a disabled feature and cleanup."""
 
 import json
 
@@ -14,8 +14,8 @@ from test.test_user_portal import HEADERS, JSON, login, promote, users  # noqa: 
 
 def test_document_projection_is_flat_and_keeps_the_stored_definition():
     detail = semantic_model_details("revenue", ["analytics"], SEMANTIC_MODEL)
-    assert (detail["specVersion"], detail["entityVersion"], detail["namespace"]) == ("0.2.0", "3", ["analytics"])
-    model = detail["models"][0]
+    assert (detail["specVersion"], detail["entityVersion"], detail["namespace"]) == ("0.3.0.dev0", "3", ["analytics"])
+    model = detail["model"]
     assert model["name"] == "Analytics"
     assert model["aiContext"] == [
         {"label": "Instructions", "value": "Count events per user.\nIgnore test users."},
@@ -23,24 +23,28 @@ def test_document_projection_is_flat_and_keeps_the_stored_definition():
     ]
     dataset = model["datasets"][0]
     assert dataset["table"] == {"namespace": ["analytics"], "name": "events"} and dataset["primaryKey"] == ["id"]
-    assert dataset["fields"][0]["expressions"] == [{"dialect": "ANSI_SQL", "expression": "id"}]
+    assert dataset["fields"][0]["expressions"] == [{"dialect": "OSSIE_SQL_2026", "expression": "id"}]
+    assert dataset["metrics"][0]["name"] == "users" and dataset["uniqueKeys"] == []
+    assert model["metrics"][0]["expressions"] == [{"dialect": "OSSIE_SQL_2026", "expression": "COUNT(*)"},
+                                                  {"dialect": "DUCKDB", "expression": "count(*)"}]
     assert model["relationships"][0]["fromColumns"] == ["user_id"]
-    assert json.loads(detail["definition"])["semantic_model"][0]["datasets"][0]["name"] == "EVENTS"
+    assert json.loads(detail["definition"])["datasets"][0]["name"] == "EVENTS"
 
 
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
-        ("lakehouse.analytics.nested.events", (["analytics", "nested"], "events")),
-        ("lakehouse.sales.orders", (["sales"], "orders")),
+        # Polaris resolves a source as `<namespace>….<table>` in the model's catalog.
+        ("analytics.nested.events", (["analytics", "nested"], "events")),
         ("sales.orders", (["sales"], "orders")),
-        ("orders", (["own"], "orders")),
+        ("orders", None),
+        ("sales..orders", None),
     ],
 )
 def test_dataset_sources_resolve_every_namespace_level(source, expected):
     loaded = {"document": {"semantic_model": json.dumps({"datasets": [{"name": "D", "source": source}]})}}
-    table = semantic_model_details("m", ["own"], loaded)["models"][0]["datasets"][0]["table"]
-    assert (table["namespace"], table["name"]) == expected
+    table = semantic_model_details("m", ["own"], loaded)["model"]["datasets"][0]["table"]
+    assert (table and (table["namespace"], table["name"])) == expected
 
 
 @pytest.mark.parametrize(
@@ -53,21 +57,22 @@ def test_dataset_sources_resolve_every_namespace_level(source, expected):
 )
 def test_ai_context_becomes_label_value_rows(context, rows):
     loaded = {"document": {"semantic_model": json.dumps({"datasets": [], "ai_context": context})}}
-    assert semantic_model_details("m", [], loaded)["models"][0]["aiContext"] == rows
+    assert semantic_model_details("m", [], loaded)["model"]["aiContext"] == rows
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"datasets": [{"name": "A", "source": "t"}]},
-        [{"datasets": [{"name": "A", "source": "t"}]}],
-        {"version": "0.2.0", "semantic_model": [{"datasets": [{"name": "A", "source": "t"}]}]},
-    ],
-)
-def test_projection_accepts_one_model_a_list_or_a_whole_document(payload):
-    detail = semantic_model_details("m", ["ns"], {"document": {"version": "1", "semantic_model": json.dumps(payload)}})
-    # A source without a namespace reads a table in the model's own namespace.
-    assert detail["models"][0]["datasets"][0]["table"] == {"namespace": ["ns"], "name": "t"}
+def test_projection_reads_the_model_at_the_root_of_the_document():
+    payload = {"version": "0.3.0.dev0", "name": "M", "datasets": [{"name": "A", "source": "ns.t", "unique_keys": [["x"]]}]}
+    detail = semantic_model_details("m", ["ns"], {"document": {"version": "0.3.0.dev0",
+                                                               "semantic_model": json.dumps(payload)}})
+    assert detail["model"]["datasets"][0]["table"] == {"namespace": ["ns"], "name": "t"}
+    assert detail["model"]["datasets"][0]["uniqueKeys"] == [["x"]] and detail["model"]["name"] == "M"
+
+
+def test_a_document_with_a_list_of_models_is_not_read():
+    # Ossie 0.3.0.dev0 removed the semantic_model list: one document holds one model.
+    old = {"version": "0.2.0", "semantic_model": [{"datasets": [{"name": "A", "source": "t"}]}]}
+    detail = semantic_model_details("m", ["ns"], {"document": {"semantic_model": json.dumps(old)}})
+    assert detail["model"] is None and "semantic_model" in detail["definition"]
 
 
 @pytest.mark.parametrize(
@@ -85,7 +90,7 @@ def test_projection_accepts_one_model_a_list_or_a_whole_document(payload):
 def test_dimensions_follow_the_ossie_object(dimension, flags):
     field = {"name": "f"} if dimension is None else {"name": "f", "dimension": dimension}
     loaded = {"document": {"semantic_model": json.dumps({"datasets": [{"name": "D", "source": "t", "fields": [field]}]})}}
-    shown = semantic_model_details("m", [], loaded)["models"][0]["datasets"][0]["fields"][0]
+    shown = semantic_model_details("m", [], loaded)["model"]["datasets"][0]["fields"][0]
     assert (shown["dimension"], shown["timeDimension"]) == flags
 
 
@@ -98,16 +103,17 @@ def test_dimensions_follow_the_ossie_object(dimension, flags):
 def test_time_dimensions_follow_the_ossie_datatype(dimension, datatype, time):
     field = {"name": "f", "dimension": dimension, "datatype": datatype}
     loaded = {"document": {"semantic_model": json.dumps({"datasets": [{"name": "D", "source": "t", "fields": [field]}]})}}
-    assert semantic_model_details("m", [], loaded)["models"][0]["datasets"][0]["fields"][0]["timeDimension"] is time
+    assert semantic_model_details("m", [], loaded)["model"]["datasets"][0]["fields"][0]["timeDimension"] is time
 
 
 def test_fields_and_metrics_show_their_synonyms():
     model = {"datasets": [{"name": "D", "source": "t", "fields": [
-                 {"name": "f", "ai_context": {"synonyms": ["eff", 3]}}, {"name": "g", "ai_context": "text"}]}],
+                 {"name": "f", "ai_context": {"synonyms": ["eff", 3]}}, {"name": "g", "ai_context": "text"}],
+                 "metrics": [{"name": "n", "ai_context": {"synonyms": ["en"]}}]}],
              "metrics": [{"name": "m", "ai_context": {"synonyms": ["em"]}}]}
-    shown = semantic_model_details("m", [], {"document": {"semantic_model": json.dumps(model)}})["models"][0]
+    shown = semantic_model_details("m", [], {"document": {"semantic_model": json.dumps(model)}})["model"]
     assert [f["synonyms"] for f in shown["datasets"][0]["fields"]] == [["eff"], []]
-    assert shown["metrics"][0]["synonyms"] == ["em"]
+    assert shown["metrics"][0]["synonyms"] == ["em"] and shown["datasets"][0]["metrics"][0]["synonyms"] == ["en"]
 
 
 def test_labels_and_ai_context_of_datasets_fields_and_metrics():
@@ -115,7 +121,7 @@ def test_labels_and_ai_context_of_datasets_fields_and_metrics():
                            "fields": [{"name": "f", "label": "AirportCode",
                                        "ai_context": {"synonyms": ["eff"], "examples": ["QAA", "QAB"]}}]}],
              "metrics": [{"name": "m", "ai_context": {"synonyms": ["em"], "instructions": "Never sum."}}]}
-    shown = semantic_model_details("m", [], {"document": {"semantic_model": json.dumps(model)}})["models"][0]
+    shown = semantic_model_details("m", [], {"document": {"semantic_model": json.dumps(model)}})["model"]
     dataset = shown["datasets"][0]
     assert dataset["aiContext"] == [{"label": "Instructions", "value": "One row per day."}]
     # Synonyms have their own list; the rest of a field's or metric's AI context is kept as rows.
@@ -127,13 +133,14 @@ def test_labels_and_ai_context_of_datasets_fields_and_metrics():
 @pytest.mark.parametrize("stored", ["not json", "[1, 2]", "42", "null", '{"semantic_model": 7}'])
 def test_projection_survives_documents_it_cannot_read(stored):
     detail = semantic_model_details("m", ["ns"], {"document": {"version": "1", "semantic_model": stored}})
-    assert detail["models"] == [] and detail["definition"]
+    assert detail["model"] is None and detail["definition"]
 
 
 def test_projection_survives_wrong_types_inside_a_model():
     junk = {"datasets": [7, {"name": ["x"], "fields": "no", "primary_key": "id"}], "metrics": {"a": 1}, "relationships": [None]}
     detail = semantic_model_details("m", [], {"document": {"semantic_model": json.dumps(junk)}})
-    assert detail["models"][0]["datasets"][0]["fields"] == [] and detail["models"][0]["metrics"] == []
+    assert detail["model"]["datasets"][0]["fields"] == [] and detail["model"]["metrics"] == []
+    assert detail["model"]["datasets"][0]["metrics"] == [] and detail["model"]["datasets"][0]["primaryKey"] == []
 
 
 def test_catalog_lists_semantic_models_and_opens_one(users):  # noqa: F811
@@ -143,7 +150,7 @@ def test_catalog_lists_semantic_models_and_opens_one(users):  # noqa: F811
     contents = c.get("/api/contents", params=params).json()
     assert contents["semanticModels"] == [{"name": "revenue", "namespace": ["analytics"]}]
     detail = c.get("/api/details", params={**params, "kind": "semantic-model", "name": "revenue"})
-    assert detail.status_code == 200 and detail.json()["models"][0]["metrics"][0]["name"] == "event_count"
+    assert detail.status_code == 200 and detail.json()["model"]["metrics"][0]["name"] == "event_count"
     assert "actual-user-token" not in detail.text
     # The database root has no namespace, so it lists none.
     assert c.get("/api/contents", params={"database": users.databases[0]}).json()["semanticModels"] == []
@@ -236,7 +243,7 @@ def test_a_shared_model_opens_with_the_recipients_own_token(users):  # noqa: F81
     users.directory.database = lambda *a, **kw: shared
     params = {"database": users.databases[0], "namespace": "analytics", "kind": "semantic-model", "name": "revenue"}
     detail = users.client.get("/api/details", params=params)
-    assert detail.status_code == 200 and detail.json()["models"][0]["name"] == "Analytics"
+    assert detail.status_code == 200 and detail.json()["model"]["name"] == "Analytics"
     assert users.calls[-1].url.path.endswith("/semantic-models/revenue")
     assert users.calls[-1].headers["Authorization"] == "Bearer actual-user-token"
 
@@ -350,18 +357,19 @@ def test_the_portal_stores_the_same_envelope_as_the_notebook_client():
     from user_portal.notebook.semantic import SemanticModels
     from user_portal.semantic.rules import document
 
-    model = {"name": "m", "datasets": [{"name": "D", "source": "lakehouse.ns.t", "fields": []}]}
-    assert document(model) == SemanticModels(None, "", "0.2.0").document(model)
+    model = {"name": "m", "datasets": [{"name": "D", "source": "ns.t", "fields": []}]}
+    assert document(model) == SemanticModels(None, "").document(model)
+    assert json.loads(document(model)["semantic_model"]) == {"version": "0.3.0.dev0", **model}
 
 
 def test_missing_descriptions_come_from_the_table_comment_and_column_docs():
     from user_portal.semantic import rules
 
-    model = {"name": "Flights", "datasets": [{"name": "FLIGHT", "source": "lakehouse.marts.fct_flights", "fields": [
-        {"name": "carrier", "expression": "carrier"},
-        {"name": "late", "expression": "arr_delay >= 15"},
-        {"name": "arr_delay", "expression": "arr_delay", "description": "Kept as written."},
-        {"name": "delay_minutes", "expression": "arr_delay"},
+    model = {"name": "Flights", "datasets": [{"name": "FLIGHT", "source": "marts.fct_flights", "fields": [
+        {"name": "carrier", "expression": {"sql": "carrier"}},
+        {"name": "late", "expression": {"sql": "arr_delay >= 15"}},
+        {"name": "arr_delay", "expression": {"sql": "arr_delay"}, "description": "Kept as written."},
+        {"name": "delay_minutes", "expression": {"dialects": [{"dialect": "DUCKDB", "expression": "arr_delay"}]}},
     ]}]}
     docs = {"FLIGHT": {"comment": "One row per flight.",
                        "columns": {"carrier": "Operating carrier.", "arr_delay": "Arrival delay in minutes."}}}
@@ -371,3 +379,81 @@ def test_missing_descriptions_come_from_the_table_comment_and_column_docs():
     assert [f.get("description") for f in dataset["fields"]] == ["Operating carrier.", None, "Kept as written.",
                                                                  "Arrival delay in minutes."]
     assert "description" not in model["datasets"][0]  # the caller's model is left as it was
+
+
+def valid_model():
+    field = {"description": "A field.", "expression": {"sql": "x"}}
+    return {
+        "version": "0.3.0.dev0", "name": "shop", "description": "Orders. One row per order.",
+        "ai_context": {"instructions": "Time: UTC. Grain: order. Missing values: none. Owner: Sales. "
+                                       "Refresh: nightly. Classification: internal."},
+        "datasets": [
+            {"name": "ORDERS", "source": "shop.orders", "description": "Orders.", "primary_key": ["id"],
+             "fields": [{**field, "name": "id", "expression": {"sql": "o_id"}},
+                        {**field, "name": "customer", "expression": {"sql": "o_cust"}},
+                        {**field, "name": "net", "expression": {"sql": "amount - discount"}}],
+             "metrics": [{"name": "net_total", "description": "Net. Unit: euro.", "expression": {"sql": "SUM(net)"}}]},
+            {"name": "CUSTOMER", "source": "shop.customers", "description": "Customers.",
+             "unique_keys": [["id"]], "fields": [{**field, "name": "id", "expression": {"sql": "c_id"}}]},
+        ],
+        "relationships": [{"name": "orders_customer", "from": "ORDERS", "to": "CUSTOMER",
+                           "from_columns": ["customer"], "to_columns": ["id"]}],
+        "metrics": [{"name": "per_order", "description": "Net per order. Unit: euro.",
+                     "expression": {"sql": "AGG(ORDERS.net_total) / COUNT(ORDERS.id)"}}],
+        "nonportable_extensions": [{"vendor_name": "DBT", "data": {"project": "shop", "tags": [1, None]}}],
+    }
+
+
+def test_a_complete_0_3_model_passes_and_is_stored_with_its_version():
+    from user_portal.semantic import rules
+
+    columns = {"ORDERS": {"o_id", "o_cust", "amount", "discount"}, "CUSTOMER": {"c_id"}}
+    model, warnings = rules.validate({k: v for k, v in valid_model().items() if k != "version"}, columns)
+    assert warnings == [] and model["version"] == "0.3.0.dev0"
+    assert json.loads(rules.document(model)["semantic_model"]) == valid_model()
+
+
+@pytest.mark.parametrize(("change", "error"), [
+    (lambda m: m.update(version="0.2.0"), "stores Apache Ossie 0.3.0.dev0 documents"),
+    (lambda m: m["metrics"][0]["expression"].update(sql="SUM(ORDERS.amount)"), "not a field of ORDERS"),
+    (lambda m: m["metrics"][0]["expression"].update(sql="SUM(net)"), "names fields as dataset.field"),
+    (lambda m: m["datasets"][0]["metrics"][0]["expression"].update(sql="SUM(o_id)"), "Write source.o_id"),
+    (lambda m: m["datasets"][0]["fields"][2]["expression"].update(sql="amount - rebate"),
+     "reads rebate, which is not a column of ORDERS's table"),
+    (lambda m: m["datasets"][0]["fields"][2]["expression"].update(sql="SUM(amount)"), "is an aggregate"),
+    (lambda m: m["datasets"][0].update(primary_key=["id", "ID"]), "names a field twice"),
+    (lambda m: m["datasets"][0]["fields"].append({"name": "NET_TOTAL", "description": "Clash.",
+                                                   "expression": {"sql": "1"}}), "share one namespace"),
+    (lambda m: m["datasets"][0]["fields"][0].update(expression={"dialects": [{"dialect": "DUCKDB"}]}),
+     "expression.dialects"),
+    (lambda m: m.update(nonportable_extensions=[{"vendor_name": "DBT", "data": {"x": float("nan")}}]),
+     "a JSON object"),
+    (lambda m: m["datasets"][0].update(custom_extensions=[]), "no key 'custom_extensions'"),
+])
+def test_publishing_refuses_what_ossie_forbids(change, error):
+    from user_portal.semantic import rules
+    from user_portal.semantic.errors import SemanticError
+
+    model = valid_model()
+    change(model)
+    columns = {"ORDERS": {"o_id", "o_cust", "amount", "discount"}, "CUSTOMER": {"c_id"}}
+    with pytest.raises(SemanticError, match=error):
+        rules.validate(model, columns)
+
+
+@pytest.mark.parametrize(("change", "warning"), [
+    (lambda m: m["datasets"][0]["metrics"][0]["expression"].update(sql="AGG(source.net)"), "no measures"),
+    (lambda m: m["metrics"][0]["expression"].update(sql="SUM(ORDERS.net) / COUNT(DISTINCT CUSTOMER.id)"),
+     "anchored on one dataset"),
+    (lambda m: m["metrics"][0]["expression"].update(sql="max(timezone('UTC', ORDERS.id))"), "governed queries refuse"),
+    (lambda m: m["datasets"][1].update(unique_keys=[["id"], ["ID"]]), "declared twice"),
+    (lambda m: m["relationships"][0].update(to_columns=["customer"], **{"from": "CUSTOMER", "to": "ORDERS"},
+                                            from_columns=["id"]), "not a whole primary or unique key"),
+])
+def test_publishing_warns_about_what_governed_queries_cannot_run(change, warning):
+    from user_portal.semantic import rules
+
+    model = valid_model()
+    change(model)
+    _, warnings = rules.validate(model)
+    assert any(warning in w for w in warnings), warnings

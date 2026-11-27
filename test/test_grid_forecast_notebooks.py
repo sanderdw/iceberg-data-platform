@@ -134,7 +134,7 @@ def test_semantic_model_is_complete_and_passes_the_portal_rules(contract):
     assert warnings == [] and stored == semantic
     assert json.loads(json.dumps(semantic)) == semantic
     assert [d["source"] for d in semantic["datasets"]] == [
-        "lakehouse.ai_grid_forecast." + d["table"] for d in contract["datasets"].values()]
+        "ai_grid_forecast." + d["table"] for d in contract["datasets"].values()]
     fields = {(d["name"], f["name"]): f for d in semantic["datasets"] for f in d["fields"]}
     assert all(f.get("description", "").endswith(".") for f in fields.values())
     assert {f["label"] for f in fields.values() if "label" in f} <= set(contract["concepts"])
@@ -167,7 +167,7 @@ def test_governed_queries_count_congestion_points_per_substation(contract, produ
     from user_portal.semantic.rules import document
 
     semantic = semantic_model(contract, NAMESPACE)
-    parsed = ossie.parse({"document": document(semantic), "entity-version": 1}, NAMESPACE)
+    parsed = ossie.parse({"document": document(semantic), "entity-version": 1})
     types = {"String": "string", "Integer": "int", "Float": "double", "Boolean": "boolean"}
     schemas = {d["name"]: {f["name"]: types[f["datatype"]] for f in d["fields"]} for d in semantic["datasets"]}
     spec = QuerySpec(metrics=["congestion_points"], dimensions=[{"field": "SUBSTATION.substation_id"}])
@@ -270,7 +270,7 @@ def test_both_notebooks_execute_against_a_local_catalog(tmp_path, monkeypatch, c
     assert {row["dataset"]: row["rows"] for row in written["published"]} == ROWS
     assert written["model_action"] == "created" and list(store.models) == ["mv_load_forecast"]
     document, _ = store.models["mv_load_forecast"]
-    assert json.loads(document["semantic_model"])["semantic_model"] == [written["grid_model"]]
+    assert json.loads(document["semantic_model"]) == written["grid_model"]
     assert written["congestion_overview"]["congestion_points"].sum() == 162
     rerun = run_notebook(workspace / "09_polars_grid_forecast_write.py")
     assert rerun["model_action"] == "updated"

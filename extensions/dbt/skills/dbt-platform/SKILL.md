@@ -62,7 +62,8 @@ it and install its chart (`kubernetes-install` skill, or the documentation's "Ad
    `semantic-model` skill (`.agents/skills/semantic-model`). Then Conversational BI and
    `query_semantic_model` answer from the mart's agreed metrics. `replace_table` keeps the table's
    identity on every build, so the model stays valid. Keep the model in the project, so it is
-   reviewed and merged with the pipeline: write the Ossie document to
+   reviewed and merged with the pipeline: write the Ossie 0.3.0.dev0 document (one model at the
+   root, `version: 0.3.0.dev0`) to
    `semantic_models/<database>/<namespace>/<name>.yml` (database by display name with `-` as `_`).
    Every successful `build` or `run` publishes it to that environment; `get_run` lists it under
    `summary.semanticModels` with any errors. Check it with the user portal's

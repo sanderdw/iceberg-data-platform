@@ -99,9 +99,10 @@ def main():
 
         # A semantic model is shared by name like a table: the credential reads exactly that model.
         models = f"{p.url}/api/catalog/polaris/v1/{db}/namespaces/sales/semantic-models"
-        document = {"version": "0.2.0", "semantic_model": json.dumps(
-            {"version": "0.2.0", "semantic_model": [{"name": "Sales", "datasets": [
-                {"name": "ORDERS", "source": "lakehouse.sales.orders", "primary_key": ["id"], "fields": []}]}]})}
+        document = {"version": "0.3.0.dev0", "semantic_model": json.dumps(
+            {"version": "0.3.0.dev0", "name": "Sales", "datasets": [
+                {"name": "ORDERS", "source": "sales.orders", "primary_key": ["id"],
+                 "fields": [{"name": "id", "expression": {"sql": "id"}}]}]})}
         owner_token = {"Authorization": f"Bearer {token(p, admin['credentials'])}"}
         for model in ("sales", "private"):
             created = httpx.post(models, json={"name": model, "document": document}, headers=owner_token)
@@ -120,7 +121,7 @@ def main():
         }
         statuses = {k: r.status_code for k, r in attempts.items()}
         assert closed == {"load": 403} and statuses == {**dict.fromkeys(attempts, 403), "load shared": 200}, (closed, statuses)
-        assert json.loads(attempts["load shared"].json()["document"]["semantic_model"])["semantic_model"][0]["name"] == "Sales"
+        assert json.loads(attempts["load shared"].json()["document"]["semantic_model"])["name"] == "Sales"
         p.update_share(id, ShareUpdate.model_validate({"objects": objects}))
         assert httpx.get(models + "/sales", headers=bearer).status_code == 403
         print("PASS: a shared semantic model is readable by name only; other models, listing and changes are refused, "

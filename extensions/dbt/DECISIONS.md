@@ -301,7 +301,8 @@ not reviewed with the pipeline, not merged by a team administrator, and not rebu
 
 ### Decision: `semantic_models/` is published by the run
 
-- A model is an Apache Ossie document at `semantic_models/<database>/<namespace…>/<name>.yml`. The
+- A model is an Apache Ossie 0.3.0.dev0 document, one model at its root, at
+  `semantic_models/<database>/<namespace…>/<name>.yml`. The
   first folder is the database's display name with `-` as `_`, as in `+catalog_name`; the folders
   after it are the namespace levels; the file name is the model's name. dbt does not read the
   folder.

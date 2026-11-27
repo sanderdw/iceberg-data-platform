@@ -286,12 +286,13 @@ function renderSemanticModel(detail, db, ns, name) {
     toolbar.append(ask);
   }
   const {tabs, panel, tab} = makeTabs(detail.kind);
-  const models = detail.models || [];
-  const count = key => models.reduce((sum, m) => sum + m[key].length, 0);
+  const m = detail.model, datasets = m?.datasets || [];
+  // Dataset-scoped metrics are named DATASET.metric, as queries name them.
+  const metrics = m ? [...m.metrics, ...datasets.flatMap(d => d.metrics.map(x => ({...x, name: `${d.name}.${x.name}`})))] : [];
   const overview = tab('Overview', p => {
-    p.append(facts([['Ossie spec version', detail.specVersion], ['Entity version', detail.entityVersion], ['Datasets', count('datasets')], ['Metrics', count('metrics')], ['Relationships', count('relationships')]]));
-    if (!models.length) p.append(element('p', 'This document holds no datasets or metrics that the portal can show. See the Definition tab for exactly what is stored.', 'hint'));
-    models.forEach(m => {
+    p.append(facts([['Ossie spec version', detail.specVersion], ['Entity version', detail.entityVersion], ['Datasets', datasets.length], ['Metrics', metrics.length], ['Relationships', m?.relationships.length || 0]]));
+    if (!m) p.append(element('p', 'This document is not an Apache Ossie 0.3.0.dev0 semantic model that the portal can show. See the Definition tab for exactly what is stored.', 'hint'));
+    else {
       p.append(element('h3', m.name));
       if (m.description) p.append(element('p', m.description));
       if (m.aiContext.length) {
@@ -300,30 +301,25 @@ function renderSemanticModel(detail, db, ns, name) {
         context.querySelectorAll(':scope > div').forEach(item => item.classList.add('catalog-fact-wide'));
         p.append(element('h3', 'AI context'), context);
       }
-    });
+    }
     p.append(element('p', 'Semantic models describe what tables mean: fields, relationships and agreed metric definitions. Polaris stores and protects them; it never runs them. Example notebook 06 publishes one; notebook 07 reads it.', 'hint'));
   });
-  if (count('datasets')) tab('Diagram', p => {
-    models.forEach(m => {
-      if (models.length > 1) p.append(element('h3', m.name));
-      if (m.datasets.length) p.append(semanticDiagram(m, {onOpenTable: d => openDataset(db, ns, d)}));
-    });
-  });
+  if (datasets.length) tab('Diagram', p => p.append(semanticDiagram(m, {onOpenTable: d => openDataset(db, ns, d)})));
   tab('Datasets & fields', p => {
-    p.append(element('p', 'A dataset maps to an Iceberg table. Expressions are SQL in the named dialect.', 'hint'));
-    if (!count('datasets')) p.append(element('p', 'No datasets.', 'catalog-empty'));
-    models.forEach(m => m.datasets.forEach(d => {
+    p.append(element('p', 'A dataset maps to an Iceberg table. Its fields read the table\'s columns; keys, relationships and metrics name fields. Expressions are SQL in the named dialect; OSSIE_SQL_2026 is Apache Ossie\'s portable SQL.', 'hint'));
+    if (!datasets.length) p.append(element('p', 'No datasets.', 'catalog-empty'));
+    datasets.forEach(d => {
       p.append(element('h3', d.name));
-      p.append(facts([['Source', d.source], ['Primary key', d.primaryKey.join(', ')], ['Description', d.description], ...d.aiContext.map(c => [c.label, c.value])]));
+      p.append(facts([['Source', d.source], ['Primary key', d.primaryKey.join(', ')], ...(d.uniqueKeys.length ? [['Unique keys', d.uniqueKeys.map(k => k.join(', ')).join('; ')]] : []), ['Description', d.description], ...d.aiContext.map(c => [c.label, c.value])]));
       if (d.table) p.append(action('Open table →', () => openDataset(db, ns, d)));
       p.append(dataGrid(['Field', 'Label', 'Type', 'Dimension', 'Expression', 'Description'], d.fields.map(f => [f.name, f.label, f.datatype, f.timeDimension ? 'Time' : f.dimension ? 'Yes' : 'No', expressionText(f.expressions), [f.description, ...f.synonyms.length ? [`Also called: ${f.synonyms.join(', ')}.`] : [], ...f.aiContext.map(c => `${c.label}: ${c.value}`)].filter(Boolean).join(' ')]), `Fields of ${d.name}`));
-    }));
+    });
   });
   tab('Metrics & relationships', p => {
     p.append(element('h3', 'Metrics'));
-    p.append(dataGrid(['Metric', 'Type', 'Expression', 'Description'], models.flatMap(m => m.metrics.map(x => [x.name, x.datatype, expressionText(x.expressions), x.description])), 'Metrics'));
+    p.append(dataGrid(['Metric', 'Type', 'Expression', 'Description'], metrics.map(x => [x.name, x.datatype, expressionText(x.expressions), x.description]), 'Metrics'));
     p.append(element('h3', 'Relationships'));
-    p.append(dataGrid(['Name', 'From', 'To', 'Columns'], models.flatMap(m => m.relationships.map(r => [r.name, r.from, r.to, `${r.fromColumns.join(', ')} → ${r.toColumns.join(', ')}`])), 'Relationships'));
+    p.append(dataGrid(['Name', 'From', 'To', 'Fields'], (m?.relationships || []).map(r => [r.name, r.from, r.to, `${r.fromColumns.join(', ')} → ${r.toColumns.join(', ')}`]), 'Relationships'));
   });
   tab('Definition', p => {
     let stored;

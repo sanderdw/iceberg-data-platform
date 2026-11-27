@@ -316,7 +316,7 @@ class UserDirectory:
         """The Iceberg tables that a semantic model's datasets read, each once."""
         detail = self.details(session, database, namespace, "semantic-model", name)
         tables = {}
-        for dataset in (d for m in detail["models"] for d in m["datasets"]):
+        for dataset in (detail["model"] or {}).get("datasets", []):
             if dataset["table"]:
                 table = {"kind": "table", **dataset["table"]}
                 tables[(tuple(table["namespace"]), table["name"])] = table
@@ -571,15 +571,22 @@ class UserDirectory:
 
     def publish_semantic_model(self, session, database, namespace, name, model, entity_version=None):
         """Create a model, or replace the version the caller read; Polaris checks the Writer role."""
-        targets = [(d.get("name"), *target) for d in rules.dicts(rules.first_model(model).get("datasets"))
-                   if (target := ossie.dataset_target(d.get("source"), namespace))]
-        docs = {}
-        schemas, unreadable = self.semantic_tables(session, database, targets, docs)
+        model = rules.definition(model)
+        targets = [(d.get("name"), *target) for d in rules.dicts(model.get("datasets"))
+                   if (target := ossie.dataset_target(d.get("source")))]
+        docs, missing = {}, []
+        schemas, unreadable = self.semantic_tables(session, database, targets, docs, missing)
         # Descriptions a model leaves out come from the table comment and column docs (dbt writes both).
-        model = rules.inherit_descriptions(rules.first_model(model), docs)
+        model = rules.inherit_descriptions(model, docs)
         model, warnings = rules.validate(model, {name: set(columns) for name, columns in schemas.items()})
-        warnings = [f"Table {table} is missing or not readable, so its fields were not checked against its columns."
-                    for table in unreadable] + warnings
+        if missing:
+            # Polaris resolves every dataset's source when it stores a model and refuses one that does not exist.
+            errors = [f"There is no table {table}. Create it before publishing, or correct the dataset's source "
+                      "(namespace.table)." for table in missing]
+            raise SemanticError(422, "The semantic model is not valid: " + " ".join(errors), "invalid_model",
+                                {"errors": errors, "warnings": warnings})
+        warnings = [f"Table {table} is not readable with your permissions, so its fields were not checked against "
+                    "its columns." for table in unreadable] + warnings
         document = rules.document(model)
         try:
             current = self.request(session, self.semantic_model_path(database, namespace, name))
@@ -613,23 +620,24 @@ class UserDirectory:
     def semantic_query_guide(self, session, database, namespace, name):
         """What query_semantic_model can answer: each metric's dataset and the dimensions reachable from it."""
         try:
-            model = ossie.parse(self.load_semantic_model(session, database, namespace, name), tuple(namespace))
+            model = ossie.parse(self.load_semantic_model(session, database, namespace, name))
         except SemanticError as exc:
             return {"metrics": {}, "dimensions": {}, "problems": [str(exc)]}
         homes, problems = {}, []
         for metric in model.metrics:
             try:
-                homes[metric.name] = compiler.metric_home(model, metric, compiler.expressions.parse(metric.expression))
+                homes[metric.name] = compiler.metric_home(model, metric)
             except SemanticError as exc:
                 problems.append(f"Metric {metric.name}: {exc}")
         return {"metrics": homes,
                 "dimensions": {home: compiler.reachable(model, home) for home in sorted({h for h in homes.values() if h})},
                 "problems": problems}
 
-    def semantic_tables(self, session, database, targets, docs=None):
+    def semantic_tables(self, session, database, targets, docs=None, missing=None):
         """{dataset: {column: Iceberg type}} for `(dataset, namespace, table)` targets, and the tables not readable.
 
-        With a `docs` dict, also collects each dataset's table comment and column docs into it.
+        With a `docs` dict, also collects each dataset's table comment and column docs into it; with a
+        `missing` list, the tables that do not exist, apart from the ones that are not readable.
         """
         schemas, unreadable = {}, []
         for dataset, namespace, table in targets:
@@ -638,7 +646,8 @@ class UserDirectory:
             except ServiceError as exc:
                 if exc.status not in (403, 404):
                     raise
-                unreadable.append(".".join([*namespace, table]))
+                found = missing if exc.status == 404 and missing is not None else unreadable
+                found.append(".".join([*namespace, table]))
                 continue
             schemas[dataset] = {c["name"]: c["type"] for c in found["columns"] if "." not in c["name"]}
             if docs is not None:
@@ -659,7 +668,7 @@ class UserDirectory:
     def semantic_query_job(self, session, database, namespace, name, spec, max_rows=200):
         """Compile a governed query from the stored model, to run as the user in a worker process."""
         loaded = self.load_semantic_model(session, database, namespace, name)
-        model = ossie.parse(loaded, tuple(namespace))
+        model = ossie.parse(loaded)
         schemas, unreadable = self.semantic_tables(
             session, database, [(d.name, d.namespace, d.table) for d in model.datasets])
         compiled = compiler.compile_query(model, schemas, spec, max_rows)
@@ -667,7 +676,7 @@ class UserDirectory:
 
     def semantic_values_job(self, session, database, namespace, name, field, search=None, limit=50):
         """Compile a lookup of one dimension's distinct values, to run as the user in a worker process."""
-        model = ossie.parse(self.load_semantic_model(session, database, namespace, name), tuple(namespace))
+        model = ossie.parse(self.load_semantic_model(session, database, namespace, name))
         wanted = field.partition(".")[0]
         schemas, unreadable = self.semantic_tables(
             session, database, [(d.name, d.namespace, d.table) for d in model.datasets if d.name == wanted])

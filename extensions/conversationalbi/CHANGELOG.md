@@ -61,6 +61,16 @@ is kept: update scripts and agent instructions.
 - Conversations are kept for live evaluation only while a team administrator has it switched on in
   Evaluations (`POST /api/v1/evaluation/recording`); switching it off, or disabling Evaluations for the
   environment, deletes them.
+- **Apache Ossie 0.3.0.dev0.** Semantic models are read as [Ossie 0.3.0.dev0](https://github.com/apache/ossie/blob/main/core-spec/spec.md)
+  documents, one model at the root; a model in the earlier shape, with a `semantic_model` list, is not read.
+  A dataset's `source` is `namespace.table` in the model's database, as Polaris resolves it.
+  Metrics, keys and relationships name fields, which compile to their expressions over the table: a join on a
+  computed field works, and a metric that reads a column that is not a field is refused. A dataset's own
+  metrics are asked for as `DATASET.metric`; a model's metric can build on one with `AGG(DATASET.metric)`, and
+  a dataset's metric reads its table's columns as `source.column`. A relationship may end on a unique key.
+  Expressions come from a `DUCKDB` dialect, then the portable `sql`, then `ANSI_SQL`, and names compare without
+  regard to case. More of Ossie's portable functions are allowed, such as `year`, `left`, `replace` and
+  `IS DISTINCT FROM`.
 
 ## 0.1.6 - 2026-11-18
 
