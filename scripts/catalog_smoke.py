@@ -111,6 +111,7 @@ def check_semantic_models(provider, directory, session, db, ns, credentials):
     409 "Namespace is not empty" unless clear_namespace removes semantic models first.
     """
     model = {
+        "version": "0.3.0.dev0",
         "name": "Events",
         "datasets": [
             {
