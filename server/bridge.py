@@ -18,7 +18,7 @@ import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 import httpx
 from fastapi import Body, Depends, FastAPI, Header, Request, Response
@@ -31,22 +31,36 @@ from joserfc.jwk import KeySet
 from joserfc.jws import JWSRegistry
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException
 
 from . import extensions as registry
 from . import listings
+from .catalog_metadata import utc_time
 from .models import ENVIRONMENTS, AutomationInput, Environment, ServiceError, TokenRequest
 from .polaris import AUTOMATION_ROLES, PolarisProvider, enc
 from .storage import RustFSStorage
 from .validation import validation_message
 
-CONTRACT_VERSION = "0.1.3"
+CONTRACT_VERSION = "1.0.0"
 CAPABILITIES = ["user-context", "automation-principals", "automation-tokens", "shared-data", "listings",
-                "team-extensions"]
+                "team-extensions", "app-directory"]
 BRIDGE_AUDIENCE = "iceberg-bridge"
 CONTRACT = Path(__file__).resolve().parent.parent / "contracts" / "bridge" / "v1" / "openapi.yaml"
 ADMIN_ROLES = ("admin", "bucket-admin")
-CODES = {400: "invalid_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
-         409: "conflict", 422: "invalid_request", 502: "provider_error", 503: "unavailable"}
+# Every `code` an error response can carry; contracts/bridge/README.md says what each one means.
+# Extensions read them, so a code is never renamed or reused: a new one is a contract change.
+ErrorCode = Literal[
+    "invalid_request", "unauthorized", "forbidden", "not_found", "method_not_allowed", "conflict",
+    "platform_error", "unavailable", "internal_error",
+    "unknown_extension", "not_linked", "user_required", "service_required", "listing_not_enabled",
+    "not_a_member", "forbidden_role", "no_teams", "extension_not_enabled",
+    "unknown_automation_principal", "unknown_listing",
+]
+ERROR_CODES = get_args(ErrorCode)
+# The code of an error that names none: one per status, and `internal_error` for any other status.
+# Every code has one status; a provider's 400 is answered as 422 `invalid_request`.
+CODES = {401: "unauthorized", 403: "forbidden", 404: "not_found", 405: "method_not_allowed", 409: "conflict",
+         422: "invalid_request", 500: "internal_error", 502: "platform_error", 503: "unavailable"}
 LOG = logging.getLogger(__name__)
 AUDIT = logging.getLogger("iceberg.bridge.audit")
 
@@ -63,17 +77,29 @@ def audit(event, fields, message, *args):
     AUDIT.info(message, *args, extra={"otel.event.name": "iceberg.bridge." + event, **fields})
 
 
+def code_for(status):
+    return CODES.get(status, "internal_error")
+
+
+def status_for(status):
+    """One status per code: a provider's 400 is the Bridge's 422 `invalid_request`."""
+    return 422 if status == 400 else status
+
+
 class BridgeError(ServiceError):
     def __init__(self, status, message, code=None):
+        status = status_for(status)
         super().__init__(status, message)
-        self.code = code or CODES.get(status, "error")
+        self.code = code or code_for(status)
+        if self.code not in ERROR_CODES:
+            raise ValueError(f"{self.code!r} is not a Bridge error code. Add it to ErrorCode and to the contract.")
 
 
 # Response schemas: the contract. Changing them is a contract change (contracts/bridge/COMPATIBILITY.md).
 
 class Error(BaseModel):
     error: str
-    code: str
+    code: ErrorCode
 
 
 class CatalogEndpoints(BaseModel):
@@ -101,15 +127,24 @@ class Network(BaseModel):
     roleLabel: str
     extensionLabel: str
     # Where the aliases resolve: Docker network aliases, or Kubernetes Services in `namespace`.
-    platform: Literal["docker", "kubernetes"] = "docker"
-    namespace: str | None = None
+    platform: Literal["docker", "kubernetes"]
+    namespace: str | None
 
 
 class Extension(BaseModel):
     id: str
     origin: str
     # Capability `listings`: this extension publishes listed data shares to a data catalog.
-    listing: bool = False
+    listing: bool
+    # Capability `app-directory`: how the Apps menus name it, and what it is for.
+    title: str
+    purpose: str | None
+
+
+class PortalPage(BaseModel):
+    id: str
+    title: str
+    url: str
 
 
 class Discovery(BaseModel):
@@ -121,6 +156,8 @@ class Discovery(BaseModel):
     environments: list[str]
     network: Network
     userPortalUrl: str
+    # Capability `app-directory`: the user portal's pages, for the Apps menu every extension shows.
+    userPortalPages: list[PortalPage]
     extensions: list[Extension]
 
 
@@ -151,10 +188,10 @@ class SharedObject(BaseModel):
 
 class SharedDatabase(Database):
     sharedWithTeam: str
-    ownerTeamName: str = ""
+    ownerTeamName: str | None
     # Capability `shared-data`: every recipient team of the user, and what they can read.
-    recipientTeams: list[str] = []
-    sharedObjects: list[SharedObject] = []
+    recipientTeams: list[str]
+    sharedObjects: list[SharedObject]
 
 
 class UserContext(BaseModel):
@@ -171,8 +208,8 @@ class AutomationPrincipal(BaseModel):
     environment: Environment
     extension: str
     status: Literal["active", "revoking"]
-    createdAt: int | None = None
-    createdBy: str
+    createdAt: str | None
+    createdBy: str | None
 
 
 class ScopedDatabase(Database):
@@ -186,7 +223,7 @@ class ScopedSharedDatabase(Database):
 class AutomationScope(AutomationPrincipal):
     databases: list[ScopedDatabase]
     # Capability `shared-data`: team shares received in this environment, readable with a read token.
-    sharedDatabases: list[ScopedSharedDatabase] = []
+    sharedDatabases: list[ScopedSharedDatabase]
 
 
 class AutomationList(BaseModel):
@@ -214,12 +251,13 @@ class TokenResponse(BaseModel):
     tokenType: Literal["bearer"]
     expiresIn: int
     access: Literal["read", "write"]
-    principal: str
+    automationPrincipal: str
     catalog: TokenCatalog
 
 
-class Revoked(BaseModel):
-    revoked: bool
+class AutomationPrincipalDeleted(BaseModel):
+    deleted: bool
+    automationPrincipal: str
 
 
 # Capability `listings`: data shares their owners publish to a data catalog. Metadata only.
@@ -227,7 +265,7 @@ class Revoked(BaseModel):
 class ListingSummary(BaseModel):
     id: str
     version: str
-    databaseId: str
+    database: str
     environment: Environment
 
 
@@ -237,7 +275,7 @@ class ListingList(BaseModel):
 
 class ListingOwner(BaseModel):
     team: str
-    teamName: str
+    teamName: str | None
 
 
 class ListingDatabase(BaseModel):
@@ -251,13 +289,13 @@ class Column(BaseModel):
     name: str
     type: str
     required: bool
-    doc: str
-    children: list[Column] = []
+    doc: str | None
+    children: list[Column]
 
 
 class PartitionField(BaseModel):
     name: str
-    sourceColumn: str
+    sourceColumn: str | None
     transform: str
 
 
@@ -268,46 +306,46 @@ class LineageInput(BaseModel):
 
 
 class Quality(BaseModel):
-    status: str
-    summary: str | None = None
-    checkedAt: str | None = None
+    status: Literal["pass", "warn", "fail"]
+    summary: str | None
+    checkedAt: str | None
 
 
 class Producer(BaseModel):
     name: str
-    version: str | None = None
-    extension: str | None = None
-    url: str | None = None
-    runId: str | None = None
-    runAt: str | None = None
-    revision: str | None = None
-    node: str | None = None
-    inputs: list[LineageInput] = []
-    inputsTruncated: bool = False
-    quality: Quality | None = None
+    version: str | None
+    extension: str | None
+    url: str | None
+    runId: str | None
+    runAt: str | None
+    revision: str | None
+    node: str | None
+    inputs: list[LineageInput]
+    inputsTruncated: bool
+    quality: Quality | None
 
 
 class ListedTable(BaseModel):
     kind: Literal["table"]
     namespace: list[str]
     name: str
-    uuid: str | None = None
-    comment: str
+    uuid: str | None
+    comment: str | None
     columns: list[Column]
     partitionFields: list[PartitionField]
-    rowCount: int | None = None
-    updatedAt: int | None = None
-    producer: Producer | None = None
+    rowCount: int | None
+    updatedAt: str | None
+    producer: Producer | None
 
 
 class ListedView(BaseModel):
     kind: Literal["view"]
     namespace: list[str]
     name: str
-    uuid: str | None = None
-    comment: str
+    uuid: str | None
+    comment: str | None
     columns: list[Column]
-    updatedAt: int | None = None
+    updatedAt: str | None
 
 
 class Expression(BaseModel):
@@ -338,14 +376,26 @@ class ModelField(BaseModel):
     expressions: list[Expression]
 
 
+class ModelMetric(BaseModel):
+    name: str
+    description: str
+    datatype: str
+    synonyms: list[str]
+    aiContext: list[ContextRow]
+    expressions: list[Expression]
+
+
 class ModelDataset(BaseModel):
     name: str
     description: str
     source: str
-    table: ModelTable | None = None
+    table: ModelTable | None
     primaryKey: list[str]
+    uniqueKeys: list[list[str]]
     aiContext: list[ContextRow]
     fields: list[ModelField]
+    # Dataset-scoped metrics, which queries name DATASET.metric.
+    metrics: list[ModelMetric]
 
 
 class ModelRelationship(BaseModel):
@@ -356,15 +406,6 @@ class ModelRelationship(BaseModel):
     to: str
     fromColumns: list[str]
     toColumns: list[str]
-
-
-class ModelMetric(BaseModel):
-    name: str
-    description: str
-    datatype: str
-    synonyms: list[str]
-    aiContext: list[ContextRow]
-    expressions: list[Expression]
 
 
 class SemanticModel(BaseModel):
@@ -382,15 +423,16 @@ class ListedSemanticModel(BaseModel):
     name: str
     specVersion: str
     entityVersion: str
-    models: list[SemanticModel]
+    # One Apache Ossie 0.3.0.dev0 document holds one model; null when the stored text is not one.
+    model: SemanticModel | None
 
 
 class Listing(BaseModel):
     id: str
     name: str
-    description: str
-    contact: str
-    expiresAt: str | None = None
+    description: str | None
+    contact: str | None
+    expiresAt: str | None
     version: str
     owner: ListingOwner
     database: ListingDatabase
@@ -457,7 +499,7 @@ def user_context(provider, principal):
         database = ready.get(share["database"])
         if team in roles and database and database["team"] not in roles:
             entry = shared.setdefault(
-                database["id"], {**{k: database[k] for k in fields}, "ownerTeamName": names.get(database["team"], ""),
+                database["id"], {**{k: database[k] for k in fields}, "ownerTeamName": names.get(database["team"]),
                                  "recipientTeams": [], "sharedObjects": {}}
             )
             if team not in entry["recipientTeams"]:
@@ -479,6 +521,11 @@ def user_context(provider, principal):
         ),
         "sharedDatabases": sorted(shared.values(), key=lambda d: (d["environment"], d["name"])),
     }
+
+
+def principal_out(item):
+    """An automation principal as the contract describes it: times in RFC 3339, absent values null."""
+    return {**item, "createdAt": utc_time(item.get("createdAt")), "createdBy": item.get("createdBy") or None}
 
 
 def create_bridge_app(provider=None, verifier=None, env=None):
@@ -524,15 +571,29 @@ def create_bridge_app(provider=None, verifier=None, env=None):
 
     @app.exception_handler(ServiceError)
     async def service_error(request, exc):
-        return error(exc.status, str(exc), getattr(exc, "code", None) or CODES.get(exc.status, "error"))
+        status = status_for(exc.status)
+        return error(status, str(exc), getattr(exc, "code", None) or code_for(status))
 
     @app.exception_handler(RequestValidationError)
     async def invalid(request, exc):
         return error(422, validation_message(exc.errors(), request.url.path), "invalid_request")
 
+    @app.exception_handler(HTTPException)
+    async def http_error(request, exc):
+        # Raised by the router itself, for a path or a method that no operation has.
+        message = {404: "This path does not exist.", 405: "This method is not allowed on this path."}
+        response = error(exc.status_code, message.get(exc.status_code, str(exc.detail)), code_for(exc.status_code))
+        response.headers.update(exc.headers or {})
+        return response
+
     @app.middleware("http")
     async def headers(request, call_next):
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Whatever went wrong, an extension gets the error shape; the cause goes to the log only.
+            LOG.exception("Bridge request failed: %s %s", request.method, request.url.path)
+            response = error(500, "The Bridge could not complete this request.", "internal_error")
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
@@ -600,12 +661,23 @@ def create_bridge_app(provider=None, verifier=None, env=None):
             raise BridgeError(403, "You are not a member of this team.", "not_a_member")
         return roles[team]
 
-    errors = {status: {"model": Error} for status in (401, 403, 404, 409, 422, 502, 503)}
+    def require_principal(id, extension):
+        """The automation principal `id` of this extension, or 404 `unknown_automation_principal`."""
+        try:
+            return provider.require_automation(id, extension=extension)
+        except ServiceError as exc:
+            if exc.status == 404:
+                raise BridgeError(404, str(exc), "unknown_automation_principal") from None
+            raise
+
+    errors = {status: {"model": Error} for status in (401, 403, 404, 405, 409, 422, 500, 502, 503)}
+    # Path parameters are named after their resource (docs/develop/api-conventions.md).
     team_id = Annotated[str, PathParam(pattern=r"^team-[a-f0-9]{32}$")]
     automation_id = Annotated[str, PathParam(pattern=r"^svc-[a-f0-9]{32}$")]
-    share_id = Annotated[str, PathParam(pattern=r"^share-[a-f0-9]{32}$")]
+    listing_id = Annotated[str, PathParam(pattern=r"^share-[a-f0-9]{32}$")]
 
-    @app.get("/bridge/v1", response_model=Discovery, summary="Discover the platform")
+    @app.get("/bridge/v1", operation_id="getDiscovery", response_model=Discovery, responses={500: {"model": Error}},
+             summary="Discover the platform")
     def discovery():
         public_catalog = env.get("POLARIS_PUBLIC_URL", "http://localhost:8181").rstrip("/") + "/api/catalog"
         return {
@@ -630,7 +702,8 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                 "extensionLabel": "io.iceberg-platform.extension",
             },
             "userPortalUrl": env.get("USER_ORIGIN", "http://localhost:3002"),
-            "extensions": registry.public(env),
+            "userPortalPages": registry.portal_pages(env.get("USER_ORIGIN", "http://localhost:3002")),
+            "extensions": [{**e, "purpose": e["purpose"] or None} for e in registry.public(env)],
         }
 
     @app.get("/bridge/v1/openapi.yaml", include_in_schema=False)
@@ -641,44 +714,50 @@ def create_bridge_app(provider=None, verifier=None, env=None):
     def health():
         return {"status": "ok"}
 
-    @app.get("/bridge/v1/me", response_model=UserContext, responses=errors,
+    @app.get("/bridge/v1/me", operation_id="getMe", response_model=UserContext, responses=errors,
              summary="The signed-in user's teams, roles and databases")
     async def me(c: UserCaller):
         return await run_in_threadpool(user_context, provider, c.principal)
 
-    @app.get("/bridge/v1/teams/{teamId}/automation-principals", response_model=AutomationList,
-             responses=errors, summary="This extension's automation principals of a team")
-    async def team_automation(teamId: team_id, c: UserCaller):
+    @app.get("/bridge/v1/teams/{team}/automation-principals", operation_id="listTeamAutomationPrincipals",
+             response_model=AutomationList, responses=errors, summary="This extension's automation principals of a team")
+    async def team_automation(team: team_id, c: UserCaller):
         def run():
-            team_role(c, teamId)
-            return {"automationPrincipals": provider.list_automation(team=teamId, extension=c.extension)}
+            team_role(c, team)
+            return {"automationPrincipals": [principal_out(i) for i in
+                                             provider.list_automation(team=team, extension=c.extension)]}
         return await run_in_threadpool(run)
 
-    @app.post("/bridge/v1/teams/{teamId}/automation-principals", response_model=AutomationPrincipal,
-              status_code=201, responses={**errors, 200: {"model": AutomationPrincipal}},
+    @app.post("/bridge/v1/teams/{team}/automation-principals", operation_id="createAutomationPrincipal",
+              response_model=AutomationPrincipal, status_code=201, responses={**errors, 200: {"model": AutomationPrincipal}},
               summary="Enable this extension for a team environment (team administrators)")
-    async def enable(teamId: team_id, data: Annotated[AutomationInput, Body()], c: UserCaller):
+    async def enable(team: team_id, data: Annotated[AutomationInput, Body()], c: UserCaller, response: Response):
         def run():
-            if team_role(c, teamId) not in ADMIN_ROLES:
+            if team_role(c, team) not in ADMIN_ROLES:
                 raise BridgeError(403, "Only team administrators can enable an extension.", "forbidden_role")
             user = provider.user(c.principal)
-            return provider.create_automation(teamId, data.environment, c.extension,
+            return provider.create_automation(team, data.environment, c.extension,
                                               {"id": user["id"], "name": user["name"]})
         async with mutations:
             item, created = await run_in_threadpool(run)
         state = "created" if created else "exists"
         audit("automation_principal." + state,
               {"iceberg.automation_principal.id": item["id"], "iceberg.extension": c.extension,
-               "iceberg.team": teamId, "iceberg.environment": data.environment, **actor(c)},
+               "iceberg.team": team, "iceberg.environment": data.environment, **actor(c)},
               "automation principal %s: %s extension=%s team=%s environment=%s by=%s",
-              state, item["id"], c.extension, teamId, data.environment, c.principal["name"])
-        return JSONResponse(item, status_code=201 if created else 200)
+              state, item["id"], c.extension, team, data.environment, c.principal["name"])
+        if not created:
+            response.status_code = 200
+        return principal_out(item)
 
-    @app.delete("/bridge/v1/automation-principals/{id}", response_model=Revoked, responses=errors,
+    @app.delete("/bridge/v1/automation-principals/{automationPrincipal}", operation_id="deleteAutomationPrincipal",
+                response_model=AutomationPrincipalDeleted, responses=errors,
                 summary="Revoke an automation principal (team administrators or the extension)")
-    async def revoke(id: automation_id, c: AnyCaller):
+    async def revoke(automationPrincipal: automation_id, c: AnyCaller):
+        id = automationPrincipal
+
         def run():
-            item = provider.automation(provider.require_automation(id, extension=c.extension))
+            item = provider.automation(require_principal(id, c.extension))
             if c.kind == "user" and team_role(c, item["team"]) not in ADMIN_ROLES:
                 raise BridgeError(403, "Only team administrators can revoke an extension.", "forbidden_role")
             provider.delete_automation(id)
@@ -692,41 +771,48 @@ def create_bridge_app(provider=None, verifier=None, env=None):
                "iceberg.team": item["team"], **actor(c)},
               "automation principal revoked: %s extension=%s team=%s by=%s",
               id, c.extension, item["team"], by)
-        return {"revoked": True}
+        return {"deleted": True, "automationPrincipal": id}
 
-    @app.get("/bridge/v1/automation-principals", response_model=AutomationList, responses=errors,
-             summary="All automation principals of this extension")
+    @app.get("/bridge/v1/automation-principals", operation_id="listAutomationPrincipals",
+             response_model=AutomationList, responses=errors, summary="All automation principals of this extension")
     async def all_automation(c: ServiceCaller):
         items = await run_in_threadpool(lambda: provider.list_automation(extension=c.extension))
-        return {"automationPrincipals": items}
+        return {"automationPrincipals": [principal_out(i) for i in items]}
 
-    @app.get("/bridge/v1/teams/{teamId}/extensions", response_model=TeamExtensionList, responses=errors,
+    @app.get("/bridge/v1/teams/{team}/extensions", operation_id="listTeamExtensions",
+             response_model=TeamExtensionList, responses=errors,
              summary="The extensions a team has enabled, per environment (extensions of that team only)")
-    async def team_extensions(teamId: team_id, c: ServiceCaller, environment: Environment | None = None):
+    async def team_extensions(team: team_id, c: ServiceCaller, environment: Environment | None = None):
         def run():
-            items = [i for i in provider.list_automation(team=teamId)
+            items = [i for i in provider.list_automation(team=team)
                      if i["status"] == "active" and i["extension"] in known]
             if not any(i["extension"] == c.extension for i in items):
                 raise BridgeError(403, "This extension is not enabled for this team.", "extension_not_enabled")
             return sorted({(i["extension"], i["environment"]) for i in items
                            if environment in (None, i["environment"])})
         pairs = await run_in_threadpool(run)
-        audit("team_extensions.read", {"iceberg.team": teamId, "iceberg.extension": c.extension},
-              "team extensions read: %s extension=%s", teamId, c.extension)
+        audit("team_extensions.read", {"iceberg.team": team, "iceberg.extension": c.extension},
+              "team extensions read: %s extension=%s", team, c.extension)
         return {"extensions": [{"extension": e, "environment": v} for e, v in pairs]}
 
-    @app.get("/bridge/v1/automation-principals/{id}", response_model=AutomationScope, responses=errors,
+    @app.get("/bridge/v1/automation-principals/{automationPrincipal}", operation_id="getAutomationPrincipal",
+             response_model=AutomationScope, responses=errors,
              summary="An automation principal and the databases it can reach")
-    async def scope(id: automation_id, c: ServiceCaller):
-        return await run_in_threadpool(lambda: provider.automation_scope(id, extension=c.extension))
+    async def scope(automationPrincipal: automation_id, c: ServiceCaller):
+        def run():
+            require_principal(automationPrincipal, c.extension)
+            return principal_out(provider.automation_scope(automationPrincipal, extension=c.extension))
+        return await run_in_threadpool(run)
 
-    @app.post("/bridge/v1/automation-principals/{id}/tokens", response_model=TokenResponse, responses=errors,
+    @app.post("/bridge/v1/automation-principals/{automationPrincipal}/tokens", operation_id="createCatalogToken",
+              response_model=TokenResponse, responses=errors,
               summary="A short-lived catalog token for an automation principal")
-    async def token(id: automation_id, data: Annotated[TokenRequest, Body()], c: ServiceCaller):
+    async def token(automationPrincipal: automation_id, data: Annotated[TokenRequest, Body()], c: ServiceCaller):
+        id = automationPrincipal
         lock = principal_locks.setdefault(id, asyncio.Lock())
 
         def issue():
-            provider.require_automation(id, extension=c.extension)
+            require_principal(id, c.extension)
             # Heals databases created concurrently with the principal.
             provider.reconcile_automation(id)
             role = id + AUTOMATION_ROLES[data.access][0]
@@ -750,24 +836,29 @@ def create_bridge_app(provider=None, verifier=None, env=None):
               data.purpose)
         return {
             "accessToken": issued["access_token"], "tokenType": "bearer",
-            "expiresIn": int(issued.get("expires_in", 0)), "access": data.access, "principal": id,
+            "expiresIn": int(issued.get("expires_in", 0)), "access": data.access, "automationPrincipal": id,
             "catalog": {"internalUri": catalog_internal},
         }
 
-    @app.get("/bridge/v1/listings", response_model=ListingList, responses=errors,
+    @app.get("/bridge/v1/listings", operation_id="listListings", response_model=ListingList, responses=errors,
              summary="Data shares listed in a data catalog (listing extensions)")
     async def all_listings(c: ListingCaller):
         return {"listings": await run_in_threadpool(listings.summaries, provider)}
 
-    @app.get("/bridge/v1/listings/{shareId}", response_model=Listing, responses={**errors, 304: {}},
-             summary="One listing with the metadata of its objects (listing extensions)")
-    async def one_listing(shareId: share_id, c: ListingCaller,
+    @app.get("/bridge/v1/listings/{listing}", operation_id="getListing", response_model=Listing,
+             responses={**errors, 304: {}}, summary="One listing with the metadata of its objects (listing extensions)")
+    async def one_listing(listing: listing_id, c: ListingCaller,
                           if_none_match: Annotated[str | None, Header()] = None):
-        body = await run_in_threadpool(listings.listing, provider, shareId, known)
+        try:
+            body = await run_in_threadpool(listings.listing, provider, listing, known)
+        except ServiceError as exc:
+            if exc.status == 404:
+                raise BridgeError(404, str(exc), "unknown_listing") from None
+            raise
         body = Listing.model_validate(body).model_dump(mode="json", by_alias=True)
         etag = f'"{listings.digest(body)}"'
-        audit("listing.read", {"iceberg.share.id": shareId, "iceberg.extension": c.extension},
-              "listing read: %s extension=%s", shareId, c.extension)
+        audit("listing.read", {"iceberg.share.id": listing, "iceberg.extension": c.extension},
+              "listing read: %s extension=%s", listing, c.extension)
         if if_none_match == etag:
             return Response(status_code=304, headers={"ETag": etag})
         return JSONResponse(body, headers={"ETag": etag})

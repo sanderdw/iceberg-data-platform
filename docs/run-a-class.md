@@ -46,7 +46,7 @@ Read the one-time password from the platform Secret:
 kubectl -n iceberg get secret iceberg-platform -o jsonpath='{.data.PLATFORM_ADMIN_PASSWORD}' | base64 -d; echo
 ```
 
-Open `https://admin.<domain>`, sign in as `platform-admin` and choose a new password. The overview shows no teams yet.
+Open `https://admin.<domain>`, sign in as `platform-admin` and choose a new password. The **Teams** page shows no teams yet.
 
 ## 3. Create the company
 
@@ -72,14 +72,14 @@ Before the class, check the address the participants will use, without spending 
 1. On a phone or another computer, scan the QR code on a slip, or open `https://users.<domain>`.
 2. Sign in as `platform-admin`.
 
-You see the company's teams under **Active team**, each with its two databases, and the **Getting started** page. The participants see the same, for their own team only.
+You see the company's teams under **Team**, each with its two databases, and the **Getting started** page. The participants see the same, for their own team only.
 
 ## 5. Teach the class
 
 1. Open the slips in a browser, print them on A4 and cut them apart. Hand one to each participant.
 2. Participants sign in, choose a password and follow **Getting started** in the user portal.
 3. Start them on **Notebooks** with example **01**, which creates the data that the later examples read. The [first steps](first-steps.md) tutorial follows the same path from step 5.
-4. Follow along in the user portal as `platform-admin`: switch the **Active team** to look at each team's databases, read-only.
+4. Follow along in the user portal as `platform-admin`: switch **Team** to look at each team's databases, read-only.
 
 Team Administrators can create more databases and share data with other teams, so a class can build a data product in one team and use it in another.
 

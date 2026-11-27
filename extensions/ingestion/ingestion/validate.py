@@ -148,8 +148,8 @@ def check_host(host, field, allow_private, resolve=True):
     return name
 
 
-def check_url(url, field, allow_private, schemes=("https", "http"), resolve=True):
-    if not isinstance(url, str) or len(url) > 2000:
+def check_url(url, field, allow_private, schemes=("https", "http"), resolve=True, limit=2000):
+    if not isinstance(url, str) or len(url) > limit:
         fail(f"{field} must be a URL.", field)
     parts = urlsplit(url)
     if parts.scheme not in schemes:
@@ -327,7 +327,12 @@ def sql_database(source, allow_private, resolve):
 
 def filesystem(source, allow_private, resolve):
     allowed_keys(source, {"url", "format", "table", "file_glob", "s3", "incremental", "csv"}, "source")
-    url = check_url(source.get("url"), "source.url", allow_private, ("https", "http", "s3"), resolve)
+    url = source.get("url")
+    if isinstance(url, str) and SECRET_REF.match(url):
+        # A pre-signed link carries credentials in its query: it is checked when the secret is set.
+        pass
+    else:
+        url = check_url(url, "source.url", allow_private, ("https", "http", "s3"), resolve)
     if source.get("format") not in FORMATS:
         fail(f"source.format must be one of {', '.join(FORMATS)}.", "source.format")
     name = text(source.get("table"), "source.table", limit=64, pattern=RESOURCE)
@@ -341,8 +346,8 @@ def filesystem(source, allow_private, resolve):
     if source.get("s3") is not None:
         if not s3:
             fail("source.s3 is for s3:// locations.", "source.s3")
-        keys = allowed_keys(source["s3"], {"endpoint_url", "region", "access_key_id", "secret_access_key"},
-                            "source.s3")
+        keys = allowed_keys(source["s3"], {"endpoint_url", "region", "access_key_id", "secret_access_key",
+                                           "session_token"}, "source.s3")
         if keys.get("endpoint_url") is not None:
             check_url(keys["endpoint_url"], "source.s3.endpoint_url", allow_private, resolve=resolve)
         if keys.get("region") is not None:
@@ -350,6 +355,11 @@ def filesystem(source, allow_private, resolve):
         if keys.get("access_key_id") is not None:
             text(keys["access_key_id"], "source.s3.access_key_id", limit=256)
             secret_ref(keys.get("secret_access_key"), "source.s3.secret_access_key")
+        if keys.get("session_token") is not None:
+            if keys.get("access_key_id") is None:
+                fail("source.s3.session_token goes with access_key_id and secret_access_key.",
+                     "source.s3.session_token")
+            secret_ref(keys["session_token"], "source.s3.session_token")
     elif s3:
         fail("source.s3 needs the storage's endpoint_url or region and keys.", "source.s3")
     if source.get("incremental") is not None:
@@ -436,6 +446,15 @@ def secret_values(values, needed=None):
         if needed is not None and value is not None and name not in needed:
             fail(f"The pipeline does not refer to $secret:{name}.", f"secrets.{name}")
     return values
+
+
+def secret_url(source_type, source, values, allow_private, resolve=True):
+    """A file source's URL kept in a secret gets the checks a URL in the definition gets."""
+    url = source.get("url") if source_type == "filesystem" else None
+    match = SECRET_REF.match(url) if isinstance(url, str) else None
+    if match and values.get(match[1]) is not None:
+        # A pre-signed link with a session token runs to a few thousand characters.
+        check_url(values[match[1]], f"secrets.{match[1]}", allow_private, resolve=resolve, limit=MAX_SECRET)
 
 
 def pipeline_name(name):

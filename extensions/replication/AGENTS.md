@@ -8,6 +8,17 @@
   (`replication/api.py`, listed in `OPERATIONS`) and an MCP tool (`replication/mcp_server.py`).
   `tests/test_api.py` fails when they diverge or when `contracts/replication-api/v1/openapi.yaml` is
   stale: regenerate it with `uv run python -m scripts.api_contract`.
+- A tool returns exactly what its REST operation returns. Build every response with a projection in
+  `Services` (`public`, `public_run`, `public_check`, `public_schedule`, `public_me`,
+  `public_environment`), never from a stored row or a Bridge response as it is, and pass every time
+  through `timestamp()`. Declare each key in the operation's response model in `replication/api.py`;
+  a key the model does not declare is dropped from the REST response.
+- REST is camelCase (`fullRefresh`, `expectedRevision`, `confirmName`); tool names and parameters
+  are snake_case. A list is an object with one plural key. A resource is named by its noun
+  (`replication`, `run`, `team`), never `id`. Errors are `ReplicationError` with a stable code.
+- Run statuses are `queued`, `running`, `success`, `incomplete`, `failed`, `error` and `cancelled`.
+  `incomplete` is a first copy that stopped at the time limit; the runner reports it and the next
+  run continues.
 - Replications are configuration, never code. A new source option goes through `replication/validate.py`
   (an allowlist per source type) and is built into OLake's files in `runner/olake.py`; never pass user
   input to OLake unchecked. Equality deletes are never offered (DECISIONS.md).

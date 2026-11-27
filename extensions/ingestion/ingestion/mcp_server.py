@@ -28,6 +28,7 @@ READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_h
 WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
 # Runs reach outside the platform: the source.
 RUN = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
+# Deletes something, or overwrites what cannot be read back: clients ask the user first.
 DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
                               open_world_hint=False)
 INSTRUCTIONS = """Ingestion (dlt) on the Iceberg Data Platform: declarative dlt pipelines that load REST APIs,
@@ -51,10 +52,13 @@ over between runs; run_pipeline with full_refresh loads everything again. dlt ad
 and _dlt_id columns, and child tables <table>__<field> for nested lists. Sources on private
 addresses are refused unless the platform allows them.
 
-run_pipeline (writers) starts a run; pass wait to block until it finishes, then read get_run
-(tables and row counts) and get_run_logs. Loaded tables show "Produced by dlt" in the platform
-catalog. Read them with the user portal's MCP server (describe_table, preview_rows), then model
-them with the dbt extension and describe marts with a semantic model.
+run_pipeline (writers) starts a run and returns it; pass wait (up to 600 seconds) to block until it
+finishes, on run_pipeline or later on get_run. A run's status is queued, running, success, failed
+(dlt reported an error), error (the platform could not run it) or cancelled; its results list the
+tables it loaded with their row counts. get_run_logs gives the last lines of its log. Times are
+RFC 3339 strings in UTC. Loaded tables show "Produced by dlt" in the platform catalog. Read them
+with the user portal's MCP server (describe_table, preview_rows), then model them with the dbt
+extension and describe marts with a semantic model.
 
 Ask the user before running in acceptance or production, before setting secrets, and before any
 tool marked destructive."""
@@ -115,28 +119,29 @@ def create_mcp(settings, services, verifier):
     @mcp.tool(annotations=READ)
     async def list_environments(team: TeamId) -> dict[str, Any]:
         """Where Ingestion is enabled for a team, and the databases of each environment."""
-        return {"environments": await call(services.environments, team)}
+        return await call(services.environments, team)
 
     @mcp.tool(annotations=WRITE)
     async def enable_environment(team: TeamId, environment: Environment) -> dict[str, Any]:
         """Enable Ingestion for a team environment (team administrators). Runs there act as the team's service
-        account. Ask the user first."""
+        account. Returns the environment, as list_environments shows it. Ask the user first."""
         return await call(services.enable_environment, team, environment)
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def disable_environment(team: TeamId, environment: Environment) -> dict[str, Any]:
-        """Disable Ingestion for a team environment (team administrators): its pipelines stop running."""
+        """Disable Ingestion for a team environment (team administrators): its pipelines stop running. Returns
+        the environment, as list_environments shows it."""
         return await call(services.disable_environment, team, environment)
 
     @mcp.tool(annotations=READ)
     async def list_templates() -> dict[str, Any]:
         """Pipeline templates: a complete definition per source type to adapt, with the secrets each needs."""
-        return {"templates": await call(services.list_templates)}
+        return await call(services.list_templates)
 
     @mcp.tool(annotations=READ)
     async def list_pipelines(team: TeamId | None = None, environment: Environment | None = None) -> dict[str, Any]:
         """Pipelines of your teams with their schedule and last run; optionally of one team or environment."""
-        return {"pipelines": await call(services.list_pipelines, team, environment)}
+        return await call(services.list_pipelines, team, environment)
 
     @mcp.tool(annotations=READ)
     async def get_pipeline(pipeline: PipelineId) -> dict[str, Any]:
@@ -166,7 +171,7 @@ def create_mcp(settings, services, verifier):
             "database": database, "namespace": namespace, "sourceType": source_type, "source": source,
             "resources": resources})
 
-    @mcp.tool(annotations=WRITE)
+    @mcp.tool(annotations=DESTRUCTIVE)
     async def update_pipeline(pipeline: PipelineId, source: Source | None = None, resources: Resources | None = None,
                               name: Annotated[str | None, Field(max_length=64)] = None,
                               description: Annotated[str | None, Field(max_length=500)] = None,
@@ -175,7 +180,8 @@ def create_mcp(settings, services, verifier):
                               source_type: SourceType | None = None,
                               expected_revision: int | None = None) -> dict[str, Any]:
         """Change a pipeline (team administrators). Give only what changes; source and resources replace the old
-        ones whole. A new host removes the secrets; a new database or namespace starts loading from scratch."""
+        ones whole. A new host removes the secrets; a new database or namespace starts loading from scratch.
+        expected_revision fails the change when someone else changed the pipeline since you read it."""
         data = {"source": source, "resources": resources, "name": name, "description": description,
                 "database": database, "namespace": namespace, "sourceType": source_type}
         return await call(services.update_pipeline, pipeline, {k: v for k, v in data.items() if v is not None},
@@ -188,7 +194,7 @@ def create_mcp(settings, services, verifier):
         stay. confirm_name must be the pipeline's name. Ask the user first."""
         return await call(services.delete_pipeline, pipeline, confirm_name)
 
-    @mcp.tool(annotations=WRITE)
+    @mcp.tool(annotations=DESTRUCTIVE)
     async def set_pipeline_secrets(pipeline: PipelineId,
                                    secrets: Annotated[dict[str, str | None], Field(
                                        description="Secret name → value, or null to remove it.")]) -> dict[str, Any]:
@@ -201,23 +207,25 @@ def create_mcp(settings, services, verifier):
     async def run_pipeline(pipeline: PipelineId, full_refresh: bool = False,
                            wait: Annotated[int, Field(ge=0, le=600)] = 0) -> dict[str, Any]:
         """Run a pipeline now (writers). full_refresh loads everything again. wait blocks up to that many
-        seconds for the run to finish."""
+        seconds for the run to finish; the answer is the run as it is then, with the tables it loaded so far in
+        results."""
         return await call(services.run_pipeline, pipeline, full_refresh, wait)
 
     @mcp.tool(annotations=READ)
     async def list_runs(pipeline: PipelineId, limit: Annotated[int, Field(ge=1, le=200)] = 20) -> dict[str, Any]:
         """A pipeline's runs, newest first."""
-        return {"runs": await call(services.list_runs, pipeline, limit)}
+        return await call(services.list_runs, pipeline, limit)
 
     @mcp.tool(annotations=READ)
-    async def get_run(run: RunId) -> dict[str, Any]:
-        """A run's status, the tables it loaded with their row counts, and its error."""
-        return await call(services.get_run, run)
+    async def get_run(run: RunId, wait: Annotated[int, Field(ge=0, le=600)] = 0) -> dict[str, Any]:
+        """A run's status, its totals in summary, the tables it loaded with their row counts in results, and its
+        error. wait blocks up to that many seconds for the run to finish."""
+        return await call(services.get_run, run, wait)
 
     @mcp.tool(annotations=READ)
-    async def get_run_logs(run: RunId, tail: Annotated[int, Field(ge=1, le=5000)] = 500) -> dict[str, Any]:
-        """The last lines of a run's log, with secrets masked."""
-        return await call(services.get_run_logs, run, tail)
+    async def get_run_logs(run: RunId, limit: Annotated[int, Field(ge=1, le=5000)] = 500) -> dict[str, Any]:
+        """The last limit lines of a run's log, with secrets masked."""
+        return await call(services.get_run_logs, run, limit)
 
     @mcp.tool(annotations=WRITE)
     async def cancel_run(run: RunId) -> dict[str, Any]:
@@ -247,7 +255,8 @@ class Endpoint:
 
     async def __call__(self, scope, receive, send):
         if self.app is None:
-            await JSONResponse({"error": "The MCP transport is not running."}, status_code=503)(scope, receive, send)
+            await JSONResponse({"error": "The MCP transport is not running.", "code": "unavailable"},
+                               status_code=503)(scope, receive, send)
             return
         body, more = bytearray(), True
         while more:
@@ -257,7 +266,8 @@ class Endpoint:
             body.extend(message.get("body", b""))
             more = message.get("more_body", False)
             if len(body) > MAX_BODY:
-                await JSONResponse({"error": "Request is too large."}, status_code=413)(scope, receive, send)
+                await JSONResponse({"error": "Request is too large.", "code": "too_large"},
+                                   status_code=413)(scope, receive, send)
                 return
         replayed = False
 

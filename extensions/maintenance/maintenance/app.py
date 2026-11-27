@@ -9,13 +9,15 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from starlette.exceptions import HTTPException
 
 from . import api
-from .auth import COOKIE, BrowserLogin, TokenVerifier
+from .auth import COOKIE, LOGIN_COOKIE, LOGIN_SECONDS, BrowserLogin, TokenVerifier
 from .bridge_client import BridgeClient
 from .config import VERSION, Settings
-from .errors import MaintenanceError
+from .errors import CODES, MaintenanceError
 from .mcp_server import create_mcp, mount
+from .polaris import Polaris
 from .runs import RunManager
 from .scheduler import Scheduler
 from .services import Services
@@ -33,13 +35,14 @@ def validation_text(errors):
     return f"Check {field}: {first.get('msg', 'invalid input')}."
 
 
-def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=None):
+def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=None, polaris=None):
     settings = settings or Settings.from_env()
     store = store or Store(settings.state_dir / "state.sqlite3")
     bridge = bridge or BridgeClient(settings)
     verifier = verifier or TokenVerifier(settings)
-    runs = runs or RunManager(settings, store, bridge)
-    services = Services(settings, store, bridge, runs)
+    polaris = polaris or Polaris(bridge)
+    runs = runs or RunManager(settings, store, bridge, polaris)
+    services = Services(settings, store, bridge, runs, polaris)
     login = BrowserLogin(settings, verifier)
     scheduler = Scheduler(services)
     mcp = create_mcp(settings, services, verifier)
@@ -70,13 +73,15 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
                 for task in tasks:
                     task.cancel()
                 await runs.close()
+                await polaris.close()
                 await bridge.close()
                 store.close()
 
     app = FastAPI(title="Maintenance · Iceberg Data Platform", version=VERSION, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url="/api/v1/openapi.json",
                   description="Table maintenance for your teams' Iceberg databases (beta): snapshot expiry, "
-                              "compaction, dangling deletes, manifests and orphan files, by policy and schedule. "
+                              "compaction, dangling deletes, manifests and orphan files, by Apache Polaris policies "
+                              "and a schedule. "
                               "Authenticate "
                               "with a Keycloak bearer token for the iceberg-bridge audience (client "
                               "ext-maintenance-mcp), or sign in with the browser. Every operation is also an MCP tool "
@@ -92,13 +97,21 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
     async def invalid(request, exc):
         return JSONResponse({"error": validation_text(exc.errors()), "code": "invalid_request"}, status_code=422)
 
+    @app.exception_handler(HTTPException)
+    async def http_error(request, exc):
+        """What the framework answers itself, such as an unknown path or a wrong method, in the API's error body."""
+        text = {404: "Not found.", 405: "This path does not support this method."}.get(exc.status_code,
+                                                                                         str(exc.detail))
+        return JSONResponse({"error": text, "code": CODES.get(exc.status_code, "internal_error")},
+                            status_code=exc.status_code, headers=exc.headers)
+
     @app.middleware("http")
     async def headers(request: Request, call_next):
         try:
             response = await call_next(request)
         except Exception:
             LOG.exception("Request failed")
-            response = JSONResponse({"error": "Something went wrong.", "code": "error"}, status_code=500)
+            response = JSONResponse({"error": "Something went wrong.", "code": "internal_error"}, status_code=500)
         response.headers.setdefault("Content-Security-Policy", CSP)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -132,15 +145,25 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
 
     @app.get("/auth/login", include_in_schema=False)
     def auth_login(return_to: str = "/"):
-        return RedirectResponse(login.start(return_to), status_code=303)
+        url, binding = login.start(return_to)
+        response = RedirectResponse(url, status_code=303)
+        # Lax: Keycloak's redirect back is a top-level navigation, so the browser sends it with the callback.
+        response.set_cookie(LOGIN_COOKIE, binding, max_age=LOGIN_SECONDS, path="/auth/callback", httponly=True,
+                            secure=settings.secure, samesite="lax")
+        return response
 
     @app.get("/auth/callback", include_in_schema=False)
-    async def auth_callback(state: str = "", code: str = ""):
+    async def auth_callback(request: Request, state: str = "", code: str = ""):
         try:
-            session_id, target = await login.finish(state, code)
+            session_id, target = await login.finish(state, code, request.cookies.get(LOGIN_COOKIE, ""))
         except MaintenanceError:
-            return RedirectResponse("/?signin=failed", status_code=303)
+            response = RedirectResponse("/?signin=failed", status_code=303)
+            response.delete_cookie(LOGIN_COOKIE, path="/auth/callback", httponly=True, secure=settings.secure,
+                                   samesite="lax")
+            return response
         response = RedirectResponse(target, status_code=303)
+        response.delete_cookie(LOGIN_COOKIE, path="/auth/callback", httponly=True, secure=settings.secure,
+                               samesite="lax")
         response.set_cookie(COOKIE, session_id, max_age=28800, httponly=True, secure=settings.secure, samesite="lax")
         return response
 

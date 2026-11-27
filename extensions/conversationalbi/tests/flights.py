@@ -13,7 +13,7 @@ TABLE_SCHEMAS = json.loads((FIXTURES / "flights.schemas.json").read_text())
 
 
 def model():
-    return ossie.parse(ENVELOPE, ["ai_flights"])
+    return ossie.parse(ENVELOPE)
 
 
 def schemas(parsed=None):

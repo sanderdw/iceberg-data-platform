@@ -150,10 +150,11 @@ class Runner:
             with TRACER.start_as_current_span("evaluate case", attributes={
                     "gen_ai.evaluation.case": inputs["question"][:200]}) as span:
                 contexts[inputs["question"]] = span.get_span_context()
-                llm = run["llm_model"] or None
+                llm_model = run["llm_model"] or None
                 question = inputs["question"]
-                answer = (await self.agent.ask_control(team, environment, model, question, llm)
-                          if run["arm"] == "control" else await self.agent.ask(team, environment, question, llm))
+                answer = (await self.agent.ask_control(team, environment, model, question, llm_model)
+                          if run["arm"] == "control"
+                          else await self.agent.ask(team, environment, question, llm_model))
                 if not (answer.get("answer") or "").strip():
                     raise EvalError(502, "The agent gave no answer.", "no_answer")
                 truth = await self.agent.truth(team, environment, model, inputs["query"]) if inputs["query"] else None
@@ -177,7 +178,7 @@ class Runner:
                 "tags": by_name[item.name].tags, "scores": scores,
                 "passed": not error and bool(scores) and all(s["value"] for s in scores.values()),
                 "answer": agent.get("answer", ""), "queries": agent.get("queries", []),
-                "tool_calls": agent.get("toolCalls", []), "model": agent.get("model") or "",
+                "tool_calls": agent.get("toolCalls", []), "model": agent.get("llmModel") or "",
                 "input_tokens": usage.get("inputTokens") or 0, "output_tokens": usage.get("outputTokens") or 0,
                 "duration_ms": agent.get("durationMs") or round(item.task_duration * 1000),
                 "trace_id": agent.get("traceId") or "", "error": error})

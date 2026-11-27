@@ -102,3 +102,16 @@ uv run python -m tests.dev_server         # the page with the platform faked: ht
 docker build -f runner/Dockerfile -t iceberg-replication-runner:dev .
 uv run python -m scripts.e2e_smoke        # against a running platform; see its docstring
 ```
+
+### API and MCP conventions
+
+The REST API and the MCP server share one service layer (`replication/services.py`), and a tool returns what its REST operation returns.
+
+- Every response is built by a projection (`public`, `public_run`, `public_check`, `public_schedule`, `public_me`, `public_environment`). No stored row and no Bridge response is passed on as it is.
+- Stored times are seconds since 1970; `timestamp()` turns them into RFC 3339 strings in UTC with milliseconds.
+- REST bodies, query parameters and responses are camelCase; tool names and tool parameters are snake_case.
+- A list is an object with one plural key. A `limit` or `wait` outside its range is refused with 422 `invalid_request`.
+- A run is started with `POST /replications/{replication}/runs` (202, the run with `results`), listed without `results`, and read with `GET /runs/{run}?wait=`.
+- The runner reports `success`, `incomplete` or `failed`. `incomplete` is a first copy that stopped at the time limit; its state is kept, so the next run continues. Runs that an earlier version stored keep the old name `partial`.
+- Every error, including an unknown path, a wrong method and an unexpected exception, is `{"error", "code", "detail"}`.
+- `replication/api.py` declares a response model for every operation. Add each new key there: a key the model does not declare is left out of the REST response, and `tests/test_api.py` compares each tool's result with the REST body.

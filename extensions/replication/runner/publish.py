@@ -6,12 +6,16 @@ producer, run and change log position with the run's write token. Standard libra
 """
 
 import json
+import random
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 
 PREFIX = "iceberg-data-platform."
+# A commit that conflicts with a concurrent one (409) is sent again, at most this often in all.
+COMMIT_ATTEMPTS = 5
 
 
 class Catalog:
@@ -35,9 +39,21 @@ class Catalog:
     def load(self, namespace, table):
         return self.call("GET", self.table_path(namespace, table))["metadata"]
 
-    def set_properties(self, namespace, table, values):
-        self.call("POST", self.table_path(namespace, table),
-                  {"requirements": [], "updates": [{"action": "set-properties", "updates": values}]})
+    def set_properties(self, namespace, table, values, *, sleep=None):
+        """One metadata-only commit, without requirements, so sending it again sets the same properties.
+
+        Polaris answers a commit that lost a race with a concurrent one, such as OLake's, with 409:
+        it did not land. That is retried with exponentially growing, fully jittered waits; any other
+        error is raised at once.
+        """
+        body = {"requirements": [], "updates": [{"action": "set-properties", "updates": values}]}
+        for attempt in range(COMMIT_ATTEMPTS):
+            try:
+                return self.call("POST", self.table_path(namespace, table), body)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 409 or attempt == COMMIT_ATTEMPTS - 1:
+                    raise
+            (sleep or time.sleep)(random.uniform(0, min(5.0, 0.2 * 2**attempt)))
 
 
 def counts(metadata, since_ms):

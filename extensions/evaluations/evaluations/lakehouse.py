@@ -28,6 +28,8 @@ from .errors import EvalError
 
 NAMESPACE = "evaluations"
 MODEL = "evaluation_results"
+# The model is stored as an Apache Ossie document of this version.
+SPEC_VERSION = "0.3.0.dev0"
 PREFIX = "iceberg-data-platform."
 SCORERS = ("result_matches", "right_metrics", "grounded", "refused", "clarified", "declined", "judge")
 ENDPOINT = "iceberg-platform.storage-endpoint"
@@ -116,18 +118,20 @@ def case_rows(run, question_set, cases):
 
 def field(name, description=""):
     return {"name": name, **({"description": description} if description else {}),
-            "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": name}]}}
+            "expression": {"sql": name}}
 
 
 def metric(name, expression, description):
     return {"name": name, "description": description,
-            "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": expression}]}}
+            "expression": {"sql": expression}}
 
 
 def semantic_model():
-    """An Apache Ossie model over case_results: pass rates and costs by LLM, question set, scorer and time."""
+    """An Apache Ossie 0.3.0.dev0 document over case_results: pass rates and costs by LLM, question set, scorer
+    and time."""
     rate = "100.0 * count(*) FILTER (WHERE CASE_RESULT.{0}) / nullif(count(CASE_RESULT.{0}), 0)"
     return {
+        "version": SPEC_VERSION,
         "name": "Evaluation results",
         "description": "How well the platform's AI agent answers the question sets of this team: one row in "
                        "CASE_RESULT per question per evaluation run.",
@@ -141,7 +145,7 @@ def semantic_model():
             "adds.\n"
             "Owner: the Evaluations extension writes this table after every run.")},
         "datasets": [{
-            "name": "CASE_RESULT", "source": f"lakehouse.{NAMESPACE}.case_results",
+            "name": "CASE_RESULT", "source": f"{NAMESPACE}.case_results",
             "description": COMMENTS["case_results"], "primary_key": ["run_id", "case_name"],
             "fields": [field("run_id", "The evaluation run."), field("question_set_name", "The question set."),
                        field("arm", "semantic: with the semantic model. control: the same LLM with only the schemas."),
@@ -187,8 +191,7 @@ def publish_model(uri, warehouse, token, http=None):
     http = http or httpx.Client(timeout=30, trust_env=False)
     url = f"{uri}/polaris/v1/{quote(warehouse, safe='')}/namespaces/{NAMESPACE}/semantic-models"
     headers = {"Authorization": f"Bearer {token}"}
-    document = {"version": "0.2.0", "semantic_model": json.dumps({"version": "0.2.0",
-                                                                   "semantic_model": [semantic_model()]})}
+    document = {"version": SPEC_VERSION, "semantic_model": json.dumps(semantic_model())}
     current = http.get(f"{url}/{MODEL}", headers=headers)
     if current.status_code == 404:
         http.post(url, json={"name": MODEL, "document": document}, headers=headers).raise_for_status()
@@ -232,14 +235,17 @@ class Lakehouse:
                                            ENDPOINT: discovery["storage"]["internalEndpoint"]})
 
     async def publish_live(self, team, environment, database_id, rows):
+        """`rows` are conversations as Conversational BI gives them, each with `askedAt` (seconds), `scores` and
+        `passed`."""
         database, token, discovery = await self.target(team, environment, database_id, "live evaluation scores")
         now = datetime.datetime.now(datetime.UTC)
-        records = [{"conversation_id": r["id"], "team": team, "environment": environment, "asked_at": at(r["at"]),
-                    "checked_at": now, "llm_model": r.get("llm_model", ""), "question": r["question"],
+        records = [{"conversation_id": r["id"], "team": team, "environment": environment,
+                    "asked_at": at(r["askedAt"]), "checked_at": now, "llm_model": r.get("llmModel") or "",
+                    "question": r["question"],
                     "passed": r["passed"], **{k: r["scores"].get(k, {}).get("value") for k in
                                               ("grounded", "refusal_explained", "judge")},
                     "reasons": json.dumps({k: v["reason"] for k, v in r["scores"].items()}),
-                    "trace_id": r.get("trace_id") or ""} for r in rows]
+                    "trace_id": r.get("traceId") or ""} for r in rows]
         properties = {PREFIX + "producer": "evaluations", PREFIX + "producer.version": f"evaluations {VERSION}",
                       PREFIX + "producer.run-at": now.isoformat(timespec="seconds")}
 

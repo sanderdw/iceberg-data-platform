@@ -46,6 +46,8 @@ spec:
             {{- include "idp.secretEnv" (list . "OIDC_MANAGEMENT_SECRET") | nindent 12 }}
             - name: OIDC_ORIGIN
               value: {{ include "idp.origin" (list . "admin") | quote }}
+            - name: USER_ORIGIN
+              value: {{ include "idp.origin" (list . "users") | quote }}
             - {name: HOST, value: 0.0.0.0}
             - {name: PORT, value: "3000"}
             - name: FORWARDED_ALLOW_IPS

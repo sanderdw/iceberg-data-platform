@@ -21,7 +21,7 @@ def version_tuple(value):
 
 
 def in_range(version, spec):
-    """`version` against a comma-separated range such as `>=0.1,<0.2`."""
+    """`version` against a comma-separated range such as `>=1.0,<2`."""
     current = version_tuple(version)
     for clause in (c.strip() for c in spec.split(",") if c.strip()):
         for op in (">=", "<=", "==", ">", "<"):
@@ -64,7 +64,8 @@ class BridgeClient:
                 body = response.json()
             except ValueError:
                 body = {}
-            status = response.status_code if response.status_code in (401, 403, 404, 409, 422) else 502
+            # A Bridge error keeps its status and code; any other failure is the platform's.
+            status = response.status_code if body.get("code") else 502
             raise ReplicationError(status, body.get("error", "The platform refused the request."),
                            body.get("code") or None)
         return response.json()

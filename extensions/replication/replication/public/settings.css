@@ -1,0 +1,65 @@
+/* The Settings page (settings.js) and its first option, Environments. It sets its own type and spacing, so it looks
+   the same in every extension whatever the page's own styles. Uses the platform's design tokens: --black, --surface,
+   --surface-raised, --border, --border-visible, --text-primary, --text-secondary, --text-display, --success, --warn,
+   --fail, --idle, --body, --mono, --display, --large, --medium and --small. Buttons take the page's own .quiet and
+   .danger styles. */
+.settings-link { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 16px; border: 1px solid var(--border-visible); border-radius: 999px; color: var(--text-primary); font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; text-decoration: none; }
+.settings-link:hover, .settings-link[aria-current='page'] { border-color: var(--text-primary); color: var(--text-display); }
+
+.settings-page { width: 100%; max-width: 1200px; margin: 0; font: var(--medium)/1.5 var(--body); color: var(--text-primary); text-align: left; }
+.settings-page :is(h1, h2, h3, p, dl, dd) { margin: 0; }
+.settings-page .eyebrow { margin: 0 0 8px; font: var(--small)/1.6 var(--mono); color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; }
+.settings-page h1 { margin: 0 0 16px; font: 500 var(--large)/1.1 var(--display); letter-spacing: -.03em; color: var(--text-display); overflow-wrap: anywhere; }
+.settings-page h2 { margin: 0 0 12px; font: 500 1.5rem/1.3 var(--body); letter-spacing: -.01em; color: var(--text-display); }
+.settings-page h3 { font: 500 var(--medium)/1.4 var(--body); color: var(--text-display); }
+.settings-page p { color: var(--text-secondary); line-height: 1.65; }
+.settings-page code { font: .8em/1.5 var(--mono); color: var(--text-primary); overflow-wrap: anywhere; }
+.settings-lead { max-width: 68ch; }
+.settings-small { max-width: 80ch; margin-top: 8px !important; font-size: .85rem; }
+.settings-head { margin-bottom: 40px; }
+.settings-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 48px; align-items: start; }
+.settings-nav { display: grid; gap: 4px; position: sticky; top: 24px; }
+.settings-nav a { display: grid; gap: 2px; padding: 10px 12px; border-left: 2px solid var(--border); color: var(--text-secondary); text-decoration: none; }
+.settings-nav strong { font: var(--small)/1.6 var(--mono); text-transform: uppercase; letter-spacing: .06em; font-weight: 400; }
+.settings-nav span { font-size: .8rem; line-height: 1.45; }
+.settings-nav a:hover { color: var(--text-primary); border-left-color: var(--text-secondary); }
+.settings-nav a[aria-current='page'] { color: var(--text-primary); border-left-color: var(--text-display); }
+.settings-nav a[aria-current='page'] strong { color: var(--text-display); }
+.settings-body { display: grid; gap: 16px; min-width: 0; }
+.settings-body > .settings-lead { margin-bottom: 8px; }
+.settings-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 12px; margin-bottom: 8px !important; }
+.settings-facts > div { padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
+.settings-facts dt { margin-bottom: 6px; font: var(--small)/1.6 var(--mono); color: var(--text-display); text-transform: uppercase; letter-spacing: .06em; }
+.settings-facts dd { font-size: .9rem; line-height: 1.6; color: var(--text-secondary); }
+
+.environments-team { display: grid; gap: 12px; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; scroll-margin-top: 24px; }
+.environments-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px; }
+.environments-cell { display: grid; gap: 4px; align-content: start; padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
+.environments-cell.on { border-color: var(--border-visible); background: var(--surface-raised); }
+.environments-cell p { font-size: .85rem; line-height: 1.5; overflow-wrap: anywhere; }
+.environments-cell a { font-size: .85rem; color: var(--text-display); }
+.environments-cell button { justify-self: start; margin-top: 8px; }
+.environments-cell-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.environments-cell-head strong { font-weight: 500; color: var(--text-display); }
+.environments-state { display: inline-flex; align-items: center; gap: 6px; font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
+.environments-state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--idle); }
+.environments-cell.on .environments-state { color: var(--text-primary); }
+.environments-cell.on .environments-state::before { background: var(--success); }
+.environments-hint { font-size: .85rem; }
+.environments-error { color: var(--fail) !important; font-size: .85rem; }
+.environments-error:empty { display: none; }
+.environments-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 16px; padding: 12px 16px; border: 1px solid var(--warn); border-radius: 8px; color: var(--text-primary); font-size: .9rem; }
+.environments-notice a { color: var(--text-display); }
+.environments-dialog { max-width: min(480px, calc(100vw - 32px)); padding: 24px; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border-visible); border-radius: 12px; }
+.environments-dialog::backdrop { background: rgb(0 0 0 / .6); }
+.environments-dialog h2 { margin: 0 0 8px; font: 500 var(--medium)/1.4 var(--body); color: var(--text-display); }
+.environments-dialog p { margin: 0 0 20px; color: var(--text-secondary); line-height: 1.6; }
+.environments-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* Phones: the settings run across the top. */
+@media (max-width: 700px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .settings-nav { position: static; display: flex; flex-wrap: wrap; gap: 8px; }
+  .settings-nav a { border-left: 0; border-bottom: 2px solid var(--border); }
+  .settings-nav span { display: none; }
+  .settings-nav a:hover, .settings-nav a[aria-current='page'] { border-bottom-color: var(--text-display); }
+}

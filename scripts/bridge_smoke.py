@@ -52,9 +52,10 @@ def shared_data(provider, recipient, principal, bridge, as_service, token):
         for name in ("shared", "private"):
             owner.create_table(("ops", name), schema=rows.schema).append(rows)
         models = f"{provider.url}/api/catalog/polaris/v1/{database}/namespaces/ops/semantic-models"
-        document = {"version": "0.2.0", "semantic_model": json.dumps({"version": "0.2.0", "semantic_model": [
-            {"name": "Ops", "datasets": [{"name": "SHARED", "source": "lakehouse.ops.shared", "primary_key": ["id"],
-                                          "fields": []}]}]})}
+        document = {"version": "0.3.0.dev0", "semantic_model": json.dumps({
+            "version": "0.3.0.dev0", "name": "Ops", "datasets": [
+                {"name": "SHARED", "source": "ops.shared", "primary_key": ["id"],
+                 "fields": [{"name": "id", "expression": {"sql": "id"}}]}]})}
         as_owner = {"Authorization": f"Bearer {principal_token(provider, credentials)}"}
         httpx.post(models, json={"name": "ops", "document": document}, headers=as_owner,
                    timeout=15).raise_for_status()
@@ -106,9 +107,15 @@ def main():
     namespace = "bridge_smoke_" + str(int(time.time()))
 
     discovery = httpx.get(bridge, timeout=15).raise_for_status().json()
-    assert discovery["contractVersion"].startswith("0.1.") and "automation-tokens" in discovery["capabilities"]
+    assert discovery["contractVersion"].startswith("1.") and "automation-tokens" in discovery["capabilities"]
     # The smoke extension is not registered with --listing, so it may not read listings.
-    assert {"id": extension, "origin": origin, "listing": False} in discovery["extensions"]
+    assert any((e["id"], e["origin"], e["listing"]) == (extension, origin, False) for e in discovery["extensions"])
+    # Every refusal has the error shape, also where no operation answers.
+    for method, path, status, code in (("GET", "/me", 401, "unauthorized"), ("GET", "/nothing-here", 404, "not_found"),
+                                       ("PUT", "/me", 405, "method_not_allowed")):
+        refused = httpx.request(method, bridge + path, timeout=15)
+        assert refused.status_code == status and set(refused.json()) == {"error", "code"}, refused.text
+        assert refused.json()["code"] == code, refused.text
 
     service = httpx.post(f"{issuer}/protocol/openid-connect/token", timeout=15, data={
         "grant_type": "client_credentials", "client_id": f"ext-{extension}", "client_secret": secret,
@@ -182,10 +189,11 @@ def main():
             finally:
                 provider.close()
     finally:
-        httpx.delete(f"{bridge}/automation-principals/{item['id']}", headers=as_service, timeout=30)
+        deleted = httpx.delete(f"{bridge}/automation-principals/{item['id']}", headers=as_service, timeout=30)
+    assert deleted.json() == {"deleted": True, "automationPrincipal": item["id"]}, deleted.text
     revoked = httpx.post(f"{bridge}/automation-principals/{item['id']}/tokens", headers=as_service,
                          json={"access": "read"}, timeout=15)
-    assert revoked.status_code == 404
+    assert (revoked.status_code, revoked.json()["code"]) == (404, "unknown_automation_principal"), revoked.text
     print("Bridge smoke passed: discovery, user context, roles, scoped tokens, vended storage, shared data "
           "and revocation.")
 

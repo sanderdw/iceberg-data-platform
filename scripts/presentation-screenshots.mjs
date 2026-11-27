@@ -368,7 +368,8 @@ try {
   // Getting started: notebook, your own tools or an AI agent over MCP.
   if (need(48)) {
     await workspace.goto(env.USER_ORIGIN);
-    await workspace.locator('#guide-nav').click();
+    await workspace.locator('.account-toggle').click();
+    await workspace.getByRole('button', {name: 'Getting started', exact: true}).click();
     await workspace.locator('#guide .guide-track').first().waitFor();
     await shot(workspace, '48-user-guide');
   }
@@ -705,7 +706,8 @@ try {
   await close.close();
   // Getting started in the administration portal: portal, AI agent or API.
   if (need(47)) {
-    await portal.locator('[data-page="guide"]').first().click();
+    await portal.locator('.account-toggle').click();
+    await portal.locator('#guide-link').click();
     await portal.locator('.guide-track').first().waitFor();
     await shot(portal, '47-admin-guide');
   }

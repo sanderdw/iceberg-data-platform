@@ -14,7 +14,7 @@ def contract_range():
     try:
         return tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["iceberg-ingestion"]["bridge-contract"]
     except (OSError, KeyError):
-        return ">=0.1,<0.2"
+        return ">=1.0,<2"
 
 
 def flag(value):
@@ -45,8 +45,10 @@ class Settings:
     run_timeout: int = 43200
     # Laptop demos: allow sources on private addresses, such as a database on the same machine.
     allow_private: bool = False
+    # The largest file an http(s) file source may download, in bytes.
+    max_download: int = 4 * 1024**3
     mcp_callback_port: int = 3010
-    contract: str = ">=0.1,<0.2"
+    contract: str = ">=1.0,<2"
 
     @classmethod
     def from_env(cls, env=None):
@@ -71,6 +73,7 @@ class Settings:
             # Each run is also limited by its catalog token, whose lifetime the platform sets (runs.time_limit).
             run_timeout=max(60, min(int(env.get("ING_RUN_TIMEOUT_SECONDS", "43200")), 43200)),
             allow_private=flag(env.get("ING_ALLOW_PRIVATE_SOURCES", "")),
+            max_download=max(1, int(env.get("ING_MAX_DOWNLOAD_GB", "4"))) * 1024**3,
             mcp_callback_port=int(env.get("MCP_CALLBACK_PORT", "3010")),
             contract=contract_range(),
         )

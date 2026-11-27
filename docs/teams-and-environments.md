@@ -26,11 +26,11 @@ A member has one role per team: Read, Read & write or Administrator. That role a
 
 A person can be in several teams, with a different role in each: Read & write in `analytics` and Read in `operations`, for example. Access is the union of all of them.
 
-The **Active team** and **Environment** in the user portal only choose what you see. Your credentials stay valid for all of your teams, so a notebook or tool on your computer can reach every database you have access to.
+**Team** and **Environment** in the user portal only choose what you see. Your credentials stay valid for all of your teams, so a notebook or tool on your computer can reach every database you have access to.
 
 ## Platform administration is separate
 
-Platform administrators create teams and users on the administration portal. That is a separate Keycloak role, and no team role grants it. A team Administrator in turn creates the team's databases in the user portal as the team needs them, and manages its data shares, but never the platform.
+Platform administrators create teams and users on the administration portal. That is a separate Keycloak role, and no team role grants it; a team Administrator can sign in there to look, never to change. A team Administrator in turn creates the team's databases in the user portal as the team needs them, and manages its data shares, but never the platform.
 
 ## Everyone signs in the same way
 

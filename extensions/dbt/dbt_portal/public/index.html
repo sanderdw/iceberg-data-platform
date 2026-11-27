@@ -8,6 +8,12 @@
 <title>Pipelines · Iceberg Data Platform</title>
 <link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/apps-menu.css">
+<link rel="stylesheet" href="/settings.css">
+<link rel="stylesheet" href="/account-menu.css">
+<script src="/apps-menu.js" defer></script>
+<script src="/settings.js" defer></script>
+<script src="/account-menu.js" defer></script>
 <script src="/graph.js" defer></script>
 <script src="/files.js" defer></script>
 <script src="/manage.js" defer></script>
@@ -18,8 +24,10 @@
   <a class="brand" href="#/"><img src="/favicon.svg" alt="">iceberg<span>/ pipelines</span></a>
   <nav id="crumbs" aria-label="Location"></nav>
   <div class="header-actions">
-    <button id="theme" class="ghost" type="button">Light / ○</button>
-    <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
+    <span id="read-only" class="read-only-badge" title="You have the read role in each of your teams: you can look at everything here and change nothing." hidden>Read-only</span>
+    <div id="settings-link" hidden></div>
+    <div id="apps" hidden></div>
+    <div id="account"></div>
   </div>
 </header>
 
@@ -67,6 +75,8 @@
   </section>
 </main>
 
+<main id="settings-page" hidden><div id="settings-content"></div></main>
+
 <main id="project" hidden>
   <section class="project-bar">
     <div class="project-title"><p class="eyebrow" id="project-team"></p><h1 id="project-name"></h1></div>
@@ -76,10 +86,11 @@
       <button type="button" data-view="files" role="tab">Files</button>
       <button type="button" data-view="runs" role="tab">Runs</button>
       <button type="button" data-view="schedules" role="tab">Schedules</button>
-      <button type="button" data-view="settings" role="tab">Settings</button>
+      <button type="button" data-view="settings" role="tab">Project settings</button>
     </div>
   </section>
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div id="environment-notice" hidden></div>
 
   <section id="pipeline-view" class="pipeline">
     <div class="toolbar">

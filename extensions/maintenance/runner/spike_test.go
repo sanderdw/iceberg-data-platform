@@ -40,8 +40,8 @@ func TestSpikeExpiryThenOrphanCleanupOnRealStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := maintainer(false, policy())
-	m.Job.Policy.ExpireSnapshots = ExpirePolicy{Enabled: true, OlderThanHours: 0, RetainLast: 1}
-	tbl, action, totals := m.ExpireSnapshots(ctx, tbl)
+	m.Policies.SnapshotExpiry = SnapshotExpiry{Enabled: true, MaxSnapshotAgeDays: 0, MinSnapshotsToKeep: 1}
+	tbl, action, totals, _ := m.ExpireSnapshots(ctx, tbl)
 	t.Logf("expiry: %s %s", action.Status, action.Detail)
 	if action.Status != "done" || totals.SnapshotsExpired == 0 {
 		t.Fatalf("nothing expired: %+v", action)

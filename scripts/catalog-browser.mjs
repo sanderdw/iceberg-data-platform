@@ -18,17 +18,20 @@ const table = {
 const view = {kind: 'view', uuid: 'view-uuid', formatVersion: 1, schemaId: 0, columns, properties: {}, currentVersionId: 1,
   versions: [{id: 1, schemaId: 0, timestamp: 1789506000000, defaultNamespace: ['analytics'], representations: [{dialect: 'spark', sql: 'SELECT meter_id, SUM(kwh) AS kwh\nFROM readings\nGROUP BY meter_id'}]}]};
 const semantic = {
-  kind: 'semantic-model', name: 'energy_model', namespace: ['analytics'], specVersion: '0.2.0', entityVersion: '3', definition: '{\n  "name": "Energy"\n}',
-  models: [{
+  kind: 'semantic-model', name: 'energy_model', namespace: ['analytics'], specVersion: '0.3.0.dev0', entityVersion: '3', definition: '{\n  "name": "Energy"\n}',
+  model: {
     name: 'Energy', description: '<img src=x onerror=alert(1)>Energy use per meter', aiContext: [{label: 'Instructions', value: 'Report kWh per meter.\nExclude test meters.'}, {label: 'Synonyms', value: 'power'}],
-    datasets: [{name: 'READINGS', description: '', source: 'lakehouse.analytics.readings', table: {namespace: ['analytics'], name: 'readings'}, primaryKey: ['meter_id'], aiContext: [],
-      fields: [{name: 'kwh', label: 'Energy', description: 'Energy', datatype: 'Decimal', dimension: false, timeDimension: false, synonyms: ['consumption'], aiContext: [{label: 'Instructions', value: 'Sum per meter.'}], expressions: [{dialect: 'ANSI_SQL', expression: 'kwh'}]}]},
-      {name: 'METERS', description: '', source: '', table: null, primaryKey: ['id'], aiContext: [], fields: [{name: 'id', label: '', description: '', datatype: 'Integer', dimension: true, timeDimension: false, synonyms: [], aiContext: [], expressions: []}]}],
+    datasets: [{name: 'READINGS', description: '', source: 'analytics.readings', table: {namespace: ['analytics'], name: 'readings'}, primaryKey: ['meter_id'], uniqueKeys: [], aiContext: [],
+      metrics: [{name: 'meters', description: 'Meters that reported', datatype: 'Integer', synonyms: [], aiContext: [], expressions: [{dialect: 'OSSIE_SQL_2026', expression: 'COUNT(DISTINCT meter_id)'}]}],
+      fields: [{name: 'kwh', label: 'Energy', description: 'Energy', datatype: 'Decimal', dimension: false, timeDimension: false, synonyms: ['consumption'], aiContext: [{label: 'Instructions', value: 'Sum per meter.'}], expressions: [{dialect: 'OSSIE_SQL_2026', expression: 'kwh'}]}]},
+      {name: 'METERS', description: '', source: '', table: null, primaryKey: ['id'], uniqueKeys: [], aiContext: [], metrics: [], fields: [{name: 'id', label: '', description: '', datatype: 'Integer', dimension: true, timeDimension: false, synonyms: [], aiContext: [], expressions: []}]}],
     relationships: [{name: 'readings_meter', from: 'READINGS', to: 'METERS', fromColumns: ['meter_id'], toColumns: ['id']}],
-    metrics: [{name: 'total_kwh', description: 'Sum of energy', datatype: 'Decimal', synonyms: [], aiContext: [], expressions: [{dialect: 'ANSI_SQL', expression: 'SUM(READINGS.kwh)'}]}],
-  }],
+    metrics: [{name: 'total_kwh', description: 'Sum of energy', datatype: 'Decimal', synonyms: [], aiContext: [], expressions: [{dialect: 'OSSIE_SQL_2026', expression: 'SUM(READINGS.kwh)'}]}],
+  },
 };
 let previewCalls = [], deny = false, oidc = true;
+// Nothing may scroll sideways.
+const noOverflow = async (page, label) => { const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (wide > 0) throw new Error(`Horizontal overflow of ${wide}px in ${label}`); };
 const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined});
 try {
   const page = await browser.newPage({viewport: {width: 1440, height: 1050}});
@@ -37,7 +40,7 @@ try {
     const url = new URL(route.request().url()), path = url.pathname;
     let body;
     if (path === '/api/session') body = {authenticated: true, ...(oidc ? {loginUrl: '/auth/login'} : {})};
-    else if (path === '/api/workspace') body = {user: {name: 'Analyst'}, teams: [{id: 'analytics', name: 'Energy analytics', role: 'reader'}], databases: [database], activeTeam: 'analytics', activeRole: 'reader', activeEnvironment: 'development', environments: ['development', 'acceptance', 'production'], notebooks: [], extensions: [{id: 'conversationalbi', origin: 'http://bi.test'}]};
+    else if (path === '/api/workspace') body = {user: {name: 'Analyst'}, teams: [{id: 'analytics', name: 'Energy analytics', role: 'reader'}], databases: [database], activeTeam: 'analytics', activeRole: 'reader', activeEnvironment: 'development', environments: ['development', 'acceptance', 'production'], notebooks: [], extensions: [{id: 'conversationalbi', origin: 'http://bi.test', title: 'Conversational BI', purpose: 'Ask questions about your semantic models'}]};
     else if (path === '/api/contents') body = url.searchParams.has('namespace') ? {namespaces: [], tables: [{name: 'readings'}], views: [{name: 'daily_energy'}], semanticModels: [{name: 'energy_model'}]} : {namespaces: [['analytics']], tables: [], views: []};
     else if (path === '/api/details') body = ({database: {kind: 'database', database}, namespace: {kind: 'namespace', properties: {owner: 'Energy analytics'}}, table, view, 'semantic-model': semantic})[url.searchParams.get('kind')];
     else if (path === '/api/preview') {
@@ -46,7 +49,7 @@ try {
       body = {columns: ['meter_id', 'kwh'], rows: [['9007199254740993', '1.25'], ['2', null]], snapshotId: input.snapshot_id, limit: 100};
     }
     if (body) return route.fulfill({json: body});
-    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || path === '/favicon.svg' ? `public${path}` : `user_portal/public${path}`;
+    const asset = path === '/' ? 'user_portal/public/index.html' : path.startsWith('/fonts/') || /^\/(favicon\.svg|(apps|account)-menu\.(js|css))$/.test(path) ? `public${path}` : `user_portal/public${path}`;
     const mime = path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.ttf') ? 'font/ttf' : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
     await route.fulfill({body: await readFile(asset), contentType: mime});
   });
@@ -80,7 +83,22 @@ try {
   await expect(page.locator('#namespace-title')).toHaveText('readings');
   await expect(page.getByRole('tabpanel')).toContainText(current);
   expect(page.url()).toBe(tableUrl);
+  // A size reads in binary units; the exact byte count is its tooltip.
+  const size = page.locator('.catalog-facts > div').filter({has: page.locator('dt', {hasText: /^Data file size$/})}).locator('dd');
+  await expect(size).toHaveText('180.7 KiB');
+  await expect(size.locator('span')).toHaveAttribute('title', '185,000 bytes');
+  await expect(page.getByRole('tabpanel')).not.toContainText('(bytes)');
+  expect(await page.evaluate(() => [0, 1023, 1024, 48339354, '9007199254740993', undefined, 'n/a'].map(value => { const size = byteSize(value); return size instanceof Node ? `${size.textContent} | ${size.title}` : size; }))).toEqual([
+    '0 B | 0 bytes', '1023 B | 1,023 bytes', '1.0 KiB | 1,024 bytes', '46.1 MiB | 48,339,354 bytes', '8.0 PiB | 9,007,199,254,740,993 bytes', '—', 'n/a']);
   await page.screenshot({path: 'test-results/catalog/table-dark.png', fullPage: true});
+  await page.setViewportSize({width: 1280, height: 800});
+  for (const name of ['Overview', 'Schema', 'Snapshots', 'Partitioning & sort', 'Properties', 'Preview']) {
+    await page.getByRole('tab', {name, exact: true}).click();
+    await noOverflow(page, `${name} at 1280×800`);
+  }
+  expect(await page.evaluate(() => document.querySelector('header').getBoundingClientRect().height)).toBe(60);
+  await page.getByRole('tab', {name: 'Overview', exact: true}).click();
+  await page.setViewportSize({width: 1440, height: 1050});
   await page.getByRole('tab', {name: 'Schema', exact: true}).click();
   await expect(page.getByRole('tabpanel')).toContainText('<script>alert(1)</script>');
   await expect(page.locator('#catalog-tab-panel script')).toHaveCount(0);
@@ -103,12 +121,12 @@ try {
   await page.getByRole('button', {name: 'Refresh catalog', exact: true}).click();
   await expect(page.locator('#namespace-title')).toHaveText('readings');
   await expect(page.getByRole('tab', {name: 'Overview', exact: true})).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click();
+  await page.locator('.account-toggle').click(); await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click(); await page.keyboard.press('Escape');
   await page.screenshot({path: 'test-results/catalog/table-light.png', fullPage: true});
   await page.setViewportSize({width: 390, height: 844});
   for (const name of ['Overview', 'Schema', 'Snapshots', 'Partitioning & sort', 'Properties', 'Preview']) {
     await page.getByRole('tab', {name, exact: true}).click();
-    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error(`Mobile overflow in ${name}`);
+    await noOverflow(page, `${name} at 390×844`);
   }
   await page.screenshot({path: 'test-results/catalog/table-mobile.png', fullPage: true});
   await page.locator('#breadcrumbs').getByRole('button', {name: 'analytics', exact: true}).click();
@@ -136,7 +154,7 @@ try {
   await expect(modelRow).toContainText('Semantic model');
   await modelRow.getByRole('button').click();
   await expect(page.locator('#namespace-title')).toHaveText('energy_model');
-  await expect(page.getByRole('tabpanel')).toContainText('0.2.0');
+  await expect(page.getByRole('tabpanel')).toContainText('0.3.0.dev0');
   await expect(page.getByRole('tabpanel')).toContainText('Energy use per meter');
   // Descriptions are user-written text, never markup.
   await expect(page.locator('#catalog-tab-panel img')).toHaveCount(0);
@@ -147,7 +165,9 @@ try {
   const ask = page.getByRole('link', {name: 'Ask in Conversational BI'});
   await expect(ask).toHaveAttribute('href', 'http://bi.test/#/ask?database=warehouse-dev&namespace=%5B%22analytics%22%5D&model=energy_model');
   await expect(ask).toHaveAttribute('rel', 'noopener');
-  await expect(page.locator('#workspace-nav .extension-link')).toHaveText('Conversational BI');
+  await page.locator('.apps-toggle').click();
+  await expect(page.locator('.apps-menu a.apps-link strong')).toHaveText('Conversational BI');
+  await page.keyboard.press('Escape');
   const modelUrl = page.url();
   await page.reload();
   await expect(page.locator('#namespace-title')).toHaveText('energy_model');
@@ -168,6 +188,8 @@ try {
   await expect(readings).toContainText('Instructions: Sum per meter.');
   await page.getByRole('tab', {name: 'Metrics & relationships', exact: true}).click();
   await expect(page.getByRole('tabpanel')).toContainText('SUM(READINGS.kwh)');
+  // A dataset's own metric is listed as queries name it, DATASET.metric.
+  await expect(page.getByRole('tabpanel')).toContainText('READINGS.meters');
   await expect(page.getByRole('tabpanel')).toContainText('meter_id → id');
   await page.getByRole('tab', {name: 'Definition', exact: true}).click();
   // YAML by default; JSON is the stored document.
@@ -177,8 +199,10 @@ try {
   await expect(page.locator('.view-sql')).toContainText('"name": "Energy"');
   for (const name of ['Overview', 'Diagram', 'Datasets & fields', 'Metrics & relationships', 'Definition']) {
     await page.getByRole('tab', {name, exact: true}).click();
-    await page.setViewportSize({width: 390, height: 844});
-    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error(`Mobile overflow in semantic ${name}`);
+    for (const [width, height] of [[390, 844], [1280, 800]]) {
+      await page.setViewportSize({width, height});
+      await noOverflow(page, `semantic ${name} at ${width}×${height}`);
+    }
     await page.setViewportSize({width: 1440, height: 1050});
   }
   await page.getByRole('tab', {name: 'Datasets & fields', exact: true}).click();
@@ -186,5 +210,5 @@ try {
   await expect(page.locator('#namespace-title')).toHaveText('readings');
   await expect(page.getByRole('tab', {name: 'Snapshots', exact: true})).toBeVisible();
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS: catalog navigation/filtering, connect panel only with OIDC, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts, semantic models listed, filtered, opened by URL, rendered as text and drawn as a diagram, linked to Conversational BI');
+  console.log('PASS: byte sizes in binary units with the exact count as tooltip, no sideways scrolling at 1280×800 and 390×844, catalog navigation/filtering, connect panel only with OIDC, schema escaping, keyboard tabs, precise snapshot selection, bounded on-demand previews, permission errors, refresh, views, dark/light/mobile layouts, semantic models listed, filtered, opened by URL, rendered as text and drawn as a diagram, linked to Conversational BI');
 } finally { await browser.close(); }

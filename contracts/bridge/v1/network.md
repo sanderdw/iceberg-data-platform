@@ -31,7 +31,7 @@ namespace (see [On Kubernetes](#on-kubernetes)).
 
 ## On Kubernetes
 
-Since contract 0.1.2 the platform also runs from its Helm chart. Discovery then says
+The platform also runs from its Helm chart. Discovery then says
 `network.platform: kubernetes`, and `network.name` and `network.namespace` are the platform's
 namespace.
 

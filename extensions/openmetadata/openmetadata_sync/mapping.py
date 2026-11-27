@@ -69,10 +69,8 @@ def data_product_name(prefix, listing):
     return clean(f"{prefix}-{listing['id']}")
 
 
-def metric_name(prefix, listing, model_object, model, metric):
+def metric_name(prefix, listing, model_object, metric):
     parts = [prefix, listing["database"]["id"], *model_object["namespace"], model_object["name"]]
-    if model is not None:
-        parts.append(model)
     return clean("__".join([*parts, metric]))
 
 
@@ -202,10 +200,36 @@ def table_request(prefix, listing, obj, owners, constraints=(), semantics=None, 
 
 
 def expression(item):
+    """The SQL to show: Ossie's portable OSSIE_SQL_2026, else ANSI SQL, else the first dialect."""
     found = item.get("expressions") or []
-    ansi = (e for e in found if e["dialect"].upper() in ("ANSI_SQL", "ANSI", "SQL"))
-    chosen = next(ansi, found[0] if found else None)
+    portable = (e for rank in (("OSSIE_SQL_2026",), ("ANSI_SQL", "ANSI", "SQL"))
+                for e in found if e["dialect"].upper() in rank)
+    chosen = next(portable, found[0] if found else None)
     return chosen["expression"] if chosen else ""
+
+
+COLUMN = re.compile(r'^(?:[`"]?[A-Za-z_][\w$]*[`"]?\.)?[`"]?([A-Za-z_][\w$]*)[`"]?$')
+
+
+def field_column(field, columns):
+    """The column a field reads when its expression is just that column, such as `carrier_code` or `t.code`.
+
+    A computed field, such as `amount * 100`, reads no column, even when one shares its name.
+    """
+    names = {c.lower(): c for c in columns}
+    match = COLUMN.match((expression(field) or "").strip())
+    return names.get(match[1].lower()) if match else None
+
+
+def models(obj):
+    """The model of a listed semantic model: one Apache Ossie 0.3.0.dev0 document holds one, or none."""
+    return [obj["model"]] if obj.get("model") else []
+
+
+def all_metrics(model):
+    """The model's metrics and each dataset's own, named as queries name them: DATASET.metric."""
+    return [*model["metrics"], *({**x, "name": f"{d['name']}.{x['name']}"} for d in model["datasets"]
+                                 for x in d.get("metrics", []))]
 
 
 def closing(text, start):
@@ -249,8 +273,7 @@ def model_tables(listing, model):
 def metric_requests(prefix, listing, obj, domain, owners):
     """[(name, request, table keys)] for every metric of a listed semantic model."""
     result = []
-    several = len(obj["models"]) > 1
-    for model in obj["models"]:
+    for model in models(obj):
         dimensions = [
             {"name": f"{d['name']}.{f['name']}"[:256], "type": "TIME" if f["timeDimension"] else "CATEGORICAL",
              **({"description": f["description"]} if f["description"] else {}),
@@ -258,8 +281,9 @@ def metric_requests(prefix, listing, obj, domain, owners):
             for d in model["datasets"] for f in d["fields"] if f["dimension"]
         ]
         tables = model_tables(listing, model)
-        for metric in model["metrics"]:
-            name = metric_name(prefix, listing, obj, model["name"] if several else None, metric["name"])
+        for metric in all_metrics(model):
+            # A dot would need quoting in a fully qualified name: ORDERS.orders is ORDERS__orders.
+            name = metric_name(prefix, listing, obj, metric["name"].replace(".", "__"))
             code = expression(metric)
             lines = [metric["description"]] if metric["description"] else []
             if metric["synonyms"]:
@@ -281,36 +305,42 @@ def metric_requests(prefix, listing, obj, domain, owners):
 def constraints(prefix, listing):
     """Primary and foreign keys that the listed semantic models declare, on listed tables only.
 
-    A key is kept only when its columns are top-level columns of the table, since Ossie fields may
-    be expressions rather than columns.
+    Keys and relationships name Ossie fields. A key is kept only when each of its fields reads one
+    top-level column of the table, since a field may be an expression rather than a column.
     """
     tables = {key(o["namespace"], o["name"]): o for o in listing["objects"] if o["kind"] == "table"}
     found = {}
 
-    def columns_of(k):
-        return {c["name"] for c in tables[k]["columns"]}
+    def columns_of(k, dataset, names):
+        """The table columns that the dataset's fields `names` read, or None unless each reads one."""
+        fields = {f["name"].upper(): f for f in dataset["fields"]}
+        found = [field_column(fields[n.upper()], [c["name"] for c in tables[k]["columns"]])
+                 if n.upper() in fields else None for n in names]
+        return found if found and all(found) else None
 
     def add(k, constraint):
         if constraint not in found.setdefault(k, []):
             found[k].append(constraint)
 
     for obj in (o for o in listing["objects"] if o["kind"] == "semantic-model"):
-        for model in obj["models"]:
+        for model in models(obj):
             datasets = {d["name"]: d for d in model["datasets"] if d.get("table")}
             for d in datasets.values():
                 k = key(d["table"]["namespace"], d["table"]["name"])
-                if k in tables and d["primaryKey"] and set(d["primaryKey"]) <= columns_of(k):
-                    add(k, {"constraintType": "PRIMARY_KEY", "columns": [clean(c) for c in d["primaryKey"]]})
+                if k in tables and (columns := columns_of(k, d, d["primaryKey"])):
+                    add(k, {"constraintType": "PRIMARY_KEY", "columns": [clean(c) for c in columns]})
             for r in model["relationships"]:
                 source, target = datasets.get(r["from"]), datasets.get(r["to"])
                 if not source or not target or len(r["fromColumns"]) != len(r["toColumns"]) or not r["fromColumns"]:
                     continue
                 fk, pk = (key(x["table"]["namespace"], x["table"]["name"]) for x in (source, target))
-                if fk in tables and pk in tables and set(r["fromColumns"]) <= columns_of(fk) \
-                        and set(r["toColumns"]) <= columns_of(pk):
+                if fk not in tables or pk not in tables:
+                    continue
+                columns, referred = columns_of(fk, source, r["fromColumns"]), columns_of(pk, target, r["toColumns"])
+                if columns and referred:
                     target_fqn = table_fqn(prefix, listing, *pk)
-                    add(fk, {"constraintType": "FOREIGN_KEY", "columns": [clean(c) for c in r["fromColumns"]],
-                             "referredColumns": [f"{target_fqn}.{quote(clean(c))}" for c in r["toColumns"]]})
+                    add(fk, {"constraintType": "FOREIGN_KEY", "columns": [clean(c) for c in columns],
+                             "referredColumns": [f"{target_fqn}.{quote(clean(c))}" for c in referred]})
     return found
 
 

@@ -26,6 +26,7 @@ Queries may use the dataset names of the model as tables (FLIGHT, ROUTE, ...).
 import argparse
 import importlib.util
 import json
+import math
 import os
 import re
 import sys
@@ -33,9 +34,11 @@ from collections import deque
 from pathlib import Path
 from urllib.parse import quote
 
-SPEC_VERSION = "0.2.0"
-DIALECT = "ANSI_SQL"
+SPEC_VERSION = "0.3.0.dev0"
+# Expressions in order of preference, as the platform picks them: it runs DuckDB.
+DIALECTS = ("DUCKDB", "OSSIE_SQL_2026", "ANSI_SQL")
 NAME = re.compile(r"[A-Za-z0-9_-]+")
+IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
 # Lines the instructions should cover, as in the flights example; matched case-insensitively.
 INSTRUCTION_TOPICS = ("time", "grain", "missing values", "owner", "refresh", "classification")
 TIME_TYPES = ("timestamp", "date", "time")
@@ -44,6 +47,17 @@ TIME_TYPES = ("timestamp", "date", "time")
 DATATYPES = ("String", "Integer", "Decimal", "Float", "Boolean", "Date", "Time", "DateTime", "DateTimeTz", "Opaque")
 TIME_DATATYPES = ("Date", "Time", "DateTime", "DateTimeTz")
 GRAIN_DATATYPES = ("Date", "DateTime", "DateTimeTz")
+# The keys the Ossie schema allows on each object; it allows no others.
+KEYS = {
+    "model": ("version", "name", "description", "ai_context", "datasets", "relationships", "metrics",
+              "nonportable_extensions"),
+    "dataset": ("name", "source", "primary_key", "unique_keys", "description", "ai_context", "fields", "metrics",
+                "nonportable_extensions"),
+    "field": ("name", "expression", "dimension", "label", "description", "datatype", "ai_context",
+              "nonportable_extensions"),
+    "metric": ("name", "expression", "description", "datatype", "ai_context", "nonportable_extensions"),
+    "relationship": ("name", "from", "to", "from_columns", "to_columns", "ai_context", "nonportable_extensions"),
+}
 UNGOVERNED = re.compile(r"\(\s*select\b|\b(from|timezone|read_\w+|iceberg_scan)\s*\(", re.IGNORECASE)
 DRAFT_INSTRUCTIONS = """\
 Time: TODO time zone and what each date or timestamp means.
@@ -94,34 +108,114 @@ def table_reference(namespace, table, alias="lakehouse"):
 
 # Reading the model ------------------------------------------------------------------------------
 
-def first_model(payload):
-    """The model in a document `{version, semantic_model: [model]}` (inner JSON string or list) or a bare model."""
-    if isinstance(payload, dict) and isinstance(payload.get("semantic_model"), str):
-        payload = json.loads(payload["semantic_model"])
-    if isinstance(payload, dict) and isinstance(payload.get("semantic_model"), list):
-        payload = payload["semantic_model"][0] if payload["semantic_model"] else None
+def read_model(payload):
+    """The Apache Ossie 0.3.0.dev0 document in a file: one model at the root, with its version."""
     if not isinstance(payload, dict):
         raise ValueError("The file holds no semantic model.")  # noqa: TRY004 - bad input, not a programming error
-    return payload
+    if "semantic_model" in payload:
+        raise ValueError(f"Apache Ossie {SPEC_VERSION} has no semantic_model list: put the model's name, datasets, "
+                         "relationships and metrics at the root of the document.")
+    return {"version": SPEC_VERSION, **{k: v for k, v in payload.items() if k != "version"}}
+
+
+def text(value):
+    return value.strip() if isinstance(value, str) else ""
+
+
+def dicts(value):
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
 
 
 def sql_of(item):
-    """The ANSI_SQL expression of a field or metric."""
+    """The expression the platform runs: a DUCKDB dialect, else the portable sql, else OSSIE_SQL_2026 or ANSI_SQL."""
     expression = item.get("expression")
-    if isinstance(expression, str):
-        return expression
-    for dialect in (expression or {}).get("dialects", []):
-        if dialect.get("dialect") == DIALECT:
-            return dialect.get("expression")
-    return None
+    if not isinstance(expression, dict):
+        return None
+    options = {}
+    for dialect in dicts(expression.get("dialects")):
+        options.setdefault(text(dialect.get("dialect")).upper(), text(dialect.get("expression")))
+    if text(expression.get("sql")):
+        options["OSSIE_SQL_2026"] = text(expression["sql"])
+    return next((options[d] for d in DIALECTS if options.get(d)), None)
 
 
 def source_table(dataset):
-    """(namespace parts, table) of `catalog.namespace....table`."""
-    parts = [p for p in str(dataset.get("source", "")).split(".") if p]
-    if len(parts) < 3:
-        raise ValueError(f"Dataset {dataset.get('name')} needs a source like lakehouse.namespace.table.")
-    return parts[1:-1], parts[-1]
+    """(namespace parts, table) of a source `namespace....table`, in the model's catalog, as Polaris resolves it."""
+    parts = text(dataset.get("source")).split(".")
+    if len(parts) < 2 or not all(parts):
+        raise ValueError(f"Dataset {dataset.get('name')} needs a source like namespace.table.")
+    return parts[:-1], parts[-1]
+
+
+# The same checks as the user portal's user_portal/semantic/rules.py; a test keeps both in step.
+
+def unknown_keys(item, kind, label):
+    return [f"{label}: Ossie has no key {k!r} here." for k in item if k not in KEYS[kind]]
+
+
+def expression_errors(item, label):
+    """Ossie's Expression object: a non-empty `sql`, or `dialects` of {dialect, expression}, or both."""
+    found = item.get("expression")
+    if not isinstance(found, dict):
+        return [f"{label} needs an expression: {{\"sql\": \"...\"}}."]
+    errors = [f"{label}: the expression has no key {k!r}; use sql and dialects." for k in found
+              if k not in ("sql", "dialects")]
+    dialects = found.get("dialects")
+    if "sql" in found and not text(found.get("sql")):
+        errors.append(f"{label}: expression.sql is empty.")
+    if dialects is not None and (not isinstance(dialects, list) or not dialects or not all(
+            isinstance(d, dict) and set(d) == {"dialect", "expression"} and text(d.get("dialect"))
+            and text(d.get("expression")) for d in dialects)):
+        errors.append(f"{label}: write expression.dialects as a list of {{\"dialect\", \"expression\"}}.")
+    if not text(found.get("sql")) and dialects is None:
+        errors.append(f"{label} needs an expression: {{\"sql\": \"...\"}}.")
+    return errors
+
+
+def json_value(value):
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, dict):
+        return all(isinstance(k, str) and json_value(v) for k, v in value.items())
+    if isinstance(value, list):
+        return all(json_value(v) for v in value)
+    return value is None or isinstance(value, str | int | bool)
+
+
+def extension_errors(item, label):
+    """Non-portable extensions: [{vendor_name, data}], where data is a JSON object Ossie carries as is."""
+    found = item.get("nonportable_extensions")
+    if found is None:
+        return []
+    if not isinstance(found, list) or not all(
+            isinstance(e, dict) and set(e) == {"vendor_name", "data"} and text(e.get("vendor_name"))
+            and isinstance(e.get("data"), dict) and json_value(e["data"]) for e in found):
+        return [(f"{label}: write nonportable_extensions as a list of {{\"vendor_name\", \"data\"}}, where data "
+                 "is a JSON object.")]
+    return []
+
+
+def context_errors(item, label):
+    """`ai_context` is text, or an object whose instructions are text and synonyms and examples lists of text."""
+    found = item.get("ai_context")
+    if found is None or isinstance(found, str):
+        return []
+    if not isinstance(found, dict):
+        return [f"{label}: ai_context is text or an object."]
+    errors = [f"{label}: ai_context.instructions is text."] if not isinstance(found.get("instructions", ""), str) \
+        else []
+    return errors + [f"{label}: ai_context.{k} is a list of text." for k in ("synonyms", "examples")
+                     if k in found and not (isinstance(found[k], list) and all(isinstance(s, str) for s in found[k]))]
+
+
+def key_errors(key, fields, label):
+    """A key is a non-empty list of field names, each named once (names compare without regard to case)."""
+    if not isinstance(key, list) or not key or not all(isinstance(k, str) for k in key):
+        return [f"{label} is a non-empty list of field names."]
+    errors = [f"{label}: {k} is not a field." for k in key if k.upper() not in fields]
+    if len({k.upper() for k in key}) != len(key):
+        errors.append(f"{label} names a field twice.")
+    return errors
 
 
 def check_structure(model, columns=None):
@@ -130,96 +224,135 @@ def check_structure(model, columns=None):
     `columns` maps a dataset name to the set of column names of its table, when known.
     """
     errors, warnings = [], []
-    if not model.get("name"):
+    errors += unknown_keys(model, "model", "The model")
+    if model.get("version", SPEC_VERSION) != SPEC_VERSION:
+        errors.append(f"The model declares version {model.get('version')!r}; write {SPEC_VERSION!r}.")
+    if not text(model.get("name")):
         errors.append("The model has no name.")
-    if not str(model.get("description", "")).strip():
+    if not text(model.get("description")):
         errors.append("The model has no description; say what it covers and its grain.")
+    errors += context_errors(model, "The model") + extension_errors(model, "The model")
     context = model.get("ai_context")
-    instructions = context.get("instructions", "") if isinstance(context, dict) else ""
-    if not instructions.strip():
+    instructions = text(context.get("instructions")) if isinstance(context, dict) else ""
+    if not instructions:
         errors.append("ai_context.instructions is empty; agents need the rules for using this model.")
     for topic in INSTRUCTION_TOPICS:
         if instructions and topic not in instructions.lower():
             warnings.append(f"ai_context.instructions does not mention {topic!r}.")
-    datasets = model.get("datasets") or []
+    datasets = dicts(model.get("datasets"))
     if not datasets:
         errors.append("The model has no datasets.")
     fields, keys = {}, {}
     for dataset in datasets:
-        name = dataset.get("name", "")
-        if not name or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-            errors.append(f"Dataset name {name!r} must be a plain identifier; metrics refer to it as NAME.column.")
+        name = dataset.get("name")
+        if not isinstance(name, str) or not IDENTIFIER.fullmatch(name):
+            errors.append(f"Dataset name {name!r} must be a plain identifier; metrics refer to it as NAME.field.")
             continue
-        if name in fields:
+        if name.upper() in fields:
             errors.append(f"Dataset {name} appears twice.")
+        errors += unknown_keys(dataset, "dataset", f"Dataset {name}")
+        errors += context_errors(dataset, f"Dataset {name}") + extension_errors(dataset, f"Dataset {name}")
         try:
             source_table(dataset)
         except ValueError as error:
             errors.append(str(error))
-        if not str(dataset.get("description", "")).strip():
+        if not text(dataset.get("description")):
             warnings.append(f"Dataset {name} has no description.")
-        fields[name] = {f.get("name") for f in dataset.get("fields") or []}
-        if not fields[name]:
+        members = [*dicts(dataset.get("fields")), *dicts(dataset.get("metrics"))]
+        fields[name.upper()] = {text(f.get("name")).upper() for f in dicts(dataset.get("fields"))}
+        if not fields[name.upper()]:
             errors.append(f"Dataset {name} has no fields.")
-        for field in dataset.get("fields") or []:
-            label = f"{name}.{field.get('name')}"
-            if not sql_of(field):
-                errors.append(f"Field {label} has no {DIALECT} expression.")
-            if not str(field.get("description", "")).strip():
-                warnings.append(f"Field {label} has no description.")
+        seen = set()
+        for member in members:
+            member_name = member.get("name")
+            if not isinstance(member_name, str) or not IDENTIFIER.fullmatch(member_name):
+                errors.append(f"Dataset {name}: {member_name!r} must be a plain identifier.")
+            elif member_name.upper() in seen:
+                errors.append(f"Dataset {name} names {member_name} twice; its fields and metrics share one namespace.")
+            else:
+                seen.add(member_name.upper())
+        for field in dicts(dataset.get("fields")):
+            label = f"Field {name}.{field.get('name')}"
+            errors += unknown_keys(field, "field", label) + expression_errors(field, label)
+            errors += context_errors(field, label) + extension_errors(field, label)
+            if not text(field.get("description")):
+                warnings.append(f"{label} has no description.")
             dimension, datatype = field.get("dimension"), field.get("datatype")
-            if dimension is not None and not (isinstance(dimension, dict)
+            if dimension is not None and not (isinstance(dimension, dict) and set(dimension) <= {"is_time"}
                                               and isinstance(dimension.get("is_time", False), bool)):
-                errors.append(f"Field {label}: write dimension as {{\"is_time\": true|false}}, {{}} or leave it out.")
+                errors.append(f"{label}: write dimension as {{\"is_time\": true|false}}, {{}} or leave it out.")
             if datatype is not None and datatype not in DATATYPES:
-                errors.append(f"Field {label}: datatype {datatype!r} is not an Ossie datatype ({', '.join(DATATYPES)}).")
+                errors.append(f"{label}: datatype {datatype!r} is not an Ossie datatype ({', '.join(DATATYPES)}).")
             elif isinstance(dimension, dict) and dimension.get("is_time", datatype in TIME_DATATYPES) is True \
                     and sql_of(field) != field.get("name") and datatype not in GRAIN_DATATYPES:
-                warnings.append(f"Field {label} is a derived time dimension without a date or timestamp datatype, so "
+                warnings.append(f"{label} is a derived time dimension without a date or timestamp datatype, so "
                                 "governed queries cannot group it by day, week or month. Add \"datatype\": \"Date\".")
-        keys[name] = dataset.get("primary_key") or []
-        for key in keys[name]:
-            if key not in fields[name]:
-                errors.append(f"Primary key {name}.{key} is not a field.")
+        if "primary_key" in dataset:
+            errors += key_errors(dataset["primary_key"], fields[name.upper()], f"Primary key of {name}")
+        unique = dataset.get("unique_keys")
+        if unique is not None and (not isinstance(unique, list) or not unique):
+            errors.append(f"Unique keys of {name} are a non-empty list of keys.")
+            unique = []
+        found = [k for k in [dataset.get("primary_key"), *(unique or [])] if isinstance(k, list) and k]
+        keys[name.upper()] = [{str(k).upper() for k in key} for key in found]
+        declared = []
+        for key in unique or []:
+            errors += key_errors(key, fields[name.upper()], f"A unique key of {name}")
+            if isinstance(key, list) and {str(k).upper() for k in key} in declared:
+                warnings.append(f"Unique keys of {name}: {', '.join(map(str, key))} is declared twice.")
+            declared.append({str(k).upper() for k in key} if isinstance(key, list) else set())
         if columns and name in columns:
-            for field in dataset.get("fields") or []:
-                if sql_of(field) == field.get("name") and field.get("name") not in columns[name]:
+            available = {c.upper() for c in columns[name]}
+            for field in dicts(dataset.get("fields")):
+                if sql_of(field) == field.get("name") and str(field.get("name")).upper() not in available:
                     errors.append(f"Field {name}.{field.get('name')} is not a column of the table.")
-    for relationship in model.get("relationships") or []:
+    names = set()
+    for relationship in dicts(model.get("relationships")):
         label = relationship.get("name", "?")
-        source, target = relationship.get("from"), relationship.get("to")
-        if source not in fields or target not in fields:
+        errors += unknown_keys(relationship, "relationship", f"Relationship {label}")
+        errors += context_errors(relationship, f"Relationship {label}")
+        errors += extension_errors(relationship, f"Relationship {label}")
+        if not text(label):
+            errors.append("A relationship has no name.")
+        elif label.upper() in names:
+            errors.append(f"Relationship {label} appears twice.")
+        names.add(str(label).upper())
+        source, target = str(relationship.get("from")), str(relationship.get("to"))
+        if source.upper() not in fields or target.upper() not in fields:
             errors.append(f"Relationship {label} joins unknown datasets {source} -> {target}.")
             continue
         before = len(errors)
         sources, targets = relationship.get("from_columns") or [], relationship.get("to_columns") or []
-        if not sources or len(sources) != len(targets):
+        if not isinstance(sources, list) or not isinstance(targets, list) or not sources or len(sources) != len(targets):
             errors.append(f"Relationship {label} needs from_columns and to_columns of the same length.")
+            continue
         for column in sources:
-            if column not in fields[source]:
+            if str(column).upper() not in fields[source.upper()]:
                 errors.append(f"Relationship {label}: {source}.{column} is not a field.")
         for column in targets:
-            if column not in fields[target]:
+            if str(column).upper() not in fields[target.upper()]:
                 errors.append(f"Relationship {label}: {target}.{column} is not a field.")
-        if len(errors) == before and set(targets) != set(keys.get(target) or ()):
-            warnings.append(f"Relationship {label}: {target}.{'+'.join(map(str, targets))} is not the whole primary key "
-                            f"of {target}, so governed queries do not join along it. Point it from the many side to "
-                            "the one side's primary key.")
-    metrics = model.get("metrics") or []
+        if len(errors) == before and {str(c).upper() for c in targets} not in keys.get(target.upper(), []):
+            warnings.append(f"Relationship {label}: {target}.{'+'.join(map(str, targets))} is not a whole primary or "
+                            f"unique key of {target}, so governed queries do not join along it. Point it from the "
+                            "many side to the one side's key.")
+    scoped = [(f"{d.get('name')}.", m) for d in datasets for m in dicts(d.get("metrics"))]
+    metrics = [("", m) for m in dicts(model.get("metrics"))] + scoped
     if not metrics:
         warnings.append("The model has no metrics; agents will invent their own definitions.")
     seen = set()
-    for metric in metrics:
-        label = metric.get("name", "?")
-        if label in seen:
-            errors.append(f"Metric {label} appears twice.")
-        seen.add(label)
-        if not sql_of(metric):
-            errors.append(f"Metric {label} has no {DIALECT} expression.")
+    for prefix, metric in metrics:
+        label = f"{prefix}{metric.get('name', '?')}"
+        if not prefix:
+            if str(metric.get("name")).upper() in seen:
+                errors.append(f"Metric {label} appears twice.")
+            seen.add(str(metric.get("name")).upper())
+        errors += unknown_keys(metric, "metric", f"Metric {label}") + expression_errors(metric, f"Metric {label}")
+        errors += context_errors(metric, f"Metric {label}") + extension_errors(metric, f"Metric {label}")
         if metric.get("datatype") is not None and metric.get("datatype") not in DATATYPES:
             errors.append(f"Metric {label}: datatype {metric.get('datatype')!r} is not an Ossie datatype.")
-        description = str(metric.get("description", ""))
-        if not description.strip():
+        description = text(metric.get("description"))
+        if not description:
             errors.append(f"Metric {label} has no description.")
         elif "unit:" not in description.lower():
             warnings.append(f"Metric {label}: end the description with its unit, for example 'Unit: percent.'")
@@ -264,15 +397,55 @@ def join_path(model, start, targets):
     return clauses
 
 
-def metric_query(model, metric):
-    names = [d["name"] for d in model["datasets"]]
+AGG = re.compile(r"\bAGG\s*\(\s*([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)\s*\)", re.IGNORECASE)
+
+
+def relation(dataset):
+    """A dataset as its metrics read it: its fields, and its table's row as `source` for source.column."""
+    namespace, table = source_table(dataset)
+    columns = [f"{sql_of(f)} AS {quoted(f['name'])}" for f in dicts(dataset.get("fields"))]
+    if not any(str(f.get("name")).upper() == "SOURCE" for f in dicts(dataset.get("fields"))):
+        columns.append('"t" AS "source"')
+    return f"(SELECT {', '.join(columns)} FROM {table_reference(namespace, table)} AS \"t\")"
+
+
+def dataset_of(model, name):
+    return next((d for d in dicts(model.get("datasets")) if str(d.get("name")).upper() == str(name).upper()), None)
+
+
+def metric_query(model, metric, dataset=None):
+    """SQL that evaluates one metric over the whole of its datasets.
+
+    A dataset's own metric reads its fields by name and its table's columns as source.column. A
+    model's metric reads DATASET.field and joins from the first dataset it names; AGG(DATASET.metric)
+    becomes that dataset's metric.
+    """
     expression = sql_of(metric)
+    if dataset is not None:
+        return f"SELECT {expression} FROM {relation(dataset)} AS {quoted(dataset['name'])}"
+    names = [d["name"] for d in model["datasets"]]
+
+    def inline(match):
+        found = dataset_of(model, match[1])
+        inner = next((m for m in dicts(found.get("metrics")) if str(m.get("name")).upper() == match[2].upper()),
+                     None) if found else None
+        if inner is None:
+            raise ValueError(f"AGG({match[1]}.{match[2]}) names no metric of a dataset")
+        return f"({sql_of(inner)})"
+
     used = referenced(expression, names)
+    expression = AGG.sub(inline, expression)
     if not used:
         if len(names) != 1:
-            raise ValueError("the expression names no dataset; write DATASET.column so agents know what it counts")
+            raise ValueError("the expression names no dataset; write DATASET.field so agents know what it counts")
         used = names
-    return "\n".join([f"SELECT {expression} FROM {quoted(used[0])}", *join_path(model, used[0], used[1:])])
+    if len(used) > 1 and AGG.search(sql_of(metric)):
+        raise ValueError("AGG(DATASET.metric) combined with other datasets is checked when you publish")
+    relations = {d["name"]: relation(d) for d in model["datasets"]}
+    clauses = join_path(model, used[0], used[1:])
+    for name in names:
+        clauses = [c.replace(f"JOIN {quoted(name)} ON", f"JOIN {relations[name]} AS {quoted(name)} ON") for c in clauses]
+    return "\n".join([f"SELECT {expression} FROM {relations[used[0]]} AS {quoted(used[0])}", *clauses])
 
 
 def parse_questions(text):
@@ -307,13 +480,24 @@ def table_columns(ic, database, model):
 
 
 def bind(connection, model):
-    """One temporary view per dataset, named like the dataset, over its Iceberg table."""
+    """One temporary view per dataset, named like the dataset, with its fields over its Iceberg table.
+
+    Keys, relationships and questions read fields, as Ossie names them; a field that fails is left out.
+    """
     # CAST(timestamptz AS DATE) follows the session time zone; checks must not depend on this computer's.
     connection.execute("SET TimeZone = 'UTC'")
     for dataset in model["datasets"]:
         namespace, table = source_table(dataset)
+        reference = table_reference(namespace, table)
+        working = []
+        for field in dataset["fields"]:
+            try:
+                connection.execute(f"SELECT {sql_of(field)} FROM {reference} LIMIT 0")
+                working.append(f"{sql_of(field)} AS {quoted(field['name'])}")
+            except Exception:  # noqa: BLE001, S112 - run_checks reports every failing field
+                continue
         connection.execute(f"CREATE OR REPLACE TEMP VIEW {quoted(dataset['name'])} AS "
-                           f"SELECT * FROM {table_reference(namespace, table)}")
+                           f"SELECT {', '.join(working) or 'NULL AS no_fields'} FROM {reference}")
 
 
 def run_checks(connection, model, questions):
@@ -354,8 +538,10 @@ def run_checks(connection, model, questions):
 
     print("Fields")
     for dataset in model["datasets"]:
+        namespace, table = source_table(dataset)
         for field in dataset["fields"]:
-            run(f"{dataset['name']}.{field['name']}", f"SELECT {sql_of(field)} FROM {quoted(dataset['name'])} LIMIT 1")
+            run(f"{dataset['name']}.{field['name']}",
+                f"SELECT {sql_of(field)} FROM {table_reference(namespace, table)} LIMIT 1")
     print("Keys and relationships")
     for dataset in model["datasets"]:
         keys = ", ".join(quoted(k) for k in dataset.get("primary_key") or [])
@@ -370,14 +556,15 @@ def run_checks(connection, model, questions):
                    f"SELECT count(*) FROM {quoted(r['from'])} f LEFT JOIN {quoted(r['to'])} t ON {on} "
                    f"WHERE {present} AND t.{quoted(pairs[0][1])} IS NULL")
     print("Metrics")
-    for metric in model.get("metrics") or []:
+    scoped = [(f"{d['name']}.{m['name']}", m, d) for d in model["datasets"] for m in dicts(d.get("metrics"))]
+    for label, metric, dataset in [(m["name"], m, None) for m in model.get("metrics") or []] + scoped:
         try:
-            sql = metric_query(model, metric)
+            sql = metric_query(model, metric, dataset)
         except ValueError as error:
             failures += 1
-            print(f"  FAIL  {metric['name']}: {error}")
+            print(f"  FAIL  {label}: {error}")
             continue
-        run(metric["name"], sql)
+        run(label, sql)
     if questions:
         print("Questions")
         for question, sql in questions:
@@ -424,13 +611,12 @@ class Models:
         if response.status_code == 404:
             return None
         loaded = response.json()
-        return loaded["document"], loaded["entity-version"]
+        return json.loads(loaded["document"]["semantic_model"]), loaded["entity-version"]
 
     @staticmethod
     def document(model):
-        # Polaris keeps a whole Ossie document, as a JSON string, inside its versioned envelope.
-        return {"version": SPEC_VERSION,
-                "semantic_model": json.dumps({"version": SPEC_VERSION, "semantic_model": [model]})}
+        # Polaris keeps the whole Ossie document, as a JSON string, inside its versioned envelope.
+        return {"version": SPEC_VERSION, "semantic_model": json.dumps(read_model(model))}
 
     def publish(self, name, model):
         current = self.load(name)
@@ -483,19 +669,19 @@ def draft(ic, database, namespace, tables, name):
         schema = catalog.load_table((*namespace, table)).schema()
         fields = []
         for column in schema.fields:
-            field = {"name": column.name, "description": column.doc or "TODO",
-                     "expression": {"dialects": [{"dialect": DIALECT, "expression": column.name}]}}
+            field = {"name": column.name, "description": column.doc or "TODO", "expression": {"sql": column.name}}
             if datatype := ossie_datatype(str(column.field_type)):
                 field["datatype"] = datatype
             if str(column.field_type).lower().startswith(TIME_TYPES):
                 field["dimension"] = {"is_time": True}
             fields.append(field)
-        datasets.append({"name": re.sub(r"\W", "_", table).upper(), "source": ".".join(["lakehouse", *namespace, table]),
+        datasets.append({"name": re.sub(r"\W", "_", table).upper(), "source": ".".join([*namespace, table]),
                          "description": "TODO", "primary_key": [], "fields": fields})
-    model = {"name": name, "description": "TODO: what the model covers. One row in <DATASET> per <grain>.",
+    model = {"version": SPEC_VERSION, "name": name,
+             "description": "TODO: what the model covers. One row in <DATASET> per <grain>.",
              "ai_context": {"instructions": DRAFT_INSTRUCTIONS},
              "datasets": datasets, "relationships": [], "metrics": []}
-    print(json.dumps({"version": SPEC_VERSION, "semantic_model": [model]}, indent=2))
+    print(json.dumps(model, indent=2))
 
 
 def governed_warnings(model):
@@ -505,6 +691,7 @@ def governed_warnings(model):
     """
     found = []
     for kind, items in [("Metric", model.get("metrics") or []),
+                        *[("Metric", d.get("metrics") or []) for d in model.get("datasets") or []],
                         *[("Field", d.get("fields") or []) for d in model.get("datasets") or []]]:
         for item in items:
             sql = sql_of(item) or ""
@@ -571,9 +758,9 @@ def main(argv=None):
             found = Models(ic, args.database, namespace).load(args.name)
             if found is None:
                 sys.exit(f"No semantic model {args.name!r} in {args.namespace}.")
-            print(json.dumps({"version": SPEC_VERSION, "semantic_model": [first_model(found[0])]}, indent=2))
+            print(json.dumps(found[0], indent=2))
         else:
-            model = first_model(json.loads(args.file.read_text()))
+            model = read_model(json.loads(args.file.read_text()))
             questions = parse_questions(args.questions.read_text()) if args.questions else []
             if args.command == "check":
                 sys.exit(0 if check(ic, args.database, model, questions) else 1)

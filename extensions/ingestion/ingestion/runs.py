@@ -208,6 +208,7 @@ class RunManager:
             "storageEndpoint": discovery["storage"]["internalEndpoint"], "sourceType": pipeline["source_type"],
             "source": pipeline["source"], "resources": pipeline["resources"],
             "allowPrivate": self.settings.allow_private, "fullRefresh": bool(run["full_refresh"]),
+            "maxDownload": self.settings.max_download,
         }
 
     async def launch(self, run, pipeline, principal):
@@ -248,6 +249,9 @@ class RunManager:
             status, error = "error", f"The run exceeded its time limit of {limit // 60} minutes."
         elif launched.get("exitCode") == 0:
             status, error = "success", ""
+        elif launched.get("exitCode") == 137:  # SIGKILL; not stopped and not timed out, so out of memory
+            status, error = "error", ("The run ran out of memory and was stopped. A platform administrator can "
+                                      "raise RUN_MEMORY (runs.memory on Kubernetes).")
         else:
             status, error = "failed", summary.get("error") or "dlt reported an error. Read the run log."
         if status == "success":
@@ -274,12 +278,13 @@ class RunManager:
         if response.status_code not in (200, 404):
             LOG.warning("The artifacts of %s could not be removed (%s).", id, response.status_code)
 
-    async def logs(self, id, tail=2000):
+    async def logs(self, id, limit=500):
+        """The last `limit` lines of a run's log."""
         path = self.artifacts / id / "out" / "run.log"
         if path.exists():
-            lines = path.read_text(errors="replace").splitlines()[-tail:]
+            lines = path.read_text(errors="replace").splitlines()[-limit:]
         else:
-            response = await self.http.get(f"/runs/{id}/logs", params={"tail": tail})
+            response = await self.http.get(f"/runs/{id}/logs", params={"tail": limit})
             lines = response.text.splitlines() if response.status_code == 200 else []
         # The runner already masks its secrets; this second pass uses the values stored now.
         run = self.store.run(id)

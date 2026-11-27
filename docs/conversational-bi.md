@@ -25,7 +25,7 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 `ICEBERG_EXTENSIONS=conversationalbi` adds it without a model, and `ICEBERG_EXTENSIONS=none` skips the question. Allocate 8 GiB of Docker memory with it. Rerunning the installer keeps Conversational BI and `llm.env`. Pass `LLM_MODEL` and its key again to replace them.
 
-A **team administrator** enables Conversational BI once per environment: the **Enable** button in the chat's sidebar, or `enable_environment` over MCP. That creates the team's read-only service account for that environment, which also reads the data shares the team received there.
+A team administrator enables Conversational BI once per environment: under **Settings** › **Environments** (Settings is in the header, and Environments is its first option), through an AI agent (`enable_environment`) or with `POST /api/v1/teams/{team}/environments/{environment}`. Environments shows who enabled each environment, and **Disable** revokes the team's service account there again. The model picker in the chat's sidebar also offers **Enable** for the environments that still need it. Enabling creates the team's read-only service account for that environment, which also reads the data shares the team received there.
 
 On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 
@@ -59,14 +59,36 @@ Other agents are set up as for the [user portal](ai-agents.md), with this addres
 
 | Tool | What it does |
 | --- | --- |
-| `whoami` | Your teams with your role in each, their databases, the data shares they received, and this extension. |
-| `list_environments` | Where Conversational BI is enabled for a team. |
-| `enable_environment` | Lets Conversational BI read a team environment, and the shares the team received there, with a read-only service account (team administrators). |
-| `disable_environment` | Revokes that service account (team administrators). Questions in that environment stop working. |
-| `list_models` | Semantic models you can ask questions of, your own and shared ones, and the environments that still need enabling. |
-| `describe_model` | Datasets, fields, metrics and reachable dimensions of one model, with the owner's instructions. |
-| `query` | Runs a [governed query](#governed-queries): up to 5 metrics split by up to 5 dimensions (`DATASET.field`, optionally with a grain and `via`), 10 filters and a limit of up to 5000 rows. It returns at most 200 rows and a `resultId`. |
-| `get_result` | More rows of an earlier result, by `resultId`. Results are kept for 30 minutes. |
+| `whoami` | Your teams with your role in each, their databases, where Conversational BI is enabled, the databases your teams received a share of, and this extension. |
+| `list_environments` | Where Conversational BI is enabled for a team, with the databases and received shares of each environment. |
+| `enable_environment` | Lets Conversational BI read a team environment, and the shares the team received there, with a read-only service account (team administrators). Returns the environment as `list_environments` shows it. |
+| `disable_environment` | Disables it again (team administrators). Questions in that environment stop working. Returns the environment as `list_environments` shows it. |
+| `list_semantic_models` | Semantic models you can ask questions of, your own and shared ones, and the environments that still need enabling. |
+| `describe_semantic_model` | Datasets, fields, metrics and reachable dimensions of one model, with the owner's instructions. Takes `database`, `namespace` and `model` (the model's name), as the list gives them in each entry's `model`. |
+| `query_semantic_model` | Runs a [governed query](#governed-queries) on a model (`database`, `namespace`, `model`): up to 5 metrics split by up to 5 dimensions (`DATASET.field`, optionally with a grain and `via`), 10 filters and a limit of up to 5000 rows. It returns at most 200 rows and a `resultId`. |
+| `get_result` | More rows of an earlier result: pass its `resultId` as `result`. Results are kept for 30 minutes. |
+
+The three semantic-model tools have the same names as in the [user portal's MCP server](mcp.md), and name a model the same way: `database`, `namespace` and `model`. Here `list_semantic_models` takes no arguments and lists every model you can ask about, in all your teams' databases and received shares.
+
+### What the tools and the API return
+
+Every tool has a REST operation under `/api/v1`, and returns what that operation returns; the [OpenAPI contract](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/conversationalbi/contracts/conversationalbi-api/v1/openapi.yaml) describes each one. Only `query_semantic_model` and `get_result` differ: they return a sample of at most 200 rows for the agent, and `GET /api/v1/results/{result}` returns every row.
+
+| Tool | REST |
+| --- | --- |
+| `whoami` | `GET /me` |
+| `list_environments` | `GET /teams/{team}/environments` |
+| `enable_environment` / `disable_environment` | `POST` / `DELETE /teams/{team}/environments/{environment}` |
+| `list_semantic_models` | `GET /semantic-models` |
+| `describe_semantic_model` | `GET /semantic-models/describe?database=&namespace=&model=` |
+| `query_semantic_model` | `POST /queries` |
+| `get_result` | `GET /results/{result}?offset=&limit=` |
+
+- A list is an object with one key: `{"semanticModels": [...], "notEnabled": [...]}` and `{"environments": [...]}`.
+- A semantic model is named by its reference, `model`: `{"database": "db-…", "namespace": ["ai_flights"], "name": "flights"}`.
+- An environment is `{team, environment, enabled, enabledBy, databases, sharedDatabases}`, with each database as `{id, name}`. Disabling one that is not enabled is refused with 409 `environment_not_enabled`.
+- Times are RFC 3339 strings in UTC, such as `2026-11-24T09:15:02.123Z`, or `null`.
+- An error is `{"error": "<text>", "code": "<code>"}`, sometimes with `detail`; a tool reports it as `<text> [<code>]`. REST fields are camelCase and tool parameters snake_case; a governed query is the same document in both, including `order_by`.
 
 ## Change the model
 
@@ -102,7 +124,7 @@ Everything is re-checked on every question and when a chart loads its rows: a re
 
 ## Governed queries
 
-The `query` tool (and `POST /api/v1/queries`) takes names, not SQL:
+The `query_semantic_model` tool (and `POST /api/v1/queries`, with the reference as `model`) takes names, not SQL:
 
 ```json
 {"metrics": ["on_time_arrival_pct"],
@@ -121,7 +143,7 @@ The `query` tool (and `POST /api/v1/queries`) takes names, not SQL:
 Every result also carries:
 
 - `recommended`: the component that shows it best, decided from its columns rather than by the LLM. One metric without dimensions is a KPI, a time dimension a line, categories are bars (sideways for many or long names), and two category dimensions split the bars into series, stacked only when the metric adds up (a `SUM` or `COUNT`, never an average). Anything wider is a table. The agent follows it unless you ask for another view.
-- `dataAsOf`: when the metrics' dataset was last committed, from the Iceberg snapshot the query read. Query cards and charts show it as *data as of*.
+- `dataAsOf`: when the metrics' dataset was last committed, from the Iceberg snapshot the query read, as an RFC 3339 time in UTC. Query cards and charts show it as *data as of*.
 
 ## What goes to the LLM
 
@@ -138,7 +160,7 @@ The [Evaluations](evaluations.md) extension asks Conversational BI questions for
 | `BI_EVAL_SCHEMA_ONLY` | `false` | Allows Evaluations' [control arm](evaluations.md#what-the-semantic-model-adds), where an LLM writes SQL on the tables of a model. Never used by the chat |
 | `BI_CONVERSATION_RETENTION_DAYS` | `30` | How long conversations are kept for live evaluation; `0` keeps none |
 
-For live evaluation, Conversational BI keeps the conversations of a team, in an environment where the team enabled Evaluations: the question, the answer, the tool calls with what the agent saw of their results, the LLM and token usage. A conversation counts for the team of the semantic model the agent answered from. Other teams' conversations stay in memory only, as before. The record is on the volume `cbi-state` (on Kubernetes the PVC `cbi-state`, size `conversationStorage`), and only Evaluations reads it, per team.
+For live evaluation, Conversational BI keeps the conversations of a team, in an environment where a team administrator switched on live evaluation in [Evaluations](evaluations.md#live-evaluation): the question, the answer, the tool calls with what the agent saw of their results, the LLM and token usage, and not who asked. A conversation counts for the team of the semantic model the agent answered from. Other teams' conversations stay in memory only, as before. The record is on the volume `cbi-state` (on Kubernetes the PVC `cbi-state`, size `conversationStorage`), and only Evaluations reads it, per team. Switching live evaluation off, or disabling Evaluations for the environment, deletes that team's conversations there.
 
 ## Limits
 

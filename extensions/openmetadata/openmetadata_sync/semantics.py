@@ -15,11 +15,7 @@ metrics. This module turns that into:
 Everything here is a pure function of a listing.
 """
 
-import re
-
 from . import mapping as m
-
-COLUMN = re.compile(r'^(?:[`"]?[A-Za-z_][\w$]*[`"]?\.)?[`"]?([A-Za-z_][\w$]*)[`"]?$')
 
 
 def glossary_request(domain):
@@ -63,21 +59,9 @@ def context(rows):
     return [f"{r['label']}: {r['value']}" + ("" if r["value"].endswith(".") else ".") for r in rows]
 
 
-def root_name(prefix, listing, obj, model, several):
+def root_name(prefix, listing, obj):
     """The term of one model: unique per installation, database, namespace and model."""
-    parts = [prefix, listing["database"]["id"], *obj["namespace"], obj["name"], *([model["name"]] if several else [])]
-    return m.clean("__".join(parts))
-
-
-def field_column(field, columns):
-    """The column a field reads when its expression is just that column, such as `carrier_code` or `t.code`.
-
-    Only a field without an expression reads the column of its own name: a computed field, such as
-    `amount * 100`, reads no column, even when one shares its name.
-    """
-    names = {c.lower(): c for c in columns}
-    match = COLUMN.match((m.expression(field) or field["name"]).strip())
-    return names.get(match[1].lower()) if match else None
+    return m.clean("__".join([prefix, listing["database"]["id"], *obj["namespace"], obj["name"]]))
 
 
 def origin(listing, model):
@@ -97,9 +81,8 @@ def enrich(prefix, listing, glossary):
               for o in listing["objects"] if o["kind"] in ("table", "view")}
     root, terms, tables, labels = m.quote(m.clean(glossary)), [], {}, []
     for obj in (o for o in listing["objects"] if o["kind"] == "semantic-model"):
-        several = len(obj["models"]) > 1
-        for model in obj["models"]:
-            name = root_name(prefix, listing, obj, model, several)
+        for model in m.models(obj):
+            name = root_name(prefix, listing, obj)
             model_fqn = f"{root}.{m.quote(name)}"
             lines = [model["description"] or f"Semantic model {model['name']}.", origin(listing, model)]
             terms.append((model_fqn, {"glossary": m.clean(glossary), "name": name, "displayName": model["name"],
@@ -139,7 +122,7 @@ def enrich(prefix, listing, glossary):
                         "description": "\n\n".join([field["description"] or f"Field {field['name']} of "
                                                                               f"{dataset['name']}.", *notes]),
                         **({"tags": [tag(label_fqn(prefix, glossary, label), "Classification")]} if label else {})}))
-                    column = field_column(field, listed[k]) if table is not None else None
+                    column = m.field_column(field, listed[k]) if table is not None else None
                     if column:
                         entry = table["columns"].setdefault(column, {"notes": [], "tags": []})
                         entry["notes"].append(" ".join(filter(None, [field["description"], *notes])))
@@ -160,7 +143,7 @@ def sections(listing):
     """A Markdown section per semantic model for the data product's description."""
     result = []
     for obj in (o for o in listing["objects"] if o["kind"] == "semantic-model"):
-        for model in obj["models"]:
+        for model in m.models(obj):
             lines = [f"### Semantic model {model['name']}"]
             if model["description"]:
                 lines.append(model["description"])
@@ -174,7 +157,7 @@ def sections(listing):
             if datasets:
                 lines.append("**Datasets**\n\n" + "\n".join(datasets))
             metrics = [f"- **{x['name']}**" + (f": {x['description']}" if x["description"] else "")
-                       for x in model["metrics"]]
+                       for x in m.all_metrics(model)]
             if metrics:
                 lines.append("**Metrics**\n\n" + "\n".join(metrics))
             result.append("\n\n".join(lines))

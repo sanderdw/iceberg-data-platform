@@ -5,6 +5,7 @@ The user portal shows them to signed-in users; the Bridge publishes listings wit
 
 import json
 import re
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 SENSITIVE = re.compile(
@@ -12,6 +13,30 @@ SENSITIVE = re.compile(
 )
 PRODUCER = "iceberg-data-platform."
 QUALITY = {"pass", "warn", "fail"}
+
+
+def utc_time(value):
+    """An RFC 3339 UTC time with milliseconds, such as `2026-11-24T09:15:02.123Z`, or None.
+
+    Takes epoch milliseconds, as Polaris and Iceberg metadata store them, or ISO-8601 text, as
+    producers write it. A time without a zone is UTC; text that is not a time is None.
+    """
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        if isinstance(value, int | float):
+            moment = datetime.fromtimestamp(value / 1000, UTC)
+        else:
+            moment = datetime.fromisoformat(str(value).strip())
+            moment = moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
+    except (ValueError, OverflowError, OSError):
+        return None
+    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def text_or_none(value, limit=2000):
+    """Absent is None, not an empty string."""
+    return str(value)[:limit] if value not in (None, "") else None
 
 
 def properties(values):
@@ -213,12 +238,13 @@ def text(value):
 
 
 def expressions(item):
+    """An Ossie expression as rows: the portable `sql` as OSSIE_SQL_2026, then each dialect."""
     found = item.get("expression")
-    if isinstance(found, dict):
-        found = found.get("dialects")
-    elif isinstance(found, str):
-        return [{"dialect": "", "expression": found}]
-    return [{"dialect": text(e.get("dialect")), "expression": text(e.get("expression"))} for e in dicts(found)]
+    if not isinstance(found, dict):
+        return []
+    rows = [{"dialect": "OSSIE_SQL_2026", "expression": text(found["sql"])}] if found.get("sql") else []
+    return rows + [{"dialect": text(e.get("dialect")), "expression": text(e.get("expression"))}
+                   for e in dicts(found.get("dialects"))]
 
 
 TIME_DATATYPES = ("Date", "Time", "DateTime", "DateTimeTz")
@@ -244,29 +270,18 @@ def synonyms(item):
     return [text(s) for s in found if isinstance(s, str)] if isinstance(found, list) else []
 
 
-def ossie_models(payload):
-    """The semantic models in a stored document. Polaris keeps the model as a JSON string, and
-    clients differ in whether it is one model, a list of models or a whole Ossie document."""
-    if isinstance(payload, list):
-        return [m for item in payload for m in ossie_models(item)]
-    if not isinstance(payload, dict):
-        return []
-    if "datasets" in payload or "metrics" in payload:
-        return [payload]
-    return ossie_models(payload.get("semantic_model"))
+def ossie_model(payload):
+    """The model of a stored Apache Ossie 0.3.0.dev0 document, which holds one model at its root."""
+    return payload if isinstance(payload, dict) and ("datasets" in payload or "metrics" in payload) else None
 
 
-def dataset_target(source, namespace):
-    """The Iceberg table a dataset reads: `catalog.namespace….table`, `namespace.table` or `table`.
+def dataset_target(source):
+    """The Iceberg table a dataset reads: its `source` is `<namespace>….<table>` in the model's catalog.
 
-    Three or more parts start with the catalog, so every part between it and the table is a
-    nested namespace level; one part means a table in the model's own namespace.
+    Polaris resolves every source this way when it stores a model; None when the source is not one.
     """
-    parts = [p for p in text(source).split(".") if p]
-    if not parts:
-        return None
-    levels = parts[1:-1] if len(parts) > 2 else parts[:-1]
-    return {"namespace": levels or list(namespace), "name": parts[-1]}
+    parts = text(source).split(".")
+    return {"namespace": parts[:-1], "name": parts[-1]} if len(parts) >= 2 and all(parts) else None
 
 
 def context_rows(value, skip=()):
@@ -285,24 +300,35 @@ def context_rows(value, skip=()):
     ]
 
 
-def semantic_model_details(name, namespace, loaded):
-    document = loaded.get("document") or {}
-    raw = document.get("semantic_model")
-    payload = raw
-    if isinstance(raw, str):
-        try:
-            payload = json.loads(raw)
-        except ValueError:
-            payload = None
-    models = []
-    for model in ossie_models(payload):
-        datasets = [
+def metric_details(m):
+    return {
+        "name": text(m.get("name")),
+        "description": text(m.get("description")),
+        "datatype": text(m.get("datatype")),
+        "synonyms": synonyms(m),
+        "aiContext": context_rows(m.get("ai_context"), skip=("synonyms",)),
+        "expressions": expressions(m),
+    }
+
+
+def key_list(value):
+    return [text(k) for k in value] if isinstance(value, list) else []
+
+
+def model_details(model, name, namespace):
+    return {
+        "name": text(model.get("name")) or name,
+        "description": text(model.get("description")),
+        "aiContext": context_rows(model.get("ai_context")),
+        "datasets": [
             {
                 "name": text(d.get("name")),
                 "description": text(d.get("description")),
                 "source": text(d.get("source")),
-                "table": dataset_target(d.get("source"), namespace),
-                "primaryKey": [text(k) for k in d["primary_key"]] if isinstance(d.get("primary_key"), list) else [],
+                "table": dataset_target(d.get("source")),
+                "primaryKey": key_list(d.get("primary_key")),
+                "uniqueKeys": [key_list(k) for k in d["unique_keys"] if isinstance(k, list)]
+                if isinstance(d.get("unique_keys"), list) else [],
                 "aiContext": context_rows(d.get("ai_context")),
                 "fields": [
                     {
@@ -318,45 +344,43 @@ def semantic_model_details(name, namespace, loaded):
                     }
                     for f in dicts(d.get("fields"))
                 ],
+                # Dataset-scoped metrics; queries name them DATASET.metric.
+                "metrics": [metric_details(m) for m in dicts(d.get("metrics"))],
             }
             for d in dicts(model.get("datasets"))
-        ]
-        models.append(
+        ],
+        "relationships": [
             {
-                "name": text(model.get("name")) or name,
-                "description": text(model.get("description")),
-                "aiContext": context_rows(model.get("ai_context")),
-                "datasets": datasets,
-                "relationships": [
-                    {
-                        "name": text(r.get("name")),
-                        "from": text(r.get("from")),
-                        "to": text(r.get("to")),
-                        "fromColumns": [text(c) for c in r.get("from_columns") or []],
-                        "toColumns": [text(c) for c in r.get("to_columns") or []],
-                    }
-                    for r in dicts(model.get("relationships"))
-                ],
-                "metrics": [
-                    {
-                        "name": text(m.get("name")),
-                        "description": text(m.get("description")),
-                        "datatype": text(m.get("datatype")),
-                        "synonyms": synonyms(m),
-                        "aiContext": context_rows(m.get("ai_context"), skip=("synonyms",)),
-                        "expressions": expressions(m),
-                    }
-                    for m in dicts(model.get("metrics"))
-                ],
+                "name": text(r.get("name")),
+                "from": text(r.get("from")),
+                "to": text(r.get("to")),
+                "fromColumns": key_list(r.get("from_columns")),
+                "toColumns": key_list(r.get("to_columns")),
             }
-        )
+            for r in dicts(model.get("relationships"))
+        ],
+        "metrics": [metric_details(m) for m in dicts(model.get("metrics"))],
+    }
+
+
+def semantic_model_details(name, namespace, loaded):
+    document = loaded.get("document") or {}
+    raw = document.get("semantic_model")
+    payload = raw
+    if isinstance(raw, str):
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            payload = None
+    model = ossie_model(payload)
     return {
         "kind": "semantic-model",
         "name": name,
         "namespace": list(namespace),
         "specVersion": text(document.get("version")),
         "entityVersion": text(loaded.get("entity-version")),
-        "models": models,
+        # None when the stored text is not an Ossie document the portal can read.
+        "model": model_details(model, name, namespace) if model is not None else None,
         # The stored text, pretty-printed when it is JSON, so users can copy exactly what Polaris holds.
         "definition": json.dumps(payload, indent=2, ensure_ascii=False) if payload is not None else text(raw),
     }
@@ -387,7 +411,7 @@ def column_tree(fields):
         result.append({
             "id": field["id"], "name": field["name"],
             "type": kind if isinstance(kind, str) else type_name(kind),
-            "required": field.get("required", False), "doc": str(field.get("doc", ""))[:2000],
+            "required": field.get("required", False), "doc": text_or_none(field.get("doc")),
             "children": children,
         })
     return result
@@ -412,6 +436,9 @@ def listed_producer(values, extensions, database, listed):
     if found:
         found["inputs"] = [i for i in found["inputs"]
                            if i["database"] == database and (tuple(i["namespace"]), i["name"]) in listed]
+        found["runAt"] = utc_time(found["runAt"])
+        if found["quality"]:
+            found["quality"]["checkedAt"] = utc_time(found["quality"]["checkedAt"])
     return found
 
 
@@ -427,14 +454,14 @@ def listed_table(namespace, name, loaded, *, database, listed, extensions=None):
     values = metadata.get("properties", {})
     return {
         "kind": "table", "namespace": list(namespace), "name": name, "uuid": metadata.get("table-uuid"),
-        "comment": str(values.get("comment", ""))[:2000],
+        "comment": text_or_none(values.get("comment")),
         "columns": column_tree(schema.get("fields", [])),
         "partitionFields": [
-            {"name": f["name"], "sourceColumn": by_id.get(f.get("source-id"), ""), "transform": f["transform"]}
+            {"name": f["name"], "sourceColumn": by_id.get(f.get("source-id")), "transform": f["transform"]}
             for f in spec.get("fields", [])
         ],
         "rowCount": int(rows) if str(rows).isdigit() else None,
-        "updatedAt": metadata.get("last-updated-ms"),
+        "updatedAt": utc_time(metadata.get("last-updated-ms")),
         "producer": listed_producer(values, extensions or {}, database, listed),
     }
 
@@ -446,9 +473,9 @@ def listed_view(namespace, name, loaded):
     schema = next((s for s in metadata.get("schemas", []) if s["schema-id"] == version.get("schema-id")), {})
     return {
         "kind": "view", "namespace": list(namespace), "name": name, "uuid": metadata.get("view-uuid"),
-        "comment": str(metadata.get("properties", {}).get("comment", ""))[:2000],
+        "comment": text_or_none(metadata.get("properties", {}).get("comment")),
         "columns": column_tree(schema.get("fields", [])),
-        "updatedAt": version.get("timestamp-ms"),
+        "updatedAt": utc_time(version.get("timestamp-ms")),
     }
 
 
@@ -457,4 +484,4 @@ def listed_semantic_model(namespace, name, loaded):
     # The normalized models only: the stored text may hold anything its writer added.
     return {"kind": "semantic-model", "namespace": list(namespace), "name": name,
             "specVersion": details["specVersion"], "entityVersion": details["entityVersion"],
-            "models": details["models"]}
+            "model": details["model"]}

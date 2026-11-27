@@ -292,7 +292,7 @@ class FakeOpenMetadata:
 class FakeBridge:
     def __init__(self):
         self.listings = {}
-        self.version = "0.1.1"
+        self.version = "1.0.0"
         self.capabilities = ["user-context", "automation-principals", "automation-tokens", "shared-data", "listings"]
         self.refuse = None
         self.fetched = []
@@ -314,11 +314,11 @@ class FakeBridge:
                     {**{k: v for k, v in item.items() if k != "objects"},
                      "objects": [[o["kind"], o["namespace"], o["name"]] for o in item["objects"]]},
                     sort_keys=True).encode()).hexdigest(),
-                 "databaseId": item["database"]["id"], "environment": item["database"]["environment"]}
+                 "database": item["database"]["id"], "environment": item["database"]["environment"]}
                 for id, item in self.listings.items()]})
         id = url.path.rsplit("/", 1)[-1]
         if id not in self.listings:
-            return httpx.Response(404, json={"error": "This listing does not exist.", "code": "not_found"})
+            return httpx.Response(404, json={"error": "This listing does not exist.", "code": "unknown_listing"})
         body = self.listings[id]
         etag = '"' + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest() + '"'
         self.fetched.append((id, request.headers.get("if-none-match") == etag))
@@ -327,7 +327,7 @@ class FakeBridge:
         return httpx.Response(200, json=body, headers={"ETag": etag})
 
 
-def column(id, name, type_, doc="", required=False, children=()):
+def column(id, name, type_, doc=None, required=False, children=()):
     return {"id": id, "name": name, "type": type_, "required": required, "doc": doc, "children": list(children)}
 
 
@@ -355,44 +355,60 @@ ORDERS = {
             column(10, "element", "struct<sku: string>", children=[column(11, "sku", "string")])]),
     ],
     "partitionFields": [{"name": "ordered_at_day", "sourceColumn": "ordered_at", "transform": "day"}],
-    "rowCount": 42, "updatedAt": 1700000000000,
+    "rowCount": 42, "updatedAt": "2023-11-14T22:13:20.000Z",
     "producer": {"name": "dbt", "inputs": [{"database": DB, "namespace": ["sales"], "name": "customers"},
                                            {"database": DB, "namespace": ["raw"], "name": "hidden"}],
                  "inputsTruncated": False},
 }
 CUSTOMERS = {
-    "kind": "table", "namespace": ["sales"], "name": "customers", "uuid": "u2", "comment": "",
+    "kind": "table", "namespace": ["sales"], "name": "customers", "uuid": "u2", "comment": None,
     "columns": [column(1, "id", "long", required=True), column(2, "region", "string", "Sales region")],
     "partitionFields": [], "rowCount": None, "updatedAt": None, "producer": None,
 }
 REPORT = {"kind": "view", "namespace": ["sales", "eu"], "name": "report", "uuid": "u3", "comment": "Monthly",
-          "columns": [column(1, "total", "decimal(12,2)")], "updatedAt": 5}
+          "columns": [column(1, "total", "decimal(12,2)")], "updatedAt": "1970-01-01T00:00:00.005Z"}
 REVENUE = {
-    "kind": "semantic-model", "namespace": ["sales"], "name": "revenue", "specVersion": "0.2.0", "entityVersion": "3",
-    "models": [{
+    "kind": "semantic-model", "namespace": ["sales"], "name": "revenue", "specVersion": "0.3.0.dev0",
+    "entityVersion": "3",
+    "model": {
         "name": "Revenue", "description": "Webshop revenue", "aiContext": [],
         "datasets": [
-            {"name": "ORDERS", "description": "", "source": "lakehouse.sales.orders",
-             "table": {"namespace": ["sales"], "name": "orders"}, "primaryKey": ["id"], "aiContext": [],
+            {"name": "ORDERS", "description": "", "source": "sales.orders",
+             "table": {"namespace": ["sales"], "name": "orders"}, "primaryKey": ["order_id"], "uniqueKeys": [],
+             "aiContext": [],
              "fields": [{"name": "ordered_at", "label": "", "description": "Order time", "datatype": "DateTimeTz",
                          "dimension": True, "timeDimension": True, "synonyms": [], "aiContext": [],
-                         "expressions": [{"dialect": "ANSI_SQL", "expression": "ordered_at"}]}]},
-            {"name": "CUSTOMERS", "description": "", "source": "lakehouse.sales.customers",
-             "table": {"namespace": ["sales"], "name": "customers"}, "primaryKey": ["id"], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "ordered_at"}]},
+                        # Keys and relationships name fields; each reads one column of the table.
+                        {"name": "order_id", "label": "", "description": "", "datatype": "Integer", "dimension": False,
+                         "timeDimension": False, "synonyms": [], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "id"}]},
+                        {"name": "customer", "label": "", "description": "", "datatype": "Integer", "dimension": False,
+                         "timeDimension": False, "synonyms": [], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "customer_id"}]}],
+             "metrics": [{"name": "orders", "description": "Number of orders", "datatype": "Integer", "synonyms": [],
+                          "aiContext": [], "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "COUNT(*)"}]}]},
+            {"name": "CUSTOMERS", "description": "", "source": "sales.customers",
+             "table": {"namespace": ["sales"], "name": "customers"}, "primaryKey": ["id"], "uniqueKeys": [],
+             "aiContext": [],
              "fields": [{"name": "region", "label": "", "description": "", "datatype": "String", "dimension": True,
-                         "timeDimension": False, "synonyms": [], "aiContext": [], "expressions": []}]},
+                         "timeDimension": False, "synonyms": [], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "region"}]},
+                        {"name": "id", "label": "", "description": "", "datatype": "Integer", "dimension": False,
+                         "timeDimension": False, "synonyms": [], "aiContext": [],
+                         "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "id"}]}],
+             "metrics": []},
         ],
         "relationships": [{"name": "orders_customers", "from": "ORDERS", "to": "CUSTOMERS",
-                           "fromColumns": ["customer_id"], "toColumns": ["id"]}],
+                           "fromColumns": ["customer"], "toColumns": ["id"]}],
         "metrics": [
             {"name": "revenue", "description": "Sum of order amounts", "datatype": "Decimal", "synonyms": ["sales"],
-             "aiContext": [], "expressions": [{"dialect": "ANSI_SQL", "expression": "SUM(ORDERS.amount)"}]},
+             "aiContext": [], "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "SUM(ORDERS.amount)"}]},
             {"name": "average_order", "description": "", "datatype": "Decimal", "synonyms": [], "aiContext": [],
-             "expressions": [{"dialect": "ANSI_SQL", "expression": "SUM(ORDERS.amount) / COUNT(*)"}]},
+             "expressions": [{"dialect": "OSSIE_SQL_2026", "expression": "SUM(ORDERS.amount) / COUNT(*)"}]},
         ],
-    }],
+    },
 }
-
 
 def settings(**extra):
     return Settings(**{"bridge_url": "http://bridge:3005", "extension_id": "openmetadata",

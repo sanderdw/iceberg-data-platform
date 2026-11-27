@@ -9,7 +9,7 @@ run writes, and OLake's telemetry is off.
 OLake talks to the catalog through a loopback proxy (runner/catalog_proxy.py) that points vended
 storage credentials at the platform's internal storage. A sync stops at the job's deadline, before
 the catalog token expires: OLake commits in chunks and records the chunks still to copy, so the
-next run continues (status "partial").
+next run continues (status "incomplete").
 """
 
 import json
@@ -202,7 +202,7 @@ def sync(job, secrets, token, log, out):
     done = olake.first_copy_done(state)
     position = olake.position(state)
     tables, published = publish.main(job, token, started_ms, position, os.environ.get("DRIVER_VERSION", ""))
-    status = "partial" if stopped or not done else "success"
+    status = "incomplete" if stopped or not done else "success"
     return {"status": status, "tables": tables, "published": published, "readUpTo": position,
             "firstCopyComplete": done, "recordsRead": olake.records_read(output), "stoppedAtLimit": stopped}
 
@@ -237,7 +237,7 @@ def main():
         # OLake's own configuration files hold the password and token: never leave them behind.
         for name in ("source.json", "destination.json"):
             (WORK / "olake" / name).unlink(missing_ok=True)
-    return 0 if result["status"] in ("success", "partial") else 1
+    return 0 if result["status"] in ("success", "incomplete") else 1
 
 
 if __name__ == "__main__":

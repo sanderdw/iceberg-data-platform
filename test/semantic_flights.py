@@ -30,7 +30,7 @@ ENVELOPE = stored()
 
 
 def model():
-    return ossie.parse(ENVELOPE, ["ai_flights"])
+    return ossie.parse(ENVELOPE)
 
 
 def local(bindings=None):

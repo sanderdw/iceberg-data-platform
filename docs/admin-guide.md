@@ -1,8 +1,13 @@
 # Administration guide
 
-The administration portal at http://localhost:3000 (on Kubernetes `https://admin.<domain>`) manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role. For the service list, see [services](reference/services.md); to start and stop the platform, see [installation](install.md#update-or-restart).
+The administration portal at http://localhost:3000 (on Kubernetes `https://admin.<domain>`) manages teams, users, databases and data shares. Sign in through Keycloak with an account that has the `iceberg-admin/platform-admin` client role. A team role never grants portal administration, including the Administrator role, but a team Administrator can sign in to [look without changing anything](#read-only-access-for-team-administrators). For the service list, see [services](reference/services.md); to start and stop the platform, see [installation](install.md#update-or-restart).
 
-You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). The portal's **Getting started** page has instructions and examples for each, using this installation's address. Lists refresh every 30 seconds while visible, and navigation and filters are kept in the URL.
+You can set up teams, databases and users in three ways: in the portal, through an AI agent over [MCP](#connect-an-mcp-client), or with the [API](#api). **Getting started**, in the account menu, has instructions and examples for each, using this installation's address. Lists refresh every 30 seconds while visible, and navigation and filters are kept in the URL.
+
+The header has the pages on the left and two menus on the right:
+
+- **Apps** opens the user portal's pages and the registered [extensions](extensions.md), each in a new tab.
+- The account menu, under your username, shows your role and whether the data provider is online. It also has **Getting started**, the light or dark theme and **Sign out**.
 
 ## Teams, databases and users
 
@@ -50,6 +55,16 @@ Move or delete its databases first. Deletion is refused if a user would lose the
 
 The portal's user management uses the `iceberg-provisioner` service account in the `iceberg` realm. For anything else, use the Keycloak console at http://localhost:8080/admin: sign in as `admin` and select the **iceberg** realm. On Kubernetes the console is not published; open it with `kubectl -n iceberg port-forward svc/keycloak 8080` and sign in with `KEYCLOAK_ADMIN_PASSWORD` from the Secret `iceberg-platform`. You grant portal administration there by assigning the `iceberg-admin` client role `platform-admin`. **Revoke** refuses accounts that have this role.
 
+## Read-only access for team Administrators
+
+A team Administrator can sign in to the administration portal with their own Keycloak account. The header then shows a **Read-only** badge, and the Teams, Users, Databases and Data shares pages start with a bar that says so.
+
+- **What they see:** every page, for the whole platform and not only their own team: teams, users, databases and their connection settings, data shares, extension service accounts, the catalog browser and Infrastructure.
+- **What they can change:** nothing. The portal hides the buttons and refuses every change with `403`, also from a script.
+- **Where they manage their team:** the [user portal](user-portal.md), for the team's databases and data shares. **Open Workspaces** in the bar opens it, and so does the **Apps** menu.
+
+Members with the Read or Read & write role are refused at sign-in. The portal checks the role again within a minute, so removing a user's Administrator role ends the access. The [MCP server](#connect-an-mcp-client) stays for platform administrators only.
+
 ## Extension service accounts
 
 When an [extension](extensions.md) such as Conversational BI is registered, the Teams page lists its service accounts (automation principals): one per team, environment and extension, enabled by a team Administrator in the extension. **Revoke** stops the extension from acting for that team environment at once. It gets no new tokens, and tokens already issued expire within `POLARIS_TOKEN_LIFETIME` (one hour by default).
@@ -66,12 +81,12 @@ The **Catalog** page browses all Polaris catalogs, namespaces, tables, views and
 
 ## Semantic models
 
-Polaris 1.8 stores [Apache Ossie](https://github.com/apache/ossie) semantic models beside the tables they describe. The platform enables the beta feature with `ENABLE_SEMANTIC_MODELS` in `compose.yaml`. Set `POLARIS_SEMANTIC_MODELS=false` in `.env` and restart Polaris to turn it off (on Kubernetes: `polaris.semanticModels=false`). Polaris then answers 406 and the user portal lists no models.
+Polaris stores [Apache Ossie](https://github.com/apache/ossie) semantic models beside the tables they describe. Polaris keeps the document as written; the platform writes and reads [Ossie 0.3.0.dev0](https://github.com/apache/ossie/blob/main/core-spec/spec.md) documents and shows a model in an earlier shape only as its stored text. The platform enables the beta feature with `ENABLE_SEMANTIC_MODELS` in `compose.yaml`. Set `POLARIS_SEMANTIC_MODELS=false` in `.env` and restart Polaris to turn it off (on Kubernetes: `polaris.semanticModels=false`). Polaris then answers 406 and the user portal lists no models.
 
 - **Access:** the Reader role of a new database gets `SEMANTIC_MODEL_LIST` and `SEMANTIC_MODEL_READ`. Writers and administrators already have `CATALOG_MANAGE_CONTENT`, which covers creating, replacing and dropping models.
 - **Deleting a database** removes its semantic models first. Polaris refuses to drop a namespace that still holds one.
 - **Where users find them:** **Catalog** in the user portal (the administration portal's **Catalog** lists their names only), the MCP tools `list_semantic_models`, `describe_semantic_model`, `query_semantic_model` and `list_dimension_values` (writers also `publish_semantic_model` and `delete_semantic_model`), the installation's `semantic-model` agent skill, and the example notebook pairs 06 and 07 (DuckDB) and 09 and 10 (Polars), which publish and read one.
-- **Beta:** the Polaris API may change in a later release. Check the [release notes](https://polaris.apache.org/releases/1.8.0/) before upgrading Polaris.
+- **Beta:** the Polaris API may change in a later release. Check the [release notes](https://polaris.apache.org/releases/1.9.0/) before upgrading Polaris.
 
 ## Infrastructure
 
@@ -114,26 +129,27 @@ Any other MCP client needs:
 - OAuth with the public client ID `iceberg-mcp`, with no client secret and no dynamic client registration
 - the scopes `openid`, `profile` and `offline_access`
 
-Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env` (the chart's `mcpCallbackPort` on Kubernetes). Sign in with your platform administrator account.
+Keycloak accepts the sign-in callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env` (the chart's `mcpCallbackPort` on Kubernetes). For Claude on the web and mobile, see [AI agents](ai-agents.md#claude-on-the-web-and-mobile). Sign in with your platform administrator account.
 
-Every call requires the `platform-admin` role. The tools are the administration API's operations:
+Every call requires the `platform-admin` role, the read tools too: a team Administrator's [read-only access](#read-only-access-for-team-administrators) covers the portal and its API, not this server. The tools are the administration API's operations:
 
 - **Read:** `get_overview`, `list_teams`, `list_databases`, `get_database_connection`, `browse_catalog`, `list_users`, `find_accounts`, `list_shares`, `list_automation_principals`
-- **Change:** `create_team`, `update_team`, `create_database`, `rename_database`, `move_database`, `create_user`, `link_user`, `update_user_access`, `retry_user_setup`
-- **Destructive:** `delete_team`, `delete_database` (requires `confirm_name`), `delete_user`, `revoke_share`, `revoke_automation_principal`
+- **Change:** `create_team`, `update_team`, `create_database`, `rename_database`, `create_user`, `link_user`, `retry_user_setup`
+- **Change that can take access away:** `move_database` (members of the old team lose access) and `update_user_access` (it replaces the memberships, so a team you leave out is removed)
+- **Destructive:** `delete_team`, `delete_database` and `delete_share` (both require `confirm_name`, the exact name), `delete_user`, `delete_automation_principal`
 
 `create_user` returns the one-time password in the agent's transcript. Treat that transcript as confidential, and reset the password if in doubt. Users connect to the [user portal's endpoint](ai-agents.md) in the same way.
 
 ## API
 
-Interactive documentation is at `/docs` on the portal (http://localhost:3000/docs with Compose) after sign-in. **Try it out** uses your session and adds the write headers. From a script, send the `iceberg_admin` cookie from your browser:
+Interactive documentation is at `/docs` on the portal (http://localhost:3000/docs with Compose) after sign-in. This API serves the portal's own pages and changes with them; for an AI agent, use the [MCP server](#connect-an-mcp-client). **Try it out** uses your session and adds the write headers. From a script, send the `iceberg_admin` cookie from your browser:
 
 ```bash
 curl -b 'iceberg_admin=<cookie>' -H 'Content-Type: application/json' -H 'X-Portal-Request: 1' \
   -d '{"name": "marketing"}' http://localhost:3000/api/teams
 ```
 
-The table lists the main endpoints; `/docs` has all of them, including Keycloak account management.
+The table lists the main endpoints; `/docs` has all of them, including Keycloak account management. With a team Administrator's [read-only session](#read-only-access-for-team-administrators) only the `GET` endpoints work; every change returns `403`.
 
 | Method | Path | Action |
 | --- | --- | --- |

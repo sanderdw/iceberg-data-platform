@@ -22,7 +22,7 @@ curl -fsSL https://github.com/sanderdw/iceberg-data-platform/releases/latest/dow
   ICEBERG_EXTENSIONS=conversationalbi,evaluations sh
 ```
 
-Open http://localhost:3012 and sign in. A team administrator enables Evaluations for an environment (**Enable** on the page, or `enable_environment`), and Conversational BI in the same environment: a run asks Conversational BI for the whole team, with what every member of the team can read. On Kubernetes, register it as `extensions.evaluations.host` and install its chart `iceberg-evaluations` ([add extensions](install-kubernetes.md#add-extensions)).
+Open http://localhost:3012 and sign in. A team administrator enables Evaluations once per environment: under **Settings** › **Environments** (Settings is in the header, and Environments is its first option), through an AI agent (`enable_environment`) or with `POST /api/v1/teams/{team}/environments/{environment}`. Environments shows who enabled each environment, and **Disable** revokes the team's service account there again. Enable Conversational BI in the same environment too: a run asks Conversational BI for the whole team, with what every member of the team can read. On Kubernetes, register it as `extensions.evaluations.host` and install its chart `iceberg-evaluations` ([add extensions](install-kubernetes.md#add-extensions)).
 
 For an LLM judge, put `JUDGE_MODEL` (a Pydantic AI model string) and its provider's key in `evaluations/llm.env` in the installation directory, then run `docker compose up -d` in `evaluations`. To compare LLMs, the platform administrator lists them in Conversational BI's `BI_EVAL_MODELS` (with their keys in its `llm.env`).
 
@@ -30,8 +30,8 @@ For an LLM judge, put `JUDGE_MODEL` (a Pydantic AI model string) and its provide
 
 1. **Write cases.** Create a question set on the page or with your AI agent, for a semantic model from **agent models**. The cases are YAML in the [pydantic-evals](https://ai.pydantic.dev/evals/) format. The [semantic-model skill](build-a-semantic-model.md) saves its interview questions as `<name>.questions.sql`; **Import questions** turns them into cases. The flights example (`examples/flights.yaml` in the extension) has 25 cases to start from.
 2. **Run.** **Run now** asks Conversational BI every question and scores the answers. A run's page shows each answer, its checks and why one failed.
-3. **Compare.** Pick two runs to see what got better or worse case by case, or **compare models** to run the set once per LLM.
-4. **Schedule.** Team administrators run a set on a cron schedule, such as nightly after the data loads.
+3. **Compare.** Pick two runs to see what got better or worse case by case, or let your AI agent run the set once per LLM (`compare_llm_models`).
+4. **Schedule.** Team administrators run a set on a cron schedule in UTC, such as nightly after the data loads. A schedule runs at most every 5 minutes.
 
 Every change to the cases is a new version, so a run always says which cases it used.
 
@@ -39,7 +39,7 @@ A run only counts when the agent actually answered. If more than 5% of the quest
 
 ## Results in your lakehouse
 
-Set a **target database** on the question set and every run lands in the team's own database, in namespace `evaluations`:
+Set a **target database** on the question set and every run lands in the team's own database, in namespace `evaluations`. A run's `summary.published` says where its results went, or why they were not written:
 
 - `case_results`: one row per question per run, with a column per check;
 - `runs`: one row per run, with its pass rate, tokens and timing;
@@ -57,7 +57,7 @@ Read the number with one thing in mind: the right answer is the semantic model's
 
 ## Live evaluation
 
-A team administrator switches on **Live evaluation** for an environment. From then on Conversational BI keeps that team's conversations in that environment, for its retention period (30 days by default), and only Evaluations reads them. Every check (hourly by default) scores a sample of the new ones:
+A team administrator switches on **Live evaluation** for an environment where Evaluations is enabled, from that environment under **Settings** › **Environments**. From then on Conversational BI keeps that team's conversations in that environment, for its retention period (30 days by default), and only Evaluations reads them. Enabling Evaluations alone keeps nothing, and switching live evaluation off deletes the conversations that were kept. Every check (hourly by default, at most every 5 minutes) scores a sample of the new ones:
 
 - `grounded`: every figure comes from a result;
 - `refusal_explained`: a refused query isn't answered around with figures;
@@ -75,14 +75,31 @@ The `agent-evaluations` skill tells the agent how to write cases, run them and e
 
 | Tool | What it does |
 | --- | --- |
-| `whoami`, `list_environments`, `enable_environment` | Your teams and where Evaluations is enabled |
-| `list_agent_models` | The semantic models the agent answers from, and the LLMs a run may choose |
-| `list_question_sets`, `get_question_set`, `save_question_set`, `import_questions`, `delete_question_set` | Question sets and their versions |
-| `run_evaluation`, `compare_models`, `measure_semantic_model`, `list_runs`, `get_run`, `compare_runs` | Runs and comparisons |
-| `set_schedule`, `delete_schedule` | Schedules (team administrators) |
-| `get_live`, `set_live`, `list_reviews`, `review_conversation`, `promote_to_case` | Live evaluation and its review queue |
+| `whoami` | Your teams, roles and databases, and where Evaluations is enabled |
+| `list_environments`, `enable_environment`, `disable_environment` | Where Evaluations is enabled for a team, with each environment's databases; enabling and disabling (team administrators) return the environment as `list_environments` shows it |
+| `list_agent_models` | The semantic models the agent answers from (`semanticModels`), the LLMs a run may choose (`llmModels`) and whether the control arm is allowed (`schemaOnly`) |
+| `list_question_sets`, `get_question_set` | Question sets with their last run; one with its cases, versions, schedules and latest runs |
+| `create_question_set`, `update_question_set`, `import_questions` | Creates a question set, or changes one: an update changes only what you give, and new cases are a new version |
+| `delete_question_set` | Deletes a question set with its versions, runs and schedules. Needs `confirm_name`, the question set's exact name |
+| `run_evaluation`, `compare_llm_models`, `measure_semantic_model` | Start runs and return them: one run, one per LLM, or the pair with and without the semantic model |
+| `list_runs`, `get_run`, `compare_runs` | A question set's runs, newest first (`limit`, 20 by default, at most 200); one run with every case; two runs case by case |
+| `list_schedules`, `create_schedule`, `update_schedule`, `delete_schedule` | Schedules (team administrators). A question set can have several |
+| `get_live_evaluation`, `update_live_evaluation` | Live evaluation of a team environment. An update changes only what you give; switching it off deletes the conversations that were kept |
+| `list_reviews`, `update_review`, `promote_review` | The review queue (`limit`, 100 by default, at most 500); dismiss a review or put it back with `status` `dismissed` or `open`; turn one into a case |
 
-Readers view everything of their teams. Writers edit question sets and run them in development. Team administrators work in acceptance and production, schedule runs and switch live evaluation on.
+Readers view everything of their teams. Writers edit question sets and run them in development, and delete them there. Team administrators work in acceptance and production, schedule runs and switch live evaluation on.
+
+### What the tools and the API return
+
+Every tool returns what its REST operation under `/api/v1` returns; the [OpenAPI contract](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/evaluations/contracts/evaluations-api/v1/openapi.yaml) describes each one.
+
+- A list is an object with one key: `{"questionSets": [...]}`, `{"runs": [...]}`, `{"schedules": [...]}`, `{"reviews": [...]}`, `{"environments": [...]}`.
+- Times are RFC 3339 strings in UTC, such as `2026-11-24T09:15:02.123Z`, or `null`.
+- A run's `status` is `queued`, `running`, `success` (it finished) or `error` (it could not run; `error` says why). A run that finished without enough answers is `success` with `summary.reliable` false. `triggeredBy` is the person's name, or `schedule`; `agent` names the MCP client when an AI agent started it. `summary` holds the totals and `get_run` adds `cases`, one per question.
+- An LLM is always `llmModel` (`llm_model` in a tool); `model` is a semantic model: `{"database", "namespace", "name"}`.
+- A schedule's `nextRunAt` is `null` while it is not enabled.
+- A delete returns `{"deleted": true, "questionSet": "<id>"}` or `{"deleted": true, "schedule": "<id>"}`. In REST the name to confirm is a query parameter: `DELETE /api/v1/question-sets/{questionSet}?confirmName=<name>`.
+- An error is `{"error": "<text>", "code": "<code>"}`, sometimes with `detail`; a tool reports it as `<text> [<code>]`. REST request bodies and query parameters are camelCase (`llmModel`, `targetDatabase`, `confirmName`); tool parameters are snake_case.
 
 ## With OpenTelemetry
 

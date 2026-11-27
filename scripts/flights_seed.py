@@ -102,7 +102,7 @@ def publish(provider, team, database):
         finally:
             connection.close()
         model = semantic_model(ontology, product, NAMESPACE)
-        with SemanticModels.connect(NAMESPACE, ontology["version"]) as models:
+        with SemanticModels.connect(NAMESPACE) as models:
             action, _ = models.publish(MODEL, model)
     tables = sorted(row["table"].rsplit(".", 1)[-1].strip('"') for row in published)
     print(f"Published {len(tables)} tables and the semantic model ({action}) in {database}.")

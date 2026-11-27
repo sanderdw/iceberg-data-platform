@@ -5,7 +5,7 @@ dbt v2 pipelines for your teams' tables. The extension is **API and MCP first**:
 | | |
 | --- | --- |
 | Engine | dbt v2 OSS with its built-in DuckDB adapter and Iceberg REST catalogs |
-| Viewer | `http://localhost:3004` (pipelines, runs, schedules, docs), linked from the user portal as **Pipelines** |
+| Viewer | `http://localhost:3004` (pipelines, runs, schedules, docs), listed under **Apps** in the user portal as **Pipelines** |
 | API | `http://localhost:3004/api/v1` |
 | MCP | `http://localhost:3004/mcp` (Keycloak sign-in through the `ext-dbt-mcp` client) |
 
@@ -24,7 +24,7 @@ irm https://github.com/sanderdw/iceberg-data-platform/releases/latest/download/i
 
 Each build runs in its own container, with no internet and a read-only file system, from the runner image the installer pulls. The extension's launcher starts these containers through the Docker socket; it accepts no image, flag or mount from a request. On [Kubernetes](install-kubernetes.md#add-extensions) each build is a Job in the namespace `<namespace>-dbt-runs` instead, with the same limits. Rerunning the installer keeps the extension, its projects and their runs.
 
-A team administrator enables dbt once per environment, through an agent (`enable_environment`), under **Settings** in the viewer, or with `POST /api/v1/teams/{team}/environments/development`.
+A team administrator enables dbt once per environment: under **Settings** › **Environments** (Settings is in the header, and Environments is its first option), through an AI agent (`enable_environment`) or with `POST /api/v1/teams/{team}/environments/{environment}`. Environments shows who enabled each environment, and **Disable** revokes the team's service account there again.
 
 On Kubernetes, install its chart next to the platform's; see [Install on Kubernetes](install-kubernetes.md#add-extensions).
 
@@ -66,7 +66,7 @@ What each role may do is in [roles and permissions](reference/roles.md#extension
 | --- | --- |
 | `whoami` | Your teams with your role in each, their databases per environment, where dbt is enabled, and this extension. |
 | `list_environments` | Where dbt is enabled for a team, and the databases of each environment. |
-| `enable_environment` / `disable_environment` | Lets dbt build in a team environment as the team's service account, or revokes it (team administrators). Disabling stops its runs and schedules. |
+| `enable_environment` / `disable_environment` | Lets dbt build in a team environment as the team's service account, or disables it (team administrators). Disabling stops its runs and schedules. Both return the environment as `list_environments` shows it. |
 | `list_projects` | dbt projects of your teams, with your role in each. |
 | `create_project` | Creates an empty project on `main`: `dbt_project.yml`, a README and the namespace macro (writers). |
 | `get_project` | A project with its branches, environments, latest run per environment and schedules. |
@@ -74,18 +74,29 @@ What each role may do is in [roles and permissions](reference/roles.md#extension
 | `list_files` / `read_file` | All files of a project, or one file's content, at a branch or revision. |
 | `write_files` | Commits file changes to a branch in one commit (writers). `main` is never written directly. `expected_revision` refuses to overwrite a newer commit. |
 | `list_branches` / `create_branch` / `delete_branch` | Branches with their latest commit; create one from `main` or another branch, or delete one (writers). `main` cannot be deleted. |
-| `get_history` | Recent commits of a branch. |
-| `diff` | Changed files and the patch between two branches or revisions. |
+| `get_history` | Recent commits of a branch, newest first (`limit`, 30 by default, at most 200). |
+| `get_diff` | Changed files and the patch between two branches or revisions. |
 | `merge_to_main` | Merges a branch into `main` (team administrators). With `revision`, the merge is refused if the branch moved after you reviewed it. |
-| `compile` | Compiles selected models, or inline SQL, with a read-only token, and returns the compiled SQL. |
-| `preview_model` | Runs one model's query without writing and returns up to 100 rows. |
-| `run` | Runs `build`, `run`, `seed`, `test`, `compile`, `parse` or `docs` as the team's service account. `build`, `run` and `seed` write tables (writers). Waits up to 600 seconds. |
-| `list_runs` / `get_run` / `get_run_logs` | Recent runs; one run with its per-node results; the last lines of its dbt log. |
-| `cancel_run` | Stops a running run (writers). |
-| `list_schedules` / `set_schedule` / `delete_schedule` | A project's schedules; create, change or delete one, with cron in UTC. Development needs writers, other environments team administrators. |
-| `get_pipeline` | The pipeline graph: nodes with type, table, latest status and test counts, and edges. |
-| `get_model` | One node: description, columns with docs, SQL and compiled SQL, tests and latest result. |
+| `compile_project` | Compiles selected models, or inline SQL, with a read-only token, and returns the compiled SQL. It writes no tables and is recorded as a run. |
+| `preview_model` | Runs one model's query without writing and returns up to 100 rows. It is recorded as a run. |
+| `run_project` | Runs `build`, `run`, `seed`, `test`, `compile`, `parse` or `docs` as the team's service account and returns the run. `build`, `run` and `seed` write tables (writers). `wait` blocks up to 600 seconds for it to finish. |
+| `list_runs` / `get_run` / `get_run_logs` | A project's runs, newest first (`limit`, 20 by default, at most 200); one run's status, totals, error and each node's result in `results`, with `wait` to block until it finishes; the last `limit` lines of its dbt log (500 by default, at most 5000). |
+| `cancel_run` | Stops a queued or running run (writers). |
+| `list_schedules` / `create_schedule` / `update_schedule` / `delete_schedule` | A project's schedules; add one, change one (only what you give changes) or delete one. Cron is five fields in UTC, at most every 5 minutes. Development needs writers, other environments team administrators. |
+| `get_pipeline_graph` | The pipeline graph: nodes with type, table, latest status and test counts, and edges. |
+| `get_node` | One node: description, columns with docs, SQL and compiled SQL, tests and latest result. |
 | `get_lineage` | Upstream and downstream nodes of a node, up to `depth` steps. |
+
+### What the tools and the API return
+
+Every tool returns what its REST operation under `/api/v1` returns; the [OpenAPI contract](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/dbt/contracts/dbt-api/v1/openapi.yaml) describes each one.
+
+- A list is an object with one key: `{"projects": [...]}`, `{"branches": [...]}`, `{"commits": [...]}`, `{"runs": [...]}`, `{"schedules": [...]}`, `{"environments": [...]}`.
+- Times are RFC 3339 strings in UTC, such as `2026-11-24T09:15:02.123Z`, or `null`.
+- A run's `status` is `queued`, `running`, `success`, `failed` (dbt reported errors), `error` (the platform could not run it: no start, time limit or restart) or `cancelled`. `scheduled` tells whether a schedule started it; `triggeredBy` is then `schedule` and `schedule` holds the schedule's id. `summary` holds dbt's totals and what the run published, and `results` each node's result; a list of runs leaves `results` out.
+- A schedule's `nextRunAt` is `null` while it is not enabled.
+- A delete returns `{"deleted": true}` with the id or name of what was deleted under `project`, `branch` or `schedule`. In REST the name to confirm is a query parameter: `DELETE /api/v1/projects/{project}?confirmName=<name>`.
+- An error is `{"error": "<text>", "code": "<code>"}`, sometimes with `detail`; a tool reports it as `<text> [<code>]`. REST request bodies and query parameters are camelCase (`fullRefresh`, `expectedRevision`, `defaultDatabase`, `confirmName`); tool parameters are snake_case.
 
 ## Use dbt from your terminal
 
@@ -110,7 +121,7 @@ uv run iceberg_dbt.py push --branch add-orders -m "Add orders"
 uv run iceberg_dbt.py build --ref add-orders   # build the branch in development
 ```
 
-A team administrator merges the branch into `main` in the viewer or with `merge_to_main`. Pass `revision` (the branch head you reviewed with `diff`) so the merge is refused if the branch moved since.
+A team administrator merges the branch into `main` in the viewer or with `merge_to_main`. Pass `revision` (the branch head you reviewed with `get_diff`) so the merge is refused if the branch moved since.
 
 The [dbt MCP server](https://docs.getdbt.com/docs/dbt-ai/about-mcp?version=2#local-mcp-server) can run these commands for an AI agent. Make the script executable (`chmod +x iceberg_dbt.py`; it starts itself with `uv run`) and point `DBT_PATH` at it:
 
@@ -134,7 +145,7 @@ Not available on the platform: `show --inline`, `list`, `debug`, `deps` and `cle
 ## How it works
 
 - **Projects** belong to a team and are Git repositories kept by the extension. A new project is empty apart from `dbt_project.yml`, a README and the namespace macro. `main` is protected: writers commit to branches, and team administrators merge.
-- **The viewer** shows each pipeline per environment and branch (`main` unless you pick another), follows running builds live, filters and focuses the graph (`+name+`), previews a model's rows and builds a node with its upstream or downstream. **Files** edits any project file on a branch, **Schedules** manages schedules and **Settings** enables environments and deletes branches. Writers create projects there. Team administrators delete them under **Settings**: the project, its history and the dbt properties on its tables go, the tables stay. Writers can edit a node's file from its panel, save it to a branch and build that branch in development. Team administrators can merge it to `main`.
+- **The viewer** shows each pipeline per environment and branch (`main` unless you pick another), follows running builds live, filters and focuses the graph (`+name+`), previews a model's rows and builds a node with its upstream or downstream. **Files** edits any project file on a branch, **Schedules** manages schedules and **Project settings** deletes branches; dbt is enabled per team environment under **Settings** in the header. Writers create projects there. Team administrators delete them under **Project settings**: the project, its history and the dbt properties on its tables go, the tables stay. Writers can edit a node's file from its panel, save it to a branch and build that branch in development. Team administrators can merge it to `main`.
 - **Runs** execute as the team's service account for one environment, with a short-lived catalog token: `write` for `build`, `run` and `seed`, `read` for everything else. Two builds of the same project and environment never overlap.
 - **Promotion.** Development builds any branch. Acceptance and production build only revisions that were the head of `main`: a merge always adds a merge commit, so a commit from inside a merged branch never reaches them. Their schedules need a team administrator.
 - **Pipelines** are drawn from dbt's information schema, with each node's latest status and test results. After a build, each table gets the platform's producer, lineage and quality properties and its column docs, so the catalog shows where it comes from under **Produced by**.
@@ -148,7 +159,7 @@ What each team role may do in the viewer, API and MCP server is listed in [roles
 - `profiles.yml` and `catalogs.yml` are generated for every run. `packages.yml` is not supported, because runs have no internet.
 - Model and column descriptions become the table comment and column docs; tests become its quality status. Generic tests take their parameters under `arguments:`, as dbt v2 requires.
 - Development is one shared sandbox per team: every branch builds the same tables, and the newest build wins. The viewer shows `main`, so build `main` after a merge to see it there.
-- Semantic models are Apache Ossie documents at `semantic_models/<database>/<namespace>/<name>.yml`. Every successful build or run publishes them to its environment, next to the tables, and lists them in the run's summary. Descriptions a model leaves out come from the dbt models it reads. The file wins over edits made elsewhere; deleting the file does not delete the model.
+- Semantic models are [Apache Ossie 0.3.0.dev0](https://github.com/apache/ossie/blob/main/core-spec/spec.md) documents, one model each with `version: 0.3.0.dev0` and the model's keys at the root and each dataset's `source` as `namespace.table`, at `semantic_models/<database>/<namespace>/<name>.yml`. Every successful build or run publishes them to its environment, next to the tables, and lists them in the run's summary. Descriptions a model leaves out come from the dbt models it reads. The file wins over edits made elsewhere; deleting the file does not delete the model.
 
 ## Limits
 

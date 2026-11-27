@@ -68,6 +68,11 @@ def main():
     secrets.add(admin)
     listed, (overview,) = run(admin, [("get_overview", {})])
     assert len(listed) == TOOL_COUNT, sorted(t.name for t in listed)
+    hints = {t.name: t.annotations for t in listed}
+    assert {"delete_share", "delete_automation_principal"} <= set(hints), sorted(hints)
+    assert not any(tool.startswith("revoke_") for tool in hints), sorted(hints)
+    # Leaving a team out removes it, and a retry may hand out another one-time password.
+    assert hints["update_user_access"].destructive_hint and not hints["retry_user_setup"].idempotent_hint
     assert not overview.is_error, text(overview)
     assert overview.structured_content["health"]["status"] == "online"
     assert "demo-team" in {t["name"] for t in overview.structured_content["teams"]}

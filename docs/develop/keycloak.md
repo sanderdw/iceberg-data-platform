@@ -41,15 +41,15 @@ sequenceDiagram
 ```
 
 - **Portals** use confidential clients with the authorization code flow and PKCE. Tokens are verified against JWKS (RS256). The browser only receives an opaque session cookie. Refresh tokens stay in server memory and never reach browsers or notebooks.
-- **Portal administration** requires the `iceberg-admin` client role `platform-admin`. A role with a similar name in another client doesn't count.
+- **Portal administration** requires the `iceberg-admin` client role `platform-admin`. A role with a similar name in another client doesn't count. An account without it whose linked user is Administrator of at least one team gets a read-only session instead: the portal reads the team roles from Polaris at sign-in and again at most a minute later.
 - **Polaris** runs in mixed mode. User tokens carry a `polaris.principal_name` claim naming the linked `portal-…` principal. Only realm administrators can edit that attribute. The gateway also checks the Keycloak issuer and subject stored on the principal. `PRINCIPAL_ROLE:ALL` activates only the roles Polaris already granted. Client-secret authentication remains for service identities and data shares.
-- **MCP clients** such as Codex, GitHub Copilot and Claude Code use the public `iceberg-mcp` client: PKCE and no secret. Its redirects are `http://localhost:<MCP_CALLBACK_PORT>/callback`, `http://localhost/*` and `http://127.0.0.1/*`. For an http loopback address, Keycloak ignores the port, so agents can use their own callback port and path (RFC 8252) and never a remote host. Both portals accept only tokens with `azp = iceberg-mcp` on `/mcp`, so portal tokens are refused there, and they authorize every call. The admin endpoint also needs `platform-admin`, which comes from the client's `roles` default scope. Keep token exchange disabled.
+- **MCP clients** such as Codex, GitHub Copilot and Claude Code use the public `iceberg-mcp` client: PKCE and no secret. Its redirects are `http://localhost:<MCP_CALLBACK_PORT>/callback`, `http://localhost/*` and `http://127.0.0.1/*`. For an http loopback address, Keycloak ignores the port, so agents can use their own callback port and path (RFC 8252). The only remote hosts are the exact `https` callbacks in `MCP_REDIRECT_URIS`, for hosted clients such as claude.ai; `scripts.setup` refuses wildcards there, and the bootstrap sets the same list on every `ext-*-mcp` client. Both portals accept only tokens with `azp = iceberg-mcp` on `/mcp`, so portal tokens are refused there, and they authorize every call. The admin endpoint also needs `platform-admin`, which comes from the client's `roles` default scope. Keep token exchange disabled.
 - **Tools on the user's computer** use the public `iceberg-cli` client with the device authorization grant: no secret and no redirect. The user approves a code in the browser, and the downloadable `iceberg_connect.py` helper then calls Polaris and RustFS directly with the user's token. Only Polaris grants apply on that path. The gateway's issuer and subject check doesn't. Access tokens of this client last one hour, so DuckDB and DBeaver sessions don't expire after 15 minutes.
 
 ## Deployment boundaries
 
 - Access tokens last 15 minutes and renew automatically. Portal sessions last at most eight hours, or less if Keycloak refuses renewal.
-- Notebooks fetch their owner's current token from the gateway. PyIceberg picks it up automatically. A native DuckDB attachment must reconnect to renew it.
+- Notebooks fetch their owner's current token from the gateway. PyIceberg picks it up automatically. A native DuckDB attachment reaches Polaris through a loopback proxy in the notebook kernel, which adds the current token to each request; DuckDB itself holds only a random per-process secret for that proxy.
 - Signing out ends that portal's session and its notebooks, then signs out of Keycloak. There is no back-channel logout. A session in the other portal, a copied token or vended S3 credentials stay valid until they expire. Disabling an account or removing its admin role doesn't invalidate tokens that were already issued.
 - MCP clients and `iceberg_connect.py` keep an offline refresh token on the user's machine. It is valid for 30 days of inactivity. Revoke it in Keycloak under the user's offline **Sessions**, or with `uv run iceberg_connect.py logout`.
 - Sessions are in memory, so each portal needs a single replica.
@@ -71,4 +71,4 @@ This creates `demo-admin`, `demo-writer`, `demo-reader` and `demo-outsider`, wit
 ## References
 
 - [Keycloak server administration](https://www.keycloak.org/docs/latest/server_admin/index.html)
-- [Polaris external identity providers](https://polaris.apache.org/releases/1.8.0/managing-security/external-idp/)
+- [Polaris external identity providers](https://polaris.apache.org/releases/1.9.0/managing-security/external-idp/)

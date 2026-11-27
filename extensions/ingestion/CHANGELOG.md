@@ -1,5 +1,71 @@
 # Changelog
 
+## Unreleased
+
+The REST API and the MCP tools follow the platform's one set of conventions. Nothing of the old shapes
+is kept: update scripts and agent instructions.
+
+- **Account menu.** The header ends the same way as in the administration and user portals: **Read-only** when
+  you have the read role in each of your teams, then Settings, Apps and your name. Your name opens your teams and
+  roles, **Getting started** (this extension's documentation), the theme switch and **Sign out**. Settings says what
+  turning it on and off does and who can change it, and looks the same in every extension.
+- **Settings.** Team administrators enable and disable Ingestion per environment under **Settings** ›
+  **Environments** (the header link), the page every extension shares, which also shows who enabled each one. Disabling was only possible
+  through MCP or REST. A pipeline in an environment where Ingestion is off says so, with Enable for
+  administrators; the start page's "Where pipelines can run" card is gone.
+- **Bridge contract 1.0.** Needs the platform 1.0.0 or later (Bridge contract `>=1.0,<2`); it no longer
+  starts against a 0.9 platform. A Bridge error keeps its status and code (a 503 or 500 was 502).
+- **File downloads.** `ING_MAX_DOWNLOAD_GB` (`runs.maxDownloadGB` on Kubernetes) sets the largest file an
+  https or http file source downloads: 4 GiB by default (was a fixed 2 GiB). On Kubernetes a run's work
+  volume (`runs.workSize`) is 8Gi (was 4Gi), so such a file fits.
+- **Out of memory.** A run killed for memory ends with status `error` and "The run ran out of memory",
+  naming `RUN_MEMORY`. It said "dlt reported an error. Read the run log.", while the log had no error.
+- **Large loads.** Append and replace load into Iceberg in pieces of 128 MB, all in one snapshot and
+  one commit, instead of holding the whole load in memory: a 373 MB Parquet file took 7.3 GB, now
+  1.2 GB. Merge still holds its rows in memory.
+- **Pre-signed links.** A file source's `url` can be a secret (`"$secret:file_url"`), so a pre-signed
+  link's credentials are no longer stored in the definition for everyone to read. The link gets the
+  same checks when the secret is set.
+- **Temporary S3 keys.** `s3.session_token` (a secret) goes with `access_key_id` and
+  `secret_access_key`.
+- **Run logs** show what a run is doing: the download of a file source with its size, when each dlt step
+  (extract, normalize, load) starts and ends with its counts, and every 30 seconds the step that is running
+  and the memory the run uses against its limit. The log is written line by line, so a run that is killed
+  keeps everything it wrote; it had only its first line until dlt finished.
+- **Apps menu.** Drawing the menu again no longer leaves the previous menu's listeners on the page.
+- **Lists** are an object with one key, in REST as in MCP: `{"pipelines": [...]}`, `{"templates": [...]}`,
+  `{"runs": [...]}` and `{"environments": [...]}` (REST returned bare arrays).
+- **Runs.** Starting a run returns 202 with the run as `get_run` returns it. The tables a run wrote are
+  in `results`, beside `summary` (was `summary.tables`); a list of runs leaves `results` out.
+  `GET /runs/{run}` and `get_run` take `wait` (0 to 600 seconds). A run has `scheduled` (was
+  `schedule`). Run logs take `limit` (was `tail`).
+- **Times** are RFC 3339 strings in UTC with milliseconds, such as `2026-11-24T09:15:02.123Z` (were
+  seconds since 1970). A schedule's `nextRunAt` is `null` while it is not enabled, and a schedule has
+  `createdAt`.
+- **REST bodies are camelCase:** `expectedRevision` (was `expected_revision`) and `fullRefresh` (was
+  `full_refresh`). The tools keep `expected_revision` and `full_refresh`.
+- **Delete** is `DELETE /pipelines/{pipeline}?confirmName=<name>` (was `POST /pipelines/{pipeline}/delete`
+  with a JSON body) and returns `{"deleted": true, "pipeline": "<id>"}` (was `id`).
+- **Secrets** are set with `PATCH /pipelines/{pipeline}/secrets` (was `PUT`): the call merges.
+- **Environments.** `enable_environment` and `disable_environment` return the environment as
+  `list_environments` shows it: `{team, environment, enabled, enabledBy, databases}`. Disabling one that
+  is not enabled is 409 `environment_not_enabled` (was 404). The service account's id is no longer
+  returned.
+- **`whoami`** returns only what this extension shows about you; `sharedDatabases` is gone.
+- **Errors.** A database in the body that is not the team's in that environment is 422
+  `invalid_database` (was `unknown_database`). An unknown path is 404 `not_found`, a wrong method 405
+  `method_not_allowed` and an unexpected error 500 `internal_error`, all as `{"error", "code"}`.
+- `update_pipeline` and `set_pipeline_secrets` are marked destructive, so an agent asks first: they can
+  remove secrets and the load state.
+- The OpenAPI contract describes every response and the error body.
+
+Apache Polaris 1.9:
+
+- **Long loads keep their storage access.** A run renews a table's storage credentials shortly before
+  they expire, through Polaris's credentials endpoint.
+- A run sets its table properties again when a concurrent commit got there first (409), instead of
+  reporting the table under `published.errors`.
+
 ## 0.1.4 - 2026-11-18
 
 - Updated dependencies, including FastAPI 0.162.4, croniter 7.0.0 and uv 0.13.8.

@@ -43,10 +43,10 @@ images:
   users: iceberg-data-platform-users
   notebook: iceberg-data-platform-notebook
   postgres: postgres:18-alpine
-  polaris: apache/polaris:1.8.0
-  polarisAdminTool: apache/polaris-admin-tool:1.8.0
-  rustfs: rustfs/rustfs:1.0.4
-  keycloak: quay.io/keycloak/keycloak:26.8.1
+  polaris: apache/polaris:1.9.0
+  polarisAdminTool: apache/polaris-admin-tool:1.9.0
+  rustfs: rustfs/rustfs:1.0.6
+  keycloak: quay.io/keycloak/keycloak:26.8.2
 
 # A Secret with the platform credentials, for GitOps tools that cannot use Helm's lookup.
 # Keys: POSTGRES_PASSWORD, KEYCLOAK_DB_PASSWORD, POLARIS_CLIENT_SECRET, RUSTFS_SECRET_KEY,
@@ -60,6 +60,9 @@ rustfsAccessKey: iceberg-local
 awsRegion: us-east-1
 # Loopback port MCP clients listen on for the Keycloak OAuth callback.
 mcpCallbackPort: 3010
+# Exact https callbacks of hosted MCP clients, added to every MCP client in Keycloak, such as
+# https://claude.ai/api/mcp/auth_callback for Claude on the web and mobile.
+mcpRedirectUris: []
 clusterDomain: cluster.local
 
 # Addresses whose X-Forwarded-For the portals trust: the ingress controller. The notebook token
@@ -136,6 +139,8 @@ users:
 
 notebooks:
   enabled: true
+  # The example notebooks teams can open (a copy in their folder). false: only their own notebooks.
+  examples: true
   max: 8
   memory: 2g
   memoryRequest: 512m
@@ -152,8 +157,8 @@ otel:
   # A Secret in this namespace with the key OTEL_EXPORTER_OTLP_HEADERS, for a backend that needs an API key.
   headersSecret: ""
   resourceAttributes: ""  # e.g. deployment.environment.name=production
-  # Polaris's own traces too, joined to the portals' traces.
-  polaris: true
+  # Polaris's own traces too, joined to the portals' traces. Off by default, as in Compose.
+  polaris: false
 
 networkPolicy:
   enabled: true

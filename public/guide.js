@@ -106,7 +106,10 @@ curl -b cookies.txt ${headers} \\
     ['agent', '02', 'AGENT', 'Ask an AI agent', 'Describe the result, let MCP do the work.'],
     ['api', '03', 'API', 'Script it', 'Repeatable setups and automation.'],
   ];
-  $('#page-content').innerHTML = `<section class="panel guide"><span class="eyebrow">GUIDE / THREE WAYS IN</span><h2>Teams, databases and users. Set them up your way.</h2><p class="guide-lead">Every route uses the same operations and the same rules. Click through it once, let an agent do the legwork, or script it so the next setup takes seconds.</p><nav class="guide-index" aria-label="Ways to get started">${ways.map(([id, number, label, title, text]) => `<button type="button" data-track="${id}"><span>${number} / ${label}</span><strong>${title}</strong><small>${text}</small></button>`).join('')}</nav>`
+  const readOnlyNote = viewer.access === 'viewer'
+    ? '<p class="read-only-note">You are signed in as a team administrator with read-only access here. You can inspect everything in this portal; manage your team’s databases and data shares in Workspaces.</p>'
+    : '';
+  $('#page-content').innerHTML = `<section class="panel guide">${readOnlyNote}<span class="eyebrow">GUIDE / THREE WAYS IN</span><h2>Teams, databases and users. Set them up your way.</h2><p class="guide-lead">Every route uses the same operations and the same rules. Click through it once, let an agent do the legwork, or script it so the next setup takes seconds.</p><nav class="guide-index" aria-label="Ways to get started">${ways.map(([id, number, label, title, text]) => `<button type="button" data-track="${id}"><span>${number} / ${label}</span><strong>${title}</strong><small>${text}</small></button>`).join('')}</nav>`
     + guideTrack('portal', '01', 'PORTAL', 'Point and click.', 'The pages of this portal, one step at a time.', portal)
     + guideTrack('agent', '02', 'AGENT', 'Ask an AI agent.', 'This portal serves a Model Context Protocol endpoint at <code>/mcp</code>. An agent such as Claude Code gets the administration operations as tools and signs in as you.', agent)
     + guideTrack('api', '03', 'API', 'Script it.', 'The portal itself runs on a JSON API. Use it directly for setups you want to repeat.', scripted)

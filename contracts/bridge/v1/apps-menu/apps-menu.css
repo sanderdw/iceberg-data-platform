@@ -1,0 +1,25 @@
+/* The Apps menu (apps-menu.js). Uses the platform's design tokens: --surface, --surface-raised, --border,
+   --border-visible, --text-primary, --text-secondary, --text-display, --mono and --small. */
+.apps-anchor { position: relative; }
+.apps-anchor[hidden] { display: none; }
+.apps-anchor .apps-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; background: transparent; border: 1px solid var(--border-visible); border-radius: 999px; color: var(--text-primary); font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; cursor: pointer; }
+.apps-anchor .apps-toggle::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s; }
+.apps-anchor .apps-toggle[aria-expanded='true']::after { transform: translateY(2px) rotate(-135deg); }
+.apps-anchor .apps-toggle:hover, .apps-anchor .apps-toggle[aria-expanded='true'] { background: transparent; border-color: var(--text-primary); color: var(--text-display); }
+.apps-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; display: grid; gap: 12px; width: min(520px, calc(100vw - 32px)); padding: 16px; background: var(--surface); border: 1px solid var(--border-visible); border-radius: 12px; box-shadow: 0 12px 32px rgb(0 0 0 / .35); text-align: left; }
+.apps-menu[hidden] { display: none; }
+.apps-group { margin: 0; font: var(--small)/1.6 var(--mono); color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; }
+.apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 8px; }
+.apps-grid.compact { grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); }
+.apps-link { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); text-decoration: none; text-transform: none; letter-spacing: 0; }
+a.apps-link:hover, a.apps-link:focus-visible { border-color: var(--text-secondary); background: var(--surface-raised); }
+.apps-link[aria-current='page'] { border-color: var(--text-secondary); }
+.apps-link strong { font-weight: 500; color: var(--text-display); }
+a.apps-link strong::after { content: ' ↗'; color: var(--text-secondary); font-size: .8em; }
+.apps-link span { color: var(--text-secondary); font-size: .8rem; line-height: 1.45; }
+/* Phones: the menu spans the screen under the header instead of hanging off its button. */
+@media (max-width: 700px) {
+  header:has(.apps-anchor) { position: relative; }
+  .apps-anchor { position: static; }
+  .apps-menu { left: 16px; right: 16px; top: calc(100% - 8px); width: auto; }
+}

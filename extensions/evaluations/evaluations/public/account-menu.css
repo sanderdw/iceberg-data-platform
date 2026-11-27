@@ -1,0 +1,41 @@
+/* The account menu (account-menu.js), styled like the Apps menu, and the Read-only pill that sits before Settings and
+   Apps in the header. Uses the platform's design tokens: --surface, --surface-raised, --border, --border-visible,
+   --text-primary, --text-secondary, --text-display, --accent, --mono and --small. Selectors start at .account-anchor
+   (or .read-only-badge) so that a page's own button styles do not override them. */
+.account-anchor { position: relative; min-width: 0; }
+.account-anchor[hidden] { display: none; }
+.account-anchor .account-toggle { display: inline-flex; align-items: center; gap: 8px; max-width: 240px; min-height: 40px; padding: 8px 16px; background: transparent; border: 1px solid var(--border-visible); border-radius: 999px; color: var(--text-primary); font: var(--small)/1.5 var(--mono); text-transform: none; letter-spacing: .02em; white-space: nowrap; cursor: pointer; }
+.account-anchor .account-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.account-anchor .account-toggle::after { content: ''; flex: none; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s; }
+.account-anchor .account-toggle[aria-expanded='true']::after { transform: translateY(2px) rotate(-135deg); }
+.account-anchor .account-toggle:hover, .account-anchor .account-toggle[aria-expanded='true'] { background: transparent; border-color: var(--text-primary); color: var(--text-display); }
+.account-anchor .account-toggle:focus-visible { outline-offset: 3px; }
+.account-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; display: grid; gap: 4px; width: max-content; min-width: 240px; max-width: min(360px, calc(100vw - 32px)); padding: 8px; background: var(--surface); border: 1px solid var(--border-visible); border-radius: 12px; box-shadow: 0 12px 32px rgb(0 0 0 / .35); }
+.account-menu[hidden] { display: none; }
+.account-anchor .account-identity { display: grid; gap: 4px; padding: 8px 12px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--border); text-align: left; }
+.account-anchor .account-identity strong { color: var(--text-display); font-weight: 500; overflow-wrap: anywhere; }
+.account-anchor .account-identity span { font: var(--small)/1.6 var(--mono); color: var(--text-secondary); text-transform: none; letter-spacing: 0; }
+.account-anchor .account-item { display: flex; align-items: center; width: 100%; justify-content: flex-start; min-height: 40px; padding: 8px 12px; background: transparent; border: 0; border-radius: 8px; color: var(--text-primary); font: var(--small)/1.5 var(--mono); text-transform: uppercase; text-decoration: none; letter-spacing: .06em; text-align: left; white-space: nowrap; cursor: pointer; }
+.account-anchor .account-item:hover, .account-anchor .account-item:focus-visible { background: var(--surface-raised); color: var(--text-display); }
+.account-anchor .account-item:focus-visible { outline-offset: -2px; }
+.account-anchor .account-item[aria-current='page'] { color: var(--text-display); }
+.account-anchor .account-item[aria-current='page']::before { content: '['; }
+.account-anchor .account-item[aria-current='page']::after { content: ']'; }
+.account-anchor .account-item:disabled { opacity: .6; cursor: progress; }
+.account-anchor .account-theme { min-height: 40px; padding: 8px; background: transparent; border: 0; color: var(--text-secondary); font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; cursor: pointer; }
+.account-anchor .account-theme:hover { background: transparent; color: var(--text-display); }
+/* Read-only: the person can look at everything here and change nothing. */
+.read-only-badge { display: inline-flex; flex: none; align-items: center; gap: 8px; padding: 4px 12px; border: 1px solid var(--accent); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text-display); font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; cursor: default; }
+.read-only-badge[hidden] { display: none; }
+.read-only-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+/* Phones: the menu spans the screen under the header instead of hanging off its button; the pill tightens. */
+@media (max-width: 700px) {
+  header:has(.account-anchor) { position: relative; }
+  .account-anchor { position: static; }
+  .account-menu { left: 16px; right: 16px; top: calc(100% - 8px); width: auto; min-width: 0; max-width: none; }
+}
+@media (max-width: 480px) {
+  .account-anchor .account-toggle { gap: 6px; padding-inline: 10px; }
+  .read-only-badge { padding: 4px 8px; font-size: .65rem; }
+  .read-only-badge::before { display: none; }
+}

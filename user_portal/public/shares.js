@@ -10,7 +10,7 @@ function modelTables(modelTableCache, db, model) {
     const query = new URLSearchParams({database: db.id, kind: 'semantic-model', name: model.name}); model.namespace.forEach(part => query.append('namespace', part));
     modelTableCache.set(key, api(`/details?${query}`).then(detail => {
       const seen = new Map();
-      detail.models.flatMap(m => m.datasets).forEach(d => { if (d.table) { const t = {kind: 'table', namespace: d.table.namespace, name: d.table.name}; seen.set(objectKey(t), t); } });
+      (detail.model?.datasets || []).forEach(d => { if (d.table) { const t = {kind: 'table', namespace: d.table.namespace, name: d.table.name}; seen.set(objectKey(t), t); } });
       return [...seen.values()];
     }).catch(error => { modelTableCache.delete(key); throw error; }));
   }
@@ -79,7 +79,11 @@ function renderShares(host, db, result) {
   const rows = result.shares.map(share => {
     const missing = share.objects.filter(o => !o.granted), extra = share.extraGrants || [];
     const objects = element('div');
-    objects.append(element('span', `${share.objects.length} selected`));
+    // The first two names as tags; the rest as a count, with their names in its tooltip.
+    const tags = element('div', undefined, 'share-tags'), paths = share.objects.map(objectPath);
+    tags.append(...paths.slice(0, 2).map(path => { const tag = element('span', path, 'share-tag'); tag.title = path; return tag; }));
+    if (paths.length > 2) { const more = element('span', `+${paths.length - 2} more`, 'share-more'); more.title = paths.slice(2).join(', '); tags.append(more); }
+    objects.append(tags);
     if (missing.length) objects.append(element('small', `Not granted (dropped or recreated): ${missing.map(objectPath).join(', ')}. Edit and save to grant again.`, 'share-drift'));
     if (extra.length) objects.append(element('small', `Still granted under a new name: ${extra.map(objectPath).join(', ')}. Edit and save to remove.`, 'share-drift'));
     const actions = element('div', undefined, 'share-actions');

@@ -45,14 +45,16 @@ def test_a_run_appends_rows_and_publishes_the_model(tmp_path, catalog):
 
         call("POST", f"/teams/{TEAM}/environments/development")
         id = call("POST", "/question-sets", json={"team": TEAM, "name": "flights_checks", "model": MODEL,
-                                                  "yaml": YAML, "target_database": DB}).json()["id"]
+                                                  "yaml": YAML, "targetDatabase": DB}).json()["id"]
         runs = []
         for _ in range(2):
-            run = call("POST", f"/question-sets/{id}/runs", json={}).json()
+            run = call("POST", f"/question-sets/{id}/runs").json()
             while (found := call("GET", f"/runs/{run['id']}").json())["status"] in ("queued", "running"):
                 pass
             runs.append(found)
-    assert runs[0]["published"] == "sales.evaluations.case_results"
+    # Where the results went is part of the run's summary; the run itself has no `published`.
+    assert runs[0]["status"] == "success" and "published" not in runs[0]
+    assert runs[0]["summary"]["published"] == "sales.evaluations.case_results"
     cases = catalog.load_table(("evaluations", "case_results")).scan().to_arrow().to_pylist()
     assert len(cases) == 6 and {c["run_id"] for c in cases} == {r["id"] for r in runs}
     delay = next(c for c in cases if c["case_name"] == "delay_by_carrier")
@@ -64,9 +66,9 @@ def test_a_run_appends_rows_and_publishes_the_model(tmp_path, catalog):
     assert table.properties["iceberg-data-platform.producer.run-id"] == runs[1]["id"]
     # A write token of Evaluations' principal for the team, once per run.
     assert [access for _, access, _ in bridge.tokens] == ["write", "write"]
-    stored = json.loads(models["evaluation_results"]["document"]["semantic_model"])
-    [model] = stored["semantic_model"]
-    assert model["datasets"][0]["source"] == "lakehouse.evaluations.case_results"
+    model = json.loads(models["evaluation_results"]["document"]["semantic_model"])
+    assert model["version"] == models["evaluation_results"]["document"]["version"] == "0.3.0.dev0"
+    assert model["datasets"][0]["source"] == "evaluations.case_results"
     assert {m["name"] for m in model["metrics"]} >= {"pass_rate", "grounded_rate", "average_tokens"}
     # Unchanged the second time.
     assert models["evaluation_results"]["entity-version"] == 1

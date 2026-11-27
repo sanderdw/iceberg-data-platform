@@ -32,25 +32,34 @@ DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idemp
                               open_world_hint=False)
 INSTRUCTIONS = """Conversational BI on the Iceberg Data Platform: governed questions over semantic models.
 
-Start with list_models: the Apache Ossie semantic models of your teams and of data shares your
-teams received. describe_model explains one model: datasets, fields, metrics (with their SQL and
-unit) and which dimensions each metric can be split by. Then call query with metric names,
-dimensions written as DATASET.field, and optional filters, a time grain, ordering and a limit.
-The platform compiles the SQL from the model: you never write SQL, and metric definitions and
-joins are always the model owner's. When a dimension can be reached along several relationships
-(for example an airport of departure or of destination), the error names the options: pass one in
-`via`. A dimension that would repeat rows of the metric's dataset is refused (fan_out).
+Start with list_semantic_models: the Apache Ossie semantic models of your teams and of data shares
+your teams received, each with its reference `model` (database, namespace, name).
+describe_semantic_model explains one model: datasets, fields, metrics (with their SQL and unit)
+and which dimensions each metric can be split by. Then call query_semantic_model with metric
+names (a dataset's own metric as DATASET.metric, as describe_semantic_model lists it), dimensions
+written as DATASET.field, and optional filters, a time grain, ordering and a limit. The
+platform compiles the SQL from the model: you never write SQL, and metric definitions and joins
+are always the model owner's. When a dimension can be reached along several
+relationships (for example an airport of departure or of destination), the error names the
+options: pass one in `via`. A dimension that would repeat rows of the metric's dataset is refused
+(fan_out).
 
 State the metric definition, unit, time window, filters and join path with every answer, and
-follow the model's instructions. Results are also available by resultId with get_result. When a
-team has not enabled Conversational BI for an environment, a team administrator calls
-enable_environment."""
+follow the model's instructions. More rows of a result come from get_result, with the resultId
+as `result`. When a team has not enabled Conversational BI for an environment (`notEnabled` in
+list_semantic_models), a team administrator calls enable_environment. Times are RFC 3339 strings
+in UTC."""
 
 Environment = Literal["development", "acceptance", "production"]
 TeamId = Annotated[str, Field(pattern=r"^team-[a-f0-9]{32}$", description="Team id from whoami.")]
-Database = Annotated[str, Field(pattern=r"^db-[a-f0-9]{32}$", description="Database id from list_models.")]
-Namespace = Annotated[list[str], Field(min_length=1, max_length=20, description="Namespace levels, from list_models.")]
-ModelName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,256}$", description="Semantic model name.")]
+Database = Annotated[str, Field(pattern=r"^db-[a-f0-9]{32}$",
+                                description="Database id: model.database in list_semantic_models.")]
+Namespace = Annotated[list[str], Field(min_length=1, max_length=20,
+                                       description="Namespace levels: model.namespace in list_semantic_models.")]
+ModelName = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,256}$",
+                                 description="Semantic model name: model.name in list_semantic_models.")]
+ResultId = Annotated[str, Field(pattern=r"^res-[a-f0-9]{24}$",
+                                description="Result id: resultId of query_semantic_model.")]
 
 
 class Verifier:
@@ -90,57 +99,64 @@ def create_mcp(settings, services, verifier):
             detail = f" Detail: {exc.detail}" if exc.detail else ""
             raise ToolError(f"{exc} [{exc.code}]{detail}") from None
 
+    def sample(result, rows):
+        """A result as an agent gets it: the sample the chat agent gets, with the model named as in REST."""
+        return {**services.for_llm(result, rows), "model": result["model"], "modelName": result["modelName"]}
+
     @mcp.tool(annotations=READ)
     async def whoami() -> dict[str, Any]:
-        """Your teams with your role in each, their databases, the data shares they received, and this extension."""
+        """Your teams with your role in each, their databases, where Conversational BI is enabled, the databases
+        your teams received a share of, and this extension."""
         return await call(services.whoami)
 
     @mcp.tool(annotations=READ)
     async def list_environments(team: TeamId) -> dict[str, Any]:
-        """Where Conversational BI is enabled for a team."""
-        return {"environments": await call(services.environments, team)}
+        """Where Conversational BI is enabled for a team, with the databases and received shares of each
+        environment."""
+        return await call(services.environments, team)
 
     @mcp.tool(annotations=WRITE)
     async def enable_environment(team: TeamId, environment: Environment) -> dict[str, Any]:
         """Let Conversational BI read a team environment, and the shares the team received there, with a read-only
-        service account (team administrators)."""
+        service account (team administrators). Returns the environment, as list_environments shows it."""
         return await call(services.enable_environment, team, environment)
 
     @mcp.tool(annotations=DESTRUCTIVE)
     async def disable_environment(team: TeamId, environment: Environment) -> dict[str, Any]:
-        """Revoke Conversational BI's service account for a team environment; questions there stop working."""
+        """Disable Conversational BI for a team environment (team administrators): questions there stop working.
+        Returns the environment, as list_environments shows it."""
         return await call(services.disable_environment, team, environment)
 
     @mcp.tool(annotations=READ)
-    async def list_models() -> dict[str, Any]:
+    async def list_semantic_models() -> dict[str, Any]:
         """Semantic models you can ask questions of, own and shared, and environments that still need enabling."""
-        return await call(services.list_models)
+        return await call(services.list_semantic_models)
 
     @mcp.tool(annotations=READ)
-    async def describe_model(database: Database, namespace: Namespace, name: ModelName) -> dict[str, Any]:
+    async def describe_semantic_model(database: Database, namespace: Namespace, model: ModelName) -> dict[str, Any]:
         """Datasets, fields, metrics and reachable dimensions of one semantic model, with the owner's instructions."""
-        return await call(services.describe_model, ModelRef(database=database, namespace=namespace, name=name))
+        return await call(services.describe_model, ModelRef(database=database, namespace=namespace, name=model))
 
     @mcp.tool(annotations=READ)
-    async def query(database: Database, namespace: Namespace, model: ModelName,
-                    metrics: Annotated[list[str], Field(min_length=1, max_length=5)],
-                    dimensions: Annotated[list[Dimension], Field(max_length=5)] = [],  # noqa: B006
-                    filters: Annotated[list[Filter], Field(max_length=10)] = [],  # noqa: B006
-                    order_by: Annotated[list[Order], Field(max_length=5)] = [],  # noqa: B006
-                    limit: Annotated[int, Field(ge=1, le=5000)] = 100) -> dict[str, Any]:
+    async def query_semantic_model(
+            database: Database, namespace: Namespace, model: ModelName,
+            metrics: Annotated[list[str], Field(min_length=1, max_length=5)],
+            dimensions: Annotated[list[Dimension], Field(max_length=5)] = [],  # noqa: B006
+            filters: Annotated[list[Filter], Field(max_length=10)] = [],  # noqa: B006
+            order_by: Annotated[list[Order], Field(max_length=5)] = [],  # noqa: B006
+            limit: Annotated[int, Field(ge=1, le=5000)] = 100) -> dict[str, Any]:
         """Run a governed query: metrics split by dimensions (DATASET.field, optional grain and via), with filters.
-        Returns at most 200 rows inline; get_result returns the rest by resultId."""
+        Returns at most 200 rows inline; get_result returns the rest, with the resultId as `result`."""
         spec = QuerySpec(metrics=metrics, dimensions=dimensions, filters=filters, order_by=order_by, limit=limit)
         result = await call(services.run_query, ModelRef(database=database, namespace=namespace, name=model), spec)
-        return {**services.for_llm(result, MCP_ROWS), "rowsUrl": f"{settings.origin}/api/v1/results/{result['id']}"}
+        return {**sample(result, MCP_ROWS), "rowsUrl": f"{settings.origin}/api/v1/results/{result['id']}"}
 
     @mcp.tool(annotations=READ)
-    async def get_result(result_id: Annotated[str, Field(pattern=r"^res-[a-f0-9]{24}$")],
-                         offset: Annotated[int, Field(ge=0)] = 0,
+    async def get_result(result: ResultId, offset: Annotated[int, Field(ge=0)] = 0,
                          limit: Annotated[int, Field(ge=1, le=MCP_ROWS)] = MCP_ROWS) -> dict[str, Any]:
         """Rows of a result you asked for earlier (results are kept for 30 minutes)."""
-        found = await call(services.get_result, result_id)
-        return {**services.for_llm(found, 0), "rows": found["rows"][offset:offset + limit], "offset": offset}
+        found = await call(services.get_result, result)
+        return {**sample(found, 0), "rows": found["rows"][offset:offset + limit], "offset": offset}
 
     return mcp
 
@@ -153,7 +169,8 @@ class Endpoint:
 
     async def __call__(self, scope, receive, send):
         if self.app is None:
-            await JSONResponse({"error": "The MCP transport is not running."}, status_code=503)(scope, receive, send)
+            await JSONResponse({"error": "The MCP transport is not running.", "code": "unavailable"},
+                               status_code=503)(scope, receive, send)
             return
         body, more = bytearray(), True
         while more:
@@ -163,7 +180,8 @@ class Endpoint:
             body.extend(message.get("body", b""))
             more = message.get("more_body", False)
             if len(body) > MAX_BODY:
-                await JSONResponse({"error": "Request is too large."}, status_code=413)(scope, receive, send)
+                await JSONResponse({"error": "Request is too large.", "code": "too_large"},
+                                   status_code=413)(scope, receive, send)
                 return
         replayed = False
 

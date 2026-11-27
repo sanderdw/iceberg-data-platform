@@ -36,9 +36,9 @@ Yes, on a [Kubernetes installation](install-kubernetes.md): it has stable public
 
 ## Accounts and access
 
-### I'm a team Administrator. Why can't I open the administration portal?
+### I'm a team Administrator. Why can't I change anything in the administration portal?
 
-The administration portal needs the Keycloak role `iceberg-admin/platform-admin`. Team roles never grant it, including the Administrator role. See the [administration guide](admin-guide.md).
+Team Administrators have read-only access there: you can look at every page and change nothing. Changing the platform needs the Keycloak role `iceberg-admin/platform-admin`, which no team role grants, including the Administrator role. Manage your own team's databases and data shares in the [user portal](user-portal.md). See the [administration guide](admin-guide.md#read-only-access-for-team-administrators).
 
 ### What can Read, Read & write and Administrator do?
 
@@ -62,9 +62,9 @@ Packages you install with marimo's package installer go to `/tmp/packages` and d
 
 Teammates share the saved files, but it isn't a collaborative editor. Agree who edits a file. See [notebooks](notebooks.md).
 
-### My DuckDB session stopped working after an hour.
+### My DuckDB session stopped working.
 
-The token it started with lasts one hour. From your computer, run the `iceberg_connect.py` command again. In a notebook, reconnect the DuckDB attachment or call `refresh_table_credentials`. See [connect from your computer](connect.md) and [notebooks](notebooks.md).
+DuckDB keeps the token it started with. From your computer, that token lasts one hour: run the `iceberg_connect.py` command again. In a notebook, `connect_duckdb` renews the token and the storage credentials itself for as long as your portal session lasts. See [connect from your computer](connect.md) and [notebooks](notebooks.md).
 
 ### `iceberg_connect.py` only works on the platform's machine.
 
@@ -97,6 +97,10 @@ Run the installer again and answer yes, or name the extensions in `ICEBERG_EXTEN
 ### Should I use Ingestion or Replication for a database?
 
 Use [Ingestion (dlt)](ingestion.md) to load a table once or now and then; it sees no deletes. Use [Replication (OLake)](replication.md) to keep an operational database in step, with its updates and deletes, every few minutes. Replication needs logical replication on the source (`wal_level = logical`, a replication slot and a publication).
+
+### Why OLake and not Filament?
+
+Both were tested on the same PostgreSQL tables and Polaris catalog in November 2026. Filament (0.52) keeps PostgreSQL's column types more faithfully than OLake and got every row right whenever a run finished. But it rewrites the whole table on every run with changes: one update of 500,000 rows did not finish in 37 minutes (OLake: 41 seconds), and the stuck run could not be cancelled and blocked every later run. Its change data capture also needs a long-running server with PostgreSQL and NATS, while the launcher needs a command that ends, as OLake is. See the extension's [decisions](https://github.com/sanderdw/iceberg-data-platform/blob/main/extensions/replication/DECISIONS.md#filament).
 
 ### Replication shows rows that were deleted in the source.
 

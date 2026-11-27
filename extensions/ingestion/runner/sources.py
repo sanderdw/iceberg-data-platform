@@ -13,7 +13,8 @@ from urllib.parse import unquote, urlsplit
 SECRET = re.compile(r"^\$secret:([a-z][a-z0-9_]{0,63})$")
 FORMATS = {"csv", "jsonl", "parquet"}
 CHUNK = 10_000
-MAX_DOWNLOAD = 2 * 1024**3
+# The default for the largest http(s) download; the gateway sends ING_MAX_DOWNLOAD_GB in job.json.
+MAX_DOWNLOAD = 4 * 1024**3
 
 
 class SourceError(ValueError):
@@ -32,14 +33,17 @@ def substitute(value, secrets):
     return value
 
 
-def build(source_type, config, secrets, work):
+def build(source_type, config, secrets, work, max_download=MAX_DOWNLOAD):
+    secret_url = isinstance(config.get("url"), str) and SECRET.fullmatch(config["url"])
     config = substitute(config, secrets)
+    if secret_url and urlsplit(config["url"]).scheme not in ("http", "https"):
+        raise SourceError("A file URL kept in a secret must start with https:// or http://.")
     if source_type == "rest_api":
         return rest_api(config)
     if source_type == "sql_database":
         return sql_database(config)
     if source_type == "filesystem":
-        return filesystem(config, Path(work))
+        return filesystem(config, Path(work), max_download)
     raise SourceError(f"Unknown source type {source_type!r}.")
 
 
@@ -131,24 +135,27 @@ def read_parquet(items):
             yield from pq.ParquetFile(file).iter_batches(batch_size=CHUNK * 5)
 
 
-def download(url, target):
+def download(url, target, limit=MAX_DOWNLOAD):
     import requests
 
     name = Path(unquote(urlsplit(url).path)).name or "download"
     target.mkdir(parents=True, exist_ok=True)
     size = 0
+    print(f"Downloading {name}", flush=True)
     with requests.get(url, stream=True, timeout=(30, 300)) as response:
         response.raise_for_status()
         with open(target / name, "wb") as file:
             for chunk in response.iter_content(1024 * 1024):
                 size += len(chunk)
-                if size > MAX_DOWNLOAD:
-                    raise SourceError(f"The file is larger than {MAX_DOWNLOAD:,} bytes.")
+                if size > limit:
+                    raise SourceError(f"The file is larger than {limit / 1024**3:g} GiB, the limit the platform "
+                                      "administrator set (ING_MAX_DOWNLOAD_GB).")
                 file.write(chunk)
+    print(f"Downloaded {name}: {size / 1000**3:.2f} GB", flush=True)
     return name
 
 
-def filesystem(config, work):
+def filesystem(config, work, max_download=MAX_DOWNLOAD):
     import dlt
     from dlt.sources.filesystem import filesystem as files
 
@@ -159,13 +166,14 @@ def filesystem(config, work):
         raise SourceError("A file source needs a table name.")
     scheme = urlsplit(url).scheme
     if scheme in ("http", "https"):
-        name = download(url, work / "in")
+        name = download(url, work / "in", max_download)
         listing = files(bucket_url=(work / "in").as_uri(), file_glob=name)
     elif scheme == "s3":
         import s3fs
 
         s3 = config.get("s3") or {}
         fs = s3fs.S3FileSystem(key=s3.get("access_key_id"), secret=s3.get("secret_access_key"),
+                               token=s3.get("session_token"),
                                anon=not s3.get("access_key_id"), endpoint_url=s3.get("endpoint_url"),
                                client_kwargs={"region_name": s3["region"]} if s3.get("region") else None)
         incremental = dlt.sources.incremental("modification_date") if config.get("incremental") else None

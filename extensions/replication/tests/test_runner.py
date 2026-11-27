@@ -3,6 +3,7 @@
 import json
 import sys
 import textwrap
+import urllib.error
 
 import pytest
 
@@ -219,7 +220,7 @@ def test_the_deadline_stops_olake_and_the_next_run_continues(work, monkeypatch):
     folder, _, _ = work
     monkeypatch.setenv("FAKE_MODE", "slow")
     code, result, log = run(folder, deadline=1)
-    assert code == 0 and result["status"] == "partial" and result["stoppedAtLimit"]
+    assert code == 0 and result["status"] == "incomplete" and result["stoppedAtLimit"]
     assert not result["firstCopyComplete"] and "Time limit reached" in log
     saved = json.loads((folder / "out" / "state" / "state.json").read_text())
     assert saved["streams"][0]["state"]["chunks"] == [{"min": 5}]
@@ -236,3 +237,35 @@ def test_a_failed_sync_reports_olakes_error(work, monkeypatch):
 def test_scrubber_masks_urls_and_values():
     scrub = Scrubber([PASSWORD])
     assert scrub(f"postgres://u:{PASSWORD}@h/db password={PASSWORD}") == "postgres://u:***@h/db password=***"
+
+
+class CommitCatalog(publish.Catalog):
+    """The catalog's commit endpoint, answering with the given statuses in turn."""
+
+    def __init__(self, statuses):
+        self.statuses, self.sent, self.base = list(statuses), [], "/v1/db"
+
+    def call(self, method, path, body=None):
+        self.sent.append((method, path, body))
+        status = self.statuses.pop(0)
+        if status != 200:
+            raise urllib.error.HTTPError(path, status, "error", {}, None)
+        return {}
+
+
+def test_a_property_commit_that_conflicts_is_sent_again():
+    catalog, waits = CommitCatalog([409, 409, 200]), []
+    catalog.set_properties("raw", "orders", {"iceberg-data-platform.producer": "olake"}, sleep=waits.append)
+    assert len(catalog.sent) == 3 and len({json.dumps(body) for *_, body in catalog.sent}) == 1
+    assert len(waits) == 2 and 0 <= waits[0] <= 0.2 and 0 <= waits[1] <= 0.4
+
+
+def test_property_commits_retry_only_conflicts_and_only_a_few_times():
+    catalog = CommitCatalog([409] * 10)
+    with pytest.raises(urllib.error.HTTPError):
+        catalog.set_properties("raw", "orders", {}, sleep=lambda wait: None)
+    assert len(catalog.sent) == publish.COMMIT_ATTEMPTS
+    catalog = CommitCatalog([403])
+    with pytest.raises(urllib.error.HTTPError):
+        catalog.set_properties("raw", "orders", {}, sleep=lambda wait: pytest.fail("no retry"))
+    assert len(catalog.sent) == 1

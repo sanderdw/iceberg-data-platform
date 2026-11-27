@@ -1,37 +1,23 @@
-"""Preserve user work and the physical invariants of the synthetic energy data."""
+"""The shipped examples and the physical invariants of their synthetic data."""
 
 import pytest
 
-from user_portal.notebook.seed import seed_workspace
+from user_portal.notebook_files import EXAMPLES
 
 
-def test_existing_workspace_receives_examples_without_overwriting_edits(tmp_path):
-    personal = tmp_path / "workspace.py"
-    personal.write_text("# Personal analysis")
-    example = tmp_path / "01_pyiceberg_neighborhood.py"
-    example.write_text("# Customized example")
-    seed_workspace(tmp_path)
-    assert "shared_objects" in (tmp_path / "shared_workspace.py").read_text()
-    assert personal.read_text() == "# Personal analysis"
-    assert example.read_text() == "# Customized example"
-    second = tmp_path / "02_duckdb_visualization.py"
-    assert "mo.sql(" in second.read_text()
-    assert "app = marimo.App" in second.read_text()
-    second.write_text("# My SQL")
-    seed_workspace(tmp_path)
-    assert second.read_text() == "# My SQL"
-    third = tmp_path / "03_duckdb_iceberg.py"
-    assert "engine=lakehouse" in third.read_text()
-    third.write_text("# My native analysis")
-    seed_workspace(tmp_path)
-    assert third.read_text() == "# My native analysis"
+def test_the_examples_run_against_the_lakehouse_and_need_no_input():
+    def read(name):
+        return (EXAMPLES / name).read_text()
+
+    assert "mo.sql(" in read("02_duckdb_visualization.py") and "app = marimo.App" in read("02_duckdb_visualization.py")
+    assert "engine=lakehouse" in read("03_duckdb_iceberg.py")
     for name in ("04_duckdb_iceberg_v3_write.py", "05_duckdb_iceberg_v3_read.py"):
-        source = (tmp_path / name).read_text()
+        source = read(name)
         assert "engine=lakehouse" in source
         # These examples run from top to bottom without input.
         assert "mo.ui." not in source and "mo.stop(" not in source
-    assert "'format-version' = 3" in (tmp_path / "04_duckdb_iceberg_v3_write.py").read_text()
-    explained = (tmp_path / "11_duckdb_iceberg_explained.py").read_text()
+    assert "'format-version' = 3" in read("04_duckdb_iceberg_v3_write.py")
+    explained = read("11_duckdb_iceberg_explained.py")
     # Replaces only its own table on a rerun, and runs from top to bottom without input.
     assert "drop_example_table(" in explained and "EXAMPLE_PROPERTY" in explained
     assert "mo.ui." not in explained and "mo.stop(" not in explained
@@ -82,6 +68,7 @@ def test_energy_data_is_reproducible_and_balanced():
     assert all(r["grid_draw_kwh"] >= 0 and r["grid_export_kwh"] >= 0 for r in rows)
 
 
+@pytest.mark.slow
 def test_duckdb_notebook_executes_sql_with_plain_street_setting(monkeypatch):
     pytest.importorskip("marimo")
     pytest.importorskip("pyarrow")
@@ -114,6 +101,7 @@ def test_duckdb_notebook_executes_sql_with_plain_street_setting(monkeypatch):
         assert hourly["generation_kwh"].sum() == pytest.approx(expected["generation_kwh"].sum())
 
 
+@pytest.mark.slow
 def test_plain_writer_runs_without_a_button_and_skips_existing_rows(monkeypatch):
     pytest.importorskip("marimo")
     pytest.importorskip("pyarrow")
@@ -207,6 +195,7 @@ def test_dlt_tables_take_the_catalog_location(monkeypatch):
     assert calls == [None]
 
 
+@pytest.mark.slow
 def test_dlt_notebook_loads_and_merges_without_duplicates(monkeypatch, tmp_path):
     pytest.importorskip("marimo")
     pytest.importorskip("dlt")

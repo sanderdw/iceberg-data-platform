@@ -7,7 +7,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.163.1",
+  "fastapi==0.165.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
   "joserfc>=1.8.0",
@@ -33,15 +33,17 @@ dev = [
   # scripts/e2e_smoke.py prepares its test source (BSD-3-Clause).
   "pg8000>=1.31.6",
   "pytest>=9.2.0",
-  "ruff>=0.17.5",
+  "ruff>=0.17.6",
 ]
 
 [tool.iceberg-replication]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
-bridge-contract = ">=0.1,<0.2"
+bridge-contract = ">=1.0,<2"
 
 [tool.uv]
 package = false
+# The platform and the other extensions get python-dateutil 2.x through botocore (<3); keep the same.
+constraint-dependencies = ["python-dateutil<3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

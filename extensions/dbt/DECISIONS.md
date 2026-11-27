@@ -14,7 +14,7 @@ contract change.
   happens at image build only.
 - dbt v2 loads warehouse drivers through the ADBC driver manager. Without a local driver it
   downloads one from `public.cdn.getdbt.com`. Run containers have no internet, so the runner image
-  registers the ADBC entry point `duckdb_adbc_init` of the pinned `duckdb==2.0.0` wheel in a driver
+  registers the ADBC entry point `duckdb_adbc_init` of the pinned `duckdb==2.0.1` wheel in a driver
   manifest, `duckdb.toml`, found through `ADBC_DRIVER_PATH`. The runner runs the same DuckDB version
   as the platform's notebooks.
 - The DuckDB extensions `iceberg`, `avro` and `httpfs` are installed at image build from DuckDB's
@@ -75,6 +75,19 @@ loopback proxy in the run (`runner/catalog_proxy.py`) that replaces the vended `
 the internal storage endpoint. DuckDB signs its requests for the internal host, which RustFS
 accepts: vended credentials are not bound to a host name. The optional capability `storage-credentials` (path B) is reserved in the contract but
 not implemented in 0.1.
+
+### Expiring credentials and conflicting commits (2026-11-25, Polaris 1.9)
+
+- **DuckDB keeps the catalog token it attached with.** Checked against a fake catalog: neither a
+  replaced `iceberg` secret nor `ATTACH OR REPLACE` changes the token it sends, and a 401 does not
+  make it read the secret again. So the run limit (token lifetime minus 15 minutes) stays.
+- **Storage credentials are DuckDB's own.** With `access_delegation_mode: vended_credentials` DuckDB
+  takes them from each loadTable; runner code cannot renew them inside a statement.
+- **Conflicting commits.** Since Polaris 1.8 a commit that conflicts with a concurrent one gets 409.
+  DuckDB does not retry it: that model fails, and the next build writes it again. The runner's own
+  metadata commit (`runner/publish.py`) loads the table again and applies the properties and column
+  docs again, up to 5 tries with growing, jittered waits. PyIceberg retries only commits that add
+  snapshots, so there is no double retry.
 
 ## Materializations
 
@@ -267,7 +280,7 @@ instead of hiding it:
 
 - A build of a branch other than `main` in development returns a `hint` that it replaces the
   tables `main` builds.
-- A branch's pipeline (`get_pipeline` with `ref`) carries `overwrittenBy` when another branch built
+- A branch's pipeline (`get_pipeline_graph` with `ref`) carries `overwrittenBy` when another branch built
   development's tables after this branch's last build; the viewer turns it into a notice.
 - `merge_to_main` returns a `hint` while `main` has no successful build of the merged revision in
   development, and the viewer offers **Build main in Development** after a merge.
@@ -288,7 +301,8 @@ not reviewed with the pipeline, not merged by a team administrator, and not rebu
 
 ### Decision: `semantic_models/` is published by the run
 
-- A model is an Apache Ossie document at `semantic_models/<database>/<namespace…>/<name>.yml`. The
+- A model is an Apache Ossie 0.3.0.dev0 document, one model at its root, at
+  `semantic_models/<database>/<namespace…>/<name>.yml`. The
   first folder is the database's display name with `-` as `_`, as in `+catalog_name`; the folders
   after it are the namespace levels; the file name is the model's name. dbt does not read the
   folder.
@@ -306,3 +320,25 @@ not reviewed with the pipeline, not merged by a team administrator, and not rebu
   `describe_semantic_model` shows the result. Dataset and field descriptions a model leaves out
   come from the dbt descriptions of the models it reads, as the user portal's publish fills them
   from table comments and column docs.
+
+## The API follows the extensions' shared contract (2026-11-25)
+
+The REST API and the MCP tools use the names, shapes and error codes the other extensions use, so an
+agent that knows one extension knows this one. `CHANGELOG.md` lists what changed; these are the
+choices that are dbt's own.
+
+- **A run with failing nodes is `failed`, not `partial`.** Nearly every failing dbt run has nodes
+  that succeeded, and alerts and the catalog's quality status key on `failed`. `results` says which
+  nodes failed.
+- **`compile_project` and `preview_model` are not read-only.** They write no table, but each leaves
+  a run a caller can list afterwards, so a client may not repeat them freely.
+- **`run_project` does not wait unless asked.** `wait` is 0 by default, as on every extension; it
+  was 120 seconds. An agent that wants the result passes `wait`, there or on `get_run`.
+- **A scheduled run is `triggeredBy: "schedule"`.** The schedule's id is in `schedule`. Stored runs
+  keep `schedule <id>` in their `triggered_by` column; the projection decides what a response shows.
+- **A schedule runs at most every 5 minutes**, checked when a cron is set. A schedule saved before
+  the minimum existed keeps its cron until someone changes it, so it can still be paused.
+- **Stored rows stay as they are.** Columns keep their names (`selector`, `next_run_at`) and times
+  stay seconds since 1970; `Services` projects every row into its response.
+- **`preview_model(model=…)` keeps `model`:** it takes a dbt model. Only the tool that takes any
+  node was renamed, to `get_node`, because `model` elsewhere on the platform is a semantic model.

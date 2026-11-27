@@ -7,12 +7,12 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.162.4",
+  "fastapi==0.165.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
-  "joserfc>=1.7.7",
+  "joserfc>=1.8.0",
   "mcp>=2.3.0,<3",
-  "croniter>=6.2.4",
+  "croniter>=7.0.0",
   "cryptography>=46.0.0",
 ]
 
@@ -33,20 +33,20 @@ runner = [
   "dlt[pyiceberg,sql_database]==1.32.0",
   "pyiceberg>=0.12.0",
   "pg8000>=1.31.6",
-  "pymysql>=1.1.2",
+  "pymysql>=1.2.4",
   "s3fs>=2025.9.0",
 ]
 dev = [
   {include-group = "otel"},
   {include-group = "launcher"},
   {include-group = "runner"},
-  "pytest>=9.1.1",
-  "ruff>=0.17.3",
+  "pytest>=9.2.0",
+  "ruff>=0.17.6",
 ]
 
 [tool.iceberg-ingestion]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
-bridge-contract = ">=0.1,<0.2"
+bridge-contract = ">=1.0,<2"
 
 [tool.uv]
 package = false

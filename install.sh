@@ -10,6 +10,7 @@ main() {
             if [ "$1" = --help ]; then
                 printf 'Usage: sh install.sh [--dir DIRECTORY]\nDefault: ~/iceberg-data-platform (or ICEBERG_INSTALL_DIR)\nRequires Linux or macOS, Docker with Compose v2, curl and tar.\n'
                 printf '\nExtensions (optional): ICEBERG_EXTENSIONS=conversationalbi,dbt,ingestion,replication,maintenance,evaluations,pgadmin names the ones to add. In\na terminal the installer asks; ICEBERG_EXTENSIONS=none skips the questions.\n'
+                printf 'OpenMetadata needs your own OpenMetadata server and a bot token, so it has its own installer:\nsee https://sanderdw.github.io/iceberg-data-platform/openmetadata/\n'
                 printf '\nConversational BI also starts with LLM_MODEL and its key, for example\nLLM_MODEL=anthropic:claude-sonnet-5-5 ANTHROPIC_API_KEY=...\nVariables: %s\n' "$cbi_variables"
                 return
             fi

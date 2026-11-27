@@ -156,7 +156,7 @@ assert models.names() == ['flights']
 stored, version = models.load('flights')
 raw = models.client.get(models.base + '/flights').json()['document']
 ossie = json.loads(raw['semantic_model'])
-assert raw['version'] == ossie['version'] == '0.2.0.dev0' and ossie['semantic_model'] == [stored], raw['version']
+assert raw['version'] == ossie['version'] == '0.3.0.dev0' and ossie == stored, raw['version']
 assert [d['name'] for d in stored['datasets']] == ['RUNWAY', 'AIRCRAFT', 'AIRPORT', 'FLIGHT', 'CARRIER', 'ROUTE']
 assert models.load('missing') is None
 for change in (lambda: models.create('other', stored), lambda: models.update('flights', stored, version), lambda: models.drop('flights')):

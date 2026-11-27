@@ -46,24 +46,46 @@ class AgentClient:
             raise EvalError(status, found["error"], found["code"])
         return found
 
+    @staticmethod
+    def current(found, key):
+        """An answer without `key` comes from a Conversational BI of before the shared API conventions. It would
+        ignore the LLM a run asks for, so it is refused instead of read."""
+        if key not in found:
+            raise EvalError(503, "This Conversational BI has an older evaluation API: upgrade it.",
+                            "agent_unsupported")
+        return found
+
     async def models(self, team, environment):
-        return await self.checked("/models", {"team": team, "environment": environment})
+        """The semantic models the agent answers from for the team, the LLMs a run may choose, and whether the
+        control arm is allowed: {semanticModels, llmModels, schemaOnly}."""
+        return self.current(await self.checked("/models", {"team": team, "environment": environment}),
+                            "semanticModels")
 
-    async def ask(self, team, environment, question, model=None):
-        return await self.checked("/ask", {"team": team, "environment": environment, "question": question,
-                                           **({"model": model} if model else {})})
+    async def ask(self, team, environment, question, llm_model=None):
+        """The agent's answer: {answer, llmModel, toolCalls, queries, usage, durationMs, traceId}. `llm_model` is
+        one of the LLMs `models` lists; without it the agent uses its default."""
+        body = {"team": team, "environment": environment, "question": question,
+                **({"llmModel": llm_model} if llm_model else {})}
+        return self.current(await self.checked("/ask", body), "llmModel")
 
-    async def ask_control(self, team, environment, model, question, llm=None):
-        """The control arm: the same LLM with only the table schemas of the semantic model."""
-        return await self.checked("/ask-schema-only", {"team": team, "environment": environment, "model": model,
-                                                       "question": question, **({"llm": llm} if llm else {})})
+    async def ask_control(self, team, environment, model, question, llm_model=None):
+        """The control arm: the same LLM with only the table schemas of the semantic model `model`."""
+        body = {"team": team, "environment": environment, "model": model, "question": question,
+                **({"llmModel": llm_model} if llm_model else {})}
+        return self.current(await self.checked("/ask-schema-only", body), "llmModel")
 
     async def truth(self, team, environment, model, spec):
         """The governed query's result, or its refusal: an expected refusal is a valid ground truth too."""
         return await self.post("/query", {"team": team, "environment": environment, "model": model, "spec": spec})
 
+    async def recording(self, team, environment, enabled):
+        """Conversational BI keeps the team's chat runs there from now on, or stops and deletes them."""
+        return await self.checked("/recording", {"team": team, "environment": environment, "enabled": enabled})
+
     async def conversations(self, team, environment, since, limit=200):
-        """Recorded chat runs of a team that enabled Evaluations, oldest first, after `since`."""
+        """Chat runs recorded while the team's live evaluation was on, oldest first, after `since` (an RFC 3339
+        time, as each conversation's `at`). A conversation is {id, at, team, environment, model, question, answer,
+        toolCalls, queries, llmModel, inputTokens, outputTokens, traceId}: never the person who asked."""
         return await self.checked("/conversations", {"team": team, "environment": environment, "since": since,
                                                      "limit": limit})
 

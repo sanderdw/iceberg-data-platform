@@ -1,6 +1,7 @@
 """Bundled agent skills stay valid against the platform's own input rules."""
 
 import importlib.util
+import json
 import math
 import os
 import re
@@ -269,7 +270,7 @@ def semantic_model():
 
 
 def expression(sql):
-    return {"dialects": [{"dialect": "ANSI_SQL", "expression": sql}]}
+    return {"sql": sql}
 
 
 def shop_model():
@@ -277,15 +278,15 @@ def shop_model():
         return {"name": name, "description": f"The {name}.", "expression": expression(name), **extra}
 
     return {
-        "name": "shop", "description": "Orders. One row in PURCHASE per order.",
+        "version": "0.3.0.dev0", "name": "shop", "description": "Orders. One row in PURCHASE per order.",
         "ai_context": {"instructions": "Time: UTC.\nGrain: one row per order.\nMissing values: none.\n"
                                        "Owner: Sales. Refresh: nightly.\nClassification: internal."},
         "datasets": [
-            {"name": "LINE", "source": "lakehouse.shop.lines", "description": "An order line.", "primary_key": ["line_id"],
+            {"name": "LINE", "source": "shop.lines", "description": "An order line.", "primary_key": ["line_id"],
              "fields": [field("line_id"), field("order_id"), field("amount")]},
-            {"name": "PURCHASE", "source": "lakehouse.shop.orders", "description": "An order.", "primary_key": ["order_id"],
+            {"name": "PURCHASE", "source": "shop.orders", "description": "An order.", "primary_key": ["order_id"],
              "fields": [field("order_id"), field("customer_id"), field("status", dimension={"is_time": False})]},
-            {"name": "CUSTOMER", "source": "lakehouse.shop.customers", "description": "A customer.",
+            {"name": "CUSTOMER", "source": "shop.customers", "description": "A customer.",
              "primary_key": ["customer_id"], "fields": [field("customer_id"), field("country")]},
         ],
         "relationships": [
@@ -325,9 +326,22 @@ def test_semantic_model_check_reports_what_blocks_publishing(semantic_model):
 def test_semantic_model_metrics_join_from_the_first_dataset_they_name(semantic_model):
     model = shop_model()
     sql = semantic_model.metric_query(model, {"expression": expression("sum(LINE.amount) / count(DISTINCT CUSTOMER.country)")})
-    assert sql == ('SELECT sum(LINE.amount) / count(DISTINCT CUSTOMER.country) FROM "LINE"\n'
-                   'JOIN "PURCHASE" ON "LINE"."order_id" = "PURCHASE"."order_id"\n'
-                   'JOIN "CUSTOMER" ON "PURCHASE"."customer_id" = "CUSTOMER"."customer_id"')
+    line, purchase, customer = (semantic_model.relation(d) for d in model["datasets"])
+    assert line == ('(SELECT line_id AS "line_id", order_id AS "order_id", amount AS "amount", "t" AS "source" '
+                    'FROM "lakehouse"."shop"."lines" AS "t")')
+    assert sql == (f'SELECT sum(LINE.amount) / count(DISTINCT CUSTOMER.country) FROM {line} AS "LINE"\n'
+                   f'JOIN {purchase} AS "PURCHASE" ON "LINE"."order_id" = "PURCHASE"."order_id"\n'
+                   f'JOIN {customer} AS "CUSTOMER" ON "PURCHASE"."customer_id" = "CUSTOMER"."customer_id"')
+    # A dataset's own metric reads its fields by name and its table's columns as source.column.
+    scoped = {"name": "lines", "expression": expression("count(*) FILTER (WHERE source.amount > 0)")}
+    assert semantic_model.metric_query(model, scoped, model["datasets"][0]) == (
+        f'SELECT count(*) FILTER (WHERE source.amount > 0) FROM {line} AS "LINE"')
+    # AGG(DATASET.metric) evaluates it inside a model's metric.
+    model["datasets"][0]["metrics"] = [{"name": "total", "expression": expression("sum(amount)")}]
+    assert semantic_model.metric_query(model, {"expression": expression("AGG(LINE.total) / count(LINE.line_id)")}) \
+        == f'SELECT (sum(amount)) / count(LINE.line_id) FROM {line} AS "LINE"'
+    with pytest.raises(ValueError, match="names no metric"):
+        semantic_model.metric_query(model, {"expression": expression("AGG(LINE.nope)")})
     # Joins also run against the direction of a relationship.
     assert semantic_model.join_path(model, "CUSTOMER", ["PURCHASE"]) == [
         'JOIN "PURCHASE" ON "CUSTOMER"."customer_id" = "PURCHASE"."customer_id"']
@@ -340,9 +354,12 @@ def test_semantic_model_questions_and_documents(semantic_model):
         ("How many?", "SELECT 1"), ("Which?", "SELECT\n  2")]
     model = shop_model()
     document = semantic_model.Models.document(model)
-    assert document["version"] == semantic_model.SPEC_VERSION
-    assert semantic_model.first_model(document) == model
-    assert semantic_model.first_model({"version": "0.2.0", "semantic_model": [model]}) == model
+    assert document["version"] == semantic_model.SPEC_VERSION == "0.3.0.dev0"
+    assert json.loads(document["semantic_model"]) == model
+    without = {k: v for k, v in model.items() if k != "version"}
+    assert semantic_model.read_model(without) == model
+    with pytest.raises(ValueError, match="no semantic_model list"):
+        semantic_model.read_model({"version": "0.2.0", "semantic_model": [model]})
     assert semantic_model.table_reference(["sales", "eu"], "orders") == '"lakehouse"."sales.eu"."orders"'
 
 
@@ -365,8 +382,8 @@ def test_semantic_model_check_follows_ossie_and_governed_queries(semantic_model)
     assert warnings == [
         ("Field PURCHASE.day is a derived time dimension without a date or timestamp datatype, so governed queries "
          'cannot group it by day, week or month. Add "datatype": "Date".'),
-        ("Relationship purchase_customer: PURCHASE.customer_id is not the whole primary key of PURCHASE, so governed "
-         "queries do not join along it. Point it from the many side to the one side's primary key."),
+        ("Relationship purchase_customer: PURCHASE.customer_id is not a whole primary or unique key of PURCHASE, so "
+         "governed queries do not join along it. Point it from the many side to the one side's key."),
     ]
 
 
@@ -385,6 +402,23 @@ def test_semantic_model_check_follows_ossie_and_governed_queries(semantic_model)
         {"name": "day", "description": "Day.", "expression": expression("CAST(ordered_at AS DATE)"),
          "dimension": {"is_time": True}}),
     lambda m: m["metrics"].append({"name": "revenue", "description": "Again.", "expression": expression("count(*)")}),
+    lambda m: m.update(version="0.2.0"),
+    lambda m: m.update(semantic_model=[]),
+    lambda m: m["datasets"][0].update(primary_key=["line_id", "LINE_ID"]),
+    lambda m: m["datasets"][0].update(unique_keys=[["order_id", "line_id"], ["LINE_ID", "order_id"]]),
+    lambda m: m["datasets"][1].update(primary_key=[], unique_keys=[["order_id"]]),
+    lambda m: m["datasets"][0].update(metrics=[{"name": "amount", "description": "Clash.", "expression": expression("sum(amount)")}]),
+    lambda m: m["datasets"][0].update(metrics=[{"name": "total", "description": "Lines. Unit: euro.",
+                                                "expression": expression("sum(amount)")}]),
+    lambda m: m["datasets"][0]["fields"][0].update(expression={"dialects": []}),
+    lambda m: m["datasets"][0]["fields"][0].update(expression={"sql": "x", "extra": 1}),
+    lambda m: m["datasets"][0]["fields"][0].update(colour="blue"),
+    lambda m: m.update(nonportable_extensions=[{"vendor_name": "DBT", "data": {"a": [1, None]}}]),
+    lambda m: m.update(nonportable_extensions=[{"vendor_name": "DBT", "data": "x"}]),
+    lambda m: m["datasets"][0].update(ai_context={"synonyms": ["a", 1]}),
+    # Polaris resolves a source as namespace.table in the model's catalog: no catalog prefix to drop.
+    lambda m: m["datasets"][0].update(source="lines"),
+    lambda m: m["datasets"][0].update(source="shop..lines"),
 ])
 def test_semantic_model_skill_and_portal_validate_alike(semantic_model, change):
     from user_portal.semantic import rules

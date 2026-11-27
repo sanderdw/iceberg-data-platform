@@ -18,7 +18,7 @@ from pyiceberg.schema import Schema
 from pyiceberg.transforms import IdentityTransform
 from pyiceberg.types import BooleanType, DoubleType, IntegerType, NestedField, StringType
 
-from user_portal.notebook.connection import polars_storage_options
+from user_portal.notebook.connection import commit_with_retry, polars_storage_options
 from user_portal.notebook.duckdb_connection import EXAMPLE_PROPERTY
 
 EXAMPLE = "09_polars_grid_forecast_write"
@@ -284,13 +284,14 @@ def require_quality(report):
 
 
 def context(item, *keys):
-    """Ossie `ai_context` from the keys of a contract entry that it has."""
-    found = {key: item[key] for key in keys if item.get(key)}
+    """Ossie `ai_context` from the keys of a contract entry that it has; synonyms and examples are text."""
+    found = {key: [str(v) for v in item[key]] if isinstance(item[key], list) else item[key]
+             for key in keys if item.get(key)}
     return {"ai_context": found} if found else {}
 
 
 def field_entry(name, field):
-    entry = {"name": name, "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": name}]},
+    entry = {"name": name, "expression": {"sql": name},
              "datatype": TYPES[field["type"]][2]}
     for key in ("label", "description"):
         if field.get(key):
@@ -300,8 +301,8 @@ def field_entry(name, field):
     return {**entry, **context(field, "synonyms", "examples")}
 
 
-def semantic_model(contract, namespace, catalog="lakehouse"):
-    """The product as one Apache Ossie semantic model, ready to store in Polaris.
+def semantic_model(contract, namespace):
+    """The product as one Apache Ossie 0.3.0.dev0 document, ready to store in Polaris.
 
     Everything comes from the contract: datasets point at the tables notebook 09 publishes,
     relationships state the joins, metrics carry the agreed SQL and the AI context the product facts.
@@ -327,6 +328,7 @@ def semantic_model(contract, namespace, catalog="lakehouse"):
             if column not in columns.get(dataset, set()):
                 raise ValueError(f"Metric {metric} reads {dataset}.{column}, which is not in the contract.")
     return {
+        "version": "0.3.0.dev0",
         "name": "mv_load_forecast",
         "description": f"{' '.join(contract['description'].split())} Grain: {' '.join(contract['grain'].split())}",
         "ai_context": {
@@ -345,7 +347,7 @@ def semantic_model(contract, namespace, catalog="lakehouse"):
         "datasets": [
             {
                 "name": name,
-                "source": ".".join([catalog, *namespace, d["table"]]),
+                "source": ".".join([*namespace, d["table"]]),
                 "description": " ".join(d["description"].split()),
                 "primary_key": d["primary_key"],
                 **({"ai_context": {"instructions": " ".join(d["instructions"].split())}} if d.get("instructions") else {}),
@@ -361,7 +363,7 @@ def semantic_model(contract, namespace, catalog="lakehouse"):
             {
                 "name": name,
                 "description": f"{metric['description']} Unit: {metric['unit']}.",
-                "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": metric["sql"]}]},
+                "expression": {"sql": metric["sql"]},
             }
             for name, metric in contract["metrics"].items()
         ],
@@ -425,11 +427,15 @@ def publish_grid_forecast(catalog, tables, contract, namespace, report):
         if table is None:
             table = catalog.create_table(identifier, schema=schema, partition_spec=spec, properties=properties)
         else:
-            with table.transaction() as transaction:
-                transaction.set_properties(properties)
-                with transaction.update_schema() as update:
-                    for field in schema.fields:
-                        update.update_column(field.name, doc=field.doc)
+            def describe(current, properties=properties, schema=schema):
+                with current.transaction() as transaction:
+                    transaction.set_properties(properties)
+                    with transaction.update_schema() as update:
+                        for field in schema.fields:
+                            update.update_column(field.name, doc=field.doc)
+
+            # A concurrent commit makes this metadata-only commit fail with 409; it is applied again.
+            commit_with_retry(lambda identifier=identifier: catalog.load_table(identifier), describe, table=table)
             table = catalog.load_table(identifier)
         tables[name].lazy().sink_iceberg(
             table,

@@ -8,6 +8,12 @@
 <title>Replication · Iceberg Data Platform</title>
 <link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/apps-menu.css">
+<link rel="stylesheet" href="/settings.css">
+<link rel="stylesheet" href="/account-menu.css">
+<script src="/apps-menu.js" defer></script>
+<script src="/settings.js" defer></script>
+<script src="/account-menu.js" defer></script>
 <script src="/app.js" defer></script>
 </head>
 <body>
@@ -15,9 +21,10 @@
   <a class="brand" href="#/"><img src="/favicon.svg" alt="">iceberg<span>/ replication</span></a>
   <nav id="crumbs" aria-label="Location"></nav>
   <div class="header-actions">
-    <a id="portal-link" class="quiet-link" target="_blank" rel="noopener" hidden>User portal <span aria-hidden="true">↗</span></a>
-    <button id="theme" class="ghost" type="button">Light / ○</button>
-    <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
+    <span id="read-only" class="read-only-badge" title="You have the read role in each of your teams: you can look at everything here and change nothing." hidden>Read-only</span>
+    <div id="settings-link" hidden></div>
+    <div id="apps" hidden></div>
+    <div id="account"></div>
   </div>
 </header>
 
@@ -34,7 +41,7 @@
   <aside class="intro">
     <div class="eyebrow">FROM SOURCE TO TABLE</div>
     <h2>Changes, not copies.</h2>
-    <p>Each run reads the changes since the last one from the source's write-ahead log and writes them as your team's service account, isolated from everything else. For APIs, files and one-time loads, use Ingestion (dlt).</p>
+    <p>Each run reads recent changes directly from the source database and writes them as your team's service account, isolated from everything else. For APIs, files and one-time loads, use Ingestion (dlt).</p>
     <ol>
       <li><span>[ 01 ]</span>Connect a source and set its password</li>
       <li><span>[ 02 ]</span>Check the source and choose tables</li>

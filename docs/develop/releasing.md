@@ -42,7 +42,7 @@ uv run python -m scripts.release --build --install --release-tag BRANCH-123-1 --
    - Ingestion (dlt): `ingestion-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/ingestion`.
    - Replication (OLake): `replication-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/replication`.
    - Maintenance: `maintenance-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/maintenance`.
-   - Evaluations: `evaluations-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/evaluations`. It needs a platform with Bridge contract 0.1.3 and Conversational BI with the evaluation API: release that Conversational BI first.
+   - Evaluations: `evaluations-v<version>`, with `compose.yaml`, `scripts/setup.py` and `skills/` in `extensions/evaluations`. It needs a platform with Bridge contract 1.0 and Conversational BI with the evaluation API: release that Conversational BI first.
 
    A branch preview skips this check, because it builds the extension images itself. OpenMetadata isn't in the installation bundle; it has its own installer, so this check doesn't cover it. Release it before the core when its version changed, so the core's release notes can point to it.
 4. Tag the core commit on `main`:

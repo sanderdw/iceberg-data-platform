@@ -1,15 +1,17 @@
 import { CopilotChat, CopilotKitProvider, useAgent, useConfigureSuggestions, useCopilotKit } from "@copilotkit/react-core/v2";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { api, CSRF, describeModel, sameRef, type ModelDescription, type ModelEntry, type ModelRef, type NotEnabled } from "./api";
+import { AppsMenu, type Apps } from "./components/AppsMenu";
+import { AccountMenu, teams } from "./components/AccountMenu";
+import { SettingsLink, SettingsPage, type Membership } from "./components/Settings";
 import { Icon } from "./components/Icon";
 import { ModelGuide } from "./components/ModelGuide";
 import { ModelPicker } from "./components/ModelPicker";
 import { useGenerativeUI } from "./generative";
 import { starterQuestions } from "./guide";
-import { useTheme } from "./theme";
 
 type Session = { authenticated: boolean; user?: string };
-type Models = { models: ModelEntry[]; notEnabled: NotEnabled[] };
+type Models = { semanticModels: ModelEntry[]; notEnabled: NotEnabled[] };
 const RETURN_KEY = "cbi-return-hash";
 const GUIDE_KEY = "cbi-guide";
 // Below this width the guide covers the chat instead of standing next to it.
@@ -30,18 +32,42 @@ function deepLink(): ModelRef | null {
   }
 }
 
-// The platform portals' header: brand, navigation, theme, identity.
-function Header({ nav, children }: { nav?: ReactNode; children?: ReactNode }) {
-  const [theme, toggle] = useTheme();
+// #/settings or #/settings/<option>, with ?team= for the team to scroll to; anything else is the chat.
+function settingsRoute(): { section: string | null; team: string | null } | null {
+  const [path, query] = location.hash.slice(1).split("?");
+  const parts = path.split("/").filter(Boolean);
+  return parts[0] === "settings"
+    ? { section: parts[1] ?? null, team: new URLSearchParams(query ?? "").get("team") } : null;
+}
+
+function useSettingsRoute() {
+  const [route, setRoute] = useState(settingsRoute);
+  useEffect(() => {
+    const changed = () => setRoute(settingsRoute());
+    addEventListener("hashchange", changed);
+    return () => removeEventListener("hashchange", changed);
+  }, []);
+  return route;
+}
+
+type Me = { apps?: Apps; extension: string; memberships: Membership[] };
+
+// Getting started, in the account menu: Conversational BI's page in the platform's documentation.
+const GUIDE = "https://sanderdw.github.io/iceberg-data-platform/conversational-bi/";
+
+// The header every portal and extension shares: brand, navigation, then Settings, Apps and the account menu (who is
+// signed in, Getting started, the theme switch and Sign out). Asking questions needs only the read role, so there is
+// no Read-only pill here.
+function Header({ nav, children, user, details, signOut }: {
+  nav?: ReactNode; children?: ReactNode; user?: string; details?: string[]; signOut?: () => Promise<void>;
+}) {
   return (
     <header className="site">
       <a className="brand" href="/"><img src="/favicon.svg" alt="" />iceberg<span>/ conversational bi</span></a>
       {nav}
       <div className="header-actions">
-        <button type="button" className="ghost" onClick={toggle} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
-          {theme === "dark" ? "Light / ○" : "Dark / ●"}
-        </button>
         {children}
+        <AccountMenu name={user} details={details} guide={user ? GUIDE : undefined} signOut={signOut} />
       </div>
     </header>
   );
@@ -148,11 +174,12 @@ function Workspace({ user }: { user: string }) {
   const { agent } = useAgent({ agentId: "analyst" });
   const { copilotkit } = useCopilotKit();
   const [models, setModels] = useState<Models>();
-  const [portal, setPortal] = useState<string>();
+  const [apps, setApps] = useState<Me>();
+  const settings = useSettingsRoute();
   const [problem, setProblem] = useState<string>();
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const selected = (agent.state as { model?: ModelRef } | undefined)?.model ?? null;
-  const current = models?.models.find((m) => sameRef(m.model, selected));
+  const current = models?.semanticModels.find((m) => sameRef(m.model, selected));
   // The full heading introduces a model; once the conversation starts it shrinks to one line.
   const started = (agent.messages?.length ?? 0) > 0;
   const [guideOpen, setGuideOpen] = useGuideOpen();
@@ -194,12 +221,12 @@ function Workspace({ user }: { user: string }) {
     [agent],
   );
   const load = useCallback(() => {
-    api<Models>("/api/v1/models").then(
+    api<Models>("/api/v1/semantic-models").then(
       (found) => {
         setModels(found);
         setProblem(undefined);
         const linked = deepLink();
-        const match = linked && found.models.find((m) => sameRef(m.model, linked));
+        const match = linked && found.semanticModels.find((m) => sameRef(m.model, linked));
         if (match) select(match);
         else if (linked) setProblem("The linked model is not available to your teams, or Conversational BI is not enabled for its environment.");
       },
@@ -268,7 +295,7 @@ function Workspace({ user }: { user: string }) {
     };
   }, []);
   useEffect(() => {
-    api<{ userPortalUrl?: string }>("/api/v1/me").then((me) => setPortal(me.userPortalUrl), () => undefined);
+    api<Me>("/api/v1/me").then((me) => setApps(me), () => undefined);
   }, []);
 
   const signOut = async () => {
@@ -278,31 +305,36 @@ function Workspace({ user }: { user: string }) {
 
   const nav = (
     <nav aria-label="Conversational BI">
-      <button type="button" className="nav-item" aria-current="page">Ask</button>
-      {portal && <a className="nav-item extension-link" href={portal + "/#catalog"} target="_blank" rel="noopener">Workspaces</a>}
+      <button type="button" className="nav-item" aria-current={settings ? undefined : "page"}
+        onClick={() => { if (settings) location.hash = "#/"; }}>Ask</button>
     </nav>
   );
 
   return (
     <>
-      <Header nav={nav}>
-        <div id="identity">
-          <span id="username">{user}</span>
-          <button type="button" className="quiet" onClick={signOut}>Sign out</button>
-        </div>
+      <Header nav={nav} user={user} details={teams(apps?.memberships)} signOut={signOut}>
+        <SettingsLink current={!!settings} />
+        <AppsMenu apps={apps?.apps} current={apps?.extension ?? ""} />
       </Header>
-      <main id="workspace-screen" className={started ? "started" : undefined}>
+      {settings && (
+        <main id="settings-screen">
+          {apps ? <SettingsPage memberships={apps.memberships} focusTeam={settings.team} section={settings.section} onChange={load} />
+            : <p className="eyebrow">[ LOADING ]</p>}
+        </main>
+      )}
+      {/* Hidden, not removed, on the Settings page: the conversation stays. */}
+      <main id="workspace-screen" className={started ? "started" : undefined} hidden={!!settings}>
         <section className={`workspace-heading${started ? " compact" : ""}`}>
           <div>
             <div className="eyebrow">{current ? (current.shared ? "SHARED SEMANTIC MODEL" : "TEAM SEMANTIC MODEL") : "CONVERSATIONAL BI"}</div>
-            <h1>{current ? current.name : "Ask"}<span className="dot-accent">.</span></h1>
+            <h1>{current ? current.model.name : "Ask"}<span className="dot-accent">.</span></h1>
             <p>{current
               ? "Ask about its metrics in plain language. Every answer shows the query, the join path and the metric definitions."
               : "Pick a semantic model of your team, or one shared with your team, and ask about its metrics."}</p>
           </div>
           {current && (
             <div className="workspace-context">
-              <Fact label="Database" value={`${current.databaseName} · ${current.namespace.join(".")}`} />
+              <Fact label="Database" value={`${current.databaseName} · ${current.model.namespace.join(".")}`} />
               <Fact label="Environment" value={current.environment} />
               <Fact label="Owner" value={current.teamName} />
             </div>
@@ -315,7 +347,7 @@ function Workspace({ user }: { user: string }) {
               <button type="button" id="refresh" className="quiet" aria-label="Refresh models" onClick={load}><Icon kind="refresh" /></button>
             </div>
             {models ? (
-              <ModelPicker models={models.models} notEnabled={models.notEnabled} selected={selected} onSelect={pick} onEnabled={load} />
+              <ModelPicker models={models.semanticModels} notEnabled={models.notEnabled} selected={selected} onSelect={pick} onEnabled={load} />
             ) : (
               <p className="hint">[ LOADING ]</p>
             )}
@@ -343,7 +375,7 @@ function Workspace({ user }: { user: string }) {
             </div>
             <CopilotChat key={threadId} threadId={threadId} agentId="analyst"
               labels={{
-                chatInputPlaceholder: current ? `Ask about ${current.name}…` : "Select a model, or ask which data you can explore…",
+                chatInputPlaceholder: current ? `Ask about ${current.model.name}…` : "Select a model, or ask which data you can explore…",
                 chatDisclaimerText: "Answers come from governed queries on the selected model. Check the query card for definitions and SQL.",
               }} />
           </section>

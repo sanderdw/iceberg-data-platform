@@ -99,18 +99,21 @@ def main():
     admin("POST", f"/teams/{team}/environments/development")
 
     models = admin("GET", f"/teams/{team}/environments/development/agent-models")
-    own = next(m for m in models["models"] if m["name"] == "flights" and not m["shared"])
+    own = next(m for m in models["semanticModels"] if m["name"] == "flights" and not m["shared"])
     database = own["model"]["database"]
     name = f"flights_smoke_{uuid.uuid4().hex[:8]}"
     example = (ROOT / "examples" / "flights.yaml").read_text()
     body = {"team": team, "environment": "development", "name": name, "model": own["model"], "yaml": example,
-            "target_database": database}
+            "targetDatabase": database}
     reader("POST", "/question-sets", expect=403, json=body)
-    created = admin("POST", "/question-sets", json=body)
+    created = admin("POST", "/question-sets", expect=201, json=body)
     try:
         assert created["version"] == 1 and "delay_by_carrier" in created["yaml"]
-        first = wait(admin, admin("POST", f"/question-sets/{created['id']}/runs", json={})["id"])
-        assert first["status"] == "done", first["error"]
+        assert created["targetDatabase"] == database and created["createdAt"].endswith("Z"), created
+        started = admin("POST", f"/question-sets/{created['id']}/runs", expect=202)
+        assert started["status"] == "queued" and started["questionSet"] == created["id"], started
+        first = wait(admin, started["id"])
+        assert first["status"] == "success", first["error"]
         summary = first["summary"]
         cases = {c["name"]: c for c in first["cases"]}
         # The scripted model answers only the carrier delay question right, whatever it is asked.
@@ -119,17 +122,17 @@ def main():
         assert not cases["delay_by_runway_length"]["scores"]["refused"]["value"]
         assert not cases["on_time_per_airport"]["scores"]["clarified"]["value"]
         assert cases["departure_delay_overall"]["scores"]["right_metrics"]["value"]
-        assert first["published"].endswith(".evaluations.case_results"), first["published"]
-        print(f"run {first['id']}: {summary['passed']}/{summary['cases']} passed, results in {first['published']}")
+        assert summary["published"].endswith(".evaluations.case_results"), summary["published"]
+        print(f"run {first['id']}: {summary['passed']}/{summary['cases']} passed, results in {summary['published']}")
 
-        second = wait(admin, admin("POST", f"/question-sets/{created['id']}/runs", json={})["id"])
+        second = wait(admin, admin("POST", f"/question-sets/{created['id']}/runs", expect=202, json={})["id"])
         compared = admin("GET", f"/runs/{first['id']}/compare/{second['id']}")
-        assert compared["change"] == {"fixed": 0, "broken": 0, "same": 25, "no_answer": 0}, compared["change"]
+        assert compared["change"] == {"fixed": 0, "broken": 0, "same": 25, "noAnswer": 0}, compared["change"]
         assert compared["reliable"] and first["summary"]["reliable"]
         assert reader("GET", f"/runs/{second['id']}")["summary"]["passed"] == 1
 
         if models.get("schemaOnly"):
-            pair = admin("POST", f"/question-sets/{created['id']}/measure-semantic-model", json={})
+            pair = admin("POST", f"/question-sets/{created['id']}/measure-semantic-model", expect=202)
             control, semantic = wait(admin, pair["control"]["id"]), wait(admin, pair["semantic"]["id"])
             assert control["arm"] == "control" and control["summary"]["passed"] == 1, control["summary"]
             measured = admin("GET", f"/runs/{control['id']}/compare/{semantic['id']}")["uplift"]
@@ -137,18 +140,23 @@ def main():
             assert (measured["control"], measured["semantic"], measured["points"]) == (0.04, 0.04, 0.0), measured
             assert set(measured["byKind"]) == {"query", "refusal", "clarify", "decline"}
             print(f"control arm {control['id']}: uplift {measured['points']} points")
-        schedule = admin("POST", f"/question-sets/{created['id']}/schedules", json={"cron": "0 3 * * 1"})
+        schedule = admin("POST", f"/question-sets/{created['id']}/schedules", expect=201,
+                         json={"cron": "0 3 * * 1"})
         reader("POST", f"/question-sets/{created['id']}/schedules", expect=403, json={"cron": "0 3 * * 1"})
-        admin("DELETE", f"/question-sets/{created['id']}/schedules/{schedule['id']}")
+        assert admin("GET", f"/question-sets/{created['id']}/schedules")["schedules"] == [schedule]
+        assert admin("PATCH", f"/schedules/{schedule['id']}", json={"enabled": False})["nextRunAt"] is None
+        assert admin("DELETE", f"/schedules/{schedule['id']}") == {"deleted": True, "schedule": schedule["id"]}
 
-        live = admin("PUT", f"/teams/{team}/environments/development/live",
-                     json={"enabled": True, "sample_pct": 100, "cron": "0 * * * *"})
-        assert live["enabled"]
-        admin("PUT", f"/teams/{team}/environments/development/live", json={"enabled": False})
+        live = admin("PATCH", f"/teams/{team}/environments/development/live",
+                     json={"enabled": True, "samplePct": 100, "cron": "0 * * * *"})
+        assert live["enabled"] and live["samplePct"] == 100
+        off = admin("PATCH", f"/teams/{team}/environments/development/live", json={"enabled": False})
+        # A change keeps what it leaves out.
+        assert not off["enabled"] and off["samplePct"] == 100, off
         print("Evaluations e2e passed: roles, question sets, scored runs, comparison, Iceberg results, schedules, "
               "live.")
     finally:
-        admin("DELETE", f"/question-sets/{created['id']}")
+        admin("DELETE", f"/question-sets/{created['id']}", params={"confirmName": name})
 
 
 if __name__ == "__main__":

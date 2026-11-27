@@ -13,7 +13,7 @@ def contract_range():
     try:
         return tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["iceberg-openmetadata"]["bridge-contract"]
     except (OSError, KeyError):
-        return ">=0.1.1,<0.2"
+        return ">=1.0,<2"
 
 
 def flag(value, default=True):
@@ -49,7 +49,7 @@ class Settings:
     poll_seconds: int = 60
     full_sync_seconds: int = 900
     verify_tls: bool = True
-    contract: str = ">=0.1.1,<0.2"
+    contract: str = ">=1.0,<2"
     # Where people browse the catalog, such as http://localhost:8585. The portal's link opens it.
     ui_url: str = ""
 

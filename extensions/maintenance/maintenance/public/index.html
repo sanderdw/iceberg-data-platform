@@ -8,6 +8,12 @@
 <title>Maintenance · Iceberg Data Platform</title>
 <link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/apps-menu.css">
+<link rel="stylesheet" href="/settings.css">
+<link rel="stylesheet" href="/account-menu.css">
+<script src="/apps-menu.js" defer></script>
+<script src="/settings.js" defer></script>
+<script src="/account-menu.js" defer></script>
 <script src="/app.js" defer></script>
 </head>
 <body>
@@ -15,9 +21,10 @@
   <a class="brand" href="#/"><img src="/favicon.svg" alt="">iceberg<span>/ maintenance</span></a>
   <nav id="crumbs" aria-label="Location"></nav>
   <div class="header-actions">
-    <a id="portal-link" class="quiet-link" target="_blank" rel="noopener" hidden>User portal <span aria-hidden="true">↗</span></a>
-    <button id="theme" class="ghost" type="button">Light / ○</button>
-    <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
+    <span id="read-only" class="read-only-badge" title="You have the read role in each of your teams: you can look at everything here and change nothing." hidden>Read-only</span>
+    <div id="settings-link" hidden></div>
+    <div id="apps" hidden></div>
+    <div id="account"></div>
   </div>
 </header>
 

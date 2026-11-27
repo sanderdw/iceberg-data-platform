@@ -130,7 +130,7 @@ def live_rows(metadata):
 async def run(agent, replication, **arguments):
     result = await agent.call("run_replication", replication=replication, wait=600, **arguments)
     if result["status"] != "success":
-        logs = await agent.call("get_run_logs", run=result["id"], tail=120)
+        logs = await agent.call("get_run_logs", run=result["id"], limit=120)
         raise AssertionError(f"Run {result['status']}: {result['error']}\n" + "\n".join(logs["lines"]))
     return result
 
@@ -166,7 +166,8 @@ async def main():
         assert me["allowPrivateSources"], "Start the extension with REP_ALLOW_PRIVATE_SOURCES=true for this check."
         team = next(m for m in me["memberships"] if m["role"] == "writer")["team"]
         await writer.refused("enable_environment", "forbidden_role", team=team, environment="development")
-        await admin.call("enable_environment", team=team, environment="development")
+        enabled = await admin.call("enable_environment", team=team, environment="development")
+        assert enabled["enabled"] and enabled["team"] == team and "principal" not in enabled, enabled
         database = next(d for d in me["databases"] if d["team"] == team and d["environment"] == "development")
         templates = await reader.call("list_templates")
         assert {t["id"] for t in templates["templates"]} >= {"postgres-cdc", "postgres-incremental"}
@@ -198,8 +199,8 @@ async def main():
         await admin.call("update_replication", replication=created["id"], tables=chosen)
         await reader.refused("run_replication", "forbidden_role", replication=created["id"])
         first = await run(writer, created["id"])
-        written = {t["name"]: t["records"] for t in first["summary"]["tables"]}
-        assert written == {"public.orders": 200, "public.audit_log": 2}, first["summary"]
+        written = {t["name"]: t["records"] for t in first["results"]}
+        assert written == {"public.orders": 200, "public.audit_log": 2}, first["results"]
         assert first["summary"]["published"]["errors"] == [] and first["summary"]["readUpTo"], first["summary"]
         print("first copy", first["id"], written)
 
@@ -207,7 +208,7 @@ async def main():
         db.run("DELETE FROM orders WHERE id > 195")
         db.run("INSERT INTO orders VALUES (201, 'new', 1), (202, 'new', 2)")
         second = await run(writer, created["id"])
-        counts = {t["name"]: t for t in second["summary"]["tables"]}
+        counts = {t["name"]: t for t in second["results"]}
         # 10 updates, 5 deletes and 2 inserts are written; the 15 rows they replace get positional deletes.
         assert counts["public.orders"]["records"] == 17 and counts["public.orders"]["replaced"] == 15, counts
         assert second["summary"]["readUpTo"] != first["summary"]["readUpTo"]
@@ -222,19 +223,23 @@ async def main():
         assert properties[f"{PRODUCER}.source-revision"] == f"LSN {second['summary']['readUpTo']}", properties
         assert "write.delete.mode" not in properties or properties["write.delete.mode"] != "equality"
         for run_id in (first["id"], second["id"]):
-            lines = "\n".join((await reader.call("get_run_logs", run=run_id, tail=5000))["lines"])
+            lines = "\n".join((await reader.call("get_run_logs", run=run_id, limit=5000))["lines"])
             assert "e2e-password" not in lines, "A run log shows the source password"
 
         schedule = await admin.call("set_schedule", replication=created["id"], cron="*/15 * * * *")
-        assert schedule["enabled"]
+        assert schedule["enabled"] and schedule["nextRunAt"].endswith("Z"), schedule
         await writer.refused("delete_schedule", "forbidden_role", replication=created["id"])
         await admin.call("delete_schedule", replication=created["id"])
 
         async with httpx.AsyncClient(headers={"Authorization": f"Bearer {accounts['reader']}"}) as rest:
             detail = (await rest.get(f"{origin}/api/v1/replications/{created['id']}")).json()
             assert detail["secretsSet"] == ["password"] and "e2e-password" not in json.dumps(detail), detail
+            listed = (await rest.get(f"{origin}/api/v1/replications/{created['id']}/runs", params={"limit": 2})).json()
+            assert [r["id"] for r in listed["runs"]] == [second["id"], first["id"]], listed
+            assert (await rest.get(f"{origin}/api/v1/runs/{second['id']}")).json() == second
 
         deleted = await admin.call("delete_replication", replication=created["id"], confirm_name=created["name"])
+        assert deleted["deleted"] and deleted["replication"] == created["id"], deleted
         assert deleted["dropSlotSql"] == f"SELECT pg_drop_replication_slot('{slot}');", deleted
     db.run(f"SELECT pg_drop_replication_slot('{slot}')")
     db.run(f"DROP PUBLICATION {slot}")

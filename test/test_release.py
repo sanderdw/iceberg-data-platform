@@ -28,6 +28,9 @@ from scripts.release import (
     replication_bundle,
 )
 
+# Most tests here copy the source tree and build archives with Docker Compose.
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture
 def release_tree(tmp_path):
@@ -281,6 +284,23 @@ def test_known_local_secret_in_public_source_is_rejected(release_tree, env_file)
     assert secret not in str(exc.value)
 
 
+@pytest.mark.skipif(shutil.which("docker") is None, reason="Docker Compose is required to render the bundle")
+@pytest.mark.parametrize("extension,key", [
+    ("conversationalbi", "ANTHROPIC_API_KEY"), ("dbt", "LAUNCHER_TOKEN"), ("ingestion", "ING_SECRET_KEY"),
+    ("maintenance", "LAUNCHER_TOKEN"), ("replication", "REP_SECRET_KEY"), ("replication", "LAUNCHER_TOKEN"),
+    ("evaluations", "LAUNCHER_TOKEN"),
+])
+def test_install_bundle_refuses_an_extensions_local_secret(release_tree, extension, key):
+    secret = secrets.token_hex(24)
+    folder = release_tree / "extensions" / extension
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / ".env").write_text(f"{key}={secret}\n")
+    (folder / "compose.yaml").write_text((folder / "compose.yaml").read_text() + f"# {secret}\n")
+    with pytest.raises(ValueError, match="Local credential") as exc:
+        build_install(release_tree)
+    assert secret not in str(exc.value)
+
+
 def test_symlink_and_unexpected_private_file_are_rejected(release_tree, tmp_path):
     private = release_tree / "user_portal" / "key.json"
     private.write_text("{}")
@@ -298,7 +318,34 @@ def test_symlink_and_unexpected_private_file_are_rejected(release_tree, tmp_path
 @pytest.mark.parametrize("tag,image_tag", [
     ("latest", "latest"), ("keycloak-123-1", "keycloak-123-1"), ("v0.2.1", "0.2.1"),
 ])
-def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, image_tag):
+def test_install_bundle_pins_the_release_and_image_tags(release_tree, tag, image_tag):
+    bundle = build_install(release_tree, release_tag=tag, image_tag=image_tag)
+    with tarfile.open(bundle) as archive:
+        files = {name.split("/", 1)[1]: archive.extractfile(name).read() for name in archive.getnames()}
+    admin = json.loads(files["compose.yaml"])
+    users = json.loads(files["compose.users.yaml"])
+    notebook_image = users["services"]["notebook-image"]["image"]
+    assert users["services"]["users"]["environment"]["NOTEBOOK_IMAGE"] == notebook_image
+    assert notebook_image == f"ghcr.io/sanderdw/iceberg-data-platform-notebook:{image_tag}"
+    for model in (admin, users):
+        for service in model["services"].values():
+            if service["image"].startswith("ghcr.io/sanderdw/"):
+                assert service["image"].endswith(":" + image_tag)
+    for filename in ("install.sh", "install.ps1"):
+        assert files[filename] == (bundle.parent / filename).read_bytes()
+        assert files[filename] == installer_source(release_tree, filename, tag, image_tag)
+        if tag == "latest":
+            assert files[filename] == (release_tree / filename).read_bytes()
+        else:
+            assert b":latest" not in files[filename]
+            assert tag.encode() in files[filename]
+            assert f"iceberg-data-platform-portal:{image_tag}".encode() in files[filename]
+
+
+@pytest.mark.skipif(shutil.which("docker") is None, reason="Docker Compose is required to render the bundle")
+def test_install_bundle_is_portable_and_excludes_secrets(release_tree):
+    # One channel; test_install_bundle_pins_the_release_and_image_tags covers the others.
+    tag, image_tag = "v0.2.1", "0.2.1"
     secret = secrets.token_hex(24)
     (release_tree / ".env").write_text(f"PORTAL_PASSWORD={secret}\n")
     source = build(release_tree)
@@ -347,22 +394,6 @@ def test_install_bundle_is_portable_and_excludes_secrets(release_tree, tag, imag
     for model in (admin, users):
         assert all("build" not in service for service in model["services"].values())
     assert admin["services"]["portal"]["image"] == admin["services"]["monitor"]["image"]
-    notebook_image = users["services"]["notebook-image"]["image"]
-    assert users["services"]["users"]["environment"]["NOTEBOOK_IMAGE"] == notebook_image
-    assert notebook_image == f"ghcr.io/sanderdw/iceberg-data-platform-notebook:{image_tag}"
-    for model in (admin, users):
-        for service in model["services"].values():
-            if service["image"].startswith("ghcr.io/sanderdw/"):
-                assert service["image"].endswith(":" + image_tag)
-    for filename in ("install.sh", "install.ps1"):
-        assert files[filename] == (bundle.parent / filename).read_bytes()
-        assert files[filename] == installer_source(release_tree, filename, tag, image_tag)
-        if tag == "latest":
-            assert files[filename] == (release_tree / filename).read_bytes()
-        else:
-            assert b":latest" not in files[filename]
-            assert tag.encode() in files[filename]
-            assert f"iceberg-data-platform-portal:{image_tag}".encode() in files[filename]
     assert admin["services"]["portal"]["environment"]["PORTAL_PASSWORD"] == "${PORTAL_PASSWORD}"
     mounts = admin["services"]["pgadmin"]["volumes"]
     assert any(mount.get("source") == "./pgadmin/servers.json" for mount in mounts)

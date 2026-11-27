@@ -3,14 +3,17 @@
 The model decides everything that makes an answer right or wrong: metric SQL, join keys and
 which fields exist. A caller (a person, an AI agent or a script) only picks names:
 
-    metrics     one or more metric names, all anchored on the same dataset (the metric's home)
+    metrics     one or more metric names (`metric`, or `DATASET.metric` for a dataset-scoped one),
+                all anchored on the same dataset (the metric's home)
     dimensions  `DATASET.field`, optionally with a time grain and the relationships to follow
     filters     on a dimension field (WHERE) or a metric (HAVING), with typed parameters
 
-Joins follow relationships from the metric's home in their declared direction only, and only
-when the relationship's `to_columns` are the target dataset's primary key. Every join is then
-many-to-one, so it can never multiply rows and inflate a metric (a "fan-out"). A dataset that is
-reachable along several paths, such as an airport of departure or of destination, needs `via`.
+Metrics, keys and relationships name fields, which `resolve` turns into SQL over the source
+tables. Joins follow relationships from the metric's home in their declared direction only, and
+only when the relationship's `to_columns` are a whole primary or unique key of the target. Every
+join is then many-to-one, so it can never multiply rows and inflate a metric (a "fan-out"). A
+dataset that is reachable along several paths, such as an airport of departure or of
+destination, needs `via`.
 """
 
 import re
@@ -21,14 +24,17 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..errors import CbiError
-from . import expressions
+from . import expressions, resolve
+from .ossie import key
 
 Grain = Literal["day", "week", "month", "quarter", "year"]
 Operator = Literal["=", "!=", "<", "<=", ">", ">=", "in", "not_in", "between", "is_null", "is_not_null"]
 Scalar = str | int | float | bool
 Name = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")]
+MetricName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}(\.[A-Za-z_][A-Za-z0-9_]{0,127})?$",
+                                  description="A model metric's name, or DATASET.metric for a dataset's own metric.")]
 FieldRef = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}\.[A-Za-z_][A-Za-z0-9_]{0,127}$",
-                                description="DATASET.field, as listed by describe_model.")]
+                                description="DATASET.field, as the model's description lists it.")]
 TIME_TYPES = ("date", "timestamp", "timestamptz", "timestamp_ns", "timestamptz_ns")
 DUCKDB_TYPES = {"string": "VARCHAR", "int": "INTEGER", "long": "BIGINT", "float": "FLOAT", "double": "DOUBLE",
                 "boolean": "BOOLEAN", "date": "DATE", "timestamp": "TIMESTAMP", "timestamptz": "TIMESTAMPTZ",
@@ -46,7 +52,7 @@ class Input(BaseModel):
 
 
 class ModelRef(Input):
-    database: str = Field(pattern=r"^db-[a-f0-9]{32}$", description="Database id, from list_models.")
+    database: str = Field(pattern=r"^db-[a-f0-9]{32}$", description="Database id, from the list of semantic models.")
     namespace: list[Annotated[str, Field(min_length=1, max_length=256, pattern=r"^[^\x00-\x1f\x7f]+$")]] = Field(
         min_length=1, max_length=20)
     name: str = Field(pattern=r"^[A-Za-z0-9_-]{1,256}$", description="Semantic model name.")
@@ -66,7 +72,7 @@ class Dimension(Input):
 
 class Filter(Input):
     field: FieldRef | None = None
-    metric: Name | None = None
+    metric: MetricName | None = None
     via: list[Name] = Field(default=[], max_length=MAX_DEPTH)
     op: Operator
     value: Scalar | list[Scalar] | None = None
@@ -98,7 +104,7 @@ class Order(Input):
 
 
 class QuerySpec(Input):
-    metrics: list[Name] = Field(min_length=1, max_length=5)
+    metrics: list[MetricName] = Field(min_length=1, max_length=5)
     dimensions: list[Dimension] = Field(default=[], max_length=5)
     filters: list[Filter] = Field(default=[], max_length=10)
     order_by: list[Order] = Field(default=[], max_length=5)
@@ -138,12 +144,11 @@ def unit(description):
 
 
 def safe_edges(model):
-    """Relationships that are many-to-one: they end on the target dataset's whole primary key."""
+    """Relationships that are many-to-one: they end on a whole primary or unique key of the target."""
     edges = defaultdict(list)
     for r in model.relationships:
-        target = model.dataset(r.target)
-        if target.primary_key and sorted(r.target_columns) == sorted(target.primary_key):
-            edges[r.source].append(r)
+        if {key(c) for c in r.target_columns} in model.dataset(r.target).keys:
+            edges[model.dataset(r.source).name].append(r)
     return edges
 
 
@@ -158,8 +163,9 @@ def paths(model, home, target):
         if len(path) >= MAX_DEPTH:
             return
         for r in edges.get(dataset, []):
-            if r.target not in seen:
-                walk(r.target, [*path, r], seen | {r.target})
+            reached = model.dataset(r.target).name
+            if reached not in seen:
+                walk(reached, [*path, r], seen | {reached})
 
     if home == target:
         return [()]
@@ -175,7 +181,8 @@ def choose_path(model, home, dataset, via, label):
     names = [[r.name for r in p] for p in options]
     if not options:
         # The dataset relates to the home only against the join direction: joining it would repeat home rows.
-        linked = any({r.source, r.target} & {dataset} for r in model.relationships)
+        linked = any(dataset in {model.dataset(r.source).name, model.dataset(r.target).name}
+                     for r in model.relationships)
         if linked and not via:
             raise fail(422, f"{label} cannot be combined with metrics on {home}: joining {dataset} would repeat "
                             f"{home} rows and inflate the metrics. Ask for a metric on {dataset} instead, or filter "
@@ -190,19 +197,16 @@ def choose_path(model, home, dataset, via, label):
     return options[0]
 
 
-def metric_home(model, metric, tree):
-    homes = {name for name in expressions.datasets(tree) if model.dataset(name)}
-    unknown = expressions.datasets(tree) - homes
-    if unknown:
-        raise fail(422, f"Metric {metric.name!r} reads {', '.join(sorted(unknown))}, which the model does not define.",
-                   "invalid_model")
+def metric_home(model, metric, resolved=None):
+    """The dataset a metric counts: a dataset-scoped metric's own, or the one dataset a model's metric reads."""
+    homes = set((resolved or resolve.metric(model, metric)).datasets)
     if len(homes) == 1:
         return homes.pop()
     if not homes and len(model.datasets) == 1:
         return model.datasets[0].name
     if not homes:
         return None
-    raise fail(422, f"Metric {metric.name!r} combines columns of {', '.join(sorted(homes))}; this layer only runs "
+    raise fail(422, f"Metric {metric.name!r} combines fields of {', '.join(sorted(homes))}; this layer only runs "
                     "metrics anchored on one dataset.", "metric_unanchored", {"metric": metric.name})
 
 
@@ -214,9 +218,10 @@ def dimension_fields(dataset):
 
 def field_type(dataset, field, schemas):
     """The Iceberg type of a field that is a plain column, otherwise the model's declared datatype."""
-    columns = schemas.get(dataset.name, {})
-    if field.expression in columns:
-        return columns[field.expression]
+    tree = resolve.field(dataset, field)
+    columns = {key(name): kind for name, kind in schemas.get(dataset.name, {}).items()}
+    if isinstance(tree, expressions.exp.Column) and key(tree.name) in columns:
+        return columns[key(tree.name)]
     declared = (field.datatype or "").lower()
     return OSSIE_TYPES.get(declared, declared) or None
 
@@ -227,7 +232,7 @@ def resolve_field(model, ref):
     if dataset is None:
         raise fail(422, f"The model has no dataset {dataset_name!r}.", "unknown_field",
                    {"datasets": [d.name for d in model.datasets]})
-    field = next((f for f in dimension_fields(dataset) if f.name == field_name), None)
+    field = next((f for f in dimension_fields(dataset) if key(f.name) == key(field_name)), None)
     if field is None:
         raise fail(422, f"{dataset_name} has no dimension {field_name!r}.", "unknown_field",
                    {"fields": [f.name for f in dimension_fields(dataset)]})
@@ -241,9 +246,9 @@ class Plan:
         self.home = home
         self.paths = {(): home}
 
-    def add(self, path):
+    def add(self, model, path):
         for i in range(1, len(path) + 1):
-            self.paths.setdefault(tuple(path[:i]), path[i - 1].target)
+            self.paths.setdefault(tuple(path[:i]), model.dataset(path[i - 1].target).name)
         return tuple(path)
 
     def aliases(self):
@@ -254,15 +259,18 @@ class Plan:
                 else f"{dataset}__{prefix[-1].name}"
                 for prefix, dataset in self.paths.items()}
 
-    def joins(self, aliases):
+    def joins(self, model, aliases):
+        """LEFT JOINs along the paths; the ON clause compares the relationship's fields."""
         clauses = []
         for prefix in sorted(self.paths, key=lambda p: (len(p), [r.name for r in p])):
             if not prefix:
                 continue
             r, parent, alias = prefix[-1], aliases[prefix[:-1]], aliases[prefix]
-            on = " AND ".join(f"{quote(parent)}.{quote(a)} = {quote(alias)}.{quote(b)}"
+            source, target = model.dataset(r.source), model.dataset(r.target)
+            on = " AND ".join(f"{field_expression(source, source.field(a), parent)} = "
+                              f"{field_expression(target, target.field(b), alias)}"
                               for a, b in zip(r.source_columns, r.target_columns, strict=True))
-            clauses.append(f"LEFT JOIN {quote(r.target)} AS {quote(alias)} ON {on}")
+            clauses.append(f"LEFT JOIN {quote(target.name)} AS {quote(alias)} ON {on}")
         return clauses
 
 
@@ -276,6 +284,11 @@ def typed(kind):
     return f"CAST(? AS {duck})" if duck else "?"
 
 
+def field_expression(dataset, field, alias):
+    """The SQL of a field over its own dataset's table, which the query reads as `alias`."""
+    return expressions.operand(expressions.qualify(resolve.field(dataset, field), {dataset.name: alias}))
+
+
 def compile_query(model, schemas, spec, max_rows=5000):
     """`schemas`: dataset name → {column: Iceberg type}. Returns the SQL, its parameters and metadata."""
     metrics = []
@@ -284,12 +297,10 @@ def compile_query(model, schemas, spec, max_rows=5000):
         if metric is None:
             raise fail(422, f"The model has no metric {name!r}.", "unknown_metric",
                        {"metrics": [m.name for m in model.metrics]})
-        if not metric.expression:
-            raise fail(422, f"Metric {name!r} has no SQL expression.", "invalid_model")
-        tree = expressions.parse(metric.expression)
-        if not expressions.is_aggregate(tree):
+        resolved = resolve.metric(model, metric)
+        if not expressions.is_aggregate(resolved.tree):
             raise fail(422, f"Metric {name!r} is not an aggregate.", "invalid_model")
-        metrics.append((metric, tree, metric_home(model, metric, tree)))
+        metrics.append((metric, resolved.tree, metric_home(model, metric, resolved)))
     homes = {home for *_, home in metrics if home}
     if len(homes) > 1:
         raise fail(422, "These metrics belong to different datasets (" + ", ".join(sorted(homes)) + "). Ask for them "
@@ -302,24 +313,16 @@ def compile_query(model, schemas, spec, max_rows=5000):
 
     def place(ref, via):
         dataset, field = resolve_field(model, ref)
-        path = plan.add(choose_path(model, home, dataset.name, via, ref))
+        path = plan.add(model, choose_path(model, home, dataset.name, via, ref))
         return dataset, field, path
 
     dims = [(d, *place(d.field, d.via)) for d in spec.dimensions]
     field_filters = [(f, *place(f.field, f.via)) for f in spec.filters if f.field]
     aliases = plan.aliases()
 
-    def field_sql(dataset, field, path):
-        tree = expressions.parse(field.expression)
-        if expressions.is_aggregate(tree):
-            raise fail(422, f"{dataset.name}.{field.name} is an aggregate and cannot be a dimension.", "invalid_model")
-        if expressions.datasets(tree) - {dataset.name}:
-            raise fail(422, f"{dataset.name}.{field.name} reads another dataset.", "invalid_model")
-        return expressions.operand(expressions.qualify(tree, {dataset.name: aliases[path]}, default=dataset.name))
-
     select, columns, join_paths, outputs = [], [], {}, []
     for d, dataset, field, path in dims:
-        expr, kind = field_sql(dataset, field, path), field_type(dataset, field, schemas)
+        expr, kind = field_expression(dataset, field, aliases[path]), field_type(dataset, field, schemas)
         alias = aliases[path]
         name = f"{alias}.{field.name}" + (f":{d.grain}" if d.grain else "")
         if d.grain:
@@ -338,7 +341,7 @@ def compile_query(model, schemas, spec, max_rows=5000):
                         "description": field.description})
     metric_meta = []
     for metric, tree, _ in metrics:
-        expr = expressions.sql(expressions.qualify(tree, {home: aliases[()]}, default=home))
+        expr = expressions.sql(expressions.qualify(tree, {home: aliases[()]}))
         select.append(f"{expr} AS {quote(metric.name)}")
         outputs.append(metric.name)
         meta = {"name": metric.name, "description": metric.description, "expression": metric.expression,
@@ -366,16 +369,16 @@ def compile_query(model, schemas, spec, max_rows=5000):
         return f"{expr} {flt.op} {placeholder}"
 
     for flt, dataset, field, path in field_filters:
-        where.append(condition(field_sql(dataset, field, path), flt, field_type(dataset, field, schemas)))
+        where.append(condition(field_expression(dataset, field, aliases[path]), flt,
+                               field_type(dataset, field, schemas)))
     for flt in (f for f in spec.filters if f.metric):
         metric = model.metric(flt.metric)
         if metric is None:
             raise fail(422, f"The model has no metric {flt.metric!r}.", "unknown_metric")
-        tree = expressions.parse(metric.expression)
-        if metric_home(model, metric, tree) not in (home, None):
+        resolved = resolve.metric(model, metric)
+        if metric_home(model, metric, resolved) not in (home, None):
             raise fail(422, f"Metric {flt.metric!r} belongs to another dataset.", "mixed_grain")
-        having.append(condition(expressions.sql(expressions.qualify(tree, {home: aliases[()]}, default=home)),
-                                flt, None))
+        having.append(condition(expressions.sql(expressions.qualify(resolved.tree, {home: aliases[()]})), flt, None))
 
     order = []
     for o in spec.order_by:
@@ -388,7 +391,7 @@ def compile_query(model, schemas, spec, max_rows=5000):
     query = " ".join([
         "SELECT " + ", ".join(select),
         f"FROM {quote(home)} AS {quote(aliases[()])}",
-        *plan.joins(aliases),
+        *plan.joins(model, aliases),
         *(["WHERE " + " AND ".join(where)] if where else []),
         *(["GROUP BY ALL"] if dims else []),
         *(["HAVING " + " AND ".join(having)] if having else []),

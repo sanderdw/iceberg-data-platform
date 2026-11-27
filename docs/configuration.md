@@ -17,11 +17,13 @@ On Kubernetes the same settings are chart values; the last column names them.
 | `PORTAL_LAN_IP` | - | Extra binding with `compose.users.lan.yaml` | - |
 | `MAX_NOTEBOOKS` | `8` | Maximum simultaneous notebook containers | `notebooks.max` |
 | `NOTEBOOK_MEMORY` | `2g` | Memory limit per notebook | `notebooks.memory` |
+| `NOTEBOOK_EXAMPLES` | `true` | Offer the example notebooks in the notebook picker. Set to `false` for a platform where teams work only with their own notebooks; copies teams already made stay | `notebooks.examples` |
 | `USER_QUERY_SLOTS` | `2` | Table previews and governed queries that run at once, for all users together | `users.queries.slots` |
 | `USER_QUERY_WAIT_SECONDS` | `15` | How long an MCP preview or query waits for a free slot before it reports busy | `users.queries.waitSeconds` |
 | `POLARIS_SEMANTIC_MODELS` | `true` | Set to `false` to turn off semantic models in Polaris | `polaris.semanticModels` |
 | `POLARIS_TOKEN_LIFETIME` | `3600` | Lifetime in seconds of the catalog tokens of extensions and data-share recipients. Extension runs end 15 minutes before their token expires. A revoked service account or data share keeps its issued tokens up to that long | `polaris.tokenLifetime` |
 | `MCP_CALLBACK_PORT` | `3010` | OAuth callback port of MCP clients | `mcpCallbackPort` |
+| `MCP_REDIRECT_URIS` | - | Exact `https` sign-in callbacks of hosted MCP clients, comma-separated, such as `https://claude.ai/api/mcp/auth_callback`. See [Claude on the web and mobile](ai-agents.md#claude-on-the-web-and-mobile) | `mcpRedirectUris` |
 | `PLATFORM_LISTING_EXTENSIONS` | - | Registered extensions that publish listed data shares to a data catalog, such as `openmetadata`. `scripts.setup --extension … --listing` sets it | `extensions.<id>.listing` |
 | `POLARIS_PUBLIC_URL` | `http://localhost:8181` | Catalog address for `iceberg_connect.py` and external share recipients | `https://<hosts.catalog>.<baseDomain>` |
 | `S3_ENDPOINT` | `http://localhost:9000` | Storage address that Polaris hands out with each table. On restart, the administration portal moves existing databases to it. | `https://<hosts.s3>.<baseDomain>` |
@@ -29,7 +31,7 @@ On Kubernetes the same settings are chart values; the last column names them.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP/HTTP receiver for logs and traces; see [OpenTelemetry](observability.md) | `otel.endpoint` |
 | `OTEL_EXPORTER_OTLP_HEADERS` | - | Headers for that receiver, such as its API key | `otel.headersSecret` |
 | `OTEL_RESOURCE_ATTRIBUTES` | - | Added to every record, such as `deployment.environment.name=production` | `otel.resourceAttributes` |
-| `POLARIS_OTEL_DISABLED` | `true` | Set to `false` to send Polaris's traces too | `otel.polaris` (`true`) |
+| `POLARIS_OTEL_DISABLED` | `true` | Set to `false` to send Polaris's traces too | `otel.polaris` (`false`) |
 
 Behind a reverse proxy, enable WebSockets and preserve the Host header. See the [security model](security.md) for the isolation and trust boundaries.
 
@@ -53,8 +55,10 @@ Chart values are set with `helm upgrade ... --reset-then-reuse-values --set <val
 | `polaris.tokenLifetime` | `3600` | Seconds that catalog tokens and storage credentials stay valid (`POLARIS_TOKEN_LIFETIME` on Compose) |
 | `polaris.semanticModels` | `true` | Semantic models in Polaris (`POLARIS_SEMANTIC_MODELS`) |
 | `users.queries.slots`, `users.queries.waitSeconds` | `2`, `15` | Previews and governed queries at once, and how long MCP waits for a slot (`USER_QUERY_SLOTS`, `USER_QUERY_WAIT_SECONDS`) |
+| `notebooks.examples` | `true` | The example notebooks in the notebook picker (`NOTEBOOK_EXAMPLES`) |
 | `notebooks.startSeconds` | `180` | How long a notebook may take to start; the first on a node pulls its image |
 | `mcpCallbackPort` | `3010` | The loopback port MCP clients use for their sign-in callback (`MCP_CALLBACK_PORT`) |
+| `mcpRedirectUris` | `[]` | Exact `https` sign-in callbacks of hosted MCP clients (`MCP_REDIRECT_URIS`) |
 | `forwardedAllowIps` | `*` | Addresses whose `X-Forwarded-For` the portals trust; see the [security model](security.md#on-kubernetes) |
 | `keycloak.adminOrigin` | `http://localhost:8080` | The address of the Keycloak administration console, through a port-forward |
 | `keycloak.proxyTrustedAddresses` | (all) | Addresses Keycloak takes `X-Forwarded-*` from |

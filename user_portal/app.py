@@ -39,10 +39,14 @@ from server.validation import validation_message
 
 from .directory import UserDirectory, validate_namespace
 from .mcp_server import create_mcp
+from .notebook_files import NotebookFiles
+from .notebook_files import enabled as notebook_examples_enabled
 from .preview import run_preview
 from .runtime import RuntimeBackendError, filespace_key, notebook_runtime
 
 PUBLIC = Path(__file__).parent / "public"
+# Served from the administration portal's public/ (the menus are copies of contracts/bridge/v1 there).
+SHARED = ("favicon.svg", "docs.js", "apps-menu.js", "apps-menu.css", "account-menu.js", "account-menu.css")
 CONNECT_SCRIPT = Path(__file__).parent / "client" / "iceberg_connect.py"
 COOKIE = "iceberg_user_session"
 SWEEP_SECONDS = 30
@@ -60,6 +64,11 @@ class LoginInput(BaseModel):
 class TeamInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     team: str = Field(min_length=1, max_length=100)
+
+
+class NewNotebook(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=64)
 
 
 class NotebookInput(BaseModel):
@@ -99,9 +108,10 @@ def same_origin(origin, url):
     )
 
 
-def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE):
+def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE, notebook_files=None):
     directory = directory or UserDirectory(os.environ)
     runtime = runtime or notebook_runtime(os.environ)
+    notebook_files = notebook_files or NotebookFiles(os.environ)
     sessions, attempts = {}, {}
     lock = asyncio.Lock()
     # Previews and governed queries share these slots; MCP calls wait up to USER_QUERY_WAIT_SECONDS for one.
@@ -160,6 +170,8 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
                 if any(d["environment"] == env for d in team_databases)
             ],
             "notebooks": [w.public() for w in runtime.workspaces.values() if w.session_id == session.id],
+            # Whether the notebook picker offers the platform's examples (NOTEBOOK_EXAMPLES).
+            "notebookExamples": notebook_examples_enabled(os.environ),
             "catalogUri": directory.metadata.public_url + "/api/catalog",
             "extensions": extensions.public(os.environ),
         }
@@ -572,6 +584,19 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         directory.database(session, workspace.database)
         return workspace
 
+    # The team's notebooks, a new one and the examples, in the notebook's shared folder (notebook_files.py).
+    @app.get("/api/notebooks/{id}/files")
+    def notebook_listing(id: str, request: Request):
+        return notebook_files.files(authorize_workspace(id, request.state.session))
+
+    @app.post("/api/notebooks/{id}/files", status_code=201)
+    def new_notebook(id: str, data: NewNotebook, request: Request):
+        return notebook_files.create(authorize_workspace(id, request.state.session), data.name)
+
+    @app.post("/api/notebooks/{id}/examples/{example}")
+    def open_example(id: str, example: str, request: Request):
+        return notebook_files.copy_example(authorize_workspace(id, request.state.session), example)
+
     @app.get("/internal/notebooks/{id}/token", include_in_schema=False)
     async def notebook_token(id: str, request: Request):
         # A runtime may retrieve only its owner's short-lived token, and only from its own container's
@@ -760,6 +785,10 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         "guide.js": "guide.js",
         "style.css": "style.css",
         "favicon.svg": "favicon.svg",
+        "apps-menu.js": "apps-menu.js",
+        "apps-menu.css": "apps-menu.css",
+        "account-menu.js": "account-menu.js",
+        "account-menu.css": "account-menu.css",
     }
     files.update(
         {f"fonts/{font}.ttf": f"fonts/{font}.ttf" for font in ("doto", "space-grotesk", "space-mono")}
@@ -770,8 +799,9 @@ def create_app(directory=None, runtime=None, *, oidc=None, session_cookie=COOKIE
         if path not in files:
             raise ServiceError(404, "Not found.")
         asset = PUBLIC / files[path]
-        # Fonts, the icon and the API docs script are the administration portal's; the image copies them in.
-        if path.startswith("fonts/") or path in ("favicon.svg", "docs.js"):
+        # Fonts, the icon, the API docs script and the header's menus are the administration portal's; the image
+        # copies them in.
+        if path.startswith("fonts/") or path in SHARED:
             shared = Path(__file__).parent.parent / "public" / files[path]
             if shared.is_file():
                 asset = shared

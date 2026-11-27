@@ -32,7 +32,7 @@ if [ "${POLARIS:-bundled}" = official ]; then
   helm upgrade --install iceberg "$chart" -n "$namespace" --create-namespace -f "$chart/values-localhost.yaml" \
     $platform --set polaris.external.enabled=true --wait --timeout 15m
   kubectl -n "$namespace" get configmap iceberg-polaris-values -o jsonpath='{.data.values\.yaml}' > "$work/polaris.yaml"
-  helm upgrade --install catalog polaris --repo https://downloads.apache.org/polaris/helm-chart --version 1.8.0 \
+  helm upgrade --install catalog polaris --repo https://downloads.apache.org/polaris/helm-chart --version 1.9.0 \
     -n "$namespace" -f "$work/polaris.yaml" --wait --timeout 10m
   helm upgrade iceberg "$chart" -n "$namespace" --reset-then-reuse-values --set demo=true --wait --timeout 15m
 else
@@ -54,7 +54,7 @@ python3 dev/kubernetes/local_env.py "$namespace" > "$work/env"
 set -a
 . "$work/env"
 set +a
-for smoke in smoke catalog_smoke data_smoke share_smoke bridge_smoke; do
+for smoke in smoke catalog_smoke data_smoke share_smoke bridge_smoke mcp_smoke mcp_admin_smoke connect_smoke; do
   echo "== $smoke"
   uv run --all-groups python -m "scripts.$smoke"
 done

@@ -3,7 +3,7 @@ const $ = (s) => document.querySelector(s);
 const envNames = {development: 'Development', acceptance: 'Acceptance', production: 'Production'};
 const roleNames = {reader: 'Read', writer: 'Read & write', admin: 'Administrator', 'bucket-admin': 'Database + bucket administration'};
 let state, database = null, namespace = [], activeNotebook = null, browseVersion = 0;
-let workspacePage = 'catalog', sharesContext = null;
+let workspacePage = 'catalog', sharesContext = null, mountedHeader = {};
 let restoringRoute = false, refreshingWorkspace = false, pendingActions = 0;
 let teamMembersVersion = 0;
 let databaseFormContext = null;
@@ -34,8 +34,10 @@ async function restoreRoute() {
     } else clearBrowser();
     const notebook = state.notebooks.find(n => n.id === params.get('notebook'));
     if (notebook) {
-      const urls = [notebook.url, notebook.filesUrl, ...(notebook.examples || []).map(n => n.url)];
-      showNotebook(notebook, urls.includes(params.get('file')) ? params.get('file') : notebook.url);
+      // Any notebook in the team's folder, by its path; anything else opens the starter notebook.
+      const file = params.get('file') || '';
+      const valid = file === notebook.filesUrl || (file.startsWith(notebook.filesUrl + '?file=') && /^[A-Za-z0-9_./-]+$/.test(file.slice(notebook.filesUrl.length + 6)) && !file.includes('..'));
+      showNotebook(notebook, valid ? file : notebook.url);
     }
     showPage(Object.hasOwn(workspacePages, page) ? page : 'catalog');
   } finally { restoringRoute = false; saveRoute(true); }
@@ -49,10 +51,8 @@ const workspacePages = {
   shares: ['Data shares', 'Share data with other teams and external parties, and review data shared with your team.'],
   guide: ['Getting started', 'Notebook, your own tools or an AI agent. Three ways to work with your team data.'],
 };
-// The full heading introduces the workspace; once you open a page, database or notebook it shrinks to one line.
-function startWork() { $('#workspace-screen').classList.add('started'); }
 function showPage(page, updateRoute = true) {
-  if (page !== workspacePage) { clearNotice(); startWork(); }
+  if (page !== workspacePage) clearNotice();
   workspacePage = page;
   for (const name of Object.keys(workspacePages)) $(`#${name}-page`).hidden = name !== page;
   document.querySelectorAll('header [data-page]').forEach(button => {
@@ -65,6 +65,7 @@ function showPage(page, updateRoute = true) {
   if (page === 'databases' && state) renderDatabases();
   if (page === 'shares') renderTeamShares();
   if (page === 'guide' && state) renderGuide();
+  if (state) renderHeader();
   placeNotice();
   if (updateRoute) saveRoute();
 }
@@ -74,15 +75,6 @@ function element(tag, text, className) { const e = document.createElement(tag); 
 function placeNotice() { const target = !$('#login-screen').hidden ? $('#login-status') : workspacePage === 'notebooks' && !$('#editor').hidden ? $('#editor-status') : $('#workspace-status'); target.append($('#notice')); }
 function clearNotice() { $('#notice').hidden = true; $('#notice').textContent = ''; }
 function notice(message, error = false) { placeNotice(); $('#notice').textContent = `[ ${error ? 'ERROR: ' : ''}${message} ]`; $('#notice').className = error ? 'error' : ''; $('#notice').hidden = false; }
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  const light = theme === 'light';
-  $('#theme-toggle').textContent = light ? 'Dark / ●' : 'Light / ○';
-  $('#theme-toggle').setAttribute('aria-label', `Switch to ${light ? 'dark' : 'light'} mode`);
-  document.querySelector('meta[name="theme-color"]').content = light ? '#f5f5f5' : '#000000';
-}
-try { applyTheme(localStorage.getItem('iceberg-theme') === 'light' ? 'light' : 'dark'); } catch { applyTheme('dark'); }
-$('#theme-toggle').addEventListener('click', () => { const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; applyTheme(theme); try { localStorage.setItem('iceberg-theme', theme); } catch {} });
 function symbol(kind) {
   const paths = {database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>', namespace: '<path d="m12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 17l10 5 10-5"/>', table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/>', view: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>', 'semantic-model': '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7 8.2l4 7.6M17 8.2l-4 7.6"/>'};
   const e = element('span', undefined, 'object-icon');
@@ -114,7 +106,7 @@ function renderDatabaseContext(host, db) {
 }
 function renderNotebookContext(notebook) {
   const db = state.databases.find(d => d.id === notebook.database);
-  $('#editor-title').textContent = `${db?.name || notebook.database} · ${envNames[notebook.environment]}`;
+  $('#editor-title').textContent = $('#editor-title').title = `${db?.name || notebook.database} · ${envNames[notebook.environment]}`;
   renderDatabaseContext($('#editor-database-context'), db);
 }
 // A red 3x3 dot matrix covers the notebook frame from opening a notebook until marimo has loaded.
@@ -134,26 +126,33 @@ function notebookLoader(label) {
   return loader;
 }
 function hideNotebookLoader() { clearInterval(loaderTimer); loaderTimer = null; $('#notebook-loader')?.remove(); }
-function resetEditor() { hideNotebookLoader(); $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
-function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Use your linked Keycloak account.'; } $('#workspace-nav').hidden = true; $('#guide-nav').hidden = true; sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#workspace-screen').classList.remove('started'); $('#identity').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
+function resetEditor() { hideNotebookLoader(); closeNewNotebook(); $('#frame-host').replaceChildren(); $('#editor').hidden = true; $('#browser').hidden = false; activeNotebook = null; $('#notebook-empty').hidden = false; }
+function loginScreen() { if (loginUrl) { $('#login').innerHTML = '<a class="button" href="/auth/login">Sign in with Keycloak</a>'; $('#login a').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`; $('#login-screen .hint').textContent = 'Sign in with your Keycloak account. Your team roles decide what you can read, write and share.'; } $('#workspace-nav').hidden = true; $('#read-only').hidden = true; IcebergApps.mount($('#apps'), {}); mountedHeader = {}; IcebergAccount.mount($('#account')); sharesContext = null; databaseFormContext = null; $('#database-form').replaceChildren(); $('#team-shares').replaceChildren(); showPage('catalog', false); state = null; database = null; namespace = []; selectedObject = null; browseVersion++; resetEditor(); $('#workspace-screen').hidden = true; $('#login-screen').hidden = false; clearNotice(); placeNotice(); }
 // A stopped server answers through the proxy with plain text, or not at all.
 const serverDown = 'The workspace server is not responding. Try again in a moment.';
 async function api(path, method = 'GET', body) { let response, result; try { response = await fetch(`/api${path}`, {method, headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Portal-Request': '1'}, body: method === 'GET' ? undefined : JSON.stringify(body ?? {})}); } catch { throw new Error(serverDown); } try { result = await response.json(); } catch { throw new Error(response.status >= 500 ? serverDown : `The request failed with HTTP ${response.status}.`); } if (!response.ok) { if (response.status === 401) loginScreen(); throw new Error(result.error || 'The action failed.'); } return result; }
 async function busy(button, action) { pendingActions++; button.disabled = true; try { await action(); } catch (error) { notice(error.message, true); } finally { pendingActions--; button.disabled = false; } }
-// Extensions open in their own origin; the portal only links to them.
-const extensionLabels = {conversationalbi: 'Conversational BI', dbt: 'Pipelines', ingestion: 'Ingestion (dlt)', replication: 'Replication (OLake)', maintenance: 'Maintenance', openmetadata: 'OpenMetadata', evaluations: 'Evaluations'};
-function renderExtensions() {
-  document.querySelectorAll('#workspace-nav .extension-link').forEach(link => link.remove());
-  for (const extension of state.extensions || []) {
-    const label = extensionLabels[extension.id] || extension.id;
-    const link = element('a', label, 'nav-item extension-link');
-    link.href = extension.origin + '/'; link.target = '_blank'; link.rel = 'noopener';
-    link.title = `Open ${label} in a new tab`; link.dataset.extension = extension.id;
-    $('#workspace-nav').append(link);
+// The header's right end, as in the administration portal and every extension: the Read-only pill when the person only
+// reads in the active team, the Apps menu (apps-menu.js: the extensions, each in its own origin) and the account menu
+// (account-menu.js: who is signed in, Getting started, the theme and Sign out). Each is mounted again only when it changes.
+async function signOut() {
+  try { const result = await api('/session', 'DELETE'); if (result.logoutUrl) { location.assign(result.logoutUrl); return; } loginScreen(); }
+  catch (error) { notice(error.message, true); }
+}
+function renderHeader() {
+  const team = state.teams.find(t => t.id === state.activeTeam);
+  const role = team?.role || state.activeRole;
+  $('#read-only').hidden = role !== 'reader';
+  const apps = JSON.stringify(state.extensions || []);
+  if (mountedHeader.apps !== apps) { IcebergApps.mount($('#apps'), {extensions: state.extensions || []}); mountedHeader.apps = apps; }
+  const account = {name: state.user.name, details: [team ? `${team.name} · ${roleNames[role] || role}` : ''], guideCurrent: workspacePage === 'guide'};
+  if (mountedHeader.account !== JSON.stringify(account)) {
+    IcebergAccount.mount($('#account'), {...account, guide: () => showPage('guide'), signOut});
+    mountedHeader.account = JSON.stringify(account);
   }
   fitHeader();
 }
-// With extension links the sections may not fit beside the actions: then the navigation takes its own row.
+// On narrow screens the sections may not fit beside the actions: then the navigation takes its own row.
 function fitHeader() {
   const header = document.querySelector('header');
   header.classList.remove('stacked');
@@ -163,8 +162,8 @@ const refitHeader = () => { if (!$('#workspace-nav').hidden) fitHeader(); };
 window.addEventListener('resize', refitHeader);
 document.fonts?.ready.then(refitHeader);
 function renderState() {
-  $('#login-screen').hidden = true; $('#identity').hidden = false; $('#workspace-screen').hidden = false; $('#username').textContent = state.user.name; $('#workspace-nav').hidden = false; $('#guide-nav').hidden = false; placeNotice();
-  renderExtensions();
+  $('#login-screen').hidden = true; $('#workspace-screen').hidden = false; $('#workspace-nav').hidden = false; placeNotice();
+  renderHeader();
   $('#team').replaceChildren(...state.teams.map(t => { const option = element('option', `${t.name} · ${roleNames[t.role] || t.role}`); option.value = t.id; return option; })); $('#team').value = state.activeTeam;
   $('#environment').replaceChildren(...state.environments.map(env => { const option = element('option', envNames[env]); option.value = env; return option; })); $('#environment').value = state.activeEnvironment;
   $('#databases').replaceChildren(...databaseGroups(state.databases, db => db, items => items.map(d => { const b = element('button', undefined, `db${database === d.id ? ' selected' : ''}`); const label = databaseLabel(d); label.append(element('small', envNames[d.environment])); b.append(symbol('database'), label); b.setAttribute('aria-pressed', String(database === d.id)); b.addEventListener('click', () => browse(d.id, [])); return b; })));
@@ -179,6 +178,7 @@ function renderState() {
   if (!state.databases.length) $('#databases').append(element('p', 'This team has no databases in this environment yet.', 'hint'));
   $('#notebooks').replaceChildren(...databaseGroups(state.notebooks, n => state.databases.find(d => d.id === n.database), items => items.map(n => { const db = state.databases.find(d => d.id === n.database); const b = action('', () => showNotebook(n)), label = databaseLabel(db || {name: n.database}); label.append(element('small', envNames[n.environment])); b.append(label, element('span', '↗')); return b; })));
   if (activeNotebook) renderNotebookContext(activeNotebook);
+  $('#notebook-examples-hint').hidden = !state.notebookExamples;
   if (!state.notebooks.length) $('#notebooks').append(element('p', 'Open a database in marimo to get started.', 'hint'));
   $('#notebook-databases').replaceChildren(...databaseGroups(state.databases, db => db, items => items.map(db => { const b = action('', () => openNotebook(db.id)); b.append(databaseLabel(db), element('span', '↗')); return b; })));
   if (!state.databases.length) $('#notebook-databases').append(element('p', 'This team has no databases in this environment yet.', 'hint'));
@@ -305,6 +305,7 @@ async function loadTeamMembers() {
   try {
     const result = await api('/team');
     if (!current() || result.team !== state.activeTeam) return;
+    renderTeamExtensions(result.extensions || []);
     const serialized = JSON.stringify(result.members);
     if (host.dataset.members === serialized) return;
     host.replaceChildren(result.members.length ? dataGrid(['Member', 'Team role'], result.members.map(member => [
@@ -314,6 +315,25 @@ async function loadTeamMembers() {
   } catch (error) {
     if (current()) { delete host.dataset.members; host.replaceChildren(element('p', error.message, 'catalog-empty')); }
   }
+}
+// Read-only: each extension enables itself per team environment in its own Settings › Environments.
+function renderTeamExtensions(items) {
+  $('#team-extensions').hidden = !items.length;
+  if (!items.length) return $('#team-extensions-list').replaceChildren();
+  const environments = state.environments || Object.keys(envNames);
+  const grid = dataGrid(['Extension', ...environments.map(env => envNames[env] || env), ''], items.map(item => [
+    item.title,
+    ...environments.map(env => {
+      const entry = item.environments.find(e => e.environment === env) || {enabled: false};
+      const cell = element('span', entry.enabled ? 'On' : 'Off', `extension-state ${entry.enabled ? 'on' : 'off'}`);
+      if (entry.enabled) cell.title = `Enabled by ${entry.enabledBy || 'a team administrator'}`;
+      return cell;
+    }),
+    Object.assign(element('a', 'Settings ↗'), {href: item.url, target: '_blank', rel: 'noopener'}),
+  ]), 'Extensions per environment');
+  const active = environments.indexOf(state.activeEnvironment) + 1;
+  if (active) grid.querySelectorAll('tr').forEach(row => row.children[active]?.classList.add('active-environment'));
+  $('#team-extensions-list').replaceChildren(grid);
 }
 $('#refresh-team').addEventListener('click', event => busy(event.currentTarget, async () => { await loadState(); await loadTeamMembers(); }));
 function clearBrowser() { clearNotice(); database = null; namespace = []; selectedObject = null; browseVersion++; $('#database-label').textContent = 'CATALOG'; renderDatabaseContext($('#catalog-database-context'), null); $('#namespace-title').textContent = 'Select a database'; $('#breadcrumbs').replaceChildren(); $('#objects').replaceChildren(element('p', 'Select a database from the catalog.', 'empty')); }
@@ -338,7 +358,7 @@ async function browse(db, ns, background = false) {
     host.querySelectorAll('details').forEach(n => { n.open = open.includes(n.querySelector('summary').textContent); });
     return;
   }
-  showPage('catalog', false); startWork(); clearNotice(); selectedObject = null; const version = ++browseVersion; database = db; namespace = [...ns]; saveRoute(); $('#browser').hidden = false; renderState();
+  showPage('catalog', false); clearNotice(); selectedObject = null; const version = ++browseVersion; database = db; namespace = [...ns]; saveRoute(); $('#browser').hidden = false; renderState();
   $('#database-label').textContent = state.databases.find(d => d.id === db)?.name || db; $('#namespace-title').textContent = ns.length ? ns.at(-1) : 'Namespaces';
   const crumbs = [[], ...ns.map((_, i) => ns.slice(0, i + 1))];
   $('#breadcrumbs').replaceChildren(...crumbs.flatMap((parts, i) => { const b = element('button', parts.at(-1) || state.databases.find(d => d.id === db)?.name || db); b.addEventListener('click', () => browse(db, parts)); return i ? [element('span', '/'), b] : [b]; }));
@@ -359,10 +379,9 @@ function renderListing(db, ns, detail, result) {
     renderCatalogListing(detail, result, rows);
     $('#objects').dataset.listing = JSON.stringify([detail, result]);
 }
-function showNotebook(notebook, targetUrl = notebook.url) { if (activeNotebook?.id !== notebook.id || activeNotebook?.selectedUrl !== targetUrl) { const frame = element('iframe'); frame.title = `marimo · ${notebook.database}`; frame.src = targetUrl; frame.allow = 'clipboard-read; clipboard-write'; frame.addEventListener('load', () => { if (frame.isConnected) hideNotebookLoader(); }, {once: true}); $('#frame-host').replaceChildren(frame, notebookLoader('Loading notebook')); } activeNotebook = {...notebook, selectedUrl: targetUrl}; $('#notebook-file').replaceChildren(...[{title: 'Shared files', url: notebook.filesUrl}, {title: 'Starter notebook', url: notebook.url}, ...(notebook.examples || [])].map(n => { const option = element('option', n.title); option.value = n.url; return option; })); $('#notebook-file').value = targetUrl; renderNotebookContext(notebook); $('#editor-external').href = targetUrl; $('#browser').hidden = false; $('#editor').hidden = false; $('#notebook-empty').hidden = true; startWork(); showPage('notebooks'); }
-async function openNotebook(db) { const existing = state.notebooks.find(n => n.database === db); if (existing) { showNotebook(existing); notice('Your existing notebook for this database has resumed. Select the table you want to work with there.'); return; } notice('Opening your team’s shared workspace…'); const previous = activeNotebook; activeNotebook = null; $('#frame-host').replaceChildren(notebookLoader('Starting your session')); $('#notebook-file').replaceChildren(); renderNotebookContext({database: db, environment: state.activeEnvironment}); $('#editor').hidden = false; $('#notebook-empty').hidden = true; startWork(); showPage('notebooks'); let notebook; try { notebook = await api('/notebooks', 'POST', {database: db, namespace: [], table: null}); } catch (error) { if (previous) showNotebook(previous, previous.selectedUrl); else resetEditor(); throw error; } await loadState(); showNotebook(notebook); notice('Marimo is ready. Saved files are shared with your team in this environment.'); }
+function showNotebook(notebook, targetUrl = notebook.url) { if (activeNotebook?.id !== notebook.id || activeNotebook?.selectedUrl !== targetUrl) { const frame = element('iframe'); frame.title = `marimo · ${notebook.database}`; frame.src = targetUrl; frame.allow = 'clipboard-read; clipboard-write'; frame.addEventListener('load', () => { if (frame.isConnected) hideNotebookLoader(); }, {once: true}); $('#frame-host').replaceChildren(frame, notebookLoader('Loading notebook')); } activeNotebook = {...notebook, selectedUrl: targetUrl}; renderNotebookPicker(notebook, targetUrl); renderNotebookContext(notebook); $('#editor-external').href = targetUrl; $('#browser').hidden = false; $('#editor').hidden = false; $('#notebook-empty').hidden = true; showPage('notebooks'); }
+async function openNotebook(db) { const existing = state.notebooks.find(n => n.database === db); if (existing) { showNotebook(existing); notice('Your existing notebook for this database has resumed. Select the table you want to work with there.'); return; } notice('Opening your team’s shared workspace…'); const previous = activeNotebook; activeNotebook = null; $('#frame-host').replaceChildren(notebookLoader('Starting your session')); $('#notebook-file').replaceChildren(); renderNotebookContext({database: db, environment: state.activeEnvironment}); $('#editor').hidden = false; $('#notebook-empty').hidden = true; showPage('notebooks'); let notebook; try { notebook = await api('/notebooks', 'POST', {database: db, namespace: [], table: null}); } catch (error) { if (previous) showNotebook(previous, previous.selectedUrl); else resetEditor(); throw error; } await loadState(); showNotebook(notebook); notice('Marimo is ready. Saved files are shared with your team in this environment.'); }
 $('#login').addEventListener('submit', e => { e.preventDefault(); const form = e.currentTarget; busy(form.querySelector('button'), async () => { const data = Object.fromEntries(new FormData(form)); await api('/session', 'POST', data); form.reset(); clearBrowser(); await loadState(); await restoreRoute(); }); });
-$('#logout').addEventListener('click', e => busy(e.currentTarget, async () => { const result = await api('/session', 'DELETE'); if (result.logoutUrl) { location.assign(result.logoutUrl); return; } loginScreen(); }));
 $('#team').addEventListener('change', e => busy(e.currentTarget, async () => { try { const next = await api('/team', 'PATCH', {team: e.target.value}); resetEditor(); clearBrowser(); state = next; renderState(); saveRoute(); } catch (error) { $('#team').value = state.activeTeam; throw error; } }));
 $('#environment').addEventListener('change', e => busy(e.currentTarget, async () => { try { const next = await api('/environment', 'PATCH', {environment: e.target.value}); resetEditor(); clearBrowser(); state = next; renderState(); saveRoute(); } catch (error) { $('#environment').value = state.activeEnvironment; throw error; } }));
 $('#refresh').addEventListener('click', e => busy(e.currentTarget, async () => { await loadState(); if (selectedObject) await inspectObject(database, namespace, selectedObject.kind, selectedObject.name); else if (database) await browse(database, namespace); }));
@@ -386,4 +405,52 @@ setInterval(refreshWorkspace, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshWorkspace(); });
 window.addEventListener('focus', refreshWorkspace);
 
-$('#notebook-file').addEventListener('change', e => showNotebook(activeNotebook, e.target.value));
+// The notebook picker: the team's notebooks (newest first), the examples the team has not opened yet, and marimo's file browser.
+let pickerVersion = 0;
+async function renderNotebookPicker(notebook, targetUrl) {
+  const picker = $('#notebook-file'), version = ++pickerVersion;
+  const option = (text, value) => { const o = element('option', text); o.value = value; return o; };
+  // At once: the open file, so the picker never shows something else; the list follows.
+  picker.replaceChildren(option(fileLabel(notebook, targetUrl), targetUrl)); picker.value = targetUrl;
+  let listing;
+  try { listing = await api(`/notebooks/${notebook.id}/files`); } catch { return; }
+  if (version !== pickerVersion || activeNotebook?.id !== notebook.id) return;
+  const team = element('optgroup'); team.label = 'Team notebooks';
+  team.append(...listing.notebooks.map(n => option(n.path, n.url)));
+  const groups = [team];
+  // An example the team opened before is its own file in examples/, which Team notebooks already lists.
+  const copied = new Set(listing.notebooks.map(n => n.path)), unopened = listing.examples.filter(e => !copied.has(`examples/${e.id}`));
+  if (unopened.length) {
+    const examples = element('optgroup'); examples.label = 'Examples · opens a copy for your team';
+    examples.append(...unopened.map(e => option(e.title, `example:${e.id}`)));
+    groups.push(examples);
+  }
+  const other = element('optgroup'); other.label = 'Folder'; other.append(option('All files', listing.allFilesUrl));
+  groups.push(other);
+  picker.replaceChildren(...groups);
+  if (![...picker.options].some(o => o.value === targetUrl)) team.prepend(option(fileLabel(notebook, targetUrl), targetUrl));
+  picker.value = activeNotebook.selectedUrl;
+}
+function fileLabel(notebook, url) { return url === notebook.filesUrl ? 'All files' : url.split('?file=')[1] || 'Notebook'; }
+$('#notebook-file').addEventListener('change', e => busy(e.target, async () => {
+  const value = e.target.value;
+  if (!value.startsWith('example:')) { showNotebook(activeNotebook, value); return; }
+  notice('Copying the example into your team\'s folder…');
+  const copy = await api(`/notebooks/${activeNotebook.id}/examples/${encodeURIComponent(value.slice(8))}`, 'POST');
+  showNotebook(activeNotebook, copy.url);
+  notice(`Opened ${copy.path}, your team's own copy.`);
+}));
+// New opens the name form under the bar; New again, Cancel or Escape closes it.
+function closeNewNotebook() { $('#new-notebook-form').hidden = true; $('#new-notebook-form').reset(); $('#new-notebook').setAttribute('aria-expanded', 'false'); }
+$('#new-notebook').addEventListener('click', () => {
+  if (!$('#new-notebook-form').hidden) { closeNewNotebook(); return; }
+  $('#new-notebook-form').hidden = false; $('#new-notebook').setAttribute('aria-expanded', 'true'); $('#new-notebook-name').focus();
+});
+$('#new-notebook-cancel').addEventListener('click', closeNewNotebook);
+$('#new-notebook-form').addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); closeNewNotebook(); $('#new-notebook').focus(); } });
+$('#new-notebook-form').addEventListener('submit', e => { e.preventDefault(); busy(e.submitter || $('#new-notebook-form button'), async () => {
+  const created = await api(`/notebooks/${activeNotebook.id}/files`, 'POST', {name: $('#new-notebook-name').value});
+  closeNewNotebook();
+  showNotebook(activeNotebook, created.url);
+  notice(`Created ${created.path} in your team's shared folder.`);
+}); });

@@ -7,6 +7,8 @@ engine and the platform's catalog browser see where a table comes from.
 """
 
 import json
+import random
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -101,6 +103,42 @@ def properties(job, node, nodes, parents, results, tests, now):
     return values
 
 
+def commit_with_retry(load, change, *, attempts=5, base_delay=0.2, max_delay=5.0, sleep=None):
+    """`change(load())`, again with a freshly loaded table when the commit conflicts.
+
+    Polaris answers a commit that lost a race with a concurrent one, or whose requirements no longer
+    hold (a changed schema), with 409, PyIceberg's `CommitFailedException`; such a commit did not
+    land. `change` derives everything from the table it receives, so applying it again is safe.
+    PyIceberg retries only commits that add snapshots, never these metadata-only ones. Other errors
+    are raised at once. Waits grow exponentially, with full jitter, up to `attempts` tries.
+    """
+    from pyiceberg.exceptions import CommitFailedException
+
+    for attempt in range(attempts):
+        try:
+            return change(load())
+        except CommitFailedException:
+            if attempt == attempts - 1:
+                raise
+            (sleep or time.sleep)(random.uniform(0, min(max_delay, base_delay * 2**attempt)))
+
+
+def stamp(table, values, docs, node, tests):
+    """One metadata-only commit: the properties, without stale ones, and changed column docs."""
+    with table.transaction() as transaction:
+        transaction.set_properties(values)
+        stale = stale_quality(node, tests, table.properties)
+        if stale:
+            transaction.remove_properties(*stale)
+        fields = {f.name: f for f in table.schema().fields}
+        changed = {name: text[:1000] for name, text in docs.items()
+                   if name in fields and (fields[name].doc or "") != text[:1000]}
+        if changed:
+            with transaction.update_schema() as schema:
+                for name, text in changed.items():
+                    schema.update_column(name, doc=text)
+
+
 def main(job, target, token):
     from pyiceberg.catalog import load_catalog
 
@@ -120,20 +158,15 @@ def main(job, target, token):
             if warehouse not in catalogs:
                 catalogs[warehouse] = load_catalog(f"platform-{warehouse}", type="rest", uri=job["catalogUri"],
                                                    warehouse=warehouse, token=token)
-            table = catalogs[warehouse].load_table(identifier)
+            values = properties(job, node, nodes, parents, results, tests, now)
             docs = columns.get(node["unique_id"], {})
-            with table.transaction() as transaction:
-                transaction.set_properties(properties(job, node, nodes, parents, results, tests, now))
-                stale = stale_quality(node["unique_id"], tests, table.properties)
-                if stale:
-                    transaction.remove_properties(*stale)
-                fields = {f.name: f for f in table.schema().fields}
-                changed = {name: text[:1000] for name, text in docs.items()
-                           if name in fields and (fields[name].doc or "") != text[:1000]}
-                if changed:
-                    with transaction.update_schema() as schema:
-                        for name, text in changed.items():
-                            schema.update_column(name, doc=text)
+
+            def change(table, values=values, docs=docs, node=node["unique_id"]):
+                stamp(table, values, docs, node, tests)
+
+            # A concurrent commit makes this one fail with 409: it is worked out again on the new table.
+            commit_with_retry(lambda catalog=catalogs[warehouse], identifier=identifier: catalog.load_table(identifier),
+                              change)
             published.append(".".join(identifier))
         except Exception as exc:  # noqa: BLE001 - One table's metadata never blocks the others.
             errors.append({"table": ".".join(identifier), "error": type(exc).__name__})

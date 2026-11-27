@@ -43,6 +43,18 @@ The [administration guide](admin-guide.md#connect-an-mcp-client) also covers Git
 
 Keycloak accepts the callback on any `localhost` or `127.0.0.1` port. Claude Code pins port 3010, which must equal `MCP_CALLBACK_PORT` in `.env`. If you change that port, run `docker compose run --build --rm keycloak-bootstrap` and register the server again. On Kubernetes the port is the chart's `mcpCallbackPort`, applied by `helm upgrade`.
 
+## Claude on the web and mobile
+
+Claude on claude.ai and in the Claude apps connects from Anthropic's servers, not from your computer. The platform must be reachable from the internet over `https`, and Keycloak must accept Claude's callback. Add it to `.env`:
+
+```bash
+MCP_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback
+```
+
+Apply it with `docker compose run --build --rm keycloak-bootstrap`. On Kubernetes, set the chart's `mcpRedirectUris` and run `helm upgrade`. Every MCP client in the table above then accepts the callback. Each person still signs in with their own account.
+
+In Claude, open **Settings → Connectors → Add custom connector** and enter the server's address, such as `https://users.<domain>/mcp`. Under **OAuth client**, choose **Use your own OAuth client**, enter the server's Keycloak client from the table, such as `iceberg-mcp` or `ext-ingestion-mcp`, and leave the secret empty. Don't choose **Register automatically**: the platform has no dynamic client registration for MCP clients.
+
 ## What the agent can do
 
 Every team member can browse the catalog, preview rows and answer questions from semantic models. Writers also publish and delete semantic models; team administrators also create, rename and delete databases and manage data shares. Destructive tools require the exact name. An external share's client secret is returned once, so the agent sees it; hand it only to the recipient.

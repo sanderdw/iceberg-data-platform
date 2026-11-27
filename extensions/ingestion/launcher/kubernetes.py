@@ -41,7 +41,7 @@ class KubernetesLauncher:
         self.artifacts = Path(env.get("ARTIFACTS_DIR", "/artifacts"))
         self.memory = env.get("RUN_MEMORY", "2g").upper().replace("G", "Gi").replace("M", "Mi")
         self.cpus = env.get("RUN_CPUS", "2")
-        self.work_size = env.get("RUN_WORK_SIZE", "4Gi")
+        self.work_size = env.get("RUN_WORK_SIZE", "8Gi")
         self.extension = env.get("BRIDGE_EXTENSION_ID", "ingestion")
         self.poll = float(env.get("RUN_POLL_SECONDS", "3"))
         self.runs = {}

@@ -6,14 +6,14 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.162.4",
+  "fastapi==0.165.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
-  "joserfc>=1.7.7",
+  "joserfc>=1.8.0",
   "mcp>=2.3.0,<3",
-  "sqlglot>=30.25.0",
+  "sqlglot>=30.35.0",
   "pyyaml>=6.0.3",
-  "duckdb==2.0.0",
+  "duckdb==2.0.1",
   "pydantic-ai-slim[ag-ui,spec,google,openai,anthropic,bedrock,bedrock-mantle,openrouter]>=2.62.0,<3",
 ]
 
@@ -26,12 +26,12 @@ otel = [
   "opentelemetry-instrumentation-httpx>=0.66b1",
   "opentelemetry-instrumentation-logging>=0.66b1",
 ]
-dev = [{include-group = "otel"}, "pytest>=9.1.1", "ruff>=0.17.3"]
+dev = [{include-group = "otel"}, "pytest>=9.2.0", "ruff>=0.17.6"]
 
 [tool.iceberg-conversationalbi]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
 # Shared semantic models need the `shared-data` capability; without it only your teams' own models appear.
-bridge-contract = ">=0.1,<0.2"
+bridge-contract = ">=1.0,<2"
 
 [tool.uv]
 package = false

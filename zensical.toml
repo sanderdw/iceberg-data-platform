@@ -42,7 +42,7 @@ nav = [
     { "How-to guides" = [
       "develop/run-from-source.md", "develop/contributing.md", "develop/kubernetes.md", "develop/releasing.md",
     ] },
-    { "Reference" = ["develop/resource-model.md", "develop/form-validation.md", "develop/extension-bridge.md"] },
+    { "Reference" = ["develop/resource-model.md", "develop/form-validation.md", "develop/extension-bridge.md", "develop/api-conventions.md"] },
     { "Concepts" = ["develop/architecture.md", "develop/keycloak.md"] },
     { "Extension internals" = ["develop/conversational-bi.md", "develop/dbt.md", "develop/ingestion.md", "develop/replication.md", "develop/maintenance.md", "develop/openmetadata.md", "develop/evaluations.md"] },
   ] },

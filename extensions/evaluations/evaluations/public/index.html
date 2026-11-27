@@ -8,6 +8,12 @@
 <title>Evaluations · Iceberg Data Platform</title>
 <link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/apps-menu.css">
+<link rel="stylesheet" href="/settings.css">
+<link rel="stylesheet" href="/account-menu.css">
+<script src="/apps-menu.js" defer></script>
+<script src="/settings.js" defer></script>
+<script src="/account-menu.js" defer></script>
 <script src="/app.js" defer></script>
 </head>
 <body>
@@ -15,8 +21,10 @@
   <a class="brand" href="#/"><img src="/favicon.svg" alt="">iceberg<span>/ evaluations</span></a>
   <nav id="crumbs" aria-label="Location"></nav>
   <div class="header-actions">
-    <button id="theme" class="ghost" type="button">Light / ○</button>
-    <div id="identity" hidden><span id="username"></span><button id="logout" class="quiet" type="button">Sign out</button></div>
+    <span id="read-only" class="read-only-badge" title="You have the read role in each of your teams: you can look at everything here and change nothing." hidden>Read-only</span>
+    <div id="settings-link" hidden></div>
+    <div id="apps" hidden></div>
+    <div id="account"></div>
   </div>
 </header>
 
@@ -27,7 +35,7 @@
     <div class="eyebrow">KNOWN QUESTIONS. CHECKED ANSWERS.</div>
     <h1>Evaluations<span class="dot-accent">.</span></h1>
     <p>See how well the platform's AI agent answers the questions your teams care about, and whether a new model or prompt makes it better or worse.</p>
-    <a class="button wide" href="/auth/login">Sign in with Keycloak <span aria-hidden="true">↗</span></a>
+    <a class="button wide" id="signin-link" href="/auth/login">Sign in with Keycloak <span aria-hidden="true">↗</span></a>
     <p class="hint">Use your linked Keycloak account.</p>
   </section>
   <aside class="intro">
@@ -52,8 +60,8 @@
   <div id="set-list" class="grid"></div>
   <section class="card agent-hint">
     <h2>Live evaluation</h2>
-    <p>Score real Conversational BI conversations of a team as they come in, and turn the doubtful ones into cases.</p>
-    <div id="live-links" class="actions"></div>
+    <p>Score real Conversational BI conversations of a team as they come in, and turn the doubtful ones into cases. Open it from an environment where Evaluations is enabled, in Settings.</p>
+    <div class="actions"><a class="button quiet" href="#/settings/environments">Settings</a></div>
   </section>
   <section class="card agent-hint">
     <h2>Build question sets with an AI agent</h2>
@@ -84,6 +92,10 @@
   </section>
   <div id="live-notice" class="notice" role="status" aria-live="polite" hidden></div>
   <section id="live-view" class="stack"></section>
+</main>
+
+<main id="settings" hidden>
+  <section id="settings-view"></section>
 </main>
 
 <main id="run" hidden>

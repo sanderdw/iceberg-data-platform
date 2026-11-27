@@ -26,7 +26,6 @@ from user_portal.notebook.grid_forecast import (
     require_quality,
     semantic_model,
 )
-from user_portal.notebook.seed import seed_workspace
 from user_portal.notebook.semantic import joins, metric_sql, model_check_queries
 
 EXAMPLES = Path(__file__).parents[1] / "user_portal/notebook/examples"
@@ -54,6 +53,15 @@ def catalog(tmp_path, monkeypatch):
     monkeypatch.delenv("ICEBERG_S3_ENDPOINT", raising=False)
     monkeypatch.setattr("user_portal.notebook.connection.connect", lambda: SqlCatalog("default", **config))
     return SqlCatalog("default", **config)
+
+def copy_examples(work):
+    """What opening the examples in the portal does: each notebook with the data files beside it."""
+    import shutil
+
+    for path in EXAMPLES.iterdir():
+        if path.suffix in (".py", ".yaml", ".txt"):
+            shutil.copyfile(path, work / path.name)
+
 
 
 def test_generated_product_follows_the_contract_and_is_reproducible(contract, product):
@@ -126,7 +134,7 @@ def test_semantic_model_is_complete_and_passes_the_portal_rules(contract):
     assert warnings == [] and stored == semantic
     assert json.loads(json.dumps(semantic)) == semantic
     assert [d["source"] for d in semantic["datasets"]] == [
-        "lakehouse.ai_grid_forecast." + d["table"] for d in contract["datasets"].values()]
+        "ai_grid_forecast." + d["table"] for d in contract["datasets"].values()]
     fields = {(d["name"], f["name"]): f for d in semantic["datasets"] for f in d["fields"]}
     assert all(f.get("description", "").endswith(".") for f in fields.values())
     assert {f["label"] for f in fields.values() if "label" in f} <= set(contract["concepts"])
@@ -159,7 +167,7 @@ def test_governed_queries_count_congestion_points_per_substation(contract, produ
     from user_portal.semantic.rules import document
 
     semantic = semantic_model(contract, NAMESPACE)
-    parsed = ossie.parse({"document": document(semantic), "entity-version": 1}, NAMESPACE)
+    parsed = ossie.parse({"document": document(semantic), "entity-version": 1})
     types = {"String": "string", "Integer": "int", "Float": "double", "Boolean": "boolean"}
     schemas = {d["name"]: {f["name"]: types[f["datatype"]] for f in d["fields"]} for d in semantic["datasets"]}
     spec = QuerySpec(metrics=["congestion_points"], dimensions=[{"field": "SUBSTATION.substation_id"}])
@@ -175,6 +183,7 @@ def test_governed_queries_count_congestion_points_per_substation(contract, produ
     assert rows == expected and sum(rows.values()) == 162
 
 
+@pytest.mark.slow
 def test_publication_writes_documented_partitioned_tables_and_keeps_them_on_rerun(contract, product, catalog):
     report = quality_report(product, contract)
     first = publish_grid_forecast(catalog, dict(product), contract, NAMESPACE, report)
@@ -199,6 +208,7 @@ def test_publication_writes_documented_partitioned_tables_and_keeps_them_on_reru
     assert stored.sort("asset_id", "year", "direction").equals(product["LOAD_FORECAST"])
 
 
+@pytest.mark.slow
 def test_a_changed_contract_recreates_only_that_table(contract, product, catalog):
     report = quality_report(product, contract)
     publish_grid_forecast(catalog, dict(product), contract, NAMESPACE, report)
@@ -235,40 +245,32 @@ def test_publication_refuses_failed_quality(contract, product):
     assert catalog.mock_calls == []
 
 
-def test_polars_gets_only_the_storage_settings(monkeypatch):
+def test_polars_gets_the_storage_endpoint_and_renews_vended_credentials_itself(monkeypatch):
     table = Mock()
     table.io.properties = {"comment": "x", "uri": "sqlite:///c.db", "s3.endpoint": "http://localhost:9000",
                            "s3.access-key-id": "AK", "s3.secret-access-key": "SK", "s3.session-token": "ST"}
     monkeypatch.setenv("ICEBERG_S3_ENDPOINT", "http://rustfs:9000")
+    # Credentials in storage options would stop Polars from renewing the table's own before they expire.
     assert polars_storage_options(table) == {
-        "s3.endpoint": "http://rustfs:9000", "s3.access-key-id": "AK", "s3.secret-access-key": "SK",
-        "s3.session-token": "ST", "s3.region": "us-east-1", "allow_http": "true"}
+        "s3.endpoint": "http://rustfs:9000", "s3.region": "us-east-1", "allow_http": "true"}
     monkeypatch.delenv("ICEBERG_S3_ENDPOINT")
     table.io.properties = {"comment": "x", "warehouse": "file:///tmp"}
     assert polars_storage_options(table) == {}
 
 
-def test_workspace_gets_the_contract_and_keeps_user_edits(tmp_path):
-    seed_workspace(tmp_path)
-    contract_file = tmp_path / "grid_forecast.product.yaml"
-    assert contract_file.read_bytes() == (EXAMPLES / "grid_forecast.product.yaml").read_bytes()
-    contract_file.write_text("# User changes")
-    seed_workspace(tmp_path)
-    assert contract_file.read_text() == "# User changes"
-
-
+@pytest.mark.slow
 def test_both_notebooks_execute_against_a_local_catalog(tmp_path, monkeypatch, catalog):
     pytest.importorskip("marimo")
     pytest.importorskip("matplotlib")
     workspace = tmp_path / "work"
     workspace.mkdir()
-    seed_workspace(workspace)
+    copy_examples(workspace)
     store = polaris(monkeypatch)
     written = run_notebook(workspace / "09_polars_grid_forecast_write.py")
     assert {row["dataset"]: row["rows"] for row in written["published"]} == ROWS
     assert written["model_action"] == "created" and list(store.models) == ["mv_load_forecast"]
     document, _ = store.models["mv_load_forecast"]
-    assert json.loads(document["semantic_model"])["semantic_model"] == [written["grid_model"]]
+    assert json.loads(document["semantic_model"]) == written["grid_model"]
     assert written["congestion_overview"]["congestion_points"].sum() == 162
     rerun = run_notebook(workspace / "09_polars_grid_forecast_write.py")
     assert rerun["model_action"] == "updated"
@@ -288,7 +290,7 @@ def test_both_notebooks_execute_against_a_local_catalog(tmp_path, monkeypatch, c
 
 def test_reader_stops_without_a_published_model(tmp_path, monkeypatch, catalog):
     pytest.importorskip("marimo")
-    seed_workspace(tmp_path)
+    copy_examples(tmp_path)
     polaris(monkeypatch)
     with pytest.raises(RuntimeError, match="Run notebook 09 first"):
         run_notebook(tmp_path / "10_polars_grid_forecast_read.py")

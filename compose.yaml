@@ -34,7 +34,7 @@ services:
 
   # Optional, for looking inside the Polaris metadata: COMPOSE_PROFILES=pgadmin in .env starts it.
   pgadmin:
-    image: dpage/pgadmin4:9.18
+    image: dpage/pgadmin4:9.19
     profiles: [pgadmin]
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
 
   polaris-bootstrap:
-    image: apache/polaris-admin-tool:1.8.0
+    image: apache/polaris-admin-tool:1.9.0
     environment: *polaris-env
     command: ["bootstrap", "--realm=POLARIS", "--credential=POLARIS,${POLARIS_CLIENT_ID},${POLARIS_CLIENT_SECRET}"]
     depends_on:
@@ -65,7 +65,7 @@ services:
         condition: service_healthy
 
   rustfs:
-    image: rustfs/rustfs:1.0.4
+    image: rustfs/rustfs:1.0.6
     labels:
       io.iceberg-platform.role: storage
     environment:
@@ -89,7 +89,7 @@ services:
     restart: unless-stopped
 
   polaris:
-    image: apache/polaris:1.8.0
+    image: apache/polaris:1.9.0
     labels:
       io.iceberg-platform.role: catalog
     networks:
@@ -172,6 +172,7 @@ services:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      USER_ORIGIN: ${USER_ORIGIN:-http://localhost:3002}
       PLATFORM_EXTENSIONS: ${PLATFORM_EXTENSIONS:-}
       PLATFORM_LISTING_EXTENSIONS: ${PLATFORM_LISTING_EXTENSIONS:-}
     ports:
@@ -267,7 +268,7 @@ services:
     restart: unless-stopped
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.1
+    image: quay.io/keycloak/keycloak:26.8.2
     command:
     - start-dev
     - --import-realm
@@ -325,6 +326,7 @@ services:
       DEMO_READER_PASSWORD: ${DEMO_READER_PASSWORD:-}
       DEMO_OUTSIDER_PASSWORD: ${DEMO_OUTSIDER_PASSWORD:-}
       MCP_CALLBACK_PORT: ${MCP_CALLBACK_PORT:-3010}
+      MCP_REDIRECT_URIS: ${MCP_REDIRECT_URIS:-}
       PLATFORM_EXTENSIONS: ${PLATFORM_EXTENSIONS:-}
       PLATFORM_LISTING_EXTENSIONS: ${PLATFORM_LISTING_EXTENSIONS:-}
       PLATFORM_EXTENSION_SECRETS: ${PLATFORM_EXTENSION_SECRETS:-}

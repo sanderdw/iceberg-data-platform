@@ -7,7 +7,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.162.4",
+  "fastapi==0.165.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
   "boto3>=1.43.120",
@@ -16,10 +16,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-oidc = ["Authlib==1.9.5", "httpx2>=2.16.0"]
+oidc = ["Authlib==1.9.10", "httpx2>=2.16.0"]
 mcp = [
     "mcp>=2.3.0,<3",
-    "sqlglot>=30.25.0",
+    "sqlglot>=30.35.0",
 ]
 # OpenTelemetry export, used only when OTEL_EXPORTER_OTLP_ENDPOINT is set (docs/observability.md).
 otel = [
@@ -29,25 +29,32 @@ otel = [
     "opentelemetry-instrumentation-httpx>=0.66b1",
     "opentelemetry-instrumentation-logging>=0.66b1",
 ]
-dev = [{include-group = "users"}, {include-group = "oidc"}, {include-group = "mcp"}, {include-group = "otel"},
-       "pytest>=9.1.1", "ruff>=0.17.3"]
+dev = [
+    {include-group = "users"},
+    {include-group = "oidc"},
+    {include-group = "mcp"},
+    {include-group = "otel"},
+    "pytest>=9.2.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.17.6",
+]
 data = ["pyiceberg[pyarrow,duckdb]>=0.12.0", "numpy>=2.5.4"]
 # The documentation site; see docs/develop/contributing.md.
 docs = ["zensical==0.1.1"]
 users = [
     "docker==7.2.0",
-    "duckdb==2.0.0",
+    "duckdb==2.0.1",
     "pytz>=2026.5",
 ]
 notebook = [
     "altair>=6.3.0",
     "dlt[pyiceberg]==1.32.0",
-    "duckdb==2.0.0",
-    "marimo[sql]==0.25.2",
+    "duckdb==2.0.1",
+    "marimo[sql]==0.26.0",
     "matplotlib>=3.11.2",
     "nbformat>=5.11.1",
     "pandas>=3.1.0",
-    "polars>=2.1.0",
+    "polars>=2.2.0",
     "pyyaml>=6.0.3",
     "pyiceberg[duckdb,pyarrow]>=0.12.0",
 ]
@@ -55,6 +62,12 @@ notebook = [
 [tool.pytest.ini_options]
 testpaths = ["test"]
 pythonpath = ["."]
+addopts = ["--strict-markers"]
+# `npm test` leaves both out; `npm run verify` and CI run everything (docs/develop/contributing.md).
+markers = [
+    "slow: runs a full example notebook pipeline or builds a release archive",
+    "installer: runs install.sh or install.ps1; CI runs these on Linux, macOS and Windows",
+]
 
 [tool.ruff]
 target-version = "py314"

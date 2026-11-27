@@ -23,39 +23,38 @@ def members(teams, role="reader"):
 # What Polaris 1.8 returns for GET .../semantic-models/{name}: the model is a JSON string inside `document`.
 SEMANTIC_MODEL = {
     "document": {
-        "version": "0.2.0",
-        # A whole Ossie document: its version and a list with one model.
-        "semantic_model": json.dumps({"version": "0.2.0", "semantic_model": [
-            {
-                "name": "Analytics",
-                "description": "Events and their meaning",
-                "ai_context": {"instructions": "Count events per user.\nIgnore test users.", "synonyms": ["activity"]},
-                "datasets": [
-                    {
-                        "name": "EVENTS",
-                        "source": "lakehouse.analytics.events",
-                        "primary_key": ["id"],
-                        "fields": [
-                            {
-                                "name": "id",
-                                "datatype": "Integer",
-                                "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "id"}]},
-                            }
-                        ],
-                    }
-                ],
-                "relationships": [
-                    {"name": "events_to_users", "from": "EVENTS", "to": "USERS", "from_columns": ["user_id"], "to_columns": ["id"]}
-                ],
-                "metrics": [
-                    {
-                        "name": "event_count",
-                        "datatype": "Integer",
-                        "expression": {"dialects": [{"dialect": "ANSI_SQL", "expression": "COUNT(*)"}]},
-                    }
-                ],
-            }
-        ]}),
+        "version": "0.3.0.dev0",
+        # A whole Apache Ossie 0.3.0.dev0 document: the model at its root.
+        "semantic_model": json.dumps({
+            "version": "0.3.0.dev0",
+            "name": "Analytics",
+            "description": "Events and their meaning",
+            "ai_context": {"instructions": "Count events per user.\nIgnore test users.", "synonyms": ["activity"]},
+            "datasets": [
+                {
+                    "name": "EVENTS",
+                    "source": "analytics.events",
+                    "primary_key": ["id"],
+                    "fields": [
+                        {"name": "id", "datatype": "Integer", "expression": {"sql": "id"}},
+                        {"name": "user_id", "datatype": "Integer", "expression": {"sql": "user_id"}},
+                    ],
+                    "metrics": [{"name": "users", "datatype": "Integer",
+                                 "expression": {"sql": "COUNT(DISTINCT user_id)"}}],
+                },
+            ],
+            "relationships": [
+                {"name": "events_to_users", "from": "EVENTS", "to": "USERS", "from_columns": ["user_id"],
+                 "to_columns": ["id"]}
+            ],
+            "metrics": [
+                {
+                    "name": "event_count",
+                    "datatype": "Integer",
+                    "expression": {"sql": "COUNT(*)", "dialects": [{"dialect": "DUCKDB", "expression": "count(*)"}]},
+                }
+            ],
+        }),
     },
     "entity-version": "3",
 }

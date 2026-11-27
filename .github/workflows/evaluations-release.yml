@@ -30,9 +30,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
-          version: '0.13.8'
+          version: '0.13.10'
       - id: version
         run: uv run --no-project python -m scripts.release --channel "$GITHUB_REF" >> "$GITHUB_OUTPUT"
       - name: Check and build the source archive
@@ -133,8 +133,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          curl --fail --silent --show-error --location https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz -o "$RUNNER_TEMP/helm.tar.gz"
-          echo '0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b  '"$RUNNER_TEMP/helm.tar.gz" | sha256sum --check
+          curl --fail --silent --show-error --location https://get.helm.sh/helm-v4.3.2-linux-amd64.tar.gz -o "$RUNNER_TEMP/helm.tar.gz"
+          echo 'd1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983  '"$RUNNER_TEMP/helm.tar.gz" | sha256sum --check
           tar -xzf "$RUNNER_TEMP/helm.tar.gz" -C "$RUNNER_TEMP" linux-amd64/helm
           helm="$RUNNER_TEMP/linux-amd64/helm"
           echo "$GH_TOKEN" | "$helm" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin

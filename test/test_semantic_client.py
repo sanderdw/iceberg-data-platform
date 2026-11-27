@@ -64,19 +64,23 @@ class Store:
         raise AssertionError(request)
 
 
-def models_for(store, version="0.2.0.dev0"):
-    return SemanticModels(httpx.Client(transport=httpx.MockTransport(store)), BASE, version)
+def models_for(store):
+    return SemanticModels(httpx.Client(transport=httpx.MockTransport(store)), BASE)
 
 
-MODEL = {"name": "Sales", "datasets": [{"name": "ORDERS", "source": "lakehouse.sales.orders"}], "metrics": []}
+MODEL = {"version": "0.3.0.dev0", "name": "Sales", "datasets": [{"name": "ORDERS", "source": "sales.orders"}],
+         "metrics": []}
 
 
 def test_model_is_stored_as_a_whole_ossie_document_in_the_versioned_envelope():
     store = Store()
     assert models_for(store).create("sales", MODEL) == "1"
     document, _ = store.models["sales"]
-    assert document["version"] == "0.2.0.dev0"
-    assert json.loads(document["semantic_model"]) == {"version": "0.2.0.dev0", "semantic_model": [MODEL]}
+    assert document["version"] == "0.3.0.dev0"
+    # Apache Ossie 0.3.0.dev0: the document is the model, with its version at the root.
+    assert json.loads(document["semantic_model"]) == MODEL
+    without = {k: v for k, v in MODEL.items() if k != "version"}
+    assert json.loads(models_for(store).document(without)["semantic_model"]) == MODEL
     create = store.requests[0]
     assert create.method == "POST" and json.loads(create.content)["name"] == "sales"
 
@@ -119,8 +123,8 @@ def test_datasets_on_tables_with_the_same_name_keep_their_own_credentials(monkey
     secrets = []
     monkeypatch.setattr(semantic, "refresh_table_credentials",
                         lambda connection, namespace, table, *, secret_name: secrets.append(secret_name))
-    model = {"datasets": [{"name": "ORDERS", "source": "lakehouse.sales.orders"},
-                          {"name": "ARCHIVED", "source": "lakehouse.archive.orders"}]}
+    model = {"datasets": [{"name": "ORDERS", "source": "sales.orders"},
+                          {"name": "ARCHIVED", "source": "archive.orders"}]}
 
     class Connection:
         def execute(self, sql):
@@ -136,10 +140,10 @@ def test_names_with_special_characters_are_encoded_in_the_path():
     assert store.requests[0].url.raw_path.endswith(b"/semantic-models/a%2Fb")
 
 
-def test_a_model_stored_without_the_ossie_wrapper_still_loads():
+def test_a_model_another_client_stored_loads():
     store = Store()
-    store.models["old"] = ({"version": "0.2.0", "semantic_model": json.dumps(MODEL)}, 4)
-    assert models_for(store).load("old") == (MODEL, "4")
+    store.models["other"] = ({"version": "0.3.0.dev0", "semantic_model": json.dumps(MODEL)}, 4)
+    assert models_for(store).load("other") == (MODEL, "4")
 
 
 def test_publish_replaces_a_model_a_teammate_created_meanwhile():

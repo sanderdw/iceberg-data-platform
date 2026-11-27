@@ -47,11 +47,11 @@ on its own HTTPS host; see [addresses and sign-in](install-kubernetes.md#address
 | Tool | What it does |
 | --- | --- |
 | `list_semantic_models` | Names of the [Apache Ossie](https://github.com/apache/ossie) models stored in one namespace. |
-| `describe_semantic_model` | Datasets, fields, relationships, metrics and AI instructions, and `queryable`: the dataset each metric counts, what it can be split by, and `problems`. It returns a summary by default. `search` and `dataset` narrow it, `detail="full"` returns every description and expression, and `include_definition` adds the stored document. |
-| `query_semantic_model` | Answers a question with up to 5 metrics, 5 dimensions (`DATASET.field`, optionally with a `day`, `week`, `month`, `quarter` or `year` grain and the relationships to follow with `via`), 10 filters and 200 rows. It returns the rows, the metric definitions with their unit, the compiled SQL and parameters, and `dataAsOf`. Uses a query slot. |
+| `describe_semantic_model` | The model: datasets, fields, relationships, metrics (a dataset's own metrics named `DATASET.metric`) and AI instructions, and `queryable`: the dataset each metric counts, what it can be split by, and `problems`. It returns a summary by default. `search` and `dataset` narrow it, `detail="full"` returns every description and expression, and `include_definition` adds the stored document. |
+| `query_semantic_model` | Answers a question with up to 5 metrics (a dataset's own as `DATASET.metric`), 5 dimensions (`DATASET.field`, optionally with a `day`, `week`, `month`, `quarter` or `year` grain and the relationships to follow with `via`), 10 filters and 200 rows. It returns the rows, the metric definitions with their unit, the compiled SQL and parameters, and `dataAsOf`. Uses a query slot. |
 | `list_dimension_values` | Distinct values of one dimension with their row counts. `search` keeps only values that contain it, ignoring case. Use it to find the exact value to filter on. Uses a query slot. |
-| `publish_semantic_model` | Creates a model or replaces one (Writer role). Replacing it needs the `entityVersion` you read. It returns the warnings from validation. |
-| `delete_semantic_model` | Deletes a model (Writer role). `confirm_name` must equal its name. |
+| `publish_semantic_model` | Creates a model or replaces one (Writer role). `model` is its name and `definition` the [Apache Ossie 0.3.0.dev0](https://github.com/apache/ossie/blob/main/core-spec/spec.md) document, with the model at its root. Replacing it needs the `entityVersion` you read, as `entity_version`, and overwrites the stored model. It returns the warnings from validation. |
+| `delete_semantic_model` | Deletes the model named `model` (Writer role). `confirm_name` must equal that name. |
 
 ### Databases
 
@@ -67,7 +67,7 @@ on its own HTTPS host; see [addresses and sign-in](install-kubernetes.md#address
 | --- | --- |
 | `list_share_teams` | Teams that can receive a share of a database. |
 | `list_shares` / `list_received_shares` | Outgoing shares of a database, and the shares your teams received. |
-| `create_share` / `update_share` | Share tables, views and semantic models with a team, an external party, the data catalog (`listed`, with a `contact`) or a combination. A listing publishes metadata only and needs a data catalog extension. By default, selecting a semantic model also selects the tables it reads (`addedTables`). |
+| `create_share` / `update_share` | Share tables, views and semantic models with a team, an external party, the data catalog (`listed`, with a `contact`) or a combination. A listing publishes metadata only and needs a data catalog extension. By default, selecting a semantic model also selects the tables it reads (`addedTables`). In `update_share`, `objects` replaces the whole selection: what you leave out is no longer shared. |
 | `rotate_share_credential` | Returns a new client secret for an external share, once. The old one stops working. |
 | `delete_share` | Revokes all access immediately. `confirm_name` must equal the share's name. |
 

@@ -6,7 +6,7 @@ import time
 from typing import Literal
 
 import httpx
-from fastapi import Query
+from fastapi import Query, Request
 from pydantic import Field, field_validator
 
 from server.models import Input, Membership, ServiceError, UserInput
@@ -304,7 +304,10 @@ class UserManagement:
 
     def install(self, app, provider):
         @app.get("/api/identity/accounts")
-        def accounts(username: str = Query(min_length=1, max_length=254)):
+        def accounts(request: Request, username: str = Query(min_length=1, max_length=254)):
+            # The lookup serves the link dialog, so read-only team administrators get no account details.
+            if request.state.access != "admin":
+                raise ServiceError(403, "Only platform administrators can look up Keycloak accounts.")
             return self.accounts(username)
 
         @app.post("/api/identity/users", status_code=201)

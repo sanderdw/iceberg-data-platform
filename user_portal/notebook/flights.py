@@ -66,8 +66,9 @@ DIMENSIONS = {
 
 
 def context(item, *keys):
-    """Ossie `ai_context` from the keys of a contract entry that it has."""
-    found = {key: item[key] for key in keys if item.get(key)}
+    """Ossie `ai_context` from the keys of a contract entry that it has; synonyms and examples are text."""
+    found = {key: [str(v) for v in item[key]] if isinstance(item[key], list) else item[key]
+             for key in keys if item.get(key)}
     return {"ai_context": found} if found else {}
 
 
@@ -84,8 +85,8 @@ def field_entry(dataset, field, meaning):
     return {**entry, **context(meaning, "synonyms", "examples")}
 
 
-def semantic_model(model, contract, namespace, catalog="lakehouse"):
-    """The flights product as one Apache Ossie semantic model, ready to store in Polaris.
+def semantic_model(model, contract, namespace):
+    """The flights product as one Apache Ossie 0.3.0.dev0 document, ready to store in Polaris.
 
     Datasets point at the Iceberg tables notebook 06 publishes, the relationships state the joins,
     the metrics carry the agreed SQL with dataset names instead of aliases, and the AI context
@@ -113,6 +114,7 @@ def semantic_model(model, contract, namespace, catalog="lakehouse"):
             if entry.get("label") and entry["label"] not in concepts:
                 raise ValueError(f"The label of {name}.{field} is not a concept in the ontology.")
     return {
+        "version": "0.3.0.dev0",
         "name": model["name"],
         "description": f"{model['description']} {contract['grain']}",
         "ai_context": {
@@ -129,7 +131,7 @@ def semantic_model(model, contract, namespace, catalog="lakehouse"):
         "datasets": [
             {
                 "name": d["name"],
-                "source": ".".join([catalog, *namespace, table_name(d)]),
+                "source": ".".join([*namespace, table_name(d)]),
                 **({"description": d["description"]} if d.get("description") else {}),
                 "primary_key": PRIMARY_KEYS[d["name"]],
                 **context(meanings.get(d["name"], {}), "instructions"),
@@ -146,9 +148,7 @@ def semantic_model(model, contract, namespace, catalog="lakehouse"):
             {
                 "name": name,
                 "description": f"{metric['description']} Unit: {metric['unit']}.",
-                "expression": {
-                    "dialects": [{"dialect": "ANSI_SQL", "expression": re.sub(r"\bf\.", "FLIGHT.", metric["sql"])}]
-                },
+                "expression": {"sql": re.sub(r"\bf\.", "FLIGHT.", metric["sql"])},
             }
             for name, metric in contract["metrics"].items()
         ],

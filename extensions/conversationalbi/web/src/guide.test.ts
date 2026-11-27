@@ -5,7 +5,7 @@ import { splitQuestion, splits, starterQuestions } from "./guide";
 const field = (name: string, extra: Partial<ModelField> = {}): ModelField =>
   ({ name, description: "", type: "string", dimension: true, time: false, synonyms: [], ...extra });
 
-// A slice of the flights model as describe_model returns it.
+// A slice of the flights model as GET /api/v1/semantic-models/describe returns it.
 const flights: ModelDescription = {
   model: { database: "db-" + "a".repeat(32), namespace: ["ai_flights"], name: "flights" },
   name: "Flights", description: "Flights.", instructions: "", examples: [], unreadableTables: [], problems: [],

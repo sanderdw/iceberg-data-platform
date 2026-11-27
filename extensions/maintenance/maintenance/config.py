@@ -14,7 +14,7 @@ def contract_range():
     try:
         return tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["iceberg-maintenance"]["bridge-contract"]
     except (OSError, KeyError):
-        return ">=0.1,<0.2"
+        return ">=1.0,<2"
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class Settings:
     # Runs end 15 minutes before their catalog token expires; this only lowers that further.
     run_timeout: int = 43200
     mcp_callback_port: int = 3010
-    contract: str = ">=0.1,<0.2"
+    contract: str = ">=1.0,<2"
 
     @classmethod
     def from_env(cls, env=None):

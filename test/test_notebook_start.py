@@ -68,4 +68,4 @@ def test_marimo_resolves_no_dotenv_for_the_workspace(tmp_path, monkeypatch, exis
         config = get_default_config_manager(current_path=str(tmp_path)).get_config(hide_secrets=False)
     finally:
         get_user_config_path.cache_clear()
-    assert config["runtime"]["dotenv"] == ["/dev/null"]
+    assert config.runtime.dotenv == ["/dev/null"]

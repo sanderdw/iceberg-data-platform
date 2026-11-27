@@ -36,6 +36,7 @@ What works, verified against Polaris:
 | `RESTORE_FROM_DESTINATION=false` | dlt does not look for its state in the destination; it uses its pipelines folder |
 | The extension stores `state.json` and `schemas/` of the pipelines folder after each successful run, and stages them into the next | Incremental cursors carry over (6 → 9 in the spike); a failed run keeps the previous state |
 | `py-io-impl` that overrides `s3.endpoint` | Polaris vends the browser-facing storage address; the run uses the internal one (as the platform's notebooks do) |
+| dlt's Iceberg load job replaced for `append` and `replace` (`runner/iceberg_load.py`) | dlt reads all of a table's load into one Arrow table before it writes: a 373 MB Parquet file took 7.3 GB. The runner reads it in pieces of 128 MB and writes each piece's data files before reading the next, all in one snapshot and one commit: 1.2 GB for the same file, and a failed run still changes nothing. pyiceberg's own streaming writes don't help: they hand every file to `Executor.map`, which reads the whole stream first |
 
 `replace` is PyIceberg's `overwrite` and `merge` (strategy `upsert`) is PyIceberg's `upsert`, so
 the table keeps its UUID; data shares and table properties survive. dlt's `refresh` modes and
@@ -45,7 +46,8 @@ the table keeps its UUID; data shares and table properties survive. dlt's `refre
 Known limits, from dlt and PyIceberg:
 
 - `merge` upserts in batches of 1,000 rows, one commit each: fine for increments, slow for large
-  first loads. Load large tables with `replace` first.
+  first loads. It also holds the whole load in memory, uncompressed. Load large tables with `replace`
+  first.
 - Upsert needs unique keys in each batch and does not evolve the schema of nested types.
 - dlt adds `_dlt_load_id` and `_dlt_id` to every table, and child tables `<table>__<field>` for
   nested lists, joined on `_dlt_parent_id`.
@@ -57,6 +59,28 @@ catalog configuration uses it directly. Vended storage credentials last as long 
 (`POLARIS_TOKEN_LIFETIME`, one hour by default), so, as in the dbt extension, a run ends 15 minutes
 before the token expires. A custom PyIceberg `AuthManager` that renews the token is not needed for
 runs that short.
+
+Vended storage credentials can still expire during a run: Polaris may serve them from its credential
+cache with less than their full lifetime left, and dlt keeps a table loaded for its whole load
+(merges commit every 1,000 rows on the same table). PyIceberg 0.12 does not renew a FileIO's
+credentials, so the runner's `InternalS3FileIO` (`runner/iceberg_io.py`) does. Shortly before
+`s3.session-token-expires-at-ms`, it asks Polaris's credentials endpoint
+(`GET .../tables/{table}/credentials`, listed in `/v1/config` since Polaris 1.9), or loads the table
+again where the catalog lacks it. dlt builds its catalog itself, so the FileIO is bound to its table
+where PyIceberg's REST catalog builds tables. Credentials without a stated expiry are not renewed.
+
+## Conflicting commits (Polaris 1.8 and later)
+
+Polaris answers a commit that lost a race with a concurrent one with 409, PyIceberg's
+`CommitFailedException`; such a commit did not land.
+
+- dlt's appends, overwrites and upserts add snapshots. PyIceberg 0.12 retries those itself, with
+  exponential backoff and jitter (`commit.retry.*` table properties, 4 retries by default), so the
+  runner does not wrap them.
+- The run's property commit (`runner/publish.py`) is metadata-only, which PyIceberg does not retry.
+  The runner loads the table again and sets the same properties, up to 5 tries.
+- dlt's schema evolution before a merge (`update_schema`) is metadata-only too, and dlt does not retry
+  it. A conflict there fails the run; the next run applies it.
 
 ## Isolation and the network
 

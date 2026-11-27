@@ -4,6 +4,7 @@ Team A owns `sales` and publishes the flights model in it; the partner team shar
 model with team A. The worker fake runs the compiled SQL on the local flights data.
 """
 
+import json
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,6 +30,10 @@ ISSUER = "http://localhost:8080/realms/iceberg"
 FLIGHTS = {"kind": "semantic-model", "namespace": ["ai_flights"], "name": "flights"}
 TABLES = [{"kind": "table", "namespace": ["ai_flights"], "name": t}
           for t in ("flights", "routes", "airports", "carriers", "aircraft", "runways")]
+
+
+class ToolRefused(Exception):
+    """An MCP tool answered with an error."""
 
 
 def settings(**overrides):
@@ -57,7 +62,7 @@ class FakeBridge:
         self.me_calls = []
 
     async def discovery(self, refresh=False):
-        return {"contractVersion": "0.1.0", "capabilities": self.capabilities_,
+        return {"contractVersion": "1.0.0", "capabilities": self.capabilities_,
                 "catalog": {"internalUri": "http://polaris-control-plane:8181/api/catalog"},
                 "storage": {"endpoint": "http://localhost:9000", "internalEndpoint": "http://rustfs:9000"},
                 "userPortalUrl": "http://localhost:3002"}
@@ -118,7 +123,7 @@ class FakeBridge:
 
     async def revoke(self, token, id):
         self.automation_ = [a for a in self.automation_ if a["id"] != id]
-        return {"revoked": True}
+        return {"deleted": True, "automationPrincipal": id}
 
     async def automation(self, *, fresh=False):
         return list(self.automation_)
@@ -178,7 +183,7 @@ class FakeCatalog:
     async def load_model(self, principal, database, namespace, name):
         if (database, namespace, name) not in ((OWN_DB, ["ai_flights"], "flights"),
                                                (SHARED_DB, ["ai_flights"], "flights")):
-            raise CbiError(404, "This semantic model does not exist.", "model_not_readable")
+            raise CbiError(404, "This semantic model does not exist.", "unknown_model")
         return flights.ENVELOPE
 
     async def table_schema(self, principal, database, namespace, table):
@@ -220,5 +225,22 @@ def stack():
         def call(method, path, user="alice", **kwargs):
             return client.request(method, "/api/v1" + path, headers={"Authorization": f"Bearer {user}"}, **kwargs)
 
-        yield SimpleNamespace(client=client, call=call, bridge=bridge, app=app, services=app.state.services,
-                              executor=executor, runtime_calls=runtime_calls)
+        def rpc(method, user, **params):
+            response = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                                   headers={"Authorization": f"Bearer {user}",
+                                            "Accept": "application/json, text/event-stream"})
+            return response.json()["result"]
+
+        def tool(name, user="alice", **arguments):
+            """Calls an MCP tool as an agent does. Returns its result; a refusal raises ToolRefused with its text."""
+            result = rpc("tools/call", user, name=name, arguments=arguments)
+            text = "".join(block.get("text", "") for block in result["content"])
+            if result.get("isError"):
+                raise ToolRefused(text)
+            return json.loads(text)
+
+        def tools():
+            return {t["name"]: t for t in rpc("tools/list", "alice")["tools"]}
+
+        yield SimpleNamespace(client=client, call=call, tool=tool, tools=tools, bridge=bridge, app=app,
+                              services=app.state.services, executor=executor, runtime_calls=runtime_calls)

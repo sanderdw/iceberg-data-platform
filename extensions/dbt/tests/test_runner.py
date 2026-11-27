@@ -179,21 +179,22 @@ class FakePolaris:
 
 
 MODEL_YAML = """\
-version: "0.2.0"
-semantic_model:
-  - name: FlightPerformance
-    description: Reliability of flights.
-    datasets:
-      - name: FLIGHT
-        source: lakehouse.marts.fct_flights
-        primary_key: [flight_id]
-        fields:
-          - name: flight_id
-            expression: flight_id
+version: 0.3.0.dev0
+name: FlightPerformance
+description: Reliability of flights.
+datasets:
+  - name: FLIGHT
+    source: marts.fct_flights
+    primary_key: [flight_id]
+    fields:
+      - name: flight_id
+        expression:
+          sql: flight_id
     metrics:
       - name: flights
         description: "Scheduled flights. Unit: count."
-        expression: count(*)
+        expression:
+          sql: count(*)
 """
 
 
@@ -206,7 +207,8 @@ def test_semantic_models_in_the_project_are_published_once_per_change(tmp_path):
     assert semantic.main(job, tmp_path, "token", polaris)["created"] == ["db1/marts/flight_performance.yml"]
     url = "http://polaris:8181/api/catalog/polaris/v1/db-1/namespaces/marts/semantic-models/flight_performance"
     stored = json.loads(polaris.store[url]["document"]["semantic_model"])
-    assert stored["semantic_model"][0]["name"] == "FlightPerformance" and polaris.store[url]["entity-version"] == 1
+    assert stored["name"] == "FlightPerformance" and stored["version"] == "0.3.0.dev0"
+    assert polaris.store[url]["document"]["version"] == "0.3.0.dev0" and polaris.store[url]["entity-version"] == 1
     # An unchanged file keeps the stored version; an edit (here or elsewhere) is replaced by the file.
     assert semantic.main(job, tmp_path, "token", polaris)["unchanged"] == ["db1/marts/flight_performance.yml"]
     (folder / "flight_performance.yml").write_text(MODEL_YAML.replace("Reliability of flights.", "Punctuality."))
@@ -223,6 +225,8 @@ def test_misplaced_or_broken_semantic_model_files_are_reported_not_published(tmp
     (root / "db1" / "marts").mkdir()
     (root / "db1" / "marts" / "not_a_model.yml").write_text("hello: [")
     (root / "db1" / "marts" / "empty.yml").write_text("name: x\n")
+    (root / "db1" / "marts" / "earlier.yml").write_text("version: '0.2.0'\nsemantic_model: [{name: x, datasets: []}]\n")
+    (root / "db1" / "marts" / "other_version.yml").write_text(MODEL_YAML.replace("0.3.0.dev0", "'0.2.0.dev0'"))
     polaris = FakePolaris()
     outcome = semantic.main({"catalogs": {"db1": "db-1"}, "catalogUri": "http://p/api/catalog"}, tmp_path, "t", polaris)
     errors = {e["model"]: e["error"] for e in outcome["errors"]}
@@ -230,6 +234,8 @@ def test_misplaced_or_broken_semantic_model_files_are_reported_not_published(tmp
     assert "not a database of this environment" in errors["other_db/marts/unknown_database.yml"]
     assert "does not parse" in errors["db1/marts/not_a_model.yml"]
     assert "not an Apache Ossie semantic model" in errors["db1/marts/empty.yml"]
+    assert "no semantic_model list" in errors["db1/marts/earlier.yml"]
+    assert "write '0.3.0.dev0'" in errors["db1/marts/other_version.yml"]
     assert polaris.calls == [] and not outcome["created"]
 
 
@@ -249,15 +255,113 @@ def test_semantic_models_take_missing_descriptions_from_the_dbt_project(tmp_path
 name: Regions
 datasets:
   - name: REGION
-    source: stg_regions
+    source: staging.stg_regions
     fields:
-      - {name: region_id, expression: {dialects: [{dialect: ANSI_SQL, expression: region_id}]}}
-      - {name: code, expression: upper(region_id)}
+      - {name: region_id, expression: {sql: region_id}}
+      - {name: code, expression: {sql: upper(region_id)}}
 """)
     polaris = FakePolaris()
     semantic.main({"catalogs": {"sales": "db-1"}, "catalogUri": "http://p/api/catalog"}, tmp_path, "t", polaris,
                   docs=docs)
-    stored = json.loads(next(iter(polaris.store.values()))["document"]["semantic_model"])["semantic_model"][0]
+    stored = json.loads(next(iter(polaris.store.values()))["document"]["semantic_model"])
     region = stored["datasets"][0]
     assert region["description"] == "Cleaned regions"
     assert [f.get("description") for f in region["fields"]] == ["Stable id", None]
+
+
+class ConflictingTable:
+    """A table whose first metadata commits lose a race with a concurrent writer (409)."""
+
+    def __init__(self, catalog):
+        self.catalog = catalog
+        self.properties = dict(catalog.committed)
+
+    def schema(self):
+        from pyiceberg.schema import Schema
+        from pyiceberg.types import NestedField, StringType
+
+        return Schema(NestedField(1, "region", StringType(), doc=self.catalog.doc))
+
+    def transaction(self):
+        table = self
+
+        class Transaction:
+            def __init__(self):
+                self.values, self.removed, self.docs = {}, [], {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, kind, *rest):
+                if kind is None:
+                    if table.catalog.conflicts:
+                        table.catalog.conflicts -= 1
+                        from pyiceberg.exceptions import CommitFailedException
+
+                        raise CommitFailedException("409: the table changed")
+                    table.catalog.commits.append((self.values, self.removed, self.docs))
+                return False
+
+            def set_properties(self, values):
+                self.values.update(values)
+
+            def remove_properties(self, *keys):
+                self.removed += keys
+
+            def update_schema(self):
+                transaction = self
+
+                class Update:
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *exc):
+                        return False
+
+                    def update_column(self, name, doc):
+                        transaction.docs[name] = doc
+
+                return Update()
+
+        return Transaction()
+
+
+class ConflictingCatalog:
+    def __init__(self, conflicts):
+        self.conflicts, self.loads, self.commits = conflicts, 0, []
+        self.committed, self.doc = {"iceberg-data-platform.quality.status": "pass"}, ""
+
+    def load_table(self, identifier):
+        self.loads += 1
+        return ConflictingTable(self)
+
+
+def test_a_metadata_commit_that_conflicts_is_worked_out_again_on_the_fresh_table():
+    catalog, waits = ConflictingCatalog(conflicts=2), []
+    change_calls = []
+
+    def change(table):
+        change_calls.append(table)
+        publish.stamp(table, {"iceberg-data-platform.producer": "dbt"}, {"region": "Sales region"},
+                      "model.shop.untested", {})
+
+    publish.commit_with_retry(lambda: catalog.load_table(("sales", "regions")), change, sleep=waits.append)
+    assert catalog.loads == 3 and len(change_calls) == 3 and len(waits) == 2 and waits[0] <= 0.2
+    ((values, removed, docs),) = catalog.commits
+    assert values == {"iceberg-data-platform.producer": "dbt"}
+    assert removed == ["iceberg-data-platform.quality.status"] and docs == {"region": "Sales region"}
+
+
+def test_metadata_commits_retry_a_bounded_number_of_times_and_only_on_conflicts():
+    from pyiceberg.exceptions import CommitFailedException
+
+    catalog = ConflictingCatalog(conflicts=99)
+    with pytest.raises(CommitFailedException):
+        publish.commit_with_retry(lambda: catalog.load_table(("sales", "regions")),
+                                  lambda table: publish.stamp(table, {}, {}, "model.shop.x", {}), sleep=lambda s: None)
+    assert catalog.loads == 5
+    calls = []
+    with pytest.raises(PermissionError):
+        publish.commit_with_retry(lambda: calls.append(1), lambda table: (_ for _ in ()).throw(PermissionError("403")),
+                                  sleep=lambda s: pytest.fail("no retry"))
+    assert calls == [1]

@@ -1,6 +1,8 @@
 'use strict';
 // The Replication page over the REST API: replications of your teams, their secrets, schedules and runs.
 // Agents do the same through the MCP server; the server checks every permission again.
+// Getting started, in the account menu: this extension's page in the platform's documentation.
+const GUIDE = 'https://sanderdw.github.io/iceberg-data-platform/replication/';
 const $ = selector => document.querySelector(selector);
 const ENVIRONMENTS = ['development', 'acceptance', 'production'];
 const LABELS = {development: 'Development', acceptance: 'Acceptance', production: 'Production'};
@@ -21,6 +23,8 @@ const BLANK = {host: 'db.example.com', port: 5432, database: 'app', username: 'o
                tls: 'verify-full', slot: 'iceberg_app', publication: 'iceberg_app'};
 const number = new Intl.NumberFormat();
 let me = null, templates = null, route = {}, poller = null, flash = null, renderToken = 0;
+// What a page redraws after an environment is enabled or disabled from a notice; by default the whole page.
+let environmentChanged = null;
 
 function h(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -51,34 +55,35 @@ async function api(path, options = {}) {
 }
 const send = (path, method, body) => api(path, {method, body: body === undefined ? undefined : JSON.stringify(body)});
 
-// Formatting
-function when(seconds) {
-  if (!seconds) return '—';
-  const date = new Date(seconds * 1000), diff = (Date.now() - date) / 1000, ahead = diff < 0, d = Math.abs(diff);
+// Formatting. The API gives every time as an RFC 3339 string in UTC, or null.
+function when(timestamp) {
+  if (!timestamp) return '—';
+  const date = new Date(timestamp), diff = (Date.now() - date) / 1000, ahead = diff < 0, d = Math.abs(diff);
   const text = d < 60 ? (ahead ? 'in a moment' : 'just now') : d < 3600 ? `${Math.round(d / 60)} min` : d < 86400 ? `${Math.round(d / 3600)} h` : null;
   if (!text) return date.toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'});
   return d < 60 ? text : ahead ? `in ${text}` : `${text} ago`;
 }
-function time(seconds) {
-  return h('time', {datetime: seconds ? new Date(seconds * 1000).toISOString() : null,
-                    title: seconds ? new Date(seconds * 1000).toLocaleString(undefined, {dateStyle: 'full', timeStyle: 'long'}) : null,
-                    text: when(seconds)});
+function time(timestamp) {
+  return h('time', {datetime: timestamp || null,
+                    title: timestamp ? new Date(timestamp).toLocaleString(undefined, {dateStyle: 'full', timeStyle: 'long'}) : null,
+                    text: when(timestamp)});
 }
 function duration(run) {
   if (!run.startedAt) return '—';
-  const s = Math.max(0, Math.round((run.finishedAt || Date.now() / 1000) - run.startedAt));
+  const s = Math.max(0, Math.round(((run.finishedAt ? new Date(run.finishedAt) : Date.now()) - new Date(run.startedAt)) / 1000));
   if (s < 60) return `${s} s`;
   if (s < 3600) return `${Math.floor(s / 60)} min ${s % 60} s`;
   return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
 }
 function chip(status, label) { return h('span', {class: `chip ${status}`}, h('i', {class: `status ${status}`, 'aria-hidden': 'true'}), label || status); }
 function typeChip(type) { return h('span', {class: 'chip type', text: SOURCE_LABELS[type] || type}); }
-const STATUS_LABELS = {partial: 'continues next run'};
+const STATUS_LABELS = {incomplete: 'continues next run'};
 function target(p) {
   return h('span', {class: 'target'}, p.databaseName || p.database, h('span', {class: 'sep', 'aria-hidden': 'true', text: '›'}),
            h('span', {class: 'visually-hidden', text: ' namespace '}), p.namespace);
 }
 function teamName(id) { return (me?.memberships.find(m => m.team === id) || {}).teamName || id; }
+function membership(team) { return me.memberships.find(m => m.team === team); }
 const isAdmin = role => ADMINS.includes(role);
 const isWriter = role => WRITERS.includes(role);
 function enabledIn(team) { return (me?.enabledEnvironments.find(e => e.team === team) || {}).environments || []; }
@@ -94,7 +99,7 @@ function failure(error) { if (!error.signin) notice(error.message + (error.detai
 // Screens and routes
 function show(section) { for (const id of ['loading', 'signin', 'page']) $(`#${id}`).hidden = id !== section; }
 function showSignin() {
-  show('signin'); $('#identity').hidden = true;
+  show('signin'); IcebergAccount.mount($('#account'));
   $('#signin-link').href = `/auth/login?return_to=${encodeURIComponent('/' + location.hash)}`;
 }
 function parseRoute() {
@@ -103,6 +108,7 @@ function parseRoute() {
   if (parts[0] === 'new') return {page: 'new', template: params.get('template')};
   if (parts[0] === 'replications' && parts[1]) return {page: parts[2] === 'edit' ? 'edit' : 'replication', id: parts[1]};
   if (parts[0] === 'runs' && parts[1]) return {page: 'run', id: parts[1]};
+  if (parts[0] === 'settings') return {page: 'settings', section: parts[1] || '', team: params.get('team') || ''};
   return {page: 'list', team: params.get('team') || '', environment: ENVIRONMENTS.includes(params.get('environment')) ? params.get('environment') : ''};
 }
 function crumbs(...items) {
@@ -118,19 +124,32 @@ function schedulePoll(fn, ms) { clearTimeout(poller); poller = setTimeout(fn, ms
 
 async function render(keep = false) {
   clearTimeout(poller);
+  environmentChanged = null;
   route = parseRoute();
   const token = ++renderToken;
   try {
     if (!me) {
       const session = await (await fetch('/api/session', {credentials: 'same-origin'})).json();
       if (!session.authenticated) return showSignin();
+      // Who is signed in, with Sign out, before /me: an account /me refuses (not linked to a portal user, or
+      // someone else's Keycloak session) must still be able to sign out and sign in as someone else.
+      IcebergAccount.mount($('#account'), {name: session.user || '', guide: GUIDE, signOut});
       me = await api('/me');
-      $('#identity').hidden = false; $('#username').textContent = me.user.name;
-      if (me.userPortalUrl) { $('#portal-link').href = me.userPortalUrl; $('#portal-link').hidden = false; }
+      IcebergAccount.mount($('#account'), {name: me.user.name, details: IcebergAccount.teams(me.memberships), guide: GUIDE, signOut});
+      // Read-only: the read role in every team, so nothing here can be changed.
+      $('#read-only').hidden = me.memberships.some((m) => ['writer', 'admin', 'bucket-admin'].includes(m.role));
+      IcebergApps.mount($('#apps'), {...me.apps, current: me.extension});
+      IcebergSettings.configure({
+        title: 'Replication', request: (method, path) => send(path, method),
+        enables: 'Its replications write data into the team\'s databases of this environment as the team\'s service account.',
+        disables: 'Replications can no longer run here and their schedules stop. Replications, their runs and the tables they wrote stay.',
+        onChange: async () => { me = await api('/me'); if (environmentChanged) environmentChanged(); else render(true); }});
+      IcebergSettings.link($('#settings-link'));
     }
     show('page');
     if (flash) { notice(...flash); flash = null; } else notice('');
-    const pages = {list: renderList, new: renderEditor, edit: renderEditor, replication: renderReplication, run: renderRun};
+    const pages = {list: renderList, new: renderEditor, edit: renderEditor, replication: renderReplication, run: renderRun,
+                   settings: renderSettings};
     await pages[route.page](token);
     if (token === renderToken && !keep) window.scrollTo(0, 0);
   } catch (error) {
@@ -147,7 +166,7 @@ async function renderList() {
   const query = new URLSearchParams();
   if (route.team) query.set('team', route.team);
   if (route.environment) query.set('environment', route.environment);
-  const replications = await api(`/replications?${query}`);
+  const {replications} = await api(`/replications?${query}`);
   const adminTeams = me.memberships.filter(m => isAdmin(m.role));
   const setFilter = changes => {
     const next = new URLSearchParams({team: route.team, environment: route.environment, ...changes});
@@ -167,13 +186,13 @@ async function renderList() {
     heading('REPLICATION', h('h1', {}, 'Replication', h('span', {class: 'dot-accent', text: '.'})),
       'Keep operational databases in step with your teams\' Iceberg databases. Each run reads the changes since the last one, writes them as the team\'s service account and stops. For APIs, files and one-time loads, use Ingestion (dlt).',
       adminTeams.length ? h('a', {class: 'button', href: '#/new', text: 'New replication'}) : null),
-    filters, body, h('div', {class: 'columns even'}, deletedRowsCard(), agentCard()), environmentsCard());
+    filters, body, h('div', {class: 'columns even'}, deletedRowsCard(), agentCard()));
   if (replications.some(p => ACTIVE.has(p.lastRun?.status))) schedulePoll(() => render(true), 4000);
 }
 
 function lastRunCell(run) {
   if (!run) return h('span', {class: 'muted small', text: 'Never run'});
-  const detail = run.status === 'partial' ? 'first copy continues next run' : run.error ? run.error
+  const detail = run.status === 'incomplete' ? 'first copy continues next run' : run.error ? run.error
     : `${written(run)} rows written`;
   return h('div', {class: 'run-cell'},
     h('a', {href: `#/runs/${run.id}`, class: 'plain-link'}, chip(run.status)),
@@ -191,7 +210,7 @@ function replicationTable(replications) {
       h('td', {}, typeChip(p.sourceType), h('p', {class: 'small-print mono', text: source(p)})),
       h('td', {}, target(p)),
       h('td', {class: 'mono nowrap', text: p.lastRun?.summary?.readUpTo || '—'}),
-      h('td', {class: 'mono nowrap'}, p.schedule ? h('span', {title: `Next run ${new Date(p.schedule.nextRunAt * 1000).toLocaleString()}`},
+      h('td', {class: 'mono nowrap'}, p.schedule ? h('span', {title: p.schedule.nextRunAt ? `Next run ${new Date(p.schedule.nextRunAt).toLocaleString()}` : null},
         p.schedule.enabled ? p.schedule.cron : `${p.schedule.cron} (paused)`) : h('span', {class: 'muted', text: '—'})),
       h('td', {class: 'wide'}, lastRunCell(p.lastRun)))))));
 }
@@ -217,32 +236,11 @@ function deletedRowsCard() {
     h('p', {class: 'small-print', text: 'OLake adds _olake_id, _olake_timestamp, _op_type, _cdc_lsn and _cdc_timestamp to every table.'}));
 }
 
-function environmentsCard() {
-  const items = me.memberships.map(m => {
-    const on = enabledIn(m.team);
-    return h('div', {class: 'env-row'}, h('span', {class: 'team', text: m.teamName}),
-      ENVIRONMENTS.map(env => h('span', {class: `env ${on.includes(env) ? 'on' : 'off'}`},
-        h('i', {class: `status ${on.includes(env) ? 'success' : ''}`, 'aria-hidden': 'true'}),
-        `${LABELS[env]}${on.includes(env) ? '' : ' · off'}`,
-        !on.includes(env) && isAdmin(m.role) ? h('button', {type: 'button', class: 'quiet', text: 'Enable',
-          'aria-label': `Enable Replication for ${m.teamName} in ${LABELS[env]}`, onclick: () => enableEnvironment(m, env)}) : null)));
-  });
-  return h('section', {class: 'card agent-hint'},
-    h('div', {class: 'section-title'}, h('h2', {text: 'Where replications can run'})),
-    h('p', {class: 'small', text: 'Runs only happen in environments a team administrator enabled. Each runs as that team\'s service account for the environment.'}),
-    h('div', {class: 'env-list'}, items));
-}
-
-async function enableEnvironment(membership, env) {
-  const ok = await confirmDialog(`Enable Replication in ${LABELS[env]}?`,
-    `Replications of ${membership.teamName} in ${LABELS[env]} will write data as the team's service account. The platform creates that account now; a team administrator can disable it again.`,
-    'Enable');
-  if (!ok) return;
-  try {
-    await send(`/teams/${membership.team}/environments/${env}`, 'POST');
-    me = await api('/me');
-    go(location.hash, [`Replication is enabled for ${membership.teamName} in ${LABELS[env]}.`]);
-  } catch (error) { failure(error); }
+// Where Replication is enabled, with Enable and Disable for team administrators (Settings › Environments, the page every extension shares).
+function renderSettings() {
+  crumbs(['Settings']);
+  environmentChanged = () => {};
+  IcebergSettings.mount($('#content'), me.memberships, {team: route.team, section: route.section});
 }
 
 function agentCard() {
@@ -257,7 +255,7 @@ function agentCard() {
 async function renderEditor(token) {
   const editing = route.page === 'edit';
   const existing = editing ? await api(`/replications/${route.id}`) : null;
-  templates = templates || await api('/templates');
+  templates = templates || (await api('/templates')).templates;
   if (token !== renderToken) return;
   const adminTeams = me.memberships.filter(m => isAdmin(m.role));
   if (!editing && !adminTeams.length) {
@@ -280,13 +278,13 @@ async function renderEditor(token) {
   const envSelect = h('select', {id: 'f-env', disabled: editing, onchange: e => { state.environment = e.target.value; refreshDatabases(); }},
     ENVIRONMENTS.map(env => h('option', {value: env, text: LABELS[env], selected: env === state.environment})));
   const dbSelect = h('select', {id: 'f-db'});
-  const envHelp = h('span', {class: 'help'});
+  const envNotice = h('div');
   function refreshDatabases() {
     const dbs = me.databases.filter(d => d.team === state.team && d.environment === state.environment);
     const current = dbSelect.value || (editing ? existing.database : '');
     fill(dbSelect, dbs.length ? dbs.map(d => h('option', {value: d.id, text: d.name, selected: d.id === current})) : h('option', {value: '', text: 'No databases in this environment'}));
     dbSelect.disabled = !dbs.length;
-    envHelp.textContent = enabledIn(state.team).includes(state.environment) ? '' : 'Replication is not enabled here yet; enable it before the first run.';
+    fill(envNotice, enabledIn(state.team).includes(state.environment) ? null : IcebergSettings.notice(membership(state.team), state.environment));
   }
   const input = (id, value, extra = {}) => h('input', {id, value: value ?? '', autocomplete: 'off', spellcheck: 'false', ...extra});
   const f = {
@@ -336,7 +334,7 @@ async function renderEditor(token) {
     const button = event.submitter; if (button) button.disabled = true;
     try {
       if (editing) {
-        const changed = await send(`/replications/${existing.id}`, 'PATCH', {...data, expected_revision: existing.revision});
+        const changed = await send(`/replications/${existing.id}`, 'PATCH', {...data, expectedRevision: existing.revision});
         go(`#/replications/${existing.id}`, [changed.hint || 'Saved. The next run uses the new settings.']);
       } else {
         const created = await send('/replications', 'POST', {...data, team: state.team, environment: state.environment, sourceType: 'postgres'});
@@ -367,7 +365,7 @@ async function renderEditor(token) {
         h('section', {class: 'card'},
           h('h2', {text: 'Where it writes'}),
           h('div', {class: 'form-grid'},
-            field('Name', f.name), field('Team', teamSelect), h('label', {class: 'field'}, h('span', {text: 'Environment'}), envSelect, envHelp),
+            field('Name', f.name), field('Team', teamSelect), h('label', {class: 'field'}, h('span', {text: 'Environment'}), envSelect),
             field('Database', dbSelect), field('Namespace', f.namespace, 'Lowercase, such as raw_crm.'), field('First run', f.firstRun)),
           field('Description', f.description))),
       h('div', {class: 'stack'},
@@ -380,22 +378,25 @@ async function renderEditor(token) {
       h('button', {type: 'submit', text: editing ? 'Save changes' : 'Create replication'}),
       h('a', {class: 'button quiet', href: editing ? `#/replications/${existing.id}` : '#/', text: 'Cancel'})));
   refreshDatabases();
+  environmentChanged = refreshDatabases;
   fill($('#content'), heading(editing ? 'EDIT REPLICATION' : 'NEW REPLICATION',
     h('h1', {class: 'compact'}, editing ? existing.name : 'Connect a source', h('span', {class: 'dot-accent', text: '.'})),
     editing ? 'Changes apply from the next run. A new host or user removes the password; a new source, slot, database or namespace copies everything again.'
-      : 'Where the replication connects and where it writes. Then set the password, check the source and choose its tables.'), form);
+      : 'Where the replication connects and where it writes. Then set the password, check the source and choose its tables.'), envNotice, form);
 }
 
 // One replication
 async function renderReplication(token) {
   const p = await api(`/replications/${route.id}`);
+  // The tables a run wrote are its results, which only the run itself carries.
+  const last = p.lastRun ? await api(`/runs/${p.lastRun.id}`) : null;
   if (token !== renderToken) return;
   crumbs([`${teamName(p.team)} · ${p.name}`]);
   const writer = isWriter(p.role), admin = isAdmin(p.role);
   const active = p.recentRuns.find(r => ACTIVE.has(r.status));
   const enabled = enabledIn(p.team).includes(p.environment);
   const hasTables = Object.keys(p.tables).length > 0;
-  const blocked = p.secretsMissing.length ? 'Set the password first.' : !enabled ? 'Replication is not enabled in this environment.'
+  const blocked = p.secretsMissing.length ? 'Set the password first.' : !enabled ? 'Not enabled in this environment.'
     : active ? 'A run is in progress.' : '';
   const start = async (event, path, body, message) => {
     event.target.disabled = true;
@@ -411,6 +412,7 @@ async function renderReplication(token) {
     heading(`${teamName(p.team)} · ${LABELS[p.environment]}`.toUpperCase(),
       h('h1', {class: 'compact'}, p.name, h('span', {class: 'dot-accent', text: '.'})), p.description,
       admin && h('a', {class: 'button quiet', href: `#/replications/${p.id}/edit`, text: 'Edit'}), checkButton, runButton),
+    enabled ? null : IcebergSettings.notice(membership(p.team), p.environment),
     h('div', {class: 'status-line spaced'}, p.lastRun ? chip(p.lastRun.status, `Last run ${p.lastRun.status}`) : chip('idle', 'Never run'),
       typeChip(p.sourceType), h('span', {class: 'chip', text: p.options.deleteMode === 'dv' ? 'Deletion vectors' : 'Positional deletes'}),
       p.schedule && h('span', {class: 'chip', text: p.schedule.enabled ? `${p.schedule.cron} UTC` : 'Schedule paused'}),
@@ -418,7 +420,7 @@ async function renderReplication(token) {
     p.warnings.length ? h('div', {class: 'notice error'}, h('ul', {class: 'plain'}, p.warnings.map(w => h('li', {text: w})))) : null,
     h('div', {class: 'columns'},
       h('div', {class: 'stack'},
-        hasTables ? lastRunCard(p) : null,
+        hasTables ? lastRunCard(p, last) : null,
         tablesCard(p),
         h('section', {class: 'card'}, h('div', {class: 'section-title'}, h('h2', {text: 'Runs'}), h('span', {class: 'small-print', text: 'Newest first'})),
           runsTable(p.recentRuns))),
@@ -428,15 +430,14 @@ async function renderReplication(token) {
 
 function stat(label, value) { return h('div', {class: 'stat'}, h('span', {class: 'eyebrow', text: label}), h('b', {text: value})); }
 
-function lastRunCard(p) {
-  const run = p.lastRun;
+function lastRunCard(p, run) {
   if (!run) return h('section', {class: 'card'}, h('h2', {text: 'Last run'}), h('p', {class: 'small muted', text: 'Not run yet. Run it now, or schedule it.'}));
-  const s = run.summary || {}, tables = s.tables || [];
+  const s = run.summary || {}, tables = run.results || [];
   return h('section', {class: 'card'},
     h('div', {class: 'section-title'}, h('h2', {text: 'Last run'}),
       h('span', {class: 'small-print'}, time(run.finishedAt || run.createdAt), ` · ${duration(run)}`)),
     run.error && h('p', {class: 'error-text', text: run.error}),
-    run.status === 'partial' && h('p', {class: 'small', text: 'The first copy stopped at the time limit; the next run continues where it stopped.'}),
+    run.status === 'incomplete' && h('p', {class: 'small', text: 'The first copy stopped at the time limit; the next run continues where it stopped.'}),
     h('div', {class: 'stats'},
       stat('Changes read', number.format(s.recordsRead || 0)), stat('Rows written', number.format(s.recordsWritten || 0)),
       stat('Replaced or deleted', number.format(tables.reduce((n, t) => n + t.replaced, 0))), stat('Read up to', s.readUpTo || '—')),
@@ -491,7 +492,7 @@ function tablesCard(p) {
                       ...(c.partition ? {partition: c.partition} : {})};
     }
     try {
-      const changed = await send(`/replications/${p.id}`, 'PATCH', {tables, expected_revision: p.revision});
+      const changed = await send(`/replications/${p.id}`, 'PATCH', {tables, expectedRevision: p.revision});
       go(location.hash, [changed.hint || `${Object.keys(tables).length} tables chosen.`]);
     } catch (error) { failure(error); }
   }
@@ -551,7 +552,7 @@ function runsTable(runs) {
       h('td', {class: 'nowrap mono', text: duration(r)}),
       h('td', {class: 'num', text: r.kind === 'check' ? '—' : written(r)}),
       h('td', {class: 'mono nowrap', text: r.summary?.readUpTo || '—'}),
-      h('td', {class: 'wide small'}, r.schedule ? 'schedule' : r.triggeredBy, r.agent && h('span', {class: 'agent', text: 'agent'}),
+      h('td', {class: 'wide small'}, r.scheduled ? 'schedule' : r.triggeredBy, r.agent && h('span', {class: 'agent', text: 'agent'}),
         r.fullRefresh && h('span', {class: 'agent', text: 'copy again'})))))));
 }
 
@@ -564,7 +565,7 @@ function secretsCard(p) {
     admin && h('form', {class: 'secret-row', onsubmit: async event => {
       event.preventDefault();
       if (!field.value) return field.focus();
-      try { await send(`/replications/${p.id}/secrets`, 'PUT', {secrets: {password: field.value}}); field.value = ''; go(location.hash, [set ? 'Password replaced.' : 'Password set. Check the source next.']); }
+      try { await send(`/replications/${p.id}/secrets`, 'PATCH', {secrets: {password: field.value}}); field.value = ''; go(location.hash, [set ? 'Password replaced.' : 'Password set. Check the source next.']); }
       catch (error) { failure(error); }
     }}, field, h('button', {type: 'submit', class: 'small', text: set ? 'Replace' : 'Set'})),
     h('p', {class: 'small-print', text: `For ${p.source.username}@${p.source.host}. Stored encrypted and write-only: nobody can read it back, and runs mask it in logs.`}),
@@ -603,7 +604,7 @@ function deleteCard(p) {
       isWriter(p.role) && h('button', {type: 'button', class: 'quiet small', text: 'Copy everything again', onclick: async event => {
         if (!await confirmDialog('Copy everything again?', 'The next run starts without the saved change log position and copies every table again. Rows are upserted on their key, so tables with a key keep one row per key; append-only tables get the rows again.', 'Copy again')) return;
         event.target.disabled = true;
-        try { await send(`/replications/${p.id}/runs`, 'POST', {full_refresh: true}); go(location.hash, ['Started a run that copies everything again.']); }
+        try { await send(`/replications/${p.id}/runs`, 'POST', {fullRefresh: true}); go(location.hash, ['Started a run that copies everything again.']); }
         catch (error) { failure(error); event.target.disabled = false; }
       }}),
       h('button', {type: 'button', class: 'danger small', text: 'Delete', onclick: () => deleteReplication(p)})));
@@ -616,7 +617,7 @@ async function deleteReplication(p) {
     'Delete', true, input, () => input.value === p.name);
   if (!ok) return;
   try {
-    const deleted = await send(`/replications/${p.id}/delete`, 'POST', {confirm_name: input.value});
+    const deleted = await send(`/replications/${p.id}?confirmName=${encodeURIComponent(input.value)}`, 'DELETE');
     if (deleted.dropSlotSql) {
       await confirmDialog(`${p.name} is deleted`, `${deleted.warning} Give the database owner this SQL: ${deleted.dropSlotSql}`, 'Done');
     }
@@ -627,7 +628,7 @@ async function deleteReplication(p) {
 // One run
 async function renderRun(token) {
   const run = await api(`/runs/${route.id}`);
-  const [p, logs] = await Promise.all([api(`/replications/${run.replication}`), api(`/runs/${run.id}/logs?tail=2000`)]);
+  const [p, logs] = await Promise.all([api(`/replications/${run.replication}`), api(`/runs/${run.id}/logs?limit=2000`)]);
   if (token !== renderToken) return;
   crumbs([`${teamName(p.team)} · ${p.name}`, `#/replications/${p.id}`], [run.kind === 'check' ? 'Source check' : 'Run']);
   const active = ACTIVE.has(run.status), summary = run.summary || {};
@@ -635,7 +636,7 @@ async function renderRun(token) {
   const stick = !previous || previous.scrollTop + previous.clientHeight >= previous.scrollHeight - 24;
   const log = h('pre', {id: 'run-log', class: 'log', tabindex: '0', 'aria-label': 'Run log',
     text: logs.lines.length ? logs.lines.join('\n') : active ? 'Waiting for output…' : 'No log for this run.'});
-  const tables = summary.tables || [];
+  const tables = run.results || [];
   fill($('#content'),
     heading(`${run.kind === 'check' ? 'SOURCE CHECK' : 'RUN'} · ${LABELS[run.environment]}`.toUpperCase(), h('h1', {class: 'compact'}, p.name), null,
       active && isWriter(p.role) && h('button', {type: 'button', class: 'danger', text: 'Stop run', onclick: async event => {
@@ -660,7 +661,7 @@ async function renderRun(token) {
             h('dt', {text: 'Started'}), h('dd', {}, time(run.startedAt)),
             h('dt', {text: 'Finished'}), h('dd', {}, active ? '—' : time(run.finishedAt)),
             h('dt', {text: 'Duration'}), h('dd', {text: duration(run)}),
-            h('dt', {text: 'Started by'}), h('dd', {}, run.schedule ? 'schedule' : run.triggeredBy, run.agent && h('span', {class: 'agent', text: run.agent})),
+            h('dt', {text: 'Started by'}), h('dd', {}, run.scheduled ? 'schedule' : run.triggeredBy, run.agent && h('span', {class: 'agent', text: run.agent})),
             summary.recordsRead !== undefined && h('dt', {text: 'Changes read'}), summary.recordsRead !== undefined && h('dd', {text: number.format(summary.recordsRead)}),
             summary.readUpTo && h('dt', {text: 'Read up to'}), summary.readUpTo && h('dd', {class: 'mono', text: summary.readUpTo}),
             summary.firstCopyComplete !== undefined && summary.firstCopyComplete !== null && h('dt', {text: 'First copy'}),
@@ -691,19 +692,11 @@ function confirmDialog(title, text, action, danger = false, extra = null, valid 
   });
 }
 
-function theme() {
-  const saved = (() => { try { return localStorage.getItem('iceberg-theme'); } catch { return null; } })();
-  const apply = mode => { document.documentElement.dataset.theme = mode;
-    document.querySelector('meta[name="theme-color"]').setAttribute('content', mode === 'light' ? '#f5f5f5' : '#000000');
-    $('#theme').textContent = mode === 'light' ? 'Dark / ●' : 'Light / ○';
-    $('#theme').setAttribute('aria-label', `Switch to ${mode === 'light' ? 'dark' : 'light'} mode`); };
-  apply(saved === 'light' ? 'light' : 'dark');
-  $('#theme').onclick = () => { const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; apply(next); try { localStorage.setItem('iceberg-theme', next); } catch { /* private mode */ } };
-}
-$('#logout').onclick = async () => {
+// Sign out of the extension and of Keycloak.
+async function signOut() {
   const result = await (await fetch('/auth/logout', {method: 'POST', headers: {'X-Iceberg-Replication': '1'}, credentials: 'same-origin'})).json();
   location.href = result.logoutUrl || '/';
-};
+}
 window.addEventListener('hashchange', () => render());
-theme();
+IcebergAccount.mount($('#account'));
 render();

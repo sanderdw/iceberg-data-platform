@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { api, sameRef, type ModelEntry, type ModelRef, type NotEnabled } from "../api";
+import { sameRef, type ModelEntry, type ModelRef, type NotEnabled } from "../api";
+import { settingsHref, useEnvironmentChange } from "./Settings";
 import { Icon } from "./Icon";
 
 type Props = {
@@ -18,12 +19,13 @@ export function ModelPicker({ models, notEnabled, selected, onSelect, onEnabled 
     ["Team models", models.filter((m) => !m.shared)],
     ["Shared with your team", models.filter((m) => m.shared)],
   ];
+  // The same confirmation and call as Settings › Environments.
+  const { change, dialog } = useEnvironmentChange(onEnabled);
   const enable = async (n: NotEnabled) => {
     setBusy(n.team + n.environment);
     setError(undefined);
     try {
-      await api(`/api/v1/teams/${n.team}/environments/${n.environment}`, { method: "POST" });
-      onEnabled();
+      await change(n, n.environment, true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -41,9 +43,9 @@ export function ModelPicker({ models, notEnabled, selected, onSelect, onEnabled 
               <button key={m.key} type="button" className={`db${active ? " selected" : ""}`} aria-pressed={active} onClick={() => onSelect(m)}>
                 <Icon kind="semantic-model" />
                 <span className="database-label">
-                  <strong>{m.name}</strong>
+                  <strong>{m.model.name}</strong>
                   {m.shared && <span className="shared-badge">Shared · Read-only</span>}
-                  <small>{m.databaseName} · {m.namespace.join(".")}</small>
+                  <small>{m.databaseName} · {m.model.namespace.join(".")}</small>
                   {m.shared && <small>Owner: {m.teamName}</small>}
                   <small>{m.environment[0].toUpperCase() + m.environment.slice(1)}</small>
                 </span>
@@ -62,11 +64,12 @@ export function ModelPicker({ models, notEnabled, selected, onSelect, onEnabled 
               {n.canEnable ? (
                 <button type="button" className="quiet" disabled={busy === n.team + n.environment} onClick={() => enable(n)}>Enable</button>
               ) : (
-                <small>A team administrator enables it.</small>
+                <small>A team administrator enables it in <a href={settingsHref(n.team)}>Settings</a>.</small>
               )}
             </div>
           ))}
           {error && <p className="notice-error" role="alert">{error}</p>}
+          {dialog}
         </section>
       )}
     </nav>

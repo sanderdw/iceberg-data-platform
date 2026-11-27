@@ -123,7 +123,8 @@ def main():
             "list_tables", "preview_rows", "query_semantic_model",
         })
         assert all(next(t for t in listed if t.name == name).annotations.destructive_hint
-                   for name in ("delete_database", "delete_semantic_model", "delete_share", "rotate_share_credential"))
+                   for name in ("delete_database", "delete_semantic_model", "delete_share", "rotate_share_credential",
+                                "publish_semantic_model", "update_share"))
         databases, namespaces, tables, described, preview, denied = results
         assert [d["name"] for d in databases.structured_content["databases"]] == ["demo-demo"], text(databases)
         assert [namespace] in namespaces.structured_content["namespaces"], text(namespaces)

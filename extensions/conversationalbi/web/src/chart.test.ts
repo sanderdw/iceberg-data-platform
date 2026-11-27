@@ -108,7 +108,8 @@ describe("chart variants", () => {
 
 describe("freshness", () => {
   it("dates an answer by its snapshot, in UTC", () => {
-    expect(formatAsOf("2026-09-01T08:00:00Z")).toBe("01 SEP 2026 08:00 UTC");
+    // As the API gives it: RFC 3339 in UTC with milliseconds.
+    expect(formatAsOf("2026-09-01T08:00:00.000Z")).toBe("01 SEP 2026 08:00 UTC");
     expect(formatAsOf(null)).toBeUndefined();
   });
 });

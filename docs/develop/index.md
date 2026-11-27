@@ -26,6 +26,7 @@ Reference:
 - [Resource model](resource-model.md): how users, teams, roles, databases and shares are stored in Polaris.
 - [Form validation](form-validation.md): the rules both portals and the API enforce.
 - [Extension Bridge](extension-bridge.md): the contract between the core and its extensions.
+- [API and MCP conventions](api-conventions.md): the rules every extension's API and MCP server follow.
 
 Concepts:
 

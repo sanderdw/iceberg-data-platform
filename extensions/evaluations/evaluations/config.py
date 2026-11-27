@@ -16,7 +16,7 @@ def contract_range():
     try:
         return tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["iceberg-evaluations"]["bridge-contract"]
     except (OSError, KeyError):
-        return ">=0.1.3,<0.2"
+        return ">=1.0,<2"
 
 
 @dataclass(frozen=True)
@@ -39,7 +39,7 @@ class Settings:
     # An LLM for the judge scorers; without one, only the scorers in code run.
     judge_model: str = ""
     mcp_callback_port: int = 3010
-    contract: str = ">=0.1.3,<0.2"
+    contract: str = ">=1.0,<2"
 
     @classmethod
     def from_env(cls, env=None):

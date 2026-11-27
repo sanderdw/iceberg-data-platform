@@ -7,8 +7,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "uv run pytest",
-    "verify": "uv run --all-groups pytest && uv run --all-groups ruff check server user_portal test scripts/*.py .agents && node --check public/app.js && node --check public/identity.js && node --check public/infrastructure.js && node --check public/docs.js && node --check public/guide.js && node --check user_portal/public/app.js && node --check user_portal/public/catalog.js && node --check user_portal/public/semantic.js && node --check user_portal/public/shares.js && node --check user_portal/public/guide.js && node --check scripts/keycloak-smoke.mjs && node --check scripts/keycloak-lifecycle-smoke.mjs && node --check scripts/keycloak-onboarding-smoke.mjs && node --check scripts/presentation-screenshots.mjs && node --check scripts/promo-render.mjs",
+    "test": "uv run --all-groups pytest -n auto -m \"not slow and not installer\"",
+    "verify": "uv run --all-groups pytest -n auto && uv run --all-groups ruff check server user_portal test scripts/*.py .agents && node --check public/app.js && node --check public/identity.js && node --check public/infrastructure.js && node --check public/docs.js && node --check public/guide.js && node --check public/apps-menu.js && node --check public/account-menu.js && node --check user_portal/public/app.js && node --check user_portal/public/catalog.js && node --check user_portal/public/semantic.js && node --check user_portal/public/shares.js && node --check user_portal/public/guide.js && node --check scripts/keycloak-smoke.mjs && node --check scripts/keycloak-lifecycle-smoke.mjs && node --check scripts/keycloak-onboarding-smoke.mjs && node --check scripts/presentation-screenshots.mjs && node --check scripts/promo-render.mjs",
     "test:e2e": "playwright test",
     "test:shares": "uv run --all-groups python -m scripts.share_smoke",
     "test:mcp": "uv run --all-groups python -m scripts.mcp_smoke",
@@ -20,6 +20,7 @@
     "test:shares-ui": "node scripts/shares-browser.mjs",
     "test:forms-ui": "node scripts/forms-browser.mjs",
     "test:navigation-ui": "node scripts/navigation-browser.mjs",
+    "test:ui": "npm run test:team-ui && npm run test:catalog && npm run test:shares-ui && npm run test:forms-ui && npm run test:navigation-ui",
     "test:examples": "USER_EXAMPLE_TEST=1 USER_BROWSER_TEST=1 uv run --all-groups python -m scripts.users_smoke",
     "check:release": "uv run --all-groups python -m scripts.release",
     "docs:serve": "uv run --only-group docs zensical serve",
@@ -30,7 +31,7 @@
     "promo:render": "node scripts/promo-render.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.65.0"
+    "@playwright/test": "1.65.1"
   },
   "license": "Apache-2.0"
 }

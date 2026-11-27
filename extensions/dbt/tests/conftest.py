@@ -31,6 +31,10 @@ DATABASES = {
 }
 
 
+class ToolRefused(Exception):
+    """An MCP tool answered with an error."""
+
+
 def settings(tmp_path):
     return Settings(bridge_url="http://bridge:3005", extension_id="dbt", client_id="ext-dbt", client_secret="s" * 48,
                     mcp_client_id="ext-dbt-mcp", issuer=ISSUER, internal_issuer=ISSUER,
@@ -47,7 +51,7 @@ class FakeBridge:
         self.token_lifetime = 3600
 
     async def discovery(self, refresh=False):
-        return {"contractVersion": "0.1.0",
+        return {"contractVersion": "1.0.0",
                 "catalog": {"internalUri": "http://polaris-control-plane:8181/api/catalog"},
                 "storage": {"endpoint": "http://localhost:9000", "internalEndpoint": "http://rustfs:9000"},
                 "userPortalUrl": "http://localhost:3002"}
@@ -78,7 +82,7 @@ class FakeBridge:
 
     async def revoke(self, token, id):
         self.automation = [a for a in self.automation if a["id"] != id]
-        return {"revoked": True}
+        return {"deleted": True, "automationPrincipal": id}
 
     async def principal_for(self, team, environment):
         for item in self.automation:
@@ -215,8 +219,25 @@ def stack(tmp_path, monkeypatch):
         def call(method, path, user="alice", **kwargs):
             return client.request(method, "/api/v1" + path, headers={"Authorization": f"Bearer {user}"}, **kwargs)
 
-        yield SimpleNamespace(client=client, call=call, bridge=bridge, launcher=launcher, app=app,
-                              services=app.state.services, settings=config)
+        def rpc(method, user, **params):
+            response = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                                   headers={"Authorization": f"Bearer {user}",
+                                            "Accept": "application/json, text/event-stream"})
+            return response.json()["result"]
+
+        def tool(tool, user="alice", /, **arguments):
+            """Calls an MCP tool as an agent does. Returns its result; a refusal raises ToolRefused with its text."""
+            result = rpc("tools/call", user, name=tool, arguments=arguments)
+            text = "".join(block.get("text", "") for block in result["content"])
+            if result.get("isError"):
+                raise ToolRefused(text)
+            return json.loads(text)
+
+        def tools():
+            return {t["name"]: t for t in rpc("tools/list", "alice")["tools"]}
+
+        yield SimpleNamespace(client=client, call=call, tool=tool, tools=tools, bridge=bridge, launcher=launcher,
+                              app=app, services=app.state.services, settings=config)
 
 
 def _fast_sleep(original):

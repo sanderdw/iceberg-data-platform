@@ -16,7 +16,7 @@ const NEW_FILE = /^[A-Za-z0-9_][A-Za-z0-9_./-]{0,200}\.(sql|yml|yaml|csv|md)$/;
 async function renderFiles() {
   const id = project.id, ref = route.ref, token = ++detailToken;
   const writer = WRITERS.includes(project.role), onMain = ref === 'main';
-  const [listing, branches] = await Promise.all([
+  const [listing, {branches}] = await Promise.all([
     api(`/projects/${id}/files?ref=${encodeURIComponent(ref)}`), api(`/projects/${id}/branches`)]);
   if (token !== detailToken) return;
   filesAt = {revision: listing.revision, files: listing.files};
@@ -77,12 +77,12 @@ async function openFile(pane, listing, editable) {
     save.disabled = true;
     try {
       const result = await api(`/projects/${id}/commits`, {method: 'POST', body: JSON.stringify({
-        branch: ref, files: {[path]: text.value}, message: message.value.trim() || `Edit ${path}`, expected_revision: filesAt.revision})});
+        branch: ref, files: {[path]: text.value}, message: message.value.trim() || `Edit ${path}`, expectedRevision: filesAt.revision})});
       moved(result.revision); rememberBranch(ref);
       say(`Saved to ${ref} @ ${result.revision.slice(0, 7)}.`);
       branchActions(after, ref, say);
     } catch (error) {
-      say(error.code === 'stale_branch' ? `${ref} changed since you opened it. Copy your edits, then reload.` : error.message, true);
+      say(error.code === 'revision_conflict' ? `${ref} changed since you opened it. Copy your edits, then reload.` : error.message, true);
     } finally { save.disabled = false; }
   };
   const remove = h('button', {type: 'button', class: 'danger', text: 'Delete file'});
@@ -90,7 +90,7 @@ async function openFile(pane, listing, editable) {
     if (!confirm(`Delete ${path} on ${ref}?`)) return;
     try {
       await api(`/projects/${id}/commits`, {method: 'POST', body: JSON.stringify({
-        branch: ref, files: {[path]: null}, message: `Delete ${path}`, expected_revision: filesAt.revision})});
+        branch: ref, files: {[path]: null}, message: `Delete ${path}`, expectedRevision: filesAt.revision})});
       go({file: null}, true);
     } catch (error) { say(error.message, true); }
   };
@@ -109,7 +109,7 @@ function startBranch(path, revision, say) {
     if (!branch || branch === 'main') return say('Choose a branch other than main. main changes only through a merge.', true);
     button.disabled = true;
     try {
-      const existing = (await api(`/projects/${project.id}/branches`)).some(b => b.name === branch);
+      const existing = (await api(`/projects/${project.id}/branches`)).branches.some(b => b.name === branch);
       if (!existing) await api(`/projects/${project.id}/branches`, {method: 'POST', body: JSON.stringify({name: branch, source: revision})});
       rememberBranch(branch);
       go({ref: branch});
@@ -171,7 +171,7 @@ function newFile() {
     try {
       const extension = value.split('.').at(-1).replace('yaml', 'yml');
       await api(`/projects/${project.id}/commits`, {method: 'POST', body: JSON.stringify({
-        branch: route.ref, files: {[value]: TEMPLATES[extension]}, message: `Add ${value}`, expected_revision: filesAt.revision})});
+        branch: route.ref, files: {[value]: TEMPLATES[extension]}, message: `Add ${value}`, expectedRevision: filesAt.revision})});
       go({file: value}, true);
     } catch (error) { status.textContent = error.message; status.className = 'small error'; create.disabled = false; }
   };

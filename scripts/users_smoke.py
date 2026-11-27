@@ -150,6 +150,22 @@ def main():
                     executed = runtime.exec_run(["/app/.venv/bin/python", "-c", code])
                     assert executed.exit_code == 0, executed.output.decode()
                     print(executed.output.decode().strip(), flush=True)
+                    files = c.get(f"/api/notebooks/{notebook['id']}/files")
+                    assert files.status_code == 200, files.text
+                    assert "workspace.py" in {n["path"] for n in files.json()["notebooks"]}
+                    assert files.json()["examples"][0]["id"] == "01_pyiceberg_neighborhood.py"
+                    created = c.post(f"/api/notebooks/{notebook['id']}/files", headers=HEADERS, json={"name": "smoke_proof"})
+                    assert created.status_code == 201, created.text
+                    duplicate = c.post(f"/api/notebooks/{notebook['id']}/files", headers=HEADERS, json={"name": "smoke_proof"})
+                    assert duplicate.status_code == 409, duplicate.text
+                    copied = c.post(
+                        f"/api/notebooks/{notebook['id']}/examples/06_duckdb_flights_write.py", headers=HEADERS, json={}
+                    )
+                    assert copied.status_code == 200, copied.text
+                    assert copied.json()["path"] == "examples/06_duckdb_flights_write.py"
+                    listed = runtime.exec_run(["ls", "/work", "/work/examples"]).output.decode()
+                    assert "smoke_proof.py" in listed and "flights.yaml" in listed, listed
+                    print("PASS: team notebook list, new notebook from the template, example copied on request", flush=True)
                     with httpx.Client(base_url=str(c.base_url), timeout=90) as peer:
                         try:
                             peer.post(

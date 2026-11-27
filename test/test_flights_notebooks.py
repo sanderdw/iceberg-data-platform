@@ -22,8 +22,7 @@ from user_portal.notebook.flights import (
     require_quality,
     semantic_model,
 )
-from user_portal.notebook.seed import seed_workspace
-from user_portal.notebook.semantic import SPEC_VERSION, SemanticModels, model_checks
+from user_portal.notebook.semantic import SemanticModels, model_checks
 
 EXAMPLES = Path(__file__).parents[1] / "user_portal/notebook/examples"
 
@@ -34,6 +33,15 @@ def flights():
     with duckdb.connect() as connection:
         generate_flights(connection, model)
         yield connection, model, contract
+
+def copy_examples(work):
+    """What opening the examples in the portal does: each notebook with the data files beside it."""
+    import shutil
+
+    for path in EXAMPLES.iterdir():
+        if path.suffix in (".py", ".yaml", ".txt"):
+            shutil.copyfile(path, work / path.name)
+
 
 
 def test_generated_product_matches_all_mapped_fields_and_is_reproducible(flights):
@@ -71,15 +79,6 @@ def test_quality_contract_detects_broken_semantics(flights, corruption):
         require_quality(quality_report(connection, contract))
 
 
-def test_workspace_gets_semantics_and_preserves_user_edits(tmp_path):
-    seed_workspace(tmp_path)
-    for name in ("flights.yaml", "flights.product.yaml", "OSSIE-NOTICE.txt"):
-        assert (tmp_path / name).read_bytes() == (EXAMPLES / name).read_bytes()
-        (tmp_path / name).write_text("# User changes")
-    seed_workspace(tmp_path)
-    assert (tmp_path / "flights.product.yaml").read_text() == "# User changes"
-
-
 def run_notebook(path, **definitions):
     spec = importlib.util.spec_from_file_location(path.stem, path)
     notebook = importlib.util.module_from_spec(spec)
@@ -93,18 +92,17 @@ def polaris(monkeypatch):
     monkeypatch.setattr(
         SemanticModels,
         "connect",
-        classmethod(lambda cls, namespace, version=SPEC_VERSION: cls(
-            httpx.Client(transport=httpx.MockTransport(store)), BASE, version
-        )),
+        classmethod(lambda cls, namespace: cls(httpx.Client(transport=httpx.MockTransport(store)), BASE)),
     )
     return store
 
 
+@pytest.mark.slow
 def test_both_notebooks_execute_and_explain_metrics(tmp_path, monkeypatch):
     pytest.importorskip("marimo")
     pytest.importorskip("matplotlib")
     pytest.importorskip("sqlglot")
-    seed_workspace(tmp_path)
+    copy_examples(tmp_path)
     store = polaris(monkeypatch)
     with duckdb.connect() as connection:
         # The integration smoke covers real Iceberg publication. Here run every
@@ -121,8 +119,8 @@ def test_both_notebooks_execute_and_explain_metrics(tmp_path, monkeypatch):
         assert next(r["rows"] for r in written["published"] if r["dataset"] == "FLIGHT") == 12000
         assert written["model_action"] == "created" and list(store.models) == ["flights"]
         document, _ = store.models["flights"]
-        assert document["version"] == "0.2.0.dev0"
-        assert json.loads(document["semantic_model"])["semantic_model"] == [written["flights_model"]]
+        assert document["version"] == "0.3.0.dev0"
+        assert json.loads(document["semantic_model"]) == written["flights_model"]
         assert run_notebook(tmp_path / "06_duckdb_flights_write.py", lakehouse=connection)["model_action"] == "updated"
         # The reader gets everything from Polaris: remove the local files it must not need.
         for name in ("flights.yaml", "flights.product.yaml"):
@@ -159,14 +157,15 @@ def test_semantic_model_describes_the_six_published_tables(flights):
     _, model, contract = flights
     semantic = semantic_model(model, contract, ["ai_flights"])
     assert [d["source"] for d in semantic["datasets"]] == [
-        "lakehouse.ai_flights." + table for table in ("runways", "aircraft", "airports", "flights", "carriers", "routes")
+        "ai_flights." + table for table in ("runways", "aircraft", "airports", "flights", "carriers", "routes")
     ]
     assert all(d["primary_key"] and d["fields"] for d in semantic["datasets"])
     fields = {d["name"]: {f["name"] for f in d["fields"]} for d in semantic["datasets"]}
     for relationship in semantic["relationships"]:
         assert set(relationship["from_columns"]) <= fields[relationship["from"]]
         assert set(relationship["to_columns"]) <= fields[relationship["to"]]
-    metrics = {m["name"]: m["expression"]["dialects"][0]["expression"] for m in semantic["metrics"]}
+    assert semantic["version"] == "0.3.0.dev0"
+    metrics = {m["name"]: m["expression"]["sql"] for m in semantic["metrics"]}
     assert set(metrics) == set(contract["metrics"])
     assert "f." not in metrics["cancellation_pct"] and "FLIGHT.cancelled" in metrics["cancellation_pct"]
     assert json.loads(json.dumps(semantic)) == semantic
@@ -205,7 +204,7 @@ def test_stored_metrics_give_the_same_answer_as_notebook_seven(flights):
     connection, model, contract = flights
     semantic = semantic_model(model, contract, ["ai_flights"])
     expected = connection.execute(f"SELECT round({contract['metrics']['cancellation_pct']['sql']}, 3) FROM FLIGHT f").fetchall()
-    stored = next(m for m in semantic["metrics"] if m["name"] == "cancellation_pct")["expression"]["dialects"][0]["expression"]
+    stored = next(m for m in semantic["metrics"] if m["name"] == "cancellation_pct")["expression"]["sql"]
     assert connection.execute(f"SELECT round({stored}, 3) FROM FLIGHT").fetchall() == expected
 
 
@@ -236,7 +235,7 @@ def test_checks_from_the_stored_model_find_broken_keys_and_joins(flights, corrup
 
 def test_reader_stops_without_a_published_model(tmp_path, monkeypatch):
     pytest.importorskip("marimo")
-    seed_workspace(tmp_path)
+    copy_examples(tmp_path)
     polaris(monkeypatch)
     with duckdb.connect() as connection, pytest.raises(RuntimeError, match="Run notebook 06 first"):
         run_notebook(tmp_path / "07_duckdb_flights_read.py", lakehouse=connection)

@@ -2,20 +2,102 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Maintenance \u00b7 Iceberg Data Platform",
-    "description": "Table maintenance for your teams' Iceberg databases (beta): snapshot expiry, compaction, dangling deletes, manifests and orphan files, by policy and schedule. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-maintenance-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
+    "description": "Table maintenance for your teams' Iceberg databases (beta): snapshot expiry, compaction, dangling deletes, manifests and orphan files, by Apache Polaris policies and a schedule. Authenticate with a Keycloak bearer token for the iceberg-bridge audience (client ext-maintenance-mcp), or sign in with the browser. Every operation is also an MCP tool at /mcp.",
     "version": "0.0.1"
   },
   "paths": {
     "/api/v1/me": {
       "get": {
-        "summary": "Your teams, roles, databases, the policy defaults and this extension",
+        "summary": "Your teams, roles, databases, the policy types and defaults, and this extension",
         "operationId": "whoami",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -43,16 +125,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -95,16 +249,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -145,16 +371,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -211,16 +509,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -231,7 +601,7 @@
     "/api/v1/tables": {
       "get": {
         "summary": "Table health from the last runs, with what needs attention",
-        "operationId": "listTables",
+        "operationId": "listTableHealth",
         "parameters": [
           {
             "name": "database",
@@ -297,6 +667,18 @@
               "default": false,
               "title": "Attention"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 500,
+              "title": "Limit"
+            }
           }
         ],
         "responses": {
@@ -304,16 +686,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TableHealthList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -323,8 +777,8 @@
     },
     "/api/v1/databases/{database}/tables/{table}": {
       "get": {
-        "summary": "One table's health, its last actions, effective policy and recent runs",
-        "operationId": "getTable",
+        "summary": "One table's health, its last actions, the policies that applied and recent runs",
+        "operationId": "getTableHealth",
         "parameters": [
           {
             "name": "database",
@@ -354,16 +808,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TableHealthDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -373,7 +899,7 @@
     },
     "/api/v1/databases/{database}/policy": {
       "get": {
-        "summary": "A database's maintenance policy and schedule, or the defaults when it has none",
+        "summary": "A database's Polaris maintenance policies, exclusions and schedule, or the defaults",
         "operationId": "getPolicy",
         "parameters": [
           {
@@ -392,25 +918,97 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
         }
       },
-      "put": {
-        "summary": "Create or change a database's policy and schedule (team administrators)",
-        "operationId": "setPolicy",
+      "patch": {
+        "summary": "Change a database's policies and exclusions, or create them from the defaults (team administrators)",
+        "operationId": "updatePolicy",
         "parameters": [
           {
             "name": "database",
@@ -438,16 +1036,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -455,7 +1125,7 @@
         }
       },
       "delete": {
-        "summary": "Remove a database's policy and schedule (team administrators)",
+        "summary": "Remove a database's policies, exclusions and schedule (team administrators)",
         "operationId": "deletePolicy",
         "parameters": [
           {
@@ -474,16 +1144,316 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedPolicy"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/databases/{database}/schedule": {
+      "put": {
+        "summary": "Maintain a database on a cron schedule in UTC; needs a policy (team administrators)",
+        "operationId": "setSchedule",
+        "parameters": [
+          {
+            "name": "database",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^db-[a-f0-9]{32}$",
+              "title": "Database"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Schedule"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a database's schedule; its policy stays (team administrators)",
+        "operationId": "deleteSchedule",
+        "parameters": [
+          {
+            "name": "database",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^db-[a-f0-9]{32}$",
+              "title": "Database"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -529,16 +1499,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -577,16 +1619,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -608,6 +1722,20 @@
               "pattern": "^run-[a-f0-9]{24}$",
               "title": "Run"
             }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 600,
+              "minimum": 0,
+              "description": "Seconds to wait for the run to finish. The run is returned as it is then, finished or not.",
+              "default": 0,
+              "title": "Wait"
+            },
+            "description": "Seconds to wait for the run to finish. The run is returned as it is then, finished or not."
           }
         ],
         "responses": {
@@ -615,16 +1743,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -634,7 +1834,7 @@
     },
     "/api/v1/runs/{run}/logs": {
       "get": {
-        "summary": "A run's log",
+        "summary": "The last lines of a run's log",
         "operationId": "getRunLogs",
         "parameters": [
           {
@@ -648,7 +1848,7 @@
             }
           },
           {
-            "name": "tail",
+            "name": "limit",
             "in": "query",
             "required": false,
             "schema": {
@@ -656,7 +1856,7 @@
               "maximum": 5000,
               "minimum": 1,
               "default": 500,
-              "title": "Tail"
+              "title": "Limit"
             }
           }
         ],
@@ -665,16 +1865,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RunLogs"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -703,16 +1975,88 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CancelResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No, invalid or expired token or session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Refused: not a member, or the role is too low",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource in your teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not possible in the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "The request is not valid",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform refused or failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -723,18 +2067,849 @@
   },
   "components": {
     "schemas": {
-      "HTTPValidationError": {
+      "Applied": {
         "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
+          "settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Settings",
+            "description": "The settings of this type that applied; off when no policy did."
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem",
+            "description": "Why the policy was not applied."
           }
         },
         "type": "object",
-        "title": "HTTPValidationError"
+        "required": [
+          "settings",
+          "policy",
+          "problem"
+        ],
+        "title": "Applied"
+      },
+      "AppliedPolicies": {
+        "properties": {
+          "snapshotExpiry": {
+            "$ref": "#/components/schemas/Applied"
+          },
+          "dataCompaction": {
+            "$ref": "#/components/schemas/Applied"
+          },
+          "metadataCompaction": {
+            "$ref": "#/components/schemas/Applied"
+          },
+          "orphanFileRemoval": {
+            "$ref": "#/components/schemas/Applied"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshotExpiry",
+          "dataCompaction",
+          "metadataCompaction",
+          "orphanFileRemoval"
+        ],
+        "title": "AppliedPolicies"
+      },
+      "AppliedPolicy": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "appliedAt": {
+            "type": "string",
+            "enum": [
+              "catalog",
+              "namespace",
+              "table"
+            ],
+            "title": "Appliedat",
+            "description": "Where it is attached."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "namespace",
+          "version",
+          "appliedAt"
+        ],
+        "title": "AppliedPolicy",
+        "description": "The policy Polaris resolved for a table."
+      },
+      "Apps": {
+        "properties": {
+          "workspace": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspacePage"
+            },
+            "type": "array",
+            "title": "Workspace"
+          },
+          "extensions": {
+            "items": {
+              "$ref": "#/components/schemas/ExtensionApp"
+            },
+            "type": "array",
+            "title": "Extensions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace",
+          "extensions"
+        ],
+        "title": "Apps"
+      },
+      "CancelResult": {
+        "properties": {
+          "run": {
+            "type": "string",
+            "title": "Run"
+          },
+          "cancelling": {
+            "type": "boolean",
+            "title": "Cancelling"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run",
+          "cancelling"
+        ],
+        "title": "CancelResult"
+      },
+      "DataCompaction": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "targetFileSizeBytes": {
+            "type": "integer",
+            "title": "Targetfilesizebytes"
+          },
+          "minInputFiles": {
+            "type": "integer",
+            "title": "Mininputfiles"
+          },
+          "deleteRatioThreshold": {
+            "type": "number",
+            "title": "Deleteratiothreshold"
+          },
+          "removeDanglingDeletes": {
+            "type": "boolean",
+            "title": "Removedanglingdeletes"
+          },
+          "maxInputBytesPerRun": {
+            "type": "integer",
+            "title": "Maxinputbytesperrun"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "targetFileSizeBytes",
+          "minInputFiles",
+          "deleteRatioThreshold",
+          "removeDanglingDeletes",
+          "maxInputBytesPerRun"
+        ],
+        "title": "DataCompaction",
+        "description": "system.data-compaction: enable and config target-file-size-bytes, min-input-files, delete-ratio-threshold,\nremove-dangling-deletes, max-input-bytes-per-run."
+      },
+      "Database": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "teamName": {
+            "type": "string",
+            "title": "Teamname"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy",
+            "description": "Whether maintenance policies are attached to the database's catalog; null where Maintenance is not enabled and cannot read them."
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Schedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tables": {
+            "type": "integer",
+            "title": "Tables",
+            "description": "Tables seen by the last runs."
+          },
+          "attention": {
+            "type": "integer",
+            "title": "Attention",
+            "description": "Tables that need attention or failed."
+          },
+          "inspected": {
+            "type": "boolean",
+            "title": "Inspected"
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "team",
+          "teamName",
+          "environment",
+          "role",
+          "policy",
+          "schedule",
+          "tables",
+          "attention",
+          "inspected",
+          "lastRun"
+        ],
+        "title": "Database"
+      },
+      "DatabaseList": {
+        "properties": {
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/Database"
+            },
+            "type": "array",
+            "title": "Databases"
+          }
+        },
+        "type": "object",
+        "required": [
+          "databases"
+        ],
+        "title": "DatabaseList"
+      },
+      "DatabaseName": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "DatabaseName"
+      },
+      "Deleted": {
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted"
+          },
+          "database": {
+            "type": "string",
+            "title": "Database"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted",
+          "database"
+        ],
+        "title": "Deleted"
+      },
+      "DeletedPolicy": {
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted"
+          },
+          "database": {
+            "type": "string",
+            "title": "Database"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted",
+          "database",
+          "note"
+        ],
+        "title": "DeletedPolicy"
+      },
+      "EnabledEnvironments": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environments": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "development",
+                "acceptance",
+                "production"
+              ]
+            },
+            "type": "array",
+            "title": "Environments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environments"
+        ],
+        "title": "EnabledEnvironments"
+      },
+      "Environment": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "acceptance",
+              "production"
+            ],
+            "title": "Environment"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "enabledBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabledby",
+            "description": "Who enabled it; null when it is not enabled."
+          },
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/DatabaseName"
+            },
+            "type": "array",
+            "title": "Databases"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "environment",
+          "enabled",
+          "enabledBy",
+          "databases"
+        ],
+        "title": "Environment"
+      },
+      "EnvironmentList": {
+        "properties": {
+          "environments": {
+            "items": {
+              "$ref": "#/components/schemas/Environment"
+            },
+            "type": "array",
+            "title": "Environments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "environments"
+        ],
+        "title": "EnvironmentList"
+      },
+      "Error": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "description": "What went wrong, for a person."
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "A stable code, for a program."
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail",
+            "description": "Only present when there is more to tell."
+          }
+        },
+        "type": "object",
+        "required": [
+          "error",
+          "code"
+        ],
+        "title": "Error"
+      },
+      "Exclusion": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "namespace",
+              "table"
+            ],
+            "title": "Level"
+          },
+          "types": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "snapshotExpiry",
+                "dataCompaction",
+                "metadataCompaction",
+                "orphanFileRemoval"
+              ]
+            },
+            "type": "array",
+            "title": "Types",
+            "description": "The policy types switched off there."
+          },
+          "createdBy": {
+            "type": "string",
+            "title": "Createdby"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat",
+            "description": "RFC 3339 in UTC with milliseconds.",
+            "examples": [
+              "2026-11-24T09:15:02.123Z"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "level",
+          "types",
+          "createdBy",
+          "createdAt"
+        ],
+        "title": "Exclusion"
+      },
+      "ExclusionInput": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_$-]{1,128}(\\.[A-Za-z0-9_$-]{1,128}){0,7}$",
+            "title": "Target",
+            "description": "A namespace, or a table as namespace.table."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "namespace",
+              "table"
+            ],
+            "title": "Level"
+          },
+          "types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "snapshotExpiry",
+                    "dataCompaction",
+                    "metadataCompaction",
+                    "orphanFileRemoval"
+                  ]
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Types",
+            "description": "The policy types switched off there; all when left out."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target",
+          "level"
+        ],
+        "title": "ExclusionInput"
+      },
+      "ExtensionApp": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "purpose",
+          "origin"
+        ],
+        "title": "ExtensionApp"
+      },
+      "Me": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "memberships": {
+            "items": {
+              "$ref": "#/components/schemas/Membership"
+            },
+            "type": "array",
+            "title": "Memberships"
+          },
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/MemberDatabase"
+            },
+            "type": "array",
+            "title": "Databases"
+          },
+          "extension": {
+            "type": "string",
+            "title": "Extension"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin"
+          },
+          "environments": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "development",
+                "acceptance",
+                "production"
+              ]
+            },
+            "type": "array",
+            "title": "Environments"
+          },
+          "enabledEnvironments": {
+            "items": {
+              "$ref": "#/components/schemas/EnabledEnvironments"
+            },
+            "type": "array",
+            "title": "Enabledenvironments"
+          },
+          "userPortalUrl": {
+            "type": "string",
+            "title": "Userportalurl"
+          },
+          "apps": {
+            "$ref": "#/components/schemas/Apps"
+          },
+          "policyTypes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PolicyTypeInfo"
+            },
+            "type": "object",
+            "title": "Policytypes",
+            "description": "The policy types: their Polaris type and title."
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/Settings",
+            "description": "What a new policy starts with, per type."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "memberships",
+          "databases",
+          "extension",
+          "origin",
+          "environments",
+          "enabledEnvironments",
+          "userPortalUrl",
+          "apps",
+          "policyTypes",
+          "defaults"
+        ],
+        "title": "Me"
+      },
+      "MemberDatabase": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "team",
+          "environment",
+          "status"
+        ],
+        "title": "MemberDatabase"
+      },
+      "Membership": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "teamName": {
+            "type": "string",
+            "title": "Teamname"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "teamName",
+          "role"
+        ],
+        "title": "Membership"
+      },
+      "MetadataCompaction": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "minCountToMerge": {
+            "type": "integer",
+            "title": "Mincounttomerge"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "minCountToMerge"
+        ],
+        "title": "MetadataCompaction",
+        "description": "system.metadata-compaction: rewrites manifests. enable, config.min-count-to-merge."
+      },
+      "OrphanFileRemoval": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "maxOrphanFileAgeInDays": {
+            "type": "integer",
+            "title": "Maxorphanfileageindays"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "maxOrphanFileAgeInDays"
+        ],
+        "title": "OrphanFileRemoval",
+        "description": "system.orphan-file-removal: enable, max_orphan_file_age_in_days (at least 1)."
+      },
+      "Policy": {
+        "properties": {
+          "database": {
+            "type": "string",
+            "title": "Database"
+          },
+          "databaseName": {
+            "type": "string",
+            "title": "Databasename"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists",
+            "description": "False: no maintenance policy is attached to the database's catalog, and settings are the defaults."
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings",
+            "description": "The database's policies, or the defaults for a type without one."
+          },
+          "policies": {
+            "$ref": "#/components/schemas/PolicyRefs",
+            "description": "Per type, the Polaris policy behind settings; null when there is none."
+          },
+          "exclusions": {
+            "items": {
+              "$ref": "#/components/schemas/Exclusion"
+            },
+            "type": "array",
+            "title": "Exclusions"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Schedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Your role in the database's team."
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database",
+          "databaseName",
+          "team",
+          "environment",
+          "exists",
+          "settings",
+          "policies",
+          "exclusions",
+          "schedule",
+          "role",
+          "note"
+        ],
+        "title": "Policy"
       },
       "PolicyInput": {
         "properties": {
@@ -752,13 +2927,13 @@
               }
             ],
             "title": "Settings",
-            "description": "Per operation (expireSnapshots, compaction, orphanFiles, rewriteManifests, danglingDeletes), the settings to change; the rest keeps its value. whoami lists the defaults."
+            "description": "Per policy type (snapshotExpiry, dataCompaction, metadataCompaction, orphanFileRemoval), the settings to change; the rest keeps its value. whoami lists the defaults."
           },
-          "exclude": {
+          "exclusions": {
             "anyOf": [
               {
                 "items": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/ExclusionInput"
                 },
                 "type": "array",
                 "maxItems": 500
@@ -767,35 +2942,269 @@
                 "type": "null"
               }
             ],
-            "title": "Exclude",
-            "description": "Tables (namespace.table) that maintenance leaves alone."
+            "title": "Exclusions",
+            "description": "Namespaces and tables that maintenance leaves alone, per policy type; replaces the list. Each is a disabled Polaris policy attached to the namespace or table, which overrides the database's."
           },
-          "cron": {
+          "expectedVersions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "propertyNames": {
+                  "enum": [
+                    "snapshotExpiry",
+                    "dataCompaction",
+                    "metadataCompaction",
+                    "orphanFileRemoval"
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectedversions",
+            "description": "Per policy type, the Polaris policy version you read (null: there was none). A type that changed since is refused with revision_conflict."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PolicyInput"
+      },
+      "PolicyRef": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace",
+            "description": "The namespace that holds the policy; _maintenance for Maintenance's own."
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Polaris's version of the policy: pass it as expectedVersions."
+          },
+          "managed": {
+            "type": "boolean",
+            "title": "Managed",
+            "description": "Whether Maintenance created it. Another tool's policy is updated in place."
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem",
+            "description": "Why Maintenance does not apply it, such as a value out of bounds."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "namespace",
+          "version",
+          "managed",
+          "problem"
+        ],
+        "title": "PolicyRef",
+        "description": "The Polaris policy of one type attached to the database's catalog."
+      },
+      "PolicyRefs": {
+        "properties": {
+          "snapshotExpiry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dataCompaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadataCompaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "orphanFileRemoval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshotExpiry",
+          "dataCompaction",
+          "metadataCompaction",
+          "orphanFileRemoval"
+        ],
+        "title": "PolicyRefs"
+      },
+      "PolicyTypeInfo": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "The Apache Polaris policy type, such as system.snapshot-expiry."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "title"
+        ],
+        "title": "PolicyTypeInfo"
+      },
+      "Run": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "database": {
+            "type": "string",
+            "title": "Database"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "inspect",
+              "dry-run",
+              "maintain"
+            ],
+            "title": "Mode"
+          },
+          "tables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tables",
+            "description": "The tables the run was limited to; empty for all."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "success",
+              "incomplete",
+              "partial",
+              "failed",
+              "error",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "triggeredBy": {
+            "type": "string",
+            "title": "Triggeredby",
+            "description": "The person's name, or schedule."
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent",
+            "description": "The MCP client when an agent started it."
+          },
+          "scheduled": {
+            "type": "boolean",
+            "title": "Scheduled"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat",
+            "description": "RFC 3339 in UTC with milliseconds.",
+            "examples": [
+              "2026-11-24T09:15:02.123Z"
+            ]
+          },
+          "startedAt": {
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 100
+                "description": "RFC 3339 in UTC with milliseconds.",
+                "examples": [
+                  "2026-11-24T09:15:02.123Z"
+                ]
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Cron",
-            "description": "Five-field cron expression in UTC, at most once an hour; empty removes the schedule."
+            "title": "Startedat"
           },
-          "scheduleEnabled": {
+          "finishedAt": {
             "anyOf": [
               {
-                "type": "boolean"
+                "type": "string",
+                "description": "RFC 3339 in UTC with milliseconds.",
+                "examples": [
+                  "2026-11-24T09:15:02.123Z"
+                ]
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Scheduleenabled",
-            "description": "Pause or resume the schedule."
+            "title": "Finishedat"
           },
-          "expected_revision": {
+          "exitCode": {
             "anyOf": [
               {
                 "type": "integer"
@@ -804,13 +3213,68 @@
                 "type": "null"
               }
             ],
-            "title": "Expected Revision",
-            "description": "Fail if the policy changed since this revision (0: only if there is none yet)."
+            "title": "Exitcode"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary",
+            "description": "The runner's totals and versions."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "databaseName": {
+            "type": "string",
+            "title": "Databasename"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Your role in the database's team."
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Results",
+            "description": "Per table: name, status, error and actions. Empty until the run has results."
           }
         },
-        "additionalProperties": false,
         "type": "object",
-        "title": "PolicyInput"
+        "required": [
+          "id",
+          "database",
+          "team",
+          "environment",
+          "mode",
+          "tables",
+          "status",
+          "triggeredBy",
+          "agent",
+          "scheduled",
+          "createdAt",
+          "startedAt",
+          "finishedAt",
+          "exitCode",
+          "summary",
+          "error",
+          "databaseName",
+          "role",
+          "results"
+        ],
+        "title": "Run",
+        "description": "A run as get and start return it."
       },
       "RunInput": {
         "properties": {
@@ -846,7 +3310,7 @@
             "maximum": 600.0,
             "minimum": 0.0,
             "title": "Wait",
-            "description": "Seconds to wait for the run to finish.",
+            "description": "Seconds to wait for the run to finish. The run is returned as it is then, finished or not.",
             "default": 0
           }
         },
@@ -854,45 +3318,680 @@
         "type": "object",
         "title": "RunInput"
       },
-      "ValidationError": {
+      "RunList": {
         "properties": {
-          "loc": {
+          "runs": {
             "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
+              "$ref": "#/components/schemas/RunSummary"
             },
             "type": "array",
-            "title": "Location"
-          },
-          "msg": {
-            "type": "string",
-            "title": "Message"
-          },
-          "type": {
-            "type": "string",
-            "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
+            "title": "Runs"
           }
         },
         "type": "object",
         "required": [
-          "loc",
-          "msg",
-          "type"
+          "runs"
         ],
-        "title": "ValidationError"
+        "title": "RunList"
+      },
+      "RunLogs": {
+        "properties": {
+          "run": {
+            "type": "string",
+            "title": "Run"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "success",
+              "incomplete",
+              "partial",
+              "failed",
+              "error",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run",
+          "status",
+          "lines"
+        ],
+        "title": "RunLogs"
+      },
+      "RunSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "database": {
+            "type": "string",
+            "title": "Database"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "inspect",
+              "dry-run",
+              "maintain"
+            ],
+            "title": "Mode"
+          },
+          "tables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tables",
+            "description": "The tables the run was limited to; empty for all."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "success",
+              "incomplete",
+              "partial",
+              "failed",
+              "error",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "triggeredBy": {
+            "type": "string",
+            "title": "Triggeredby",
+            "description": "The person's name, or schedule."
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent",
+            "description": "The MCP client when an agent started it."
+          },
+          "scheduled": {
+            "type": "boolean",
+            "title": "Scheduled"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat",
+            "description": "RFC 3339 in UTC with milliseconds.",
+            "examples": [
+              "2026-11-24T09:15:02.123Z"
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339 in UTC with milliseconds.",
+                "examples": [
+                  "2026-11-24T09:15:02.123Z"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startedat"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339 in UTC with milliseconds.",
+                "examples": [
+                  "2026-11-24T09:15:02.123Z"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishedat"
+          },
+          "exitCode": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exitcode"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary",
+            "description": "The runner's totals and versions."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "database",
+          "team",
+          "environment",
+          "mode",
+          "tables",
+          "status",
+          "triggeredBy",
+          "agent",
+          "scheduled",
+          "createdAt",
+          "startedAt",
+          "finishedAt",
+          "exitCode",
+          "summary",
+          "error"
+        ],
+        "title": "RunSummary",
+        "description": "A run as a list shows it."
+      },
+      "Schedule": {
+        "properties": {
+          "cron": {
+            "type": "string",
+            "title": "Cron",
+            "description": "Five fields, UTC."
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "nextRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339 in UTC with milliseconds.",
+                "examples": [
+                  "2026-11-24T09:15:02.123Z"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextrunat",
+            "description": "Null while the schedule is paused."
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrun",
+            "description": "The id of the last run this database's schedule started."
+          }
+        },
+        "type": "object",
+        "required": [
+          "cron",
+          "enabled",
+          "nextRunAt",
+          "lastRun"
+        ],
+        "title": "Schedule"
+      },
+      "ScheduleInput": {
+        "properties": {
+          "cron": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Cron",
+            "description": "Five-field cron expression in UTC, at most once an hour."
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "description": "False keeps the schedule and pauses it.",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cron"
+        ],
+        "title": "ScheduleInput"
+      },
+      "Settings": {
+        "properties": {
+          "snapshotExpiry": {
+            "$ref": "#/components/schemas/SnapshotExpiry"
+          },
+          "dataCompaction": {
+            "$ref": "#/components/schemas/DataCompaction"
+          },
+          "metadataCompaction": {
+            "$ref": "#/components/schemas/MetadataCompaction"
+          },
+          "orphanFileRemoval": {
+            "$ref": "#/components/schemas/OrphanFileRemoval"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshotExpiry",
+          "dataCompaction",
+          "metadataCompaction",
+          "orphanFileRemoval"
+        ],
+        "title": "Settings"
+      },
+      "SnapshotExpiry": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "maxSnapshotAgeDays": {
+            "type": "integer",
+            "title": "Maxsnapshotagedays"
+          },
+          "minSnapshotsToKeep": {
+            "type": "integer",
+            "title": "Minsnapshotstokeep"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "maxSnapshotAgeDays",
+          "minSnapshotsToKeep"
+        ],
+        "title": "SnapshotExpiry",
+        "description": "system.snapshot-expiry: enable, config.max_snapshot_age_days, config.min_snapshot_to_keep."
+      },
+      "TableHealth": {
+        "properties": {
+          "database": {
+            "type": "string",
+            "title": "Database"
+          },
+          "databaseName": {
+            "type": "string",
+            "title": "Databasename"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "namespace.table"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "attention",
+              "failed",
+              "no-policy",
+              "excluded"
+            ],
+            "title": "State"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "health": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Health",
+            "description": "What the runner read: snapshots, files, deletes, manifests."
+          },
+          "policies": {
+            "$ref": "#/components/schemas/AppliedPolicies",
+            "description": "The policies Polaris resolved for the table at its last run."
+          },
+          "inspectedAt": {
+            "type": "string",
+            "title": "Inspectedat",
+            "description": "RFC 3339 in UTC with milliseconds.",
+            "examples": [
+              "2026-11-24T09:15:02.123Z"
+            ]
+          },
+          "inspectedBy": {
+            "type": "string",
+            "title": "Inspectedby"
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrun"
+          },
+          "lastStatus": {
+            "type": "string",
+            "title": "Laststatus"
+          },
+          "lastError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterror"
+          },
+          "lastActions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Lastactions"
+          },
+          "lastMaintainedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339 in UTC with milliseconds.",
+                "examples": [
+                  "2026-11-24T09:15:02.123Z"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastmaintainedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database",
+          "databaseName",
+          "team",
+          "environment",
+          "name",
+          "state",
+          "reasons",
+          "health",
+          "policies",
+          "inspectedAt",
+          "inspectedBy",
+          "lastRun",
+          "lastStatus",
+          "lastError",
+          "lastActions",
+          "lastMaintainedAt"
+        ],
+        "title": "TableHealth"
+      },
+      "TableHealthDetail": {
+        "properties": {
+          "database": {
+            "type": "string",
+            "title": "Database"
+          },
+          "databaseName": {
+            "type": "string",
+            "title": "Databasename"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "namespace.table"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "attention",
+              "failed",
+              "no-policy",
+              "excluded"
+            ],
+            "title": "State"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "health": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Health",
+            "description": "What the runner read: snapshots, files, deletes, manifests."
+          },
+          "policies": {
+            "$ref": "#/components/schemas/AppliedPolicies",
+            "description": "The policies Polaris resolved for the table at its last run."
+          },
+          "inspectedAt": {
+            "type": "string",
+            "title": "Inspectedat",
+            "description": "RFC 3339 in UTC with milliseconds.",
+            "examples": [
+              "2026-11-24T09:15:02.123Z"
+            ]
+          },
+          "inspectedBy": {
+            "type": "string",
+            "title": "Inspectedby"
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrun"
+          },
+          "lastStatus": {
+            "type": "string",
+            "title": "Laststatus"
+          },
+          "lastError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterror"
+          },
+          "lastActions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Lastactions"
+          },
+          "lastMaintainedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339 in UTC with milliseconds.",
+                "examples": [
+                  "2026-11-24T09:15:02.123Z"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastmaintainedat"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "recentRuns": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummary"
+            },
+            "type": "array",
+            "title": "Recentruns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database",
+          "databaseName",
+          "team",
+          "environment",
+          "name",
+          "state",
+          "reasons",
+          "health",
+          "policies",
+          "inspectedAt",
+          "inspectedBy",
+          "lastRun",
+          "lastStatus",
+          "lastError",
+          "lastActions",
+          "lastMaintainedAt",
+          "role",
+          "recentRuns"
+        ],
+        "title": "TableHealthDetail"
+      },
+      "TableHealthList": {
+        "properties": {
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/TableHealth"
+            },
+            "type": "array",
+            "title": "Tables"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "How many tables match, before the limit."
+          }
+        },
+        "type": "object",
+        "required": [
+          "tables",
+          "total"
+        ],
+        "title": "TableHealthList"
+      },
+      "User": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "User"
+      },
+      "WorkspacePage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "url"
+        ],
+        "title": "WorkspacePage"
       }
     }
   }

@@ -39,8 +39,11 @@ with `ICEBERG_EXTENSIONS=ingestion`, or on Kubernetes to register it and install
    `hint`.
 5. Secrets: ask the user to enter them on the pipeline's page (`url`). Use `set_pipeline_secrets`
    only with a value the user gave you for exactly that, and never repeat it back.
-6. `run_pipeline` with `wait` (writers). On `failed`, read `get_run` and `get_run_logs`, fix the
-   definition with `update_pipeline`, and run again. `full_refresh` loads everything again.
+6. `run_pipeline` with `wait` (writers, up to 600 seconds). It returns the run: `status`, the
+   totals in `summary` and the loaded tables with their row counts in `results`. While it is still
+   `queued` or `running`, call `get_run` with `wait`. On `failed` (dlt reported an error) or `error`
+   (the platform could not run it), read `error` and `get_run_logs`, fix the definition with
+   `update_pipeline`, and run again. `full_refresh` loads everything again.
 7. Check the result with the user portal tools (`describe_table`, `preview_rows`). The table shows
    "Produced by dlt" in the catalog.
 8. Offer a schedule (`set_schedule`, cron in UTC, at most every 5 minutes), then a dbt staging model
@@ -58,10 +61,21 @@ with `ICEBERG_EXTENSIONS=ingestion`, or on Kubernetes to register it and install
   an optional `incremental.cursor` column. Ask for a read-only account. A cursor misses deleted
   rows: run with `full_refresh` now and then.
 - `filesystem`: `url` of one file over HTTPS, or `s3://bucket/prefix/` with `file_glob` and `s3`
-  (`endpoint_url` or `region`, `access_key_id`, `secret_access_key` as a secret); `format` `csv`,
-  `jsonl` or `parquet`; `table`; `incremental` (only files changed since the last run, S3 only).
+  (`endpoint_url` or `region`, `access_key_id`, `secret_access_key` as a secret, and `session_token`
+  as a secret for temporary keys); `format` `csv`, `jsonl` or `parquet`; `table`; `incremental` (only
+  files changed since the last run, S3 only). A pre-signed link (`X-Amz-Signature` and the like in
+  its query) carries credentials: put it in a secret, `"url": "$secret:file_url"`. It expires, so
+  it suits one run, not a schedule.
 - `resources`: per resource name, `writeDisposition` (`append`, `replace`, `merge`), `primaryKey`
   (needed for merge) and `partition`.
+
+## Results
+
+- Lists come as an object with one key: `pipelines`, `runs`, `templates`, `environments`.
+- Times are RFC 3339 strings in UTC. A schedule's `nextRunAt` is `null` while it is not enabled.
+- A run started by a schedule has `scheduled: true` and `triggeredBy: "schedule"`.
+- A refusal ends with its code in brackets, such as `[secrets_missing]`, `[run_in_progress]`,
+  `[environment_not_enabled]`, `[invalid_database]` or `[revision_conflict]`.
 
 ## Rules
 
@@ -70,5 +84,6 @@ with `ICEBERG_EXTENSIONS=ingestion`, or on Kubernetes to register it and install
 - dlt adds `_dlt_load_id` and `_dlt_id` columns, and child tables `<table>__<field>` for nested lists.
 - Changing a pipeline's host removes its secrets; changing its database or namespace starts it from
   scratch.
-- Ask before running in acceptance or production, before setting secrets, and before
+- Ask before running in acceptance or production, before setting secrets, before an
+  `update_pipeline` that changes where the pipeline connects or loads, and before
   `delete_pipeline`, `delete_schedule` or `disable_environment`.

@@ -1,7 +1,9 @@
 """Authorization boundaries of the standalone user gateway."""
 
 import asyncio
+import re
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -10,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from server import extensions
 from server.models import DatabaseInput, ServiceError, TeamInput, UserInput
 from test.conftest import SEMANTIC_MODEL, MemoryPolaris, members
 from user_portal import app as user_app
@@ -323,16 +326,46 @@ def test_team_overview_members_are_scoped_and_have_no_credentials(users, role):
     assert result == {"team": users.teams[0], "members": [
         {"id": users.account["id"], "name": "alice", "role": role},
         {"id": bob["id"], "name": "bob", "role": "admin"},
-    ]}
+    ], "extensions": []}
     c.patch("/api/team", json={"team": users.teams[1]}, headers=HEADERS)
     assert c.get("/api/team").json() == {"team": users.teams[1], "members": [
         {"id": users.account["id"], "name": "alice", "role": "writer"},
         {"id": bob["id"], "name": "bob", "role": "reader"},
-    ]}
+    ], "extensions": []}
     p.update_memberships(bob["id"], {users.teams[0]: "admin"})
     assert len(c.get("/api/team").json()["members"]) == 1
     p.update_memberships(users.account["id"], {users.teams[0]: role})
     assert c.get("/api/team").status_code == 403
+
+
+def test_team_overview_shows_where_extensions_are_enabled_without_principal_ids(users, monkeypatch):
+    """Read-only, for every member: per registered extension and environment whether it is on, and by whom."""
+    c, p, (first, second, _) = users.client, users.provider, users.teams
+    monkeypatch.setenv("PLATFORM_EXTENSIONS", "ingestion=http://localhost:3008,evaluations=http://localhost:3012,"
+                       "openmetadata=http://localhost:3011,unknown=http://localhost:3020")
+    creator = {"id": "creator", "name": "carol"}
+    enabled, _ = p.create_automation(first, "production", "ingestion", creator)
+    p.create_automation(second, "development", "evaluations", creator)
+    revoking, _ = p.create_automation(first, "development", "evaluations", creator)
+    p.resources["principals"][revoking["id"]]["properties"]["portal.deleting"] = "true"
+    login(c)
+    result = c.get("/api/team").json()
+    off = lambda env: {"environment": env, "enabled": False, "enabledBy": None}
+    assert result["extensions"] == [
+        {"id": "ingestion", "title": "Ingestion", "origin": "http://localhost:3008",
+         "url": f"http://localhost:3008/#/settings/environments?team={first}",
+         "environments": [off("development"), off("acceptance"),
+                          {"environment": "production", "enabled": True, "enabledBy": "carol"}]},
+        {"id": "evaluations", "title": "Evaluations", "origin": "http://localhost:3012",
+         "url": f"http://localhost:3012/#/settings/environments?team={first}",
+         "environments": [off("development"), off("acceptance"), off("production")]},
+    ]
+    assert enabled["id"] not in str(result) and "ext-" not in str(result)
+    # An extension without a per-team switch shows up once it acts for the team.
+    p.create_automation(first, "acceptance", "openmetadata", creator)
+    listed = {e["id"]: e for e in c.get("/api/team").json()["extensions"]}
+    assert list(listed) == ["ingestion", "evaluations", "openmetadata"]
+    assert listed["openmetadata"]["environments"][1] == {"environment": "acceptance", "enabled": True, "enabledBy": "carol"}
 
 
 def test_team_switch_and_database_access(users):
@@ -926,7 +959,8 @@ def test_a_share_is_listed_only_with_a_data_catalog_extension(users, monkeypatch
     monkeypatch.setenv("PLATFORM_EXTENSIONS", "openmetadata=http://localhost:3011")
     monkeypatch.setenv("PLATFORM_LISTING_EXTENSIONS", "openmetadata")
     assert c.get("/api/workspace").json()["extensions"] == [
-        {"id": "openmetadata", "origin": "http://localhost:3011", "listing": True}]
+        {"id": "openmetadata", "origin": "http://localhost:3011", "listing": True, "title": "OpenMetadata",
+         "purpose": "Your data products in OpenMetadata"}]
     created = c.post("/api/shares", json=body, headers=JSON)
     assert created.status_code == 201, created.text
     share = created.json()["share"]
@@ -936,3 +970,67 @@ def test_a_share_is_listed_only_with_a_data_catalog_extension(users, monkeypatch
     # Without the extension a listing can still be edited otherwise, and revoked.
     assert c.patch(f"/api/shares/{share['id']}", json={"description": "Orders"}, headers=JSON).status_code == 200
     assert c.delete(f"/api/shares/{share['id']}", headers=JSON).status_code == 200
+
+
+def test_the_workspace_says_whether_the_examples_are_offered(users, monkeypatch):
+    # The Notebooks page mentions the examples only when the platform offers them (NOTEBOOK_EXAMPLES).
+    c = users.client
+    login(c)
+    monkeypatch.delenv("NOTEBOOK_EXAMPLES", raising=False)
+    assert c.get("/api/workspace").json()["notebookExamples"] is True
+    monkeypatch.setenv("NOTEBOOK_EXAMPLES", "false")
+    assert c.get("/api/workspace").json()["notebookExamples"] is False
+
+
+def test_the_user_portal_serves_the_platforms_header_menus(users):
+    """The Apps and account menus are the administration portal's copies of contracts/bridge/v1."""
+    root = Path(__file__).resolve().parent.parent
+    page = users.client.get("/").text
+    for menu in ("apps-menu", "account-menu"):
+        for name in (f"{menu}.js", f"{menu}.css"):
+            assert users.client.get(f"/{name}").content == (root / "contracts/bridge/v1" / menu / name).read_bytes()
+            assert f'"/{name}"' in page
+
+
+def test_the_apps_menu_lists_the_pages_in_the_order_of_the_navigation():
+    html = (Path(user_app.__file__).parent / "public" / "index.html").read_text(encoding="utf-8")
+    navigation = html[html.index('<nav id="workspace-nav"'):html.index("</nav>")]
+    assert re.findall(r'data-page="([a-z]+)"[^>]*>([^<]+)<', navigation) == extensions.PORTAL_PAGES
+
+
+def test_notebook_files_are_reached_only_through_the_sessions_own_notebook(users):
+    class Files:
+        def __init__(self):
+            self.calls = []
+
+        def files(self, workspace):
+            self.calls.append(("files", workspace.id))
+            return {"notebooks": [], "examples": [], "allFilesUrl": workspace.url}
+
+        def create(self, workspace, name):
+            self.calls.append(("create", workspace.id, name))
+            return {"path": f"{name}.py", "url": f"{workspace.url}?file={name}.py"}
+
+        def copy_example(self, workspace, example):
+            self.calls.append(("example", workspace.id, example))
+            return {"path": f"examples/{example}", "url": f"{workspace.url}?file=examples/{example}"}
+
+    files = Files()
+    with TestClient(create_app(users.directory, users.runtime, notebook_files=files)) as c:
+        login(c)
+        notebook = c.post("/api/notebooks", json={"database": users.databases[0]}, headers=HEADERS).json()
+        base = f"/api/notebooks/{notebook['id']}"
+        assert c.get(base + "/files").json()["allFilesUrl"] == notebook["filesUrl"]
+        assert c.post(base + "/files", json={"name": "sales"}).status_code == 403  # No CSRF header.
+        assert c.post(base + "/files", json={"name": "sales"}, headers=HEADERS).status_code == 201
+        assert c.post(base + "/examples/01_pyiceberg_neighborhood.py", json={}, headers=HEADERS).status_code == 200
+        owner = c.cookies.get(COOKIE)
+        c.cookies.clear()
+        login(c)  # Another session of the same user cannot reach this notebook's files.
+        assert c.get(base + "/files").status_code == 404
+        assert c.post(base + "/files", json={"name": "x"}, headers=HEADERS).status_code == 404
+        c.cookies.clear()
+        c.cookies.set(COOKIE, owner)
+        assert c.get("/api/notebooks/unknown/files").status_code == 404
+    assert files.calls == [("files", notebook["id"]), ("create", notebook["id"], "sales"),
+                           ("example", notebook["id"], "01_pyiceberg_neighborhood.py")]

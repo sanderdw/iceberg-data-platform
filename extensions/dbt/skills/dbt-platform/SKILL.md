@@ -43,15 +43,18 @@ it and install its chart (`kubernetes-install` skill, or the documentation's "Ad
    a README and the namespace macro. Add the sources, models and tests the user asks for.
 4. Change code on a branch: `create_branch`, then `write_files` with full file contents
    (one commit per call; `null` deletes). `main` is never written directly.
-5. `compile` the changed models, then `run` with `command="build"`, `ref=<branch>` in
-   development. On failure read `get_run_logs`, fix, commit again, and rebuild with
-   `select="<model>+"`. Development is one shared sandbox per team: every branch builds the same
-   tables, so your build replaces what a build of `main` wrote. Build `main` again when you are done
-   with a branch that was not merged.
-6. Check the result: `preview_model` for rows, `get_pipeline` with `ref=<branch>` for the DAG and
-   statuses of your branch, `get_model` for columns and tests. Without `ref` it shows the latest run
-   of any branch; the pipeline viewer shows `main` unless the person picks a branch.
-7. Ask a team admin to `merge_to_main`, passing the branch head they reviewed with `diff` as
+5. `compile_project` the changed models, then `run_project` with `command="build"`, `ref=<branch>`
+   in development and `wait` (up to 600 seconds). It returns the run: `status`, dbt's totals in
+   `summary` and each node's result in `results`. While it is still `queued` or `running`, call
+   `get_run` with `wait`. On `failed` (dbt reported errors) or `error` (the platform could not run
+   it), read `error` and `get_run_logs`, fix, commit again, and rebuild with `select="<model>+"`.
+   Development is one shared sandbox per team: every branch builds the same tables, so your build
+   replaces what a build of `main` wrote. Build `main` again when you are done with a branch that
+   was not merged.
+6. Check the result: `preview_model` for rows, `get_pipeline_graph` with `ref=<branch>` for the DAG
+   and statuses of your branch, `get_node` for columns and tests. Without `ref` it shows the latest
+   run of any branch; the pipeline viewer shows `main` unless the person picks a branch.
+7. Ask a team admin to `merge_to_main`, passing the branch head they reviewed with `get_diff` as
    `revision`. Then build `main` in development: the pipeline viewer shows `main` and draws only what
    a run of `main` produced (the merge's `hint` says so). Acceptance and production build only
    revisions that were the head of `main`; ask the user before building or scheduling there.
@@ -59,13 +62,31 @@ it and install its chart (`kubernetes-install` skill, or the documentation's "Ad
    `semantic-model` skill (`.agents/skills/semantic-model`). Then Conversational BI and
    `query_semantic_model` answer from the mart's agreed metrics. `replace_table` keeps the table's
    identity on every build, so the model stays valid. Keep the model in the project, so it is
-   reviewed and merged with the pipeline: write the Ossie document to
+   reviewed and merged with the pipeline: write the Ossie 0.3.0.dev0 document (one model at the
+   root, `version: 0.3.0.dev0`) to
    `semantic_models/<database>/<namespace>/<name>.yml` (database by display name with `-` as `_`).
    Every successful `build` or `run` publishes it to that environment; `get_run` lists it under
    `summary.semanticModels` with any errors. Check it with the user portal's
    `describe_semantic_model`, whose publish warnings the run does not repeat. Field and dataset
    descriptions you leave out come from the column docs and table comment dbt wrote. The file wins
    over edits made elsewhere; deleting it does not delete the published model.
+
+To run a pipeline on a schedule, use `create_schedule` (five-field cron in UTC, at most every
+5 minutes; writers in development, team admins in acceptance and production, which run `main`).
+`update_schedule` changes only what you pass, such as `enabled=false` to pause it, and
+`delete_schedule` removes it.
+
+## Results
+
+- Lists come as an object with one key: `projects`, `branches`, `commits`, `runs`, `schedules`,
+  `environments`.
+- Times are RFC 3339 strings in UTC. A schedule's `nextRunAt` is `null` while it is not enabled.
+- A run's `status` is `queued`, `running`, `success`, `failed`, `error` or `cancelled`. A run started
+  by a schedule has `scheduled: true`, `triggeredBy: "schedule"` and the schedule's id in `schedule`.
+- `compile_project` and `preview_model` write no tables, but each is recorded as a run.
+- A refusal ends with its code in brackets, such as `[environment_not_enabled]`, `[forbidden_role]`,
+  `[main_required]`, `[revision_conflict]` (the branch moved since you read it: read it again),
+  `[name_taken]`, `[run_in_progress]` or `[run_finished]`.
 
 ## From a terminal
 

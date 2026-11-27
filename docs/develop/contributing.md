@@ -26,10 +26,16 @@ The user portal works the same way: stop `users` and run `uv run --group users p
 ## Tests
 
 ```bash
-npm run verify           # unit and authorization tests, Ruff, JavaScript syntax
+npm test                 # the fast loop: unit and authorization tests, in parallel
+npm run verify           # all tests, Ruff, JavaScript syntax
 npm run check:release    # release allowlist, versions, licenses and Markdown links
 uv run --all-groups marimo check user_portal/notebook/template.py user_portal/notebook/examples/*.py
 ```
+
+`npm test` leaves out two pytest markers: `slow` (full example notebook pipelines and release archives)
+and `installer` (`install.sh` and `install.ps1`). Run one group with `uv run --all-groups pytest -m slow`.
+CI runs the installer tests on Linux, macOS and Windows; without `pwsh` the PowerShell cases skip, so
+point `ICEBERG_TEST_POWERSHELL` at a `pwsh` binary to run them.
 
 `test/test_helm_chart.py` renders the Helm chart and is skipped without `helm`. Install the pinned
 tools with `sh dev/kubernetes/tools.sh .local/bin` to run it, and `sh dev/kubernetes/kind_check.sh`
@@ -40,11 +46,7 @@ Browser checks run against fixtures and don't need a running stack:
 
 ```bash
 npx playwright install chromium
-npm run test:team-ui
-npm run test:catalog
-npm run test:shares-ui
-npm run test:forms-ui
-npm run test:navigation-ui
+npm run test:ui          # all five: test:team-ui, test:catalog, test:shares-ui, test:forms-ui and test:navigation-ui
 ```
 
 With both stacks running (each test creates and cleans up its own resources):
@@ -69,7 +71,7 @@ npm run test:mcp-admin
 npm run test:connect
 ```
 
-`scripts.bridge_smoke` checks the Extension Bridge with a registered extension; see its docstring. Each extension in `extensions/` has its own tests and CI; see [Conversational BI](conversational-bi.md#development), [dbt](dbt.md#development), [Ingestion](ingestion.md#development) and [Replication](replication.md#development).
+`scripts.bridge_smoke` checks the Extension Bridge with a registered extension; see its docstring. Each extension in `extensions/` has its own tests and CI; see [Conversational BI](conversational-bi.md#development), [dbt](dbt.md#development), [Ingestion](ingestion.md#development), [Replication](replication.md#development), [Maintenance](maintenance.md#run-from-source), [Evaluations](evaluations.md#development) and [OpenMetadata](openmetadata.md#development).
 
 ## Documentation
 
@@ -103,6 +105,6 @@ Published URLs are linked from the portals, the installer and the skills, so nev
 - Never include credentials, `.env` files, notebook output or screenshots that show secrets.
 - Never delete volumes wholesale on a shared development environment.
 - Update `uv.lock` or `package-lock.json` together with their manifests, and format Python with Ruff.
-- Example notebooks run from top to bottom and must never overwrite existing user notebooks.
+- Example notebooks run from top to bottom. A team gets a copy only when it picks one, and a copy never overwrites the team's files; add a new example to `EXAMPLE_TITLES` in `user_portal/notebook_files.py`.
 
 By submitting a contribution, you agree to license it under this project's Apache-2.0 license. Be respectful and keep discussions about the project.

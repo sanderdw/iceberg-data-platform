@@ -7,13 +7,13 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14"
 dependencies = [
-  "fastapi==0.162.4",
+  "fastapi==0.165.0",
   "uvicorn[standard]>=0.53.0",
   "httpx>=0.28.1",
-  "joserfc>=1.7.7",
+  "joserfc>=1.8.0",
   "mcp>=2.3.0,<3",
-  "croniter>=6.2.4",
-  "duckdb==2.0.0",
+  "croniter>=7.0.0",
+  "duckdb==2.0.1",
 ]
 
 [dependency-groups]
@@ -31,16 +31,16 @@ launcher = ["docker==7.2.0"]
 # PyYAML for the project's semantic models.
 runner = [
   "dbt-oss==2.0.11",
-  "duckdb==2.0.0",
+  "duckdb==2.0.1",
   "pyiceberg>=0.12.0",
   "pyyaml>=6.0.2",
 ]
-dev = [{include-group = "otel"}, {include-group = "launcher"}, "pytest>=9.1.1", "ruff>=0.17.3", "pyiceberg>=0.12.0",
+dev = [{include-group = "otel"}, {include-group = "launcher"}, "pytest>=9.2.0", "ruff>=0.17.6", "pyiceberg>=0.12.0",
        "pyyaml>=6.0.2"]
 
 [tool.iceberg-dbt]
 # Bridge contract versions this release supports (contracts/bridge/COMPATIBILITY.md in the core).
-bridge-contract = ">=0.1,<0.2"
+bridge-contract = ">=1.0,<2"
 
 [tool.uv]
 package = false

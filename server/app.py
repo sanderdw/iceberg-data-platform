@@ -7,11 +7,12 @@ import time
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi import Path as PathParam
+from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -27,6 +28,7 @@ from .models import (
     Memberships,
     ServiceError,
     TeamInput,
+    TeamUpdate,
     UserInput,
 )
 from .polaris import PolarisProvider
@@ -36,7 +38,8 @@ from .validation import validation_message
 PUBLIC = Path(__file__).resolve().parent.parent / "public"
 FILES = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg",
          "/infrastructure.js": "infrastructure.js", "/identity.js": "identity.js", "/guide.js": "guide.js",
-         "/docs.js": "docs.js"}
+         "/docs.js": "docs.js", "/apps-menu.js": "apps-menu.js", "/apps-menu.css": "apps-menu.css",
+         "/account-menu.js": "account-menu.js", "/account-menu.css": "account-menu.css"}
 FILES.update({f"/fonts/{name}.ttf": f"fonts/{name}.ttf" for name in ("doto", "space-grotesk", "space-mono")})
 
 
@@ -121,14 +124,45 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
                 raise ServiceError(409, "Finish setup or revocation before editing this user.")
             return principal
 
+    # Keycloak sessions: platform administrators get full access ("admin"), team administrators read-only
+    # access ("viewer"). The level is checked again on requests, at most a minute old.
+    access = {}
+    ACCESS_TTL = 60
+
+    def access_level(claims):
+        roles = claims.get("resource_access", {}).get(oidc.client_id, {}).get("roles", [])
+        if "platform-admin" in roles:
+            return "admin"
+        # The account link the Bridge uses as well: a portal user, whose team roles decide.
+        mapping = claims.get("polaris") or {}
+        name = mapping.get("principal_name")
+        if not isinstance(name, str) or not name.startswith("portal-") or mapping.get("principal_id") != 0:
+            return None
+        try:
+            user = provider.user(provider.require_user(f"/principals/{quote(name, safe='')}"))
+        except ServiceError:
+            return None
+        return "viewer" if any(m["role"] in ("admin", "bucket-admin") for m in user["memberships"]) else None
+
+    async def session_access(session_id, grant):
+        level, checked = access.get(session_id, (None, 0))
+        roles = grant.claims.get("resource_access", {}).get(oidc.client_id, {}).get("roles", [])
+        if "platform-admin" in roles:
+            level, checked = "admin", time.monotonic()
+        elif level != "viewer" or time.monotonic() - checked > ACCESS_TTL:
+            level, checked = await run_in_threadpool(access_level, grant.claims), time.monotonic()
+        access[session_id] = (level, checked)
+        return level
+
     if oidc:
         async def accept_oidc(request, claims, token, lifetime, grant):
-            roles = claims.get("resource_access", {}).get(oidc.client_id, {}).get("roles", [])
-            if "platform-admin" not in roles:
-                raise ServiceError(403, "Platform administrator access is required.")
+            level = await run_in_threadpool(access_level, claims)
+            if level is None:
+                raise ServiceError(403, "Sign in with a platform administrator or team administrator account.")
             sessions.pop(request.cookies.get(session_cookie), None)
             session_id = secrets.token_urlsafe(32)
             sessions[session_id] = grant
+            access[session_id] = (level, time.monotonic())
             response = oidc.redirect(request.state.oidc_return_to)
             response.set_cookie(session_cookie, session_id, max_age=int(grant.expires - time.monotonic()), httponly=True,
                                 samesite="strict", secure=secure_cookie)
@@ -150,12 +184,15 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         for key, expiry in list(sessions.items()):
             if (expiry.expires if oidc else expiry) <= now:
                 sessions.pop(key, None)
+                access.pop(key, None)
         for key, (_, expiry) in list(attempts.items()):
             if expiry <= now:
                 attempts.pop(key, None)
         session_id = request.cookies.get(session_cookie)
         current = sessions.get(session_id)
         request.state.authenticated = bool(current) if oidc else (current or 0) > now
+        # The password sign-in (without Keycloak) is the platform administrator's.
+        request.state.access = "admin" if request.state.authenticated and not oidc else None
         try:
             if is_mcp_path(path):
                 # Bearer-token API for MCP clients: no cookies, CSRF checks or session lock. The
@@ -206,8 +243,8 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         if oidc and current and (protected or (path == "/api/session" and request.method == "GET")):
             try:
                 await oidc.renew(current)
-                roles = current.claims.get("resource_access", {}).get(oidc.client_id, {}).get("roles", [])
-                if "platform-admin" not in roles:
+                request.state.access = await session_access(session_id, current)
+                if request.state.access is None:
                     raise ServiceError(401, "Administrator access ended. Sign in again.")
                 if sessions.get(session_id) is not current:
                     raise ServiceError(401, "Sign in to continue.")
@@ -219,6 +256,10 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
                     raise
         if protected and not request.state.authenticated:
             raise ServiceError(401, "Sign in to continue.")
+        # Team administrators see everything and change nothing; signing out stays possible.
+        if (path.startswith("/api/") and request.method not in ("GET", "HEAD") and path != "/api/session"
+                and request.state.access == "viewer"):
+            raise ServiceError(403, "You have read-only access. Only platform administrators can change the platform.")
         if protected and path != "/api/infrastructure":
             async with mutation_lock:
                 return await call_next(request)
@@ -230,7 +271,17 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
 
     @app.get("/api/session")
     async def session(request: Request):
-        return {"authenticated": request.state.authenticated, **({"loginUrl": "/auth/login"} if oidc else {}),
+        identity = {}
+        if oidc and request.state.authenticated:
+            current = sessions.get(request.cookies.get(session_cookie))
+            identity = {"user": current.claims.get("preferred_username") or current.claims.get("name", "")}
+        if request.state.authenticated:
+            # Where the user portal is: the Apps menu and the read-only bar link to it.
+            user_origin = os.environ.get("USER_ORIGIN", "http://localhost:3002")
+            identity |= {"access": request.state.access, "userPortalUrl": user_origin.rstrip("/"),
+                         "userPortalPages": extensions.portal_pages(user_origin)}
+        return {"authenticated": request.state.authenticated,
+                **identity, **({"loginUrl": "/auth/login"} if oidc else {}),
                 **({"userManagement": "keycloak"} if user_management else {})}
 
     @app.post("/api/session")
@@ -257,6 +308,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
     @app.delete("/api/session")
     async def logout(request: Request):
         sessions.pop(request.cookies.get(session_cookie), None)
+        access.pop(request.cookies.get(session_cookie), None)
         response = JSONResponse({"authenticated": False, **({"logoutUrl": oidc.logout_url} if oidc else {})})
         response.delete_cookie(session_cookie, httponly=True, samesite="strict", secure=secure_cookie)
         return response
@@ -328,7 +380,7 @@ def create_app(provider=None, password=None, secure_cookie=None, *, oidc=None,
         return provider.save_team(data)
 
     @app.patch("/api/teams/{id}")
-    def update_team(id: str, data: TeamInput):
+    def update_team(id: str, data: TeamUpdate):
         return provider.save_team(data, id)
 
     @app.delete("/api/teams/{id}")

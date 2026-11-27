@@ -75,17 +75,15 @@ button.ghost:hover { color: var(--text-display); }
 button:disabled { cursor: not-allowed; opacity: .4; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 4px; }
 svg { width: 20px; height: 20px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-header { min-height: 96px; padding: 24px 48px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--border); }
+header { min-height: 60px; padding: 0 48px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--border); }
 .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 500; text-decoration: none; color: var(--text-display); }
-.brand img { width: 32px; height: 32px; }
+.brand img { width: 28px; height: 28px; }
 .brand span { font: var(--small) var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
-.header-actions, #identity { display: flex; align-items: center; gap: 24px; min-width: 0; }
-#username { max-width: 240px; overflow: hidden; text-overflow: ellipsis; font: var(--small) var(--mono); }
-#theme-toggle { white-space: nowrap; }
+.header-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .eyebrow, label, .hint, .footer-note { font: var(--small)/1.6 var(--mono); color: var(--text-secondary); }
 .eyebrow, label { text-transform: uppercase; letter-spacing: .06em; }
 h1 { font: 500 var(--large)/1.1 Doto, var(--mono); letter-spacing: -.03em; color: var(--text-display); margin: 16px 0; }
-.accent { color: var(--text-disabled); }
+.accent { color: var(--accent); }
 label { display: grid; gap: 12px; }
 input, select { min-width: 0; width: 100%; min-height: 44px; padding: 12px; background: var(--black); color: var(--text-primary); border: 1px solid var(--border-visible); border-radius: 6px; font: var(--small)/1.5 var(--mono); }
 /* A drawn chevron: the native arrow ignores padding and sits against the border. */
@@ -93,7 +91,7 @@ select { appearance: none; padding-right: 40px; background-image: var(--chevron)
 input:focus, select:focus { border-color: var(--text-primary); }
 #notice { padding-block: 16px; font: var(--small)/1.7 var(--mono); color: var(--text-primary); overflow-wrap: anywhere; }
 #notice.error { color: var(--text-primary); border-left: 2px solid var(--accent); padding-left: 16px; }
-#login-screen { max-width: 1440px; min-height: calc(100vh - 96px); margin: auto; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; gap: 96px; padding: 64px 48px 96px; }
+#login-screen { max-width: 1440px; min-height: calc(100vh - 60px); margin: auto; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; gap: 96px; padding: 64px 48px 96px; }
 .login > p { max-width: 440px; }
 .login form { display: grid; gap: 24px; max-width: 400px; margin: 40px 0 16px; }
 .login form button { justify-content: space-between; }
@@ -103,21 +101,20 @@ input:focus, select:focus { border-color: var(--text-primary); }
 .intro p { max-width: 320px; }
 .intro ol { list-style: none; padding: 0; margin: 48px 0 0; display: grid; gap: 24px; }
 .intro li { display: flex; align-items: baseline; gap: 24px; }
-.intro li span { font: var(--small) var(--mono); color: var(--text-secondary); }
-#workspace-screen { max-width: 1800px; margin: auto; padding: 64px 48px 24px; }
-.workspace-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 48px; margin-bottom: 64px; }
-.workspace-heading p { max-width: 560px; }
-/* Once work starts: one line under the header, so the page content starts near the top. */
-#workspace-screen.started { padding-top: 24px; }
-#workspace-screen.started .workspace-heading { align-items: center; gap: 32px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
-#workspace-screen.started .workspace-heading > div:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 24px; min-width: 0; }
-#workspace-screen.started .workspace-heading h1 { font-size: 2rem; margin: 0; }
-#workspace-screen.started .workspace-heading p { display: none; }
-#workspace-screen.started .workspace-context { flex-wrap: nowrap; gap: 8px 32px; }
-#workspace-screen.started .team-label { display: flex; align-items: center; gap: 12px; flex: 0 1 auto; width: auto; white-space: nowrap; }
-#workspace-screen.started .team-label select { width: 240px; }
-.team-label { width: 256px; flex-shrink: 0; }
-.workbench { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 64px; min-height: 55vh; }
+.intro li span { font: var(--small) var(--mono); color: var(--text-secondary); white-space: nowrap; }
+#workspace-screen { max-width: 1800px; margin: auto; padding: 0 48px 24px; }
+/* The context bar: which page this is and, on the right, the team and environment everything on it follows.
+   One row from a laptop up; on a narrower screen the selects take a second row instead of squeezing the description. */
+.workspace-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 32px; min-height: 52px; padding-block: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.page-heading { display: flex; flex: 1 1 560px; align-items: center; gap: 20px; min-width: 0; }
+.workspace-heading h1 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: 0; white-space: nowrap; }
+#page-description { max-width: 560px; font-size: .8125rem; line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.workspace-context { display: flex; align-items: center; gap: 20px; margin-left: auto; }
+.workspace-context label { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+/* Compact selects, for the context bar and the notebook bar. */
+.workspace-context select, .workbench-bar select { width: auto; min-height: 32px; padding: 4px 32px 4px 10px; background-position: right 12px center; background-size: 10px 7px; text-overflow: ellipsis; }
+.workspace-context select { max-width: 240px; }
+.workbench { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 40px; min-height: 55vh; }
 .catalog, .content { min-width: 0; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-bottom: 24px; }
 .panel-heading .eyebrow { margin-bottom: 8px; overflow-wrap: anywhere; }
@@ -143,15 +140,25 @@ input:focus, select:focus { border-color: var(--text-primary); }
 .empty { padding: 96px 16px; text-align: center; color: var(--text-secondary); }
 .empty h3 { font: var(--medium) var(--mono); }
 .empty p { max-width: 400px; margin: 16px auto 0; }
-.footer-note { margin-top: 64px; max-width: 960px; }
-.editor-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding-bottom: 16px; }
-.editor-toolbar > div { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; min-width: 0; }
-#editor-title { overflow-wrap: anywhere; }
-.editor-toolbar button, .editor-toolbar a { padding-inline: 16px; }
+.footer-note { margin-top: 16px; max-width: 960px; }
+/* Notebooks: one bar docked on the notebook frame. Left: where you are and which file. Right: the session. */
+.workbench-bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; min-height: 46px; padding: 6px 12px; border: 1px solid var(--border-visible); border-bottom: 0; background: var(--surface); }
+.workbench-bar > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.workbench-bar > div:first-child { flex: 1 1 320px; gap: 12px; }
+.workbench-bar button, .workbench-bar a.button { min-height: 32px; padding: 4px 14px; white-space: nowrap; }
+.workbench-bar select { flex: 0 1 320px; min-width: 96px; }
+#editor-title { min-width: 0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--small)/1.5 var(--mono); color: var(--text-primary); }
 .status-dot { height: 6px; width: 6px; flex-shrink: 0; border-radius: 50%; background: var(--success); }
-.notebook-picker { display: flex; align-items: center; gap: 16px; padding-block: 16px; }
-.notebook-picker select { max-width: 400px; }
-#frame-host { position: relative; min-height: max(550px, 75vh); border: 1px solid var(--border-visible); }
+/* The name of a new notebook: a panel that hangs under the bar, over the frame, so the bar keeps its shape. */
+.new-notebook { position: absolute; top: 100%; left: -1px; z-index: 20; display: flex; flex-wrap: wrap; align-items: end; gap: 12px; width: min(460px, calc(100% + 2px)); padding: 16px; border: 1px solid var(--border-visible); background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / .35); }
+.workbench-bar .new-notebook button { min-height: 44px; padding: 12px 20px; }
+.new-notebook label { flex: 1 1 200px; }
+.new-notebook .hint { flex-basis: 100%; margin: 0; }
+/* Shared context and messages sit above the bar and take no room while they are empty. */
+#editor .database-context { padding: 8px 12px; margin-bottom: 8px; }
+#editor-status #notice { padding-block: 0 12px; }
+/* The frame fills the screen under the header (60px), the context bar (52px + 16px) and the notebook bar (46px). */
+#frame-host { position: relative; min-height: max(550px, calc(100vh - 190px)); border: 1px solid var(--border-visible); }
 .notebook-loader { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 20px; background: var(--surface); }
 .notebook-loader-matrix { display: grid; grid-template-columns: repeat(3, 6px); gap: 6px; }
 .notebook-loader-matrix span { width: 6px; height: 6px; border-radius: 50%; background: var(--border-visible); animation: notebook-wave 1.4s infinite; animation-delay: calc(var(--wave) * 140ms - 1.4s); }
@@ -162,7 +169,7 @@ input:focus, select:focus { border-color: var(--text-primary); }
 }
 .notebook-loader > div:last-child { display: flex; gap: 12px; font: var(--small) var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
 .notebook-loader-time { color: var(--text-primary); font-variant-numeric: tabular-nums; }
-iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0; background: var(--surface); }
+iframe { display: block; width: 100%; height: max(550px, calc(100vh - 192px)); border: 0; background: var(--surface); }
 @media (max-width: 1100px) {
   :root { --large: 3rem; }
   header { padding-inline: 32px; }
@@ -174,22 +181,19 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
 }
 @media (max-width: 700px) {
   :root { --large: 2.25rem; }
-  header { min-height: 80px; padding: 16px 20px; flex-wrap: wrap; gap: 8px 16px; }
-  .header-actions, #identity { gap: 8px; }
-  .header-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+  header { min-height: 56px; padding: 6px 20px; flex-wrap: wrap; }
+  .header-actions { gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
   .brand span { display: none; }
-  #username { max-width: 120px; }
-  #identity button { padding-inline: 12px; }
-  #login-screen { display: block; min-height: calc(100vh - 80px); padding: 64px 24px; }
+  .account-anchor .account-toggle { max-width: 140px; }
+  #login-screen { display: block; min-height: calc(100vh - 56px); padding: 64px 24px; }
   .intro { display: none; }
   .login form { margin-top: 32px; }
-  #workspace-screen { padding: 48px 24px 24px; }
-  .workspace-heading { align-items: stretch; flex-direction: column; gap: 32px; margin-bottom: 48px; }
-  #workspace-screen.started .workspace-heading { align-items: stretch; gap: 16px; margin-bottom: 24px; }
-  #workspace-screen.started .workspace-context { flex-wrap: wrap; }
-  #workspace-screen.started .team-label { flex: 1 1 100%; }
-  #workspace-screen.started .team-label select { width: auto; flex: 1; }
-  .team-label { width: 100%; }
+  #workspace-screen { padding: 0 24px 24px; }
+  .workspace-heading { align-items: stretch; flex-direction: column; flex-wrap: nowrap; gap: 10px; padding-block: 12px; }
+  .page-heading { flex: none; align-items: flex-start; flex-direction: column; gap: 4px; }
+  .workspace-context { gap: 12px; margin-left: 0; }
+  .workspace-context label { flex: 1 1 0; min-width: 0; flex-direction: column; align-items: stretch; gap: 4px; }
+  .workspace-context select { width: 100%; max-width: none; min-height: 40px; }
   .workbench { display: block; }
   .catalog { margin-bottom: 48px; }
   #databases { padding: 4px; margin: -4px; }
@@ -197,12 +201,14 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
   .saved button { width: auto; margin-right: 16px; }
   .object-row { gap: 12px; }
   .object-row button { padding-inline: 16px; }
-  .editor-toolbar .hint { display: none; }
   .empty { padding: 64px 8px; }
-  .notebook-picker { align-items: stretch; flex-direction: column; gap: 8px; }
-  .notebook-picker select { max-width: none; }
-  .footer-note { margin-top: 48px; }
-  iframe { height: 80vh; }
+  /* Three rows: where you are, the file, the session. */
+  .workbench-bar { padding: 8px; }
+  .workbench-bar > div:first-child { flex-wrap: wrap; gap: 6px 8px; }
+  .workbench-bar button, .workbench-bar a.button, .workbench-bar select { min-height: 40px; }
+  .workbench-bar select { flex: 1 1 96px; }
+  #editor-title { flex: 1 1 calc(100% - 14px); max-width: none; }
+  iframe { height: max(550px, 80vh); }
   #frame-host { min-height: max(550px, 80vh); }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -211,9 +217,6 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
   .notebook-loader-matrix span:nth-child(5) { background: var(--accent); }
 }
 
-.workspace-context { display: flex; flex-wrap: wrap; gap: 24px; }
-.workspace-context .team-label { flex: 1; min-width: 160px; }
-
 .catalog-summary { border-block: 1px solid var(--border); padding: 8px 0 24px; }
 .catalog-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px; margin: 24px 0; }
 .catalog-facts > div { min-width: 0; }
@@ -221,6 +224,8 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
 .catalog-facts-text dd { white-space: pre-line; }
 .catalog-facts dt { color: var(--text-secondary); font: var(--small)/1.6 var(--mono); margin-bottom: 8px; }
 .catalog-facts dd { margin: 0; overflow-wrap: anywhere; }
+/* A rounded value whose tooltip has the exact one. */
+.catalog-facts dd span[title] { text-decoration: underline dotted var(--text-disabled); text-underline-offset: 4px; cursor: help; }
 .catalog-search { display: block; max-width: 480px; margin: 24px 0; }
 .catalog-search input { width: 100%; margin-top: 8px; }
 .catalog-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
@@ -283,6 +288,9 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
 .shares { padding-top: 16px; }
 .shares > button { margin: 16px 0 8px; }
 .share-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.share-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.share-tag { max-width: 240px; padding: 2px 8px; border: 1px solid var(--border-visible); border-radius: 4px; background: var(--surface-raised); color: var(--text-primary); font: var(--small)/1.6 var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-more { color: var(--text-secondary); font: var(--small)/1.6 var(--mono); white-space: nowrap; }
 .share-drift { display: block; margin-top: 8px; padding-left: 12px; border-left: 2px solid var(--accent); color: var(--text-secondary); font: var(--small)/1.6 var(--mono); }
 .data-grid td small { display: block; color: var(--text-secondary); }
 .share-form { display: grid; gap: 24px; max-width: 720px; padding: 24px 0; }
@@ -337,21 +345,18 @@ iframe { display: block; width: 100%; height: 75vh; min-height: 550px; border: 0
 }
 
 /* Match the administration portal's top navigation and active brackets. */
-header { justify-content: flex-start; gap: 40px; }
+header { justify-content: flex-start; gap: 32px; }
 .header-actions { margin-left: auto; }
 #workspace-nav { display: flex; align-items: center; gap: 24px; }
 header .nav-item { background: transparent; border: 0; border-radius: 0; padding: 16px 0; color: var(--text-secondary); white-space: nowrap; }
 header .nav-item:hover, header .nav-item[aria-current='page'] { color: var(--text-display); }
 header .nav-item[aria-current='page']::before { content: '['; }
 header .nav-item[aria-current='page']::after { content: ']'; }
-/* Links to extensions (PLATFORM_EXTENSIONS) look like the other sections, with an outward arrow. */
-header a.nav-item.extension-link { display: inline-flex; align-items: center; min-height: 44px; font: var(--small)/1.5 var(--mono); text-transform: uppercase; letter-spacing: .06em; text-decoration: none; }
-header a.nav-item.extension-link::after { content: ' ↗'; }
+/* The Read-only pill, the Apps menu and the account menu are the platform's: apps-menu.css and account-menu.css. */
 /* Wide screens keep the actions whole, so an overflowing header stacks its navigation instead (app.js fitHeader).
    Phones wrap the actions, as before. */
 @media (min-width: 701px) { .header-actions { flex-shrink: 0; } }
-#identity button { white-space: nowrap; }
-header.stacked { flex-wrap: wrap; gap: 16px 24px; }
+header.stacked { flex-wrap: wrap; gap: 0 24px; padding-block: 6px; }
 header.stacked #workspace-nav { order: 3; width: 100%; }
 #notebooks-page .saved:first-child { margin-top: 0; }
 .team-description { max-width: 720px; margin-bottom: 24px; overflow-wrap: anywhere; }
@@ -361,6 +366,14 @@ header.stacked #workspace-nav { order: 3; width: 100%; }
 .team-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; }
 .team-overview-grid > section { min-width: 0; }
 .team-overview-grid .hint { margin-bottom: 24px; }
+.team-extensions { margin-top: 48px; }
+.team-extensions .data-grid { max-height: none; }
+.team-extensions .active-environment { background: var(--surface-raised); }
+.team-extensions th.active-environment { color: var(--text-primary); }
+.extension-state { display: inline-flex; align-items: center; gap: 8px; font: var(--small)/1.6 var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
+.extension-state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--text-disabled); }
+.extension-state.on { color: var(--text-primary); }
+.extension-state.on::before { background: var(--success); }
 .team-workspace-links { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--border); }
 .database-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .database-actions button { padding-inline: 12px; }
@@ -383,11 +396,14 @@ header.stacked #workspace-nav { order: 3; width: 100%; }
 .saved .database-group button { margin-top: 0; }
 #share-permissions { margin-bottom: 24px; }
 .shares button:disabled { background: var(--surface-raised); border-color: var(--border-visible); color: var(--text-disabled); opacity: 1; }
-@media (max-width: 1100px) {
-  header { flex-wrap: wrap; gap: 16px 24px; }
-  #workspace-nav { order: 3; width: 100%; }
+/* A laptop keeps the header on one row: tighter gaps, and a long account name ends in an ellipsis sooner. */
+@media (min-width: 701px) and (max-width: 1400px) {
+  header { gap: 0 24px; }
+  #workspace-nav { gap: 20px; }
+  .account-anchor .account-toggle { max-width: 160px; }
 }
 @media (max-width: 700px) {
+  header { gap: 4px 16px; }
   .team-overview-grid { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .team-workspace-links { flex-direction: column; align-items: stretch; }
   .database-actions { justify-content: flex-start; }

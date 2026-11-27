@@ -28,9 +28,9 @@ def test_the_diagram_shows_listed_tables_and_their_keys():
 
 def test_names_are_escaped_and_no_keys_means_no_diagram():
     odd = {**CUSTOMERS, "name": "<b>&co"}
-    model = {**REVENUE, "models": [{**REVENUE["models"][0], "datasets": [
+    model = {**REVENUE, "model": {**REVENUE["model"], "datasets": [
         {**d, "table": {"namespace": ["sales"], "name": "<b>&co"}} if d["name"] == "CUSTOMERS" else d
-        for d in REVENUE["models"][0]["datasets"]]}]}
+        for d in REVENUE["model"]["datasets"]]}}
     _, svg = drawn(listing(objects=[ORDERS, odd, model]))
     assert "&lt;b&gt;&amp;co" in svg and "<b>" not in svg
     assert drawn(listing(objects=[ORDERS, CUSTOMERS])) == ("", "")

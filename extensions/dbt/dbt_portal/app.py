@@ -10,12 +10,13 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from starlette.exceptions import HTTPException
 
 from . import api
-from .auth import COOKIE, BrowserLogin, TokenVerifier
+from .auth import COOKIE, LOGIN_COOKIE, LOGIN_SECONDS, BrowserLogin, TokenVerifier
 from .bridge_client import BridgeClient
 from .config import VERSION, Settings
-from .errors import DbtError
+from .errors import CODES, DbtError
 from .git_repo import GitRepos
 from .mcp_server import create_mcp, mount
 from .runs import RunManager
@@ -98,13 +99,20 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
     async def invalid(request, exc):
         return JSONResponse({"error": validation_text(exc.errors()), "code": "invalid_request"}, status_code=422)
 
+    @app.exception_handler(HTTPException)
+    async def http_error(request, exc):
+        """An unknown path, a wrong method and anything else the framework refuses, in this API's error shape."""
+        text = {404: "Not found.", 405: "This method is not allowed here."}.get(exc.status_code, str(exc.detail))
+        return JSONResponse({"error": text, "code": CODES.get(exc.status_code, "internal_error")},
+                            status_code=exc.status_code, headers=exc.headers)
+
     @app.middleware("http")
     async def headers(request: Request, call_next):
         try:
             response = await call_next(request)
         except Exception:
             LOG.exception("Request failed")
-            response = JSONResponse({"error": "Something went wrong.", "code": "error"}, status_code=500)
+            response = JSONResponse({"error": "Something went wrong.", "code": "internal_error"}, status_code=500)
         response.headers.setdefault("Content-Security-Policy", CSP)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -138,15 +146,25 @@ def create_app(settings=None, *, bridge=None, verifier=None, runs=None, store=No
 
     @app.get("/auth/login", include_in_schema=False)
     def auth_login(return_to: str = "/"):
-        return RedirectResponse(login.start(return_to), status_code=303)
+        url, binding = login.start(return_to)
+        response = RedirectResponse(url, status_code=303)
+        # Lax: Keycloak's redirect back is a top-level navigation, so the browser sends it with the callback.
+        response.set_cookie(LOGIN_COOKIE, binding, max_age=LOGIN_SECONDS, path="/auth/callback", httponly=True,
+                            secure=settings.secure, samesite="lax")
+        return response
 
     @app.get("/auth/callback", include_in_schema=False)
-    async def auth_callback(state: str = "", code: str = ""):
+    async def auth_callback(request: Request, state: str = "", code: str = ""):
         try:
-            session_id, target = await login.finish(state, code)
+            session_id, target = await login.finish(state, code, request.cookies.get(LOGIN_COOKIE, ""))
         except DbtError:
-            return RedirectResponse("/?signin=failed", status_code=303)
+            response = RedirectResponse("/?signin=failed", status_code=303)
+            response.delete_cookie(LOGIN_COOKIE, path="/auth/callback", httponly=True, secure=settings.secure,
+                                   samesite="lax")
+            return response
         response = RedirectResponse(target, status_code=303)
+        response.delete_cookie(LOGIN_COOKIE, path="/auth/callback", httponly=True, secure=settings.secure,
+                               samesite="lax")
         response.set_cookie(COOKIE, session_id, max_age=28800, httponly=True, secure=settings.secure, samesite="lax")
         return response
 

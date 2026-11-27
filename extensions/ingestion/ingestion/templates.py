@@ -21,7 +21,7 @@ TEMPLATES = [
         "id": "postgres-incremental",
         "title": "PostgreSQL table, incremental on updated_at",
         "description": "Loads rows changed since the last run, by updated_at, and merges them on id. A cursor does "
-                       "not see deleted rows: run with fullRefresh now and then. Give the account read-only "
+                       "not see deleted rows: run a full refresh now and then. Give the account read-only "
                        "rights at the source.",
         "sourceType": "sql_database",
         "namespace": "raw_crm",
