@@ -2,7 +2,7 @@
 # proposes OLake updates. Built with context extensions/replication. Each run reaches only the
 # platform's catalog and storage on an internal network, and its source through an egress network.
 # The start-up program (runner/) uses Python's standard library only.
-FROM ghcr.io/astral-sh/uv:0.13.9 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.10 AS uv
 FROM olakego/source-postgres:v1.2.0
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_PYTHON_INSTALL_DIR=/opt/python UV_PYTHON_PREFERENCE=only-managed
